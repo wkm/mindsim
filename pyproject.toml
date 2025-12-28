@@ -1,0 +1,16 @@
+[project]
+name = "mindsim"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "black>=25.12.0",
+    "brax>=0.14.0",
+    "ipykernel>=7.1.0",
+    "mediapy>=1.2.5",
+    "mujoco>=3.4.0",
+    "mujoco-mjx>=3.4.0",
+    "numpy>=2.4.0",
+    "warp-lang>=1.10.1",
+]
