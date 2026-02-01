@@ -1,0 +1,13 @@
+{
+    "autodeskProduct": "Fusion",
+    "type": "addin",
+    "id": "b8c4a1d2-3e5f-4a6b-9c8d-1e2f3a4b5c6d",
+    "author": "MindSim",
+    "description": {
+        "": "Export Fusion 360 assemblies with joints to MuJoCo MJCF format for physics simulation."
+    },
+    "version": "0.1.0",
+    "runOnStartup": false,
+    "supportedOS": "windows|mac",
+    "editEnabled": true
+}
