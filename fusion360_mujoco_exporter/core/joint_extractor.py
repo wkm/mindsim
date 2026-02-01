@@ -11,7 +11,10 @@ from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from .transforms import (
     Vector3,
     Transform,
+    Quaternion,
     matrix3d_to_transform,
+    invert_matrix3d,
+    multiply_matrices,
     sanitize_name,
     CM_TO_M,
 )
@@ -220,6 +223,8 @@ def _extract_joint_axis(joint_motion, fusion_joint_type: int) -> Vector3:
         elif fusion_joint_type == 6:  # Ball - no specific axis
             return Vector3(0, 0, 1)  # Default
     except Exception:
+        # Axis vector properties may not exist for all joint motion types,
+        # or may fail if the joint is in an invalid state
         pass
 
     # Default axis (Z-up)
@@ -251,6 +256,8 @@ def _extract_joint_limits(joint_motion, fusion_joint_type: int) -> Optional[Join
             return _extract_slide_limits(joint_motion)
 
     except Exception:
+        # Limit properties may not be available for all joint types,
+        # or limits may not be configured - treat as unlimited
         pass
 
     return None
@@ -271,6 +278,8 @@ def _extract_slide_limits(joint_motion) -> Optional[JointLimits]:
                     limited=True,
                 )
     except Exception:
+        # Slide limits may not be available for non-sliding joints
+        # or when limits haven't been configured
         pass
 
     return None
@@ -295,20 +304,31 @@ def _get_joint_origin(joint) -> Transform:
                     origin.y * CM_TO_M,
                     origin.z * CM_TO_M,
                 )
-                from .transforms import Quaternion
                 return Transform(pos, Quaternion(1, 0, 0, 0))
     except Exception:
+        # Joint geometry access can fail for certain joint types or
+        # when geometry hasn't been fully computed yet
         pass
 
-    # Fallback: use child occurrence transform relative to parent
+    # Fallback: compute child transform relative to parent (parent^-1 * child)
     try:
         parent_occ = joint.occurrenceTwo
         child_occ = joint.occurrenceOne
 
         if child_occ:
-            matrix = child_occ.transform.asArray()
-            return matrix3d_to_transform(matrix)
+            child_matrix = child_occ.transform.asArray()
+
+            if parent_occ:
+                # Compute relative transform: parent^-1 * child
+                parent_matrix = parent_occ.transform.asArray()
+                parent_inv = invert_matrix3d(parent_matrix)
+                relative_matrix = multiply_matrices(parent_inv, child_matrix)
+                return matrix3d_to_transform(relative_matrix)
+            else:
+                # No parent (connected to root), use child's world transform
+                return matrix3d_to_transform(child_matrix)
     except Exception:
+        # Transform access can fail if occurrences are suppressed or invalid
         pass
 
     # Default: identity transform

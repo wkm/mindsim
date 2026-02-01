@@ -177,11 +177,23 @@ def _perform_export(
     """
     # Import core modules
     from .core.joint_extractor import extract_joints
-    from .core.body_extractor import extract_bodies
+    from .core.body_extractor import extract_bodies, has_base_link_component
     from .core.mesh_exporter import export_meshes, MeshRefinement
     from .core.mjcf_generator import generate_mjcf
 
     root = design.rootComponent
+
+    # Validate base_link exists in the actual design structure
+    # (before extraction, which always creates a synthetic base_link entry)
+    if not has_base_link_component(root):
+        _ui.messageBox(
+            "Error: No 'base_link' component found.\n\n"
+            "Please ensure your assembly has:\n"
+            "- A component named 'base_link', OR\n"
+            "- Joints connected to the root component\n\n"
+            "The base_link serves as the root of your kinematic tree."
+        )
+        return
 
     # Progress dialog
     progress = _ui.createProgressDialog()
@@ -198,16 +210,6 @@ def _perform_export(
         progress.message = "Extracting bodies..."
         bodies = extract_bodies(root, joints)
         progress.progressValue = 2
-
-        # Validate base_link exists
-        if "base_link" not in bodies:
-            progress.hide()
-            _ui.messageBox(
-                "Error: No 'base_link' component found.\n\n"
-                "Please ensure your assembly has a component named 'base_link' "
-                "as the root of your kinematic tree."
-            )
-            return
 
         # Step 3: Export meshes
         progress.message = "Exporting meshes..."

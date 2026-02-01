@@ -10,7 +10,6 @@ from typing import Dict, List, Optional, Set, TYPE_CHECKING
 from .transforms import (
     Vector3,
     Transform,
-    Quaternion,
     matrix3d_to_transform,
     convert_inertia_to_body_frame,
     sanitize_name,
@@ -114,6 +113,8 @@ def _create_base_body(root_component, name: str) -> BodyData:
         if props:
             inertial = _extract_inertial(props, Transform.identity())
     except Exception:
+        # Physical properties may not be available for empty components
+        # or components without solid bodies - proceed without inertial data
         pass
 
     return BodyData(
@@ -155,6 +156,8 @@ def _extract_single_body(occurrence, joints: Dict[str, JointData]) -> Optional[B
         if props:
             inertial = _extract_inertial(props, transform)
     except Exception:
+        # Physical properties calculation can fail for occurrences without
+        # solid geometry or when the component is suppressed
         pass
 
     return BodyData(
@@ -236,6 +239,38 @@ def _build_hierarchy(
         for child_name in child_names:
             if child_name in bodies:
                 bodies[child_name].parent_name = parent_name
+
+
+def has_base_link_component(root_component) -> bool:
+    """
+    Check if the design has a component that can serve as base_link.
+
+    Returns True if:
+    - The root component is named "base_link", OR
+    - There's an occurrence named "base_link", OR
+    - There are joints that reference "base_link" as parent
+
+    This validates that the user has properly set up their design with
+    a base_link before export.
+    """
+    # Check root component name
+    root_name = sanitize_name(root_component.name)
+    if root_name == "base_link":
+        return True
+
+    # Check occurrences
+    for occ in root_component.allOccurrences:
+        if sanitize_name(occ.name) == "base_link":
+            return True
+
+    # Check if any joint references base_link (occurs when joint connects to root)
+    for joint in root_component.joints:
+        # If parent occurrence is None, it's connected to root (our base_link)
+        if joint.occurrenceTwo is None:
+            return True
+
+    # No explicit base_link found
+    return False
 
 
 def get_body_hierarchy(

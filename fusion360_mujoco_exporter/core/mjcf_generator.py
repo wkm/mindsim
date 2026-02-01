@@ -4,14 +4,12 @@ MJCF (MuJoCo XML) generator.
 Generates MuJoCo-compatible XML files from extracted Fusion 360 data.
 """
 
-import os
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from xml.dom import minidom
 
-from .transforms import Vector3
 from .joint_extractor import JointData, MuJoCoJointType, get_joint_for_body
-from .body_extractor import BodyData, get_body_hierarchy
+from .body_extractor import BodyData
 from .mesh_exporter import get_mesh_relative_path
 
 
