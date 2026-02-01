@@ -19,12 +19,13 @@ from .transforms import (
 from .joint_extractor import JointData, build_kinematic_tree, get_joint_for_body
 
 if TYPE_CHECKING:
-    import adsk.fusion
+    pass
 
 
 @dataclass
 class InertialData:
     """Inertial properties for a body."""
+
     mass: float  # kg
     center_of_mass: Vector3  # meters, in body-local frame
     inertia: Vector3  # diagonal inertia (Ixx, Iyy, Izz) in kg*m²
@@ -37,6 +38,7 @@ class InertialData:
 @dataclass
 class BodyData:
     """Extracted body/component data."""
+
     name: str
     transform: Transform  # Position/orientation in parent frame
     inertial: Optional[InertialData] = None
@@ -63,7 +65,6 @@ def extract_bodies(
     Returns:
         Dictionary mapping body names to BodyData objects
     """
-    import adsk.fusion
 
     bodies_dict: Dict[str, BodyData] = {}
 
@@ -127,7 +128,9 @@ def _create_base_body(root_component, name: str) -> BodyData:
     )
 
 
-def _extract_single_body(occurrence, joints: Dict[str, JointData]) -> Optional[BodyData]:
+def _extract_single_body(
+    occurrence, joints: Dict[str, JointData]
+) -> Optional[BodyData]:
     """Extract data from a single Fusion 360 occurrence."""
     import adsk.fusion
 
@@ -170,7 +173,9 @@ def _extract_single_body(occurrence, joints: Dict[str, JointData]) -> Optional[B
     )
 
 
-def _extract_inertial(physical_props, body_transform: Transform) -> Optional[InertialData]:
+def _extract_inertial(
+    physical_props, body_transform: Transform
+) -> Optional[InertialData]:
     """Extract inertial properties from Fusion 360 PhysicalProperties."""
     try:
         # Mass in kg (Fusion uses kg)

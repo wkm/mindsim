@@ -20,6 +20,7 @@ KG_CM2_TO_KG_M2 = 0.0001  # 1 kg*cm² = 0.0001 kg*m²
 @dataclass
 class Vector3:
     """3D vector."""
+
     x: float
     y: float
     z: float
@@ -37,6 +38,7 @@ class Vector3:
 @dataclass
 class Quaternion:
     """Quaternion for rotation (w, x, y, z format - MuJoCo convention)."""
+
     w: float
     x: float
     y: float
@@ -61,6 +63,7 @@ class Quaternion:
 @dataclass
 class Transform:
     """Rigid body transform (position + orientation)."""
+
     position: Vector3
     rotation: Quaternion
 
@@ -179,10 +182,22 @@ def invert_matrix3d(matrix: List[float]) -> List[float]:
     itz = -(r20 * tx + r21 * ty + r22 * tz)
 
     return [
-        r00, r01, r02, itx,
-        r10, r11, r12, ity,
-        r20, r21, r22, itz,
-        0.0, 0.0, 0.0, 1.0,
+        r00,
+        r01,
+        r02,
+        itx,
+        r10,
+        r11,
+        r12,
+        ity,
+        r20,
+        r21,
+        r22,
+        itz,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
     ]
 
 
@@ -215,9 +230,9 @@ def convert_inertia_to_body_frame(
     """
     # For simplicity, return diagonal inertia
     # Full implementation would compute principal axes
-    d_sq_x = com.y ** 2 + com.z ** 2
-    d_sq_y = com.x ** 2 + com.z ** 2
-    d_sq_z = com.x ** 2 + com.y ** 2
+    d_sq_x = com.y**2 + com.z**2
+    d_sq_y = com.x**2 + com.z**2
+    d_sq_z = com.x**2 + com.y**2
 
     ixx_local = ixx - mass * d_sq_x
     iyy_local = iyy - mass * d_sq_y
@@ -238,6 +253,7 @@ def sanitize_name(name: str) -> str:
     Removes or replaces special characters that aren't valid in MJCF names.
     """
     import re
+
     # Replace spaces, colons, parentheses with underscores
     sanitized = re.sub(r"[ :()/<>]", "_", name)
     # Remove version suffix like ":1" or "_v1"

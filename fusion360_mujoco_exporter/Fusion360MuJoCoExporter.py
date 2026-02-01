@@ -213,7 +213,9 @@ def _perform_export(
 
         # Step 3: Export meshes
         progress.message = "Exporting meshes..."
-        refinement = getattr(MeshRefinement, mesh_quality.upper(), MeshRefinement.MEDIUM)
+        refinement = getattr(
+            MeshRefinement, mesh_quality.upper(), MeshRefinement.MEDIUM
+        )
         mesh_results = export_meshes(design, bodies, output_folder, refinement)
         progress.progressValue = 3
 
@@ -242,7 +244,7 @@ def _perform_export(
             f"Output folder:\n{output_folder}"
         )
 
-    except Exception as e:
+    except Exception:
         progress.hide()
         _ui.messageBox(f"Export failed:\n{traceback.format_exc()}")
 

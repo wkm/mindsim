@@ -11,13 +11,13 @@ from typing import Dict, Optional, TYPE_CHECKING
 from .transforms import sanitize_name
 
 if TYPE_CHECKING:
-    import adsk.fusion
-    import adsk.core
+    from .body_extractor import BodyData
 
 
 @dataclass
 class MeshExportResult:
     """Result of exporting a single mesh."""
+
     body_name: str
     file_path: str
     success: bool
@@ -26,6 +26,7 @@ class MeshExportResult:
 
 class MeshRefinement:
     """Mesh refinement levels for STL export."""
+
     LOW = "Low"
     MEDIUM = "Medium"
     HIGH = "High"
@@ -49,7 +50,6 @@ def export_meshes(
     Returns:
         Dictionary mapping body names to export results
     """
-    import adsk.fusion
 
     results: Dict[str, MeshExportResult] = {}
 
@@ -105,7 +105,9 @@ def _get_refinement_setting(refinement: str):
         MeshRefinement.MEDIUM: adsk.fusion.MeshRefinementSettings.MeshRefinementMedium,
         MeshRefinement.HIGH: adsk.fusion.MeshRefinementSettings.MeshRefinementHigh,
     }
-    return mapping.get(refinement, adsk.fusion.MeshRefinementSettings.MeshRefinementMedium)
+    return mapping.get(
+        refinement, adsk.fusion.MeshRefinementSettings.MeshRefinementMedium
+    )
 
 
 def _export_component_mesh(

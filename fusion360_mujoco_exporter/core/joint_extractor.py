@@ -4,9 +4,9 @@ Joint extraction from Fusion 360 designs.
 Extracts joint information and maps Fusion 360 joint types to MuJoCo joint types.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from .transforms import (
     Vector3,
@@ -20,21 +20,23 @@ from .transforms import (
 )
 
 if TYPE_CHECKING:
-    import adsk.fusion
+    pass
 
 
 class MuJoCoJointType(Enum):
     """MuJoCo joint types."""
-    HINGE = "hinge"      # 1-DOF rotation
-    SLIDE = "slide"      # 1-DOF translation
-    BALL = "ball"        # 3-DOF spherical
-    FREE = "free"        # 6-DOF floating
-    FIXED = "fixed"      # No motion (welded) - not actually a joint in MuJoCo
+
+    HINGE = "hinge"  # 1-DOF rotation
+    SLIDE = "slide"  # 1-DOF translation
+    BALL = "ball"  # 3-DOF spherical
+    FREE = "free"  # 6-DOF floating
+    FIXED = "fixed"  # No motion (welded) - not actually a joint in MuJoCo
 
 
 @dataclass
 class JointLimits:
     """Joint motion limits."""
+
     lower: float  # radians for hinge, meters for slide
     upper: float
     limited: bool = True
@@ -43,6 +45,7 @@ class JointLimits:
 @dataclass
 class JointData:
     """Extracted joint data."""
+
     name: str
     joint_type: MuJoCoJointType
     parent_name: str
@@ -68,13 +71,13 @@ class JointData:
 # BallJointType = 6
 
 FUSION_TO_MUJOCO_JOINT_MAP = {
-    0: MuJoCoJointType.FIXED,      # Rigid
-    1: MuJoCoJointType.HINGE,      # Revolute
-    2: MuJoCoJointType.SLIDE,      # Slider
-    3: MuJoCoJointType.HINGE,      # Cylindrical (primary: rotation)
-    4: MuJoCoJointType.HINGE,      # PinSlot (primary: rotation)
-    5: MuJoCoJointType.SLIDE,      # Planar (primary: slide X)
-    6: MuJoCoJointType.BALL,       # Ball
+    0: MuJoCoJointType.FIXED,  # Rigid
+    1: MuJoCoJointType.HINGE,  # Revolute
+    2: MuJoCoJointType.SLIDE,  # Slider
+    3: MuJoCoJointType.HINGE,  # Cylindrical (primary: rotation)
+    4: MuJoCoJointType.HINGE,  # PinSlot (primary: rotation)
+    5: MuJoCoJointType.SLIDE,  # Planar (primary: slide X)
+    6: MuJoCoJointType.BALL,  # Ball
 }
 
 
@@ -88,7 +91,6 @@ def extract_joints(root_component) -> Dict[str, JointData]:
     Returns:
         Dictionary mapping joint names to JointData objects
     """
-    import adsk.fusion
 
     joints_dict: Dict[str, JointData] = {}
 
@@ -106,7 +108,6 @@ def extract_joints(root_component) -> Dict[str, JointData]:
 
 def _extract_single_joint(joint) -> Optional[JointData]:
     """Extract data from a single Fusion 360 joint."""
-    import adsk.fusion
 
     # Get joint motion type
     joint_motion = joint.jointMotion
@@ -115,7 +116,9 @@ def _extract_single_joint(joint) -> Optional[JointData]:
     # Map to MuJoCo type
     mujoco_type = FUSION_TO_MUJOCO_JOINT_MAP.get(fusion_joint_type)
     if mujoco_type is None:
-        print(f"Warning: Unknown joint type {fusion_joint_type} for joint '{joint.name}'")
+        print(
+            f"Warning: Unknown joint type {fusion_joint_type} for joint '{joint.name}'"
+        )
         return None
 
     # Skip fixed joints (they don't need a joint element in MuJoCo)
@@ -202,7 +205,6 @@ def _get_occurrence_name(occurrence) -> str:
 
 def _extract_joint_axis(joint_motion, fusion_joint_type: int) -> Vector3:
     """Extract the joint axis vector based on joint type."""
-    import adsk.fusion
 
     try:
         if fusion_joint_type in [1, 3, 4]:  # Revolute, Cylindrical, PinSlot
@@ -231,9 +233,10 @@ def _extract_joint_axis(joint_motion, fusion_joint_type: int) -> Vector3:
     return Vector3(0, 0, 1)
 
 
-def _extract_joint_limits(joint_motion, fusion_joint_type: int) -> Optional[JointLimits]:
+def _extract_joint_limits(
+    joint_motion, fusion_joint_type: int
+) -> Optional[JointLimits]:
     """Extract joint limits for rotation or translation."""
-    import adsk.fusion
 
     try:
         if fusion_joint_type in [1, 3, 4]:  # Rotational joints
@@ -354,7 +357,7 @@ def _get_perpendicular_axis(axis: Vector3) -> Vector3:
     )
 
     # Normalize
-    length = math.sqrt(perp.x ** 2 + perp.y ** 2 + perp.z ** 2)
+    length = math.sqrt(perp.x**2 + perp.y**2 + perp.z**2)
     if length > 0:
         return Vector3(perp.x / length, perp.y / length, perp.z / length)
 

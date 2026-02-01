@@ -5,7 +5,7 @@ Generates MuJoCo-compatible XML files from extracted Fusion 360 data.
 """
 
 import xml.etree.ElementTree as ET
-from typing import Dict, Optional
+from typing import Dict
 from xml.dom import minidom
 
 from .joint_extractor import JointData, MuJoCoJointType, get_joint_for_body
@@ -251,7 +251,9 @@ class MJCFGenerator:
 
         # Add limits
         if joint.limits and joint.limits.limited:
-            joint_attribs["range"] = f"{joint.limits.lower:.4g} {joint.limits.upper:.4g}"
+            joint_attribs["range"] = (
+                f"{joint.limits.lower:.4g} {joint.limits.upper:.4g}"
+            )
             joint_attribs["limited"] = "true"
 
         # Add damping if non-default
