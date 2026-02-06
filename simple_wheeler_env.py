@@ -48,6 +48,7 @@ class SimpleWheelerEnv:
     def reset(self):
         """Reset the environment to initial state."""
         mujoco.mj_resetData(self.model, self.data)
+        mujoco.mj_forward(self.model, self.data)  # Compute forward kinematics
         return self.get_camera_image()
 
     def step(self, left_motor, right_motor):
