@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "black>=25.12.0",
     "brax>=0.14.0",
-    "ipykernel>=7.1.0",
     "mediapy>=1.2.5",
     "mujoco>=3.4.0",
     "mujoco-mjx>=3.4.0",
@@ -15,7 +14,6 @@ dependencies = [
     "ruff>=0.14.10",
     "warp-lang>=1.10.1",
     "tqdm>=4.67.2",
-    "rerun>=1.0.30",
-    "rerun-sdk>=0.29.0",
+    "rerun-sdk[datafusion,notebook]>=0.29.0",
     "wandb>=0.24.1",
 ]
