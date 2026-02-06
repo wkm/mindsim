@@ -332,8 +332,8 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
 
             step_count += 1
 
-            # Small delay to make it easier to follow in real-time
-            time.sleep(0.01)
+            # Small delay to make it easier to follow in real-time (disabled for performance)
+            # time.sleep(0.01)
 
     # Final summary
     print()
