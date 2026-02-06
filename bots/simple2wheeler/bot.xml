@@ -2,7 +2,7 @@
 <mujoco model="Simple2Wheel">
   <compiler angle="radian" meshdir="meshes" />
   <default>
-    <motor ctrlrange="-1 1" gear="10" />
+    <motor ctrlrange="-1 1" gear="1" />
   </default>
   <asset>
     <mesh name="body_body" file="body_body.stl" scale="0.001000 0.001000 0.001000" />
@@ -26,17 +26,18 @@
           <joint name="Revolute_2" type="hinge" pos="-0.175000 0.075000 0.000000" axis="1.000000 0.000000 0.000000" />
           <geom type="mesh" mesh="r_wheel_r_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
         </body>
-      </body>
-      <body name="camera_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
-        <inertial pos="-0.050000 0.148736 -0.086472" mass="0.02022509319841813" fullinertia="4.895318e-06 4.895318e-06 1.363515e-06 0.000000e+00 0.000000e+00 0.000000e+00" />
-        <geom type="mesh" mesh="camera_camera" rgba="1.0 1.0 1.0 1.0" />
-        <camera name="bot_camera" pos="-0.050000 0.120000 0.000000" euler="0 0 0" fovy="60" />
+        <body name="camera_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+          <inertial pos="-0.050000 0.148736 -0.086472" mass="0.02022509319841813" fullinertia="4.895318e-06 4.895318e-06 1.363515e-06 0.000000e+00 0.000000e+00 0.000000e+00" />
+          <geom type="mesh" mesh="camera_camera" rgba="1.0 1.0 1.0 1.0" />
+          <camera name="camera_1_cam" fovy="45.0" pos="-0.050000 0.148736 -0.061472" euler="0 3.141592653589793 0" />
+        </body>
       </body>
     </body>
   </worldbody>
   <contact>
     <exclude body1="body_1" body2="l_wheel_1" />
     <exclude body1="body_1" body2="r_wheel_1" />
+    <exclude body1="body_1" body2="camera_1" />
   </contact>
   <actuator>
     <motor name="Revolute_1_motor" joint="Revolute_1" ctrlrange="-1 1" />

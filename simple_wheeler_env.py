@@ -37,7 +37,7 @@ class SimpleWheelerEnv:
         self.right_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_2_motor")
         self.bot_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base")
         self.target_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "target")
-        self.camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "bot_camera")
+        self.camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "camera_1_cam")
 
         # Viewer for debugging (optional)
         self.viewer = None
@@ -74,7 +74,7 @@ class SimpleWheelerEnv:
 
         # Update viewer if running
         if self.viewer is not None and self.viewer.is_running():
-            self.viewer.sync()
+            self.viewer.sync() 
 
         # Return camera image
         return self.get_camera_image()

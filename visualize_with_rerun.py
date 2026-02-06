@@ -19,7 +19,7 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
 
     # Create environment
     print("Creating environment...")
-    env = SimpleWheelerEnv(render_width=64, render_height=64)
+    env = SimpleWheelerEnv(render_width=128, render_height=128)
 
     # Log static scene elements
     print("Logging scene setup...")
@@ -58,14 +58,18 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
     step_count = 0
     start_time = time.time()
 
+    # Calculate logging frequency (30Hz for all data)
+    log_interval = max(1, int(1.0 / (30.0 * env.model.opt.timestep)))
+    sim_freq = 1.0 / env.model.opt.timestep
+    log_freq = sim_freq / log_interval
+    print(f"Simulation frequency: {sim_freq:.1f}Hz (timestep={env.model.opt.timestep}s)")
+    print(f"Logging every {log_interval} steps (~{log_freq:.1f}Hz)")
+    print()
+
     for phase_name, left_motor, right_motor, num_steps in phases:
         print(f"Phase: {phase_name} (L={left_motor:+.1f}, R={right_motor:+.1f}) for {num_steps} steps")
 
         for i in range(num_steps):
-            # Set time for this frame
-            rr.set_time("step", sequence=step_count)
-            rr.set_time("sim_time", timestamp=env.data.time)
-
             # Step simulation
             camera_img = env.step(left_motor, right_motor)
 
@@ -74,32 +78,38 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
             target_pos = env.get_target_position()
             distance = env.get_distance_to_target()
 
-            # Log motor inputs
-            rr.log("inputs/left_motor", rr.Scalars([left_motor]))
-            rr.log("inputs/right_motor", rr.Scalars([right_motor]))
+            # Log at 30Hz
+            if step_count % log_interval == 0:
+                # Set time for this frame
+                rr.set_time("step", sequence=step_count)
+                rr.set_time("sim_time", timestamp=env.data.time)
 
-            # Log bot state
-            rr.log("outputs/distance_to_target", rr.Scalars([distance]))
-            rr.log("outputs/bot_position_x", rr.Scalars([bot_pos[0]]))
-            rr.log("outputs/bot_position_y", rr.Scalars([bot_pos[1]]))
-            rr.log("outputs/bot_position_z", rr.Scalars([bot_pos[2]]))
+                # Log motor inputs
+                rr.log("inputs/left_motor", rr.Scalars([left_motor]))
+                rr.log("inputs/right_motor", rr.Scalars([right_motor]))
 
-            # Log bot position in 3D world
-            rr.log(
-                "world/bot",
-                rr.Boxes3D(
-                    half_sizes=[0.05, 0.05, 0.05],
-                    centers=[bot_pos],
-                    colors=[[100, 150, 255]],
-                    labels=["Bot"]
+                # Log bot state
+                rr.log("outputs/distance_to_target", rr.Scalars([distance]))
+                rr.log("outputs/bot_position_x", rr.Scalars([bot_pos[0]]))
+                rr.log("outputs/bot_position_y", rr.Scalars([bot_pos[1]]))
+                rr.log("outputs/bot_position_z", rr.Scalars([bot_pos[2]]))
+
+                # Log bot position in 3D world
+                rr.log(
+                    "world/bot",
+                    rr.Boxes3D(
+                        half_sizes=[0.05, 0.05, 0.05],
+                        centers=[bot_pos],
+                        colors=[[100, 150, 255]],
+                        labels=["Bot"]
+                    )
                 )
-            )
 
-            # Log camera image
-            rr.log("camera/rgb", rr.Image(camera_img))
+                # Log camera image
+                rr.log("camera/rgb", rr.Image(camera_img))
 
-            # Log current phase
-            rr.log("info/phase", rr.TextLog(phase_name))
+                # Log current phase
+                rr.log("info/phase", rr.TextLog(phase_name))
 
             # Print progress
             if step_count % 100 == 0:
@@ -136,76 +146,6 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
     env.close()
 
 
-def run_keyboard_control(output_file="robot_keyboard.rrd"):
-    """
-    Run keyboard-controlled robot with Rerun visualization.
-    (Requires interactive terminal - simplified version)
-    """
-    rr.init("simple_wheeler_keyboard")
-    rr.save(output_file)
-
-    print("Keyboard control mode!")
-    print("This demo will cycle through some pre-programmed moves.")
-    print("(Full keyboard control requires terminal input handling)")
-    print()
-
-    env = SimpleWheelerEnv(render_width=64, render_height=64)
-
-    # Log static elements
-    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
-    target_pos = env.get_target_position()
-    rr.log(
-        "world/target",
-        rr.Boxes3D(
-            half_sizes=[0.05, 0.05, 0.05],
-            centers=[target_pos],
-            colors=[[255, 127, 0]]
-        ),
-        static=True
-    )
-
-    # Simple control loop
-    controls = [
-        (0.5, 0.5),   # Forward
-        (0.5, 0.2),   # Slight right
-        (0.5, 0.5),   # Forward
-        (0.2, 0.5),   # Slight left
-        (0.5, 0.5),   # Forward
-    ]
-
-    step_count = 0
-    for control_idx in range(100):
-        left_motor, right_motor = controls[control_idx % len(controls)]
-
-        for _ in range(10):
-            rr.set_time("step", sequence=step_count)
-
-            camera_img = env.step(left_motor, right_motor)
-            bot_pos = env.get_bot_position()
-            distance = env.get_distance_to_target()
-
-            # Log everything
-            rr.log("inputs/left_motor", rr.Scalars([left_motor]))
-            rr.log("inputs/right_motor", rr.Scalars([right_motor]))
-            rr.log("outputs/distance_to_target", rr.Scalars([distance]))
-            rr.log("world/bot", rr.Boxes3D(
-                half_sizes=[0.05, 0.05, 0.05],
-                centers=[bot_pos],
-                colors=[[100, 150, 255]]
-            ))
-            rr.log("camera/rgb", rr.Image(camera_img))
-
-            step_count += 1
-            time.sleep(0.01)
-
-    env.close()
-    print("Demo complete! Check the Rerun viewer.")
-
 
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "keyboard":
-        run_keyboard_control()
-    else:
-        run_manual_control_demo()
+    run_manual_control_demo()
