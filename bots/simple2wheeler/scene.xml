@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="Simple2Wheel_scene">
+  <option timestep="0.02" />
   <include file="bot.xml" />
   <visual>
     <headlight ambient=".4 .4 .4" diffuse=".8 .8 .8" specular="0.1 0.1 0.1" />
