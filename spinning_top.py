@@ -46,16 +46,19 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
     start = time.time()
 
     # Enable wireframe rendering of the entire scene.
-    viewer.user_scn.flags[mujoco.mjtRndFlag.mjRND_WIREFRAME] = 1
     viewer.sync()
 
     while viewer.is_running() and time.time() - start < 30:
       step_start = time.time()
       mujoco.mj_step(model, data)
-      viewer.align()
 
       with viewer.lock():
          viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = int(data.time%2)
 
       viewer.sync()
+
+      # Proper frame rate control
+      time_until_next_step = model.opt.timestep - (time.time() - step_start)
+      if time_until_next_step > 0:
+        time.sleep(time_until_next_step)
 
