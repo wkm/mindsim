@@ -17,4 +17,5 @@ dependencies = [
     "tqdm>=4.67.2",
     "rerun>=1.0.30",
     "rerun-sdk>=0.29.0",
+    "wandb>=0.24.1",
 ]

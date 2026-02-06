@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="Simple2Wheel">
+  <freejoint />
+  <compiler angle="radian" meshdir="meshes" />
+  <default>
+    <motor ctrlrange="-1 1" gear="1" />
+  </default>
+  <asset>
+    <mesh name="body_body" file="body_body.stl" />
+    <mesh name="l_wheel_l_wheel" file="l_wheel_l_wheel.stl" />
+    <mesh name="r_wheel_r_wheel" file="r_wheel_r_wheel.stl" />
+  </asset>
+  <worldbody>
+    <body name="base" pos="0 0 0" euler="1.5707963267948966 0 0">
+      <body name="body_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+        <inertial pos="-50.000000 70.000000 0.000000" mass="8.124999999999996" fullinertia="53760.416667 84635.416667 53760.416667 0.000000 0.000000 0.000000" />
+        <geom type="mesh" mesh="body_body" rgba="0.9647058823529412 0.9647058823529412 0.9529411764705882 1.0" />
+        <body name="l_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+          <inertial pos="95.000000 75.000000 0.000000" mass="0.9000000000000001" fullinertia="3375.000000 1807.500000 1807.500000 0.000000 0.000000 0.000000" />
+          <joint name="Revolute_1" type="hinge" pos="75.000000 75.000000 0.000000" axis="-1.000000 0.000000 0.000000" />
+          <geom type="mesh" mesh="l_wheel_l_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
+        </body>
+        <body name="r_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+          <inertial pos="-195.000000 75.000000 0.000000" mass="0.9000000000000002" fullinertia="3375.000000 1807.500000 1807.500000 0.000000 0.000000 0.000000" />
+          <joint name="Revolute_2" type="hinge" pos="-175.000000 75.000000 0.000000" axis="1.000000 0.000000 0.000000" />
+          <geom type="mesh" mesh="r_wheel_r_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="Revolute_1_motor" joint="Revolute_1" ctrlrange="-1 1" />
+    <motor name="Revolute_2_motor" joint="Revolute_2" ctrlrange="-1 1" />
+  </actuator>
+  <sensor>
+    <jointpos name="Revolute_1_pos_sensor" joint="Revolute_1" />
+    <jointvel name="Revolute_1_vel_sensor" joint="Revolute_1" />
+    <jointpos name="Revolute_2_pos_sensor" joint="Revolute_2" />
+    <jointvel name="Revolute_2_vel_sensor" joint="Revolute_2" />
+  </sensor>
+</mujoco>

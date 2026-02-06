@@ -1,0 +1,83 @@
+# F3DToMuJoCo Export Manifest
+# Generated automatically - compare with .xml and meshes/
+
+export:
+  document: Simple2Wheel
+  timestamp: "2026-02-02T22:26:05.320786"
+  units: mm
+  length_scale: 10.0
+  debug_mode: false
+  actuators_enabled: true
+  actuator_type: motor
+  sensors_enabled: true
+
+files:
+  scene: scene.xml
+  robot: bot.xml
+  meshes: meshes/
+
+components:
+  - name: body_1
+    parent: base
+    position: [0.000000 0.000000 0.000000]
+    quaternion: [1.000000 0.000000 0.000000 0.000000]
+  - name: l_wheel_1
+    parent: body_1
+    position: [0.000000 0.000000 0.000000]
+    quaternion: [1.000000 0.000000 0.000000 0.000000]
+  - name: r_wheel_1
+    parent: body_1
+    position: [0.000000 0.000000 0.000000]
+    quaternion: [1.000000 0.000000 0.000000 0.000000]
+
+bodies:
+  - name: body_body
+    component: body_1
+    mesh: meshes/body_body.stl
+    color: [0.9647058823529412 0.9647058823529412 0.9529411764705882 1.0]
+  - name: l_wheel_l_wheel
+    component: l_wheel_1
+    mesh: meshes/l_wheel_l_wheel.stl
+    color: [0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0]
+  - name: r_wheel_r_wheel
+    component: r_wheel_1
+    mesh: meshes/r_wheel_r_wheel.stl
+    color: [0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0]
+
+joints:
+  - name: Revolute_1
+    type: hinge
+    parent: body_1
+    child: l_wheel_1
+    position: [75.000000 75.000000 0.000000]
+    axis: [-1.000000 0.000000 0.000000]
+  - name: Revolute_2
+    type: hinge
+    parent: body_1
+    child: r_wheel_1
+    position: [-175.000000 75.000000 0.000000]
+    axis: [1.000000 0.000000 0.000000]
+
+actuators:
+  - name: Revolute_1_motor
+    type: motor
+    joint: Revolute_1
+    ctrlrange: [-1 1]
+  - name: Revolute_2_motor
+    type: motor
+    joint: Revolute_2
+    ctrlrange: [-1 1]
+
+sensors:
+  - name: Revolute_1_pos_sensor
+    type: jointpos
+    joint: Revolute_1
+  - name: Revolute_1_vel_sensor
+    type: jointvel
+    joint: Revolute_1
+  - name: Revolute_2_pos_sensor
+    type: jointpos
+    joint: Revolute_2
+  - name: Revolute_2_vel_sensor
+    type: jointvel
+    joint: Revolute_2
