@@ -1,33 +1,43 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="Simple2Wheel">
-  <freejoint />
   <compiler angle="radian" meshdir="meshes" />
   <default>
-    <motor ctrlrange="-1 1" gear="1" />
+    <motor ctrlrange="-1 1" gear="10" />
   </default>
   <asset>
-    <mesh name="body_body" file="body_body.stl" />
-    <mesh name="l_wheel_l_wheel" file="l_wheel_l_wheel.stl" />
-    <mesh name="r_wheel_r_wheel" file="r_wheel_r_wheel.stl" />
+    <mesh name="body_body" file="body_body.stl" scale="0.001000 0.001000 0.001000" />
+    <mesh name="l_wheel_l_wheel" file="l_wheel_l_wheel.stl" scale="0.001000 0.001000 0.001000" />
+    <mesh name="r_wheel_r_wheel" file="r_wheel_r_wheel.stl" scale="0.001000 0.001000 0.001000" />
+    <mesh name="camera_camera" file="camera_camera.stl" scale="0.001000 0.001000 0.001000" />
   </asset>
   <worldbody>
     <body name="base" pos="0 0 0" euler="1.5707963267948966 0 0">
+      <freejoint name="root" />
       <body name="body_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
-        <inertial pos="-50.000000 70.000000 0.000000" mass="8.124999999999996" fullinertia="53760.416667 84635.416667 53760.416667 0.000000 0.000000 0.000000" />
+        <inertial pos="-0.050000 0.070000 0.000000" mass="8.124999999999996" fullinertia="5.376042e-02 8.463542e-02 5.376042e-02 0.000000e+00 0.000000e+00 0.000000e+00" />
         <geom type="mesh" mesh="body_body" rgba="0.9647058823529412 0.9647058823529412 0.9529411764705882 1.0" />
         <body name="l_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
-          <inertial pos="95.000000 75.000000 0.000000" mass="0.9000000000000001" fullinertia="3375.000000 1807.500000 1807.500000 0.000000 0.000000 0.000000" />
-          <joint name="Revolute_1" type="hinge" pos="75.000000 75.000000 0.000000" axis="-1.000000 0.000000 0.000000" />
+          <inertial pos="0.095000 0.075000 0.000000" mass="0.9000000000000001" fullinertia="3.375000e-03 1.807500e-03 1.807500e-03 0.000000e+00 0.000000e+00 0.000000e+00" />
+          <joint name="Revolute_1" type="hinge" pos="0.075000 0.075000 0.000000" axis="-1.000000 0.000000 0.000000" />
           <geom type="mesh" mesh="l_wheel_l_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
         </body>
         <body name="r_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
-          <inertial pos="-195.000000 75.000000 0.000000" mass="0.9000000000000002" fullinertia="3375.000000 1807.500000 1807.500000 0.000000 0.000000 0.000000" />
-          <joint name="Revolute_2" type="hinge" pos="-175.000000 75.000000 0.000000" axis="1.000000 0.000000 0.000000" />
+          <inertial pos="-0.195000 0.075000 0.000000" mass="0.9000000000000002" fullinertia="3.375000e-03 1.807500e-03 1.807500e-03 0.000000e+00 0.000000e+00 0.000000e+00" />
+          <joint name="Revolute_2" type="hinge" pos="-0.175000 0.075000 0.000000" axis="1.000000 0.000000 0.000000" />
           <geom type="mesh" mesh="r_wheel_r_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
         </body>
       </body>
+      <body name="camera_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
+        <inertial pos="-0.050000 0.148736 -0.086472" mass="0.02022509319841813" fullinertia="4.895318e-06 4.895318e-06 1.363515e-06 0.000000e+00 0.000000e+00 0.000000e+00" />
+        <geom type="mesh" mesh="camera_camera" rgba="1.0 1.0 1.0 1.0" />
+        <camera name="bot_camera" pos="-0.050000 0.120000 0.000000" euler="0 0 0" fovy="60" />
+      </body>
     </body>
   </worldbody>
+  <contact>
+    <exclude body1="body_1" body2="l_wheel_1" />
+    <exclude body1="body_1" body2="r_wheel_1" />
+  </contact>
   <actuator>
     <motor name="Revolute_1_motor" joint="Revolute_1" ctrlrange="-1 1" />
     <motor name="Revolute_2_motor" joint="Revolute_2" ctrlrange="-1 1" />

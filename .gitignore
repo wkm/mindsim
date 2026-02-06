@@ -9,5 +9,13 @@ wheels/
 # Virtual environments
 .venv
 
+# Project-specific ignores
 mujoco_menagerie/
 .DS_Store
+
+# MuJoCo logs
+MUJOCO_LOG.TXT
+*.log
+
+# Rerun recordings
+*.rrd

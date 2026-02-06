@@ -47,6 +47,7 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 
     # Enable wireframe rendering of the entire scene.
     viewer.sync()
+    viewer.align()
 
     while viewer.is_running() and time.time() - start < 30:
       step_start = time.time()
