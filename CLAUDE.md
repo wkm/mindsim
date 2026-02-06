@@ -4,7 +4,7 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 
 ## Quick Start
 
-**This project uses `uv` for package management. Always run Python with:**
+**Always run with `uv`:**
 ```bash
 uv run python <script.py>
 ```
@@ -13,14 +13,12 @@ uv run python <script.py>
 
 ```
 mindsim/
-├── bots/simple2wheeler/     # Robot MJCF files + STL meshes
-│   ├── bot.xml              # Robot definition (scaled, camera, motors)
-│   ├── scene.xml            # Scene with floor + orange target cube
-│   └── meshes/              # STL files (body, wheels, camera)
-├── simple_wheeler_env.py    # Core environment class
-├── test_manual_control.py   # Basic testing script
-├── visualize_with_rerun.py  # Rerun visualization (saves .rrd file)
-└── visualize_matplotlib.py  # Live matplotlib plots
+├── bots/simple2wheeler/
+│   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
+│   ├── scene.xml            # World: floor, lighting, target
+│   └── meshes/*.stl         # Visual geometry (scaled in XML)
+├── simple_wheeler_env.py    # Environment API
+└── visualize.py             # Rerun visualization → robot_sim.rrd
 ```
 
 ## Environment API
@@ -28,57 +26,68 @@ mindsim/
 ```python
 from simple_wheeler_env import SimpleWheelerEnv
 
-env = SimpleWheelerEnv(render_width=16, render_height=16)
+env = SimpleWheelerEnv(render_width=128, render_height=128)
 
-# Step simulation with motor commands
-camera_img = env.step(left_motor=0.5, right_motor=0.5)  # range: [-1, 1]
+# Step simulation
+camera_img = env.step(left_motor=0.5, right_motor=0.5)  # [-1, 1]
 
-# Get state
-bot_pos = env.get_bot_position()          # [x, y, z] in meters
-target_pos = env.get_target_position()    # [x, y, z] in meters
-distance = env.get_distance_to_target()   # float
+# Access MuJoCo model/data directly
+env.model    # MjModel - structure (bodies, geoms, cams, meshes)
+env.data     # MjData - state (xpos, xquat, sensor data)
+
+# Convenience methods
+env.get_bot_position()
+env.get_target_position()
+env.get_distance_to_target()
 
 env.close()
 ```
 
-## Running Visualizations
+## Visualization
 
-**Rerun (recommended):**
 ```bash
-uv run python visualize_with_rerun.py
-# Creates robot_sim.rrd file
-# View with: rerun robot_sim.rrd (requires: cargo binstall rerun-cli)
+uv run python visualize.py
+rerun robot_sim.rrd
 ```
 
-**Matplotlib (live plots):**
-```bash
-uv run python visualize_matplotlib.py
-# Opens interactive window with camera, motors, distance, trajectory
-```
+Creates a Rerun recording with:
+- 3D robot meshes from MuJoCo model
+- Camera view with proper FOV
+- Trajectory trail
+- Motor inputs and distance plots
 
-**Basic test:**
-```bash
-uv run python test_manual_control.py
-```
+## MuJoCo → Visualization Gotchas
 
-## Scene Configuration
+1. **Always call `mj_forward()` after `mj_resetData()`**
+   Positions/orientations aren't computed until forward kinematics runs
 
-- **Bot**: Starts at origin (0, 0, 0), 90° rotated
-- **Target**: Orange cube at (0, 2, 0.08) - 2m in front
-- **Camera**: 64x64 RGB (configurable), mounted on bot
-- **Motors**: Gear ratio = 10, control range [-1, 1]
-- **Distance**: Bot moves ~0.08m per 100 steps at motor=0.5
+2. **Get meshes from model, not files**
+   `model.mesh_vert` and `model.mesh_face` have XML `scale=` already applied
 
-## Next Steps for ML
+3. **Use model structure to drive everything**
+   Iterate `model.nbody`, `model.ngeom`, `model.ncam` - don't hardcode names
 
-1. **Reward function**: `reward = -distance_to_target`
-2. **Observation**: 16x16 camera image (grayscale or RGB)
-3. **Action**: (left_motor, right_motor) in [-1, 1]
-4. **Network**: Simple CNN → 2 output values
-5. **Training**: Use wandb (already in dependencies)
+4. **Respect geometry hierarchy**
+   Bodies → Geoms → Meshes (each has relative transforms)
+   ```
+   world/{body}              (data.xpos, data.xquat)
+     └─ {geom}               (model.geom_pos, model.geom_quat)
+        └─ mesh              (vertices, faces)
+   ```
 
-## Key Files to Edit
+5. **Cameras need coordinate corrections**
+   MuJoCo ≠ Rerun conventions → compose quaternions to fix orientation
 
-- `bot.xml` - Robot config (motor gear, camera position)
-- `scene.xml` - Target position, lighting, floor size
-- `simple_wheeler_env.py` - Add reward function, reset logic
+6. **Don't duplicate model entities**
+   If the model has floor/target/etc., use it - don't log separately
+
+## Key Files
+
+- **bot.xml** - Robot structure (motors, sensors, camera, meshes)
+- **scene.xml** - World setup (target, floor, lighting)
+- **simple_wheeler_env.py** - Env logic (step, reset, reward)
+- **visualize.py** - Rerun logging (model-driven, no hardcoding)
+
+## Development Notes
+
+- **Clean up before committing** - Remove debug scripts (debug_*.py, test_*.py created during dev), temporary files, and .rrd recordings before making commits
