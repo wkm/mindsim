@@ -8,6 +8,13 @@ import time
 from simple_wheeler_env import SimpleWheelerEnv
 import mujoco
 
+# Visualization constants
+CAMERA_WIDTH = 128
+CAMERA_HEIGHT = 128
+LOGGING_FREQUENCY_HZ = 30.0
+PROGRESS_PRINT_INTERVAL = 100  # steps
+FLOOR_SIZE = 10.0  # meters (10x10 floor)
+
 
 def quaternion_multiply(q1, q2):
     """
@@ -32,7 +39,8 @@ def log_mujoco_scene(env):
     Extracts mesh data directly from MuJoCo (with correct scaling already applied).
     """
     model = env.model
-    print("  Scanning MuJoCo model for bodies and meshes...")
+    mesh_count = 0
+    geom_count = 0
 
     # Iterate through all bodies in the model
     for body_id in range(model.nbody):
@@ -51,7 +59,6 @@ def log_mujoco_scene(env):
                 # If it's a mesh geometry
                 if geom_type == mujoco.mjtGeom.mjGEOM_MESH:
                     mesh_id = model.geom_dataid[geom_id]
-                    mesh_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MESH, mesh_id)
                     geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
 
                     # Extract mesh vertices and faces from MuJoCo model
@@ -95,7 +102,7 @@ def log_mujoco_scene(env):
                         ),
                         static=True
                     )
-                    print(f"    ✓ Loaded mesh '{mesh_name}' for body '{body_name}' ({len(vertices)} verts)")
+                    mesh_count += 1
 
                 # Handle non-mesh geometries (boxes, spheres, etc.)
                 elif geom_type == mujoco.mjtGeom.mjGEOM_BOX:
@@ -126,12 +133,9 @@ def log_mujoco_scene(env):
                         ),
                         static=True
                     )
-                    print(f"    ✓ Logged box geometry for '{body_name}'")
-
-    print(f"  Found and logged {model.nbody - 1} bodies")
+                    geom_count += 1
 
     # Log cameras
-    print("  Scanning for cameras...")
     for cam_id in range(model.ncam):
         cam_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, cam_id)
         cam_body_id = model.cam_bodyid[cam_id]
@@ -140,9 +144,6 @@ def log_mujoco_scene(env):
         # Get camera position and orientation relative to body
         cam_pos = model.cam_pos[cam_id]
         cam_quat = model.cam_quat[cam_id]  # [w, x, y, z] format
-
-        # Get camera intrinsics
-        fovy_deg = model.cam_fovy[cam_id]
 
         # Convert MuJoCo quaternion to xyzw format
         mj_quat_xyzw = np.array([cam_quat[1], cam_quat[2], cam_quat[3], cam_quat[0]])
@@ -172,35 +173,11 @@ def log_mujoco_scene(env):
             static=True
         )
 
-        # Log Pinhole camera with FOV (stored in env for later use)
-        # We'll set this up when we know the image resolution
-        print(f"    ✓ Logged camera '{cam_name}' on body '{body_name}' (fovy={fovy_deg}°)")
+    print(f"  Loaded: {model.nbody - 1} bodies, {mesh_count} meshes, {geom_count} geoms, {model.ncam} cameras")
 
 
-def run_manual_control_demo(output_file="robot_sim.rrd"):
-    """
-    Run a manual control demo with Rerun visualization.
-    Saves to .rrd file that can be viewed with: rerun robot_sim.rrd
-    """
-    # Initialize Rerun - save to file instead of spawning viewer
-    rr.init("simple_wheeler_robot")
-    rr.save(output_file)
-
-    # Create environment
-    print("Creating environment...")
-    env = SimpleWheelerEnv(render_width=128, render_height=128)
-
-    # Log static scene elements
-    print("Logging scene setup...")
-
-    # Log world origin
-    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
-    print("  ✓ Logged world origin")
-
-    # Log all bodies and meshes from MuJoCo model
-    log_mujoco_scene(env)
-
-    # Set up Pinhole camera for the robot's camera
+def setup_camera(env):
+    """Set up Pinhole camera for the robot's camera and return the entity path."""
     cam_id = env.camera_id
     cam_name = mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_CAMERA, cam_id)
     cam_body_id = env.model.cam_bodyid[cam_id]
@@ -208,7 +185,6 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
     fovy_deg = env.model.cam_fovy[cam_id]
 
     # Calculate focal length from FOV
-    # focal_length = image_height / (2 * tan(fovy/2))
     focal_length = float(env.render_height / (2.0 * np.tan(np.radians(fovy_deg) / 2.0)))
 
     camera_entity_path = f"world/{body_name}/{cam_name}"
@@ -220,53 +196,62 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
         ),
         static=True
     )
-    print(f"  ✓ Set up Pinhole for camera '{cam_name}' (focal_length={focal_length:.1f})")
 
-    # Log floor plane (10x10 meter ground plane)
+    return camera_entity_path
+
+
+def setup_scene(env):
+    """Log static scene elements (world origin, bodies, meshes, floor)."""
+    # Log world origin
+    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
+
+    # Log all bodies and meshes from MuJoCo model
+    log_mujoco_scene(env)
+
+    # Set up camera
+    camera_entity_path = setup_camera(env)
+
+    # Log floor plane
+    half_size = FLOOR_SIZE / 2.0
     rr.log(
         "world/floor",
         rr.Boxes3D(
-            half_sizes=[[5.0, 5.0, 0.005]],  # 10x10 meter floor, thin
+            half_sizes=[[half_size, half_size, 0.005]],
             centers=[[0, 0, -0.005]],
-            colors=[[128, 128, 128, 100]],  # Semi-transparent gray
+            colors=[[128, 128, 128, 100]],
         ),
         static=True
     )
-    print("  ✓ Logged floor")
 
-    # Track trajectory points
+    return camera_entity_path
+
+
+def run_simulation(env, camera_entity_path, phases):
+    """
+    Run simulation with specified control phases.
+
+    Args:
+        env: SimpleWheelerEnv instance
+        camera_entity_path: Path to camera entity in Rerun
+        phases: List of (name, left_motor, right_motor, num_steps) tuples
+
+    Returns:
+        Total elapsed time in seconds
+    """
     trajectory_points = []
-
-    # Run simulation with different control phases
-    print("Starting simulation...")
-    print("  Phase 1: Forward")
-    print("  Phase 2: Turn right")
-    print("  Phase 3: Forward again")
-    print()
-
-    phases = [
-        ("Forward", 0.5, 0.5, 200),
-        ("Turn Right", 0.5, -0.5, 150),
-        ("Forward Again", 0.5, 0.5, 200),
-        ("Turn Left", -0.5, 0.5, 150),
-        ("Forward More", 0.5, 0.5, 300),
-    ]
-
     step_count = 0
     start_time = time.time()
 
-    # Calculate logging frequency (30Hz for all data)
-    log_interval = max(1, int(1.0 / (30.0 * env.model.opt.timestep)))
+    # Calculate logging frequency
+    log_interval = max(1, int(1.0 / (LOGGING_FREQUENCY_HZ * env.model.opt.timestep)))
     sim_freq = 1.0 / env.model.opt.timestep
     log_freq = sim_freq / log_interval
-    print(f"Simulation frequency: {sim_freq:.1f}Hz (timestep={env.model.opt.timestep}s)")
-    print(f"Logging every {log_interval} steps (~{log_freq:.1f}Hz)")
+
+    print(f"Simulation: {sim_freq:.1f}Hz | Logging: {log_freq:.1f}Hz ({log_interval} step interval)")
     print()
 
     for phase_name, left_motor, right_motor, num_steps in phases:
-        print(f"Phase: {phase_name} (L={left_motor:+.1f}, R={right_motor:+.1f}) for {num_steps} steps")
-
-        for i in range(num_steps):
+        for _ in range(num_steps):
             # Step simulation
             camera_img = env.step(left_motor, right_motor)
 
@@ -326,39 +311,62 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
                 rr.log("info/phase", rr.TextLog(phase_name))
 
             # Print progress
-            if step_count % 100 == 0:
+            if step_count % PROGRESS_PRINT_INTERVAL == 0:
                 elapsed = time.time() - start_time
-                print(f"  Step {step_count}: pos={bot_pos[:2]}, dist={distance:.3f}m, time={elapsed:.1f}s")
+                print(f"  Step {step_count}: pos={bot_pos[:2]}, dist={distance:.3f}m, {elapsed:.1f}s")
 
             step_count += 1
 
-            # Small delay to make it easier to follow in real-time (disabled for performance)
-            # time.sleep(0.01)
+    return time.time() - start_time
 
-    # Final summary
+
+def run_manual_control_demo(output_file="robot_sim.rrd"):
+    """
+    Run a manual control demo with Rerun visualization.
+    Saves to .rrd file that can be viewed with: rerun robot_sim.rrd
+    """
+    # Initialize Rerun
+    rr.init("simple_wheeler_robot")
+    rr.save(output_file)
+
+    # Create environment
+    print(f"Creating environment ({CAMERA_WIDTH}x{CAMERA_HEIGHT})...")
+    env = SimpleWheelerEnv(render_width=CAMERA_WIDTH, render_height=CAMERA_HEIGHT)
+
+    # Set up scene
+    print("Setting up scene...")
+    camera_entity_path = setup_scene(env)
+
+    # Define control phases
+    phases = [
+        ("Forward", 0.5, 0.5, 200),
+        ("Turn Right", 0.5, -0.5, 150),
+        ("Forward Again", 0.5, 0.5, 200),
+        ("Turn Left", -0.5, 0.5, 150),
+        ("Forward More", 0.5, 0.5, 300),
+    ]
+
+    total_steps = sum(n for _, _, _, n in phases)
+    print(f"Running {len(phases)} phases ({total_steps} total steps)...")
+    print()
+
+    # Run simulation
+    elapsed = run_simulation(env, camera_entity_path, phases)
+
+    # Summary
     print()
     print("=" * 60)
     print("Simulation Complete!")
-    print(f"  Total steps: {step_count}")
+    print(f"  Total steps: {total_steps}")
     print(f"  Final position: {env.get_bot_position()}")
     print(f"  Final distance to target: {env.get_distance_to_target():.3f}m")
-    print(f"  Elapsed time: {time.time() - start_time:.1f}s")
+    print(f"  Elapsed time: {elapsed:.1f}s ({total_steps/elapsed:.0f} steps/sec)")
     print("=" * 60)
     print()
     print(f"Recording saved to: {output_file}")
-    print()
-    print("To view the recording:")
-    print(f"  1. Install rerun viewer: cargo binstall rerun-cli")
-    print(f"  2. View the file: rerun {output_file}")
-    print()
-    print("The recording includes:")
-    print("  - 3D scene with bot and target positions")
-    print("  - Motor input time series (L/R)")
-    print("  - Distance to target over time")
-    print("  - Camera feed")
+    print(f"View with: rerun {output_file}")
 
     env.close()
-
 
 
 if __name__ == "__main__":
