@@ -27,6 +27,17 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
     # Log world origin
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
 
+    # Log floor plane (10x10 meter ground plane)
+    rr.log(
+        "world/floor",
+        rr.Boxes3D(
+            half_sizes=[[5.0, 5.0, 0.005]],  # 10x10 meter floor, thin
+            centers=[[0, 0, -0.005]],
+            colors=[[128, 128, 128, 100]],  # Semi-transparent gray
+        ),
+        static=True
+    )
+
     # Log target cube position
     target_pos = env.get_target_position()
     rr.log(
@@ -39,6 +50,9 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
         ),
         static=True
     )
+
+    # Track trajectory points
+    trajectory_points = []
 
     # Run simulation with different control phases
     print("Starting simulation...")
@@ -94,14 +108,41 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
                 rr.log("outputs/bot_position_y", rr.Scalars([bot_pos[1]]))
                 rr.log("outputs/bot_position_z", rr.Scalars([bot_pos[2]]))
 
-                # Log bot position in 3D world
+                # Get bot rotation (quaternion from MuJoCo)
+                bot_quat = env.data.xquat[env.bot_body_id]  # [w, x, y, z] format
+
+                # Log bot as Transform3D with position and orientation
                 rr.log(
                     "world/bot",
+                    rr.Transform3D(
+                        translation=bot_pos,
+                        rotation=rr.Quaternion(xyzw=[bot_quat[1], bot_quat[2], bot_quat[3], bot_quat[0]])  # Convert to xyzw
+                    )
+                )
+
+                # Log bot body as a box under the transform
+                rr.log(
+                    "world/bot/body",
                     rr.Boxes3D(
-                        half_sizes=[0.05, 0.05, 0.05],
-                        centers=[bot_pos],
-                        colors=[[100, 150, 255]],
-                        labels=["Bot"]
+                        half_sizes=[[0.08, 0.05, 0.03]],  # Approximate bot dimensions
+                        colors=[[100, 150, 255]]
+                    )
+                )
+
+                # Add to trajectory and log trail
+                trajectory_points.append(bot_pos.copy())
+                if len(trajectory_points) > 1:
+                    rr.log(
+                        "world/trajectory",
+                        rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]])
+                    )
+
+                # Log camera frustum to visualize FOV
+                rr.log(
+                    "world/bot/camera",
+                    rr.Pinhole(
+                        resolution=[env.render_width, env.render_height],
+                        focal_length=0.5 * env.render_width,  # Approximate
                     )
                 )
 
