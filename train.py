@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 from datetime import datetime
 from tqdm import tqdm
+import time
 import wandb
 import rerun as rr
 from training_env import TrainingEnv
@@ -349,7 +350,7 @@ def main():
             "learning_rate": 1e-3,
             "algorithm": "REINFORCE",
             "gamma": 0.99,
-            "num_episodes": 1000,
+            "num_episodes": 10000,
             "log_rerun_every": 100,
         }
     )
@@ -366,11 +367,19 @@ def main():
     print()
 
     # Training loop
-    num_episodes = 1000  # Baseline run
+    num_episodes = 10000  # Baseline run
     log_rerun_every = 100  # Log every 100th episode to Rerun
     print(f"Training for {num_episodes} episodes...")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
+
+    # Timing accumulators
+    timing = {
+        'collect': 0.0,
+        'train': 0.0,
+        'log': 0.0,
+        'rerun': 0.0,
+    }
 
     pbar = tqdm(range(num_episodes), desc="Training", position=0)
     for episode in pbar:
@@ -378,21 +387,29 @@ def main():
         should_log_rerun = (episode % log_rerun_every == 0)
 
         # Start new Rerun recording for this episode
+        t_rerun_start = time.perf_counter()
         if should_log_rerun:
             rr_wandb.start_episode(episode, env, namespace="training")
+        timing['rerun'] += time.perf_counter() - t_rerun_start
 
+        t_collect_start = time.perf_counter()
         episode_data = collect_episode(
             env, policy, device,
             show_progress=False,
             log_rerun=should_log_rerun
         )
+        timing['collect'] += time.perf_counter() - t_collect_start
 
         # Finish Rerun recording and upload to wandb
+        t_rerun_start = time.perf_counter()
         if should_log_rerun:
             rr_wandb.finish_episode(episode_data, upload_artifact=True)
+        timing['rerun'] += time.perf_counter() - t_rerun_start
 
         # Train on episode
+        t_train_start = time.perf_counter()
         loss, grad_norm, policy_std = train_step(policy, optimizer, episode_data)
+        timing['train'] += time.perf_counter() - t_train_start
 
         # Log to wandb
         actions_array = np.array(episode_data['actions'])
@@ -439,7 +456,9 @@ def main():
             sample_img = (episode_data['observations'][sample_idx] * 255).astype(np.uint8)
             log_dict["episode/sample_camera"] = wandb.Image(sample_img, caption=f"Episode {episode}, step {sample_idx}")
 
+        t_log_start = time.perf_counter()
         wandb.log(log_dict)
+        timing['log'] += time.perf_counter() - t_log_start
 
         # Update progress bar
         pbar.set_postfix({
@@ -449,8 +468,25 @@ def main():
             'loss': f"{loss:.6f}",
         })
 
-    # Clean up
+    # Print timing summary
+    total_time = sum(timing.values())
     print()
+    print("=" * 60)
+    print("Timing Summary")
+    print("=" * 60)
+    print(f"  Episode collection: {timing['collect']:>8.2f}s ({100*timing['collect']/total_time:>5.1f}%)")
+    print(f"  Training step:      {timing['train']:>8.2f}s ({100*timing['train']/total_time:>5.1f}%)")
+    print(f"  Wandb logging:      {timing['log']:>8.2f}s ({100*timing['log']/total_time:>5.1f}%)")
+    print(f"  Rerun recording:    {timing['rerun']:>8.2f}s ({100*timing['rerun']/total_time:>5.1f}%)")
+    print("  " + "─" * 40)
+    print(f"  Total:              {total_time:>8.2f}s")
+    print()
+    print(f"  Per-episode average:")
+    print(f"    Collection: {1000*timing['collect']/num_episodes:.1f}ms")
+    print(f"    Training:   {1000*timing['train']/num_episodes:.1f}ms")
+    print()
+
+    # Clean up
     wandb.finish()
     env.close()
     print("Training complete!")
