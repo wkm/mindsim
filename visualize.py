@@ -322,26 +322,34 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
     return time.time() - start_time
 
 
-def run_episode(env, episode_index, phases, camera_entity_path):
+def run_episode(env, episode_index, phases, output_dir):
     """
-    Run a single episode within the current Rerun recording.
+    Run a single episode with its own Rerun recording file.
 
     Args:
         env: SimpleWheelerEnv instance
-        episode_index: Episode number (used for timeline)
+        episode_index: Episode number
         phases: List of (name, left_motor, right_motor, num_steps) tuples
-        camera_entity_path: Path to camera entity for image logging
+        output_dir: Directory to save .rrd files
 
     Returns:
         Dict with episode stats
     """
+    # Create a new recording for this episode
+    rr.init(f"simple_wheeler/episode_{episode_index}")
+    episode_file = f"{output_dir}/episode_{episode_index}.rrd"
+    rr.save(episode_file)
+
     # Reset environment for new episode
     env.reset()
+
+    # Set up scene (each recording needs its own static data)
+    camera_entity_path = setup_scene(env)
 
     total_steps = sum(n for _, _, _, n in phases)
     print(f"  Episode {episode_index}: {len(phases)} phases, {total_steps} steps")
 
-    # Run simulation with episode index in timeline
+    # Run simulation
     elapsed = run_simulation(env, camera_entity_path, phases, episode_index)
 
     return {
@@ -350,29 +358,26 @@ def run_episode(env, episode_index, phases, camera_entity_path):
         "final_position": env.get_bot_position().copy(),
         "final_distance": env.get_distance_to_target(),
         "elapsed": elapsed,
+        "file": episode_file,
     }
 
 
-def run_manual_control_demo(output_file="robot_sim.rrd", num_episodes=3):
+def run_manual_control_demo(output_dir="recordings", num_episodes=3, interactive=True):
     """
     Run a manual control demo with Rerun visualization.
-    All episodes are saved to one .rrd file with an 'episode' timeline for filtering.
+    Each episode is saved to a separate .rrd file.
 
     Args:
-        output_file: Path to save .rrd file
+        output_dir: Directory to save .rrd files
         num_episodes: Number of episodes to run
+        interactive: If True, wait for Enter key between episodes
     """
-    # Initialize Rerun - single recording for all episodes
-    rr.init("simple_wheeler")
-    rr.save(output_file)
+    import os
+    os.makedirs(output_dir, exist_ok=True)
 
     # Create environment
     print(f"Creating environment ({CAMERA_WIDTH}x{CAMERA_HEIGHT})...")
     env = SimpleWheelerEnv(render_width=CAMERA_WIDTH, render_height=CAMERA_HEIGHT)
-
-    # Set up scene (static elements shared across episodes)
-    print("Setting up scene...")
-    camera_entity_path = setup_scene(env)
 
     # Define control phases (same for each episode for demo)
     phases = [
@@ -384,28 +389,40 @@ def run_manual_control_demo(output_file="robot_sim.rrd", num_episodes=3):
     ]
 
     print(f"Running {num_episodes} episodes...")
+    if interactive:
+        print("(Press Enter to start each episode, Ctrl+C to quit)")
     print()
 
-    # Run multiple episodes with episode timeline
+    # Run multiple episodes, each with its own recording file
     episode_stats = []
-    for episode_idx in range(num_episodes):
-        stats = run_episode(env, episode_idx, phases, camera_entity_path)
-        episode_stats.append(stats)
-        print()
+    try:
+        for episode_idx in range(num_episodes):
+            if interactive:
+                input(f"Press Enter to start episode {episode_idx}...")
+
+            stats = run_episode(env, episode_idx, phases, output_dir)
+            episode_stats.append(stats)
+            print()
+    except KeyboardInterrupt:
+        print("\n\nInterrupted by user.")
 
     # Summary
-    print("=" * 60)
-    print("All Episodes Complete!")
-    print(f"  Episodes: {num_episodes}")
-    total_steps = sum(s["total_steps"] for s in episode_stats)
-    total_time = sum(s["elapsed"] for s in episode_stats)
-    print(f"  Total steps: {total_steps}")
-    print(f"  Total time: {total_time:.1f}s ({total_steps/total_time:.0f} steps/sec)")
-    print("=" * 60)
-    print()
-    print(f"Recording saved to: {output_file}")
-    print(f"View with: rerun {output_file}")
-    print("(Use the 'episode' timeline to filter by episode)")
+    if episode_stats:
+        print("=" * 60)
+        print("Episodes Complete!")
+        print(f"  Episodes: {len(episode_stats)}")
+        total_steps = sum(s["total_steps"] for s in episode_stats)
+        total_time = sum(s["elapsed"] for s in episode_stats)
+        print(f"  Total steps: {total_steps}")
+        print(f"  Total time: {total_time:.1f}s ({total_steps/total_time:.0f} steps/sec)")
+        print("=" * 60)
+        print()
+        print(f"Recordings saved to: {output_dir}/")
+        for s in episode_stats:
+            print(f"  - {s['file']}")
+        print()
+        print(f"View all episodes: rerun {output_dir}/*.rrd")
+        print("(Use the recording dropdown to switch between episodes)")
 
     env.close()
 
