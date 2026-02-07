@@ -19,7 +19,7 @@ MUJOCO_LOG.TXT
 
 # Rerun recordings
 *.rrd
-training.rrd
+recordings/
 
 # Weights & Biases
 wandb/
