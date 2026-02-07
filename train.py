@@ -13,6 +13,7 @@ import wandb
 import rerun as rr
 from training_env import TrainingEnv
 import rerun_logger
+from rerun_wandb import RerunWandbLogger
 
 
 class TinyPolicy(nn.Module):
@@ -247,11 +248,16 @@ def main():
     print(f"  Logging to W&B: {wandb.run.url}")
     print()
 
+    # Initialize Rerun-WandB integration
+    rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+    print(f"  Rerun recordings: {rr_wandb.run_dir}/")
+    print()
+
     # Training loop
     num_episodes = 1000  # Baseline run
-    log_rerun_every = 10  # Log every 10th episode to Rerun
+    log_rerun_every = 100  # Log every 100th episode to Rerun
     print(f"Training for {num_episodes} episodes...")
-    print(f"  Logging every {log_rerun_every} episodes to Rerun (training.rrd)")
+    print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
     pbar = tqdm(range(num_episodes), desc="Training", position=0)
@@ -259,17 +265,19 @@ def main():
         # Collect episode (log to Rerun periodically for visualization)
         should_log_rerun = (episode % log_rerun_every == 0)
 
-        # Create new recording for each logged episode
+        # Start new Rerun recording for this episode
         if should_log_rerun:
-            rr.init("mindsim-training", recording_id=f"episode-{episode}")
-            rr.save("training.rrd")
-            rerun_logger.setup_scene(env, namespace="training")
+            rr_wandb.start_episode(episode, env, namespace="training")
 
         episode_data = collect_episode(
             env, policy, device,
             show_progress=False,
             log_rerun=should_log_rerun
         )
+
+        # Finish Rerun recording and log reference to wandb
+        if should_log_rerun:
+            rr_wandb.finish_episode(episode_data)
 
         # Train on episode
         loss = train_step(policy, optimizer, episode_data)
