@@ -19,13 +19,16 @@ from rerun_wandb import RerunWandbLogger
 
 class TinyPolicy(nn.Module):
     """
-    Trivially small neural network for proof of concept.
+    Stochastic policy network for REINFORCE.
 
     Input: RGB image (64x64x3)
-    Output: Motor commands [left, right]
+    Output: Mean of Gaussian distribution over motor commands [left, right]
+
+    The policy is stochastic: actions are sampled from N(mean, std).
+    std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=64, image_width=64):
+    def __init__(self, image_height=64, image_width=64, init_std=0.5):
         super().__init__()
 
         # Tiny CNN: just 2 conv layers
@@ -37,17 +40,22 @@ class TinyPolicy(nn.Module):
 
         # Tiny FC layers
         self.fc1 = nn.Linear(conv_out_size, 32)
-        self.fc2 = nn.Linear(32, 2)  # Output: [left_motor, right_motor]
+        self.fc2 = nn.Linear(32, 2)  # Output: mean of [left_motor, right_motor]
+
+        # Learnable log_std (state-independent)
+        # Using log_std ensures std is always positive when we exp() it
+        self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
 
     def forward(self, x):
         """
-        Forward pass.
+        Forward pass - returns action distribution parameters.
 
         Args:
             x: Input image (B, H, W, 3) in range [0, 1]
 
         Returns:
-            actions: (B, 2) motor commands in range [-1, 1]
+            mean: (B, 2) mean motor commands in range [-1, 1]
+            std: (2,) standard deviation (shared across batch)
         """
         # Permute to (B, 3, H, W) for PyTorch conv layers
         x = x.permute(0, 3, 1, 2)
@@ -61,9 +69,45 @@ class TinyPolicy(nn.Module):
 
         # FC layers
         x = torch.relu(self.fc1(x))
-        x = torch.tanh(self.fc2(x))  # Tanh to get [-1, 1] range
+        mean = torch.tanh(self.fc2(x))  # Tanh to get [-1, 1] range
 
-        return x
+        std = torch.exp(self.log_std)  # Ensure positive
+        return mean, std
+
+    def sample_action(self, x):
+        """
+        Sample an action from the policy distribution.
+
+        Args:
+            x: Input image (B, H, W, 3)
+
+        Returns:
+            action: (B, 2) sampled actions, clamped to [-1, 1]
+            log_prob: (B,) log probability of the sampled actions
+        """
+        mean, std = self.forward(x)
+        dist = torch.distributions.Normal(mean, std)
+        action = dist.sample()
+        log_prob = dist.log_prob(action).sum(dim=-1)  # Sum over action dimensions
+
+        # Clamp action to valid range
+        action = torch.clamp(action, -1.0, 1.0)
+        return action, log_prob
+
+    def log_prob(self, x, action):
+        """
+        Compute log probability of given actions.
+
+        Args:
+            x: Input image (B, H, W, 3)
+            action: (B, 2) actions to evaluate
+
+        Returns:
+            log_prob: (B,) log probability of actions
+        """
+        mean, std = self.forward(x)
+        dist = torch.distributions.Normal(mean, std)
+        return dist.log_prob(action).sum(dim=-1)
 
 
 def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=False):
@@ -72,16 +116,17 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
 
     Args:
         env: TrainingEnv instance
-        policy: Neural network policy
+        policy: Neural network policy (stochastic)
         device: torch device
         show_progress: Show progress bar for episode steps
         log_rerun: Log episode to Rerun for visualization
 
     Returns:
-        episode_data: Dict with observations, actions, rewards, etc.
+        episode_data: Dict with observations, actions, rewards, log_probs, etc.
     """
     observations = []
     actions = []
+    log_probs = []
     rewards = []
     distances = []
 
@@ -102,13 +147,16 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
         # Convert observation to torch tensor
         obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)  # (1, H, W, 3)
 
-        # Get action from policy
+        # Sample action from stochastic policy
         with torch.no_grad():
-            action = policy(obs_tensor).cpu().numpy()[0]  # (2,)
+            action, log_prob = policy.sample_action(obs_tensor)
+            action = action.cpu().numpy()[0]  # (2,)
+            log_prob = log_prob.cpu().numpy()[0]  # scalar
 
         # Store data
         observations.append(obs)
         actions.append(action)
+        log_probs.append(log_prob)
 
         # Take step
         obs, reward, done, truncated, info = env.step(action)
@@ -163,6 +211,7 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     return {
         'observations': observations,
         'actions': actions,
+        'log_probs': log_probs,
         'rewards': rewards,
         'distances': distances,
         'total_reward': total_reward,
@@ -180,42 +229,46 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     }
 
 
-def train_step(policy, optimizer, episode_data):
+def train_step(policy, optimizer, episode_data, gamma=0.99):
     """
-    Simple training step using policy gradient approach.
+    REINFORCE policy gradient training step.
 
-    For now, just optimize to maximize total reward (very basic).
+    Maximizes expected reward by increasing log probability of actions
+    that led to higher-than-average returns.
 
     Args:
-        policy: Neural network
+        policy: Stochastic neural network policy
         optimizer: PyTorch optimizer
         episode_data: Data from collect_episode
+        gamma: Discount factor for reward-to-go
     """
     observations = torch.from_numpy(np.array(episode_data['observations']))  # (T, H, W, 3)
     actions = torch.from_numpy(np.array(episode_data['actions']))  # (T, 2)
-    rewards = torch.tensor(episode_data['rewards'])  # (T,)
+    rewards = torch.tensor(episode_data['rewards'], dtype=torch.float32)  # (T,)
 
-    # Simple reward-to-go
+    # Compute discounted reward-to-go
     reward_to_go = torch.zeros_like(rewards)
     running_sum = 0
     for t in reversed(range(len(rewards))):
-        running_sum += rewards[t]
+        running_sum = rewards[t] + gamma * running_sum
         reward_to_go[t] = running_sum
 
-    # Normalize rewards
-    if reward_to_go.std() > 0:
-        reward_to_go = (reward_to_go - reward_to_go.mean()) / (reward_to_go.std() + 1e-8)
+    # Normalize advantages (reward-to-go centered and scaled)
+    # This reduces variance and helps training stability
+    advantage = reward_to_go
+    if advantage.std() > 1e-8:
+        advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
 
-    # Forward pass
-    predicted_actions = policy(observations)  # (T, 2)
+    # Compute log probabilities of the actions taken
+    log_probs = policy.log_prob(observations, actions)  # (T,)
 
-    # Loss: MSE between predicted and taken actions, weighted by reward
-    # (This is a simplified policy gradient)
-    loss = torch.mean(reward_to_go.unsqueeze(1) * (predicted_actions - actions) ** 2)
+    # REINFORCE loss: -E[advantage * log_prob]
+    # Negative because we want to maximize expected reward
+    policy_loss = -torch.mean(advantage * log_probs)
 
     # Backward pass
     optimizer.zero_grad()
-    loss.backward()
+    policy_loss.backward()
 
     # Compute gradient norm before optimizer step
     total_grad_norm = 0.0
@@ -226,7 +279,10 @@ def train_step(policy, optimizer, episode_data):
 
     optimizer.step()
 
-    return loss.item(), total_grad_norm
+    # Get current policy std for logging
+    policy_std = torch.exp(policy.log_std).detach().cpu().numpy()
+
+    return policy_loss.item(), total_grad_norm, policy_std
 
 
 def main():
@@ -287,10 +343,12 @@ def main():
             "fc2_size": 2,
             "activation": "relu",
             "output_activation": "tanh",
+            "init_std": 0.5,
             # Training
             "optimizer": "Adam",
             "learning_rate": 1e-3,
-            "algorithm": "simple_policy_gradient",
+            "algorithm": "REINFORCE",
+            "gamma": 0.99,
             "num_episodes": 1000,
             "log_rerun_every": 100,
         }
@@ -334,7 +392,7 @@ def main():
             rr_wandb.finish_episode(episode_data, upload_artifact=True)
 
         # Train on episode
-        loss, grad_norm = train_step(policy, optimizer, episode_data)
+        loss, grad_norm, policy_std = train_step(policy, optimizer, episode_data)
 
         # Log to wandb
         actions_array = np.array(episode_data['actions'])
@@ -349,6 +407,9 @@ def main():
             "episode/steps": episode_data['steps'],
             "episode/loss": loss,
             "training/grad_norm": grad_norm,
+            # Policy std (exploration level)
+            "policy/std_left": policy_std[0],
+            "policy/std_right": policy_std[1],
             # Action statistics
             "actions/left_motor_mean": episode_data['left_motor_mean'],
             "actions/left_motor_std": episode_data['left_motor_std'],
