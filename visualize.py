@@ -226,7 +226,7 @@ def setup_scene(env):
     return camera_entity_path
 
 
-def run_simulation(env, camera_entity_path, phases):
+def run_simulation(env, camera_entity_path, phases, episode_index=0):
     """
     Run simulation with specified control phases.
 
@@ -234,6 +234,7 @@ def run_simulation(env, camera_entity_path, phases):
         env: SimpleWheelerEnv instance
         camera_entity_path: Path to camera entity in Rerun
         phases: List of (name, left_motor, right_motor, num_steps) tuples
+        episode_index: Episode number for timeline
 
     Returns:
         Total elapsed time in seconds
@@ -261,7 +262,8 @@ def run_simulation(env, camera_entity_path, phases):
 
             # Log at 30Hz
             if step_count % log_interval == 0:
-                # Set time for this frame
+                # Set time for this frame - episode allows filtering by episode
+                rr.set_time("episode", sequence=episode_index)
                 rr.set_time("step", sequence=step_count)
                 rr.set_time("sim_time", timestamp=env.data.time)
 
@@ -320,24 +322,59 @@ def run_simulation(env, camera_entity_path, phases):
     return time.time() - start_time
 
 
-def run_manual_control_demo(output_file="robot_sim.rrd"):
+def run_episode(env, episode_index, phases, camera_entity_path):
+    """
+    Run a single episode within the current Rerun recording.
+
+    Args:
+        env: SimpleWheelerEnv instance
+        episode_index: Episode number (used for timeline)
+        phases: List of (name, left_motor, right_motor, num_steps) tuples
+        camera_entity_path: Path to camera entity for image logging
+
+    Returns:
+        Dict with episode stats
+    """
+    # Reset environment for new episode
+    env.reset()
+
+    total_steps = sum(n for _, _, _, n in phases)
+    print(f"  Episode {episode_index}: {len(phases)} phases, {total_steps} steps")
+
+    # Run simulation with episode index in timeline
+    elapsed = run_simulation(env, camera_entity_path, phases, episode_index)
+
+    return {
+        "episode": episode_index,
+        "total_steps": total_steps,
+        "final_position": env.get_bot_position().copy(),
+        "final_distance": env.get_distance_to_target(),
+        "elapsed": elapsed,
+    }
+
+
+def run_manual_control_demo(output_file="robot_sim.rrd", num_episodes=3):
     """
     Run a manual control demo with Rerun visualization.
-    Saves to .rrd file that can be viewed with: rerun robot_sim.rrd
+    All episodes are saved to one .rrd file with an 'episode' timeline for filtering.
+
+    Args:
+        output_file: Path to save .rrd file
+        num_episodes: Number of episodes to run
     """
-    # Initialize Rerun
-    rr.init("simple_wheeler_robot")
+    # Initialize Rerun - single recording for all episodes
+    rr.init("simple_wheeler")
     rr.save(output_file)
 
     # Create environment
     print(f"Creating environment ({CAMERA_WIDTH}x{CAMERA_HEIGHT})...")
     env = SimpleWheelerEnv(render_width=CAMERA_WIDTH, render_height=CAMERA_HEIGHT)
 
-    # Set up scene
+    # Set up scene (static elements shared across episodes)
     print("Setting up scene...")
     camera_entity_path = setup_scene(env)
 
-    # Define control phases
+    # Define control phases (same for each episode for demo)
     phases = [
         ("Forward", 0.5, 0.5, 200),
         ("Turn Right", 0.5, -0.5, 150),
@@ -346,25 +383,29 @@ def run_manual_control_demo(output_file="robot_sim.rrd"):
         ("Forward More", 0.5, 0.5, 300),
     ]
 
-    total_steps = sum(n for _, _, _, n in phases)
-    print(f"Running {len(phases)} phases ({total_steps} total steps)...")
+    print(f"Running {num_episodes} episodes...")
     print()
 
-    # Run simulation
-    elapsed = run_simulation(env, camera_entity_path, phases)
+    # Run multiple episodes with episode timeline
+    episode_stats = []
+    for episode_idx in range(num_episodes):
+        stats = run_episode(env, episode_idx, phases, camera_entity_path)
+        episode_stats.append(stats)
+        print()
 
     # Summary
-    print()
     print("=" * 60)
-    print("Simulation Complete!")
+    print("All Episodes Complete!")
+    print(f"  Episodes: {num_episodes}")
+    total_steps = sum(s["total_steps"] for s in episode_stats)
+    total_time = sum(s["elapsed"] for s in episode_stats)
     print(f"  Total steps: {total_steps}")
-    print(f"  Final position: {env.get_bot_position()}")
-    print(f"  Final distance to target: {env.get_distance_to_target():.3f}m")
-    print(f"  Elapsed time: {elapsed:.1f}s ({total_steps/elapsed:.0f} steps/sec)")
+    print(f"  Total time: {total_time:.1f}s ({total_steps/total_time:.0f} steps/sec)")
     print("=" * 60)
     print()
     print(f"Recording saved to: {output_file}")
     print(f"View with: rerun {output_file}")
+    print("(Use the 'episode' timeline to filter by episode)")
 
     env.close()
 
