@@ -10,7 +10,9 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 import wandb
+import rerun as rr
 from training_env import TrainingEnv
+import rerun_logger
 
 
 class TinyPolicy(nn.Module):
@@ -62,7 +64,7 @@ class TinyPolicy(nn.Module):
         return x
 
 
-def collect_episode(env, policy, device='cpu', show_progress=False):
+def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=False):
     """
     Run one episode and collect data.
 
@@ -71,6 +73,7 @@ def collect_episode(env, policy, device='cpu', show_progress=False):
         policy: Neural network policy
         device: torch device
         show_progress: Show progress bar for episode steps
+        log_rerun: Log episode to Rerun for visualization
 
     Returns:
         episode_data: Dict with observations, actions, rewards, etc.
@@ -84,9 +87,13 @@ def collect_episode(env, policy, device='cpu', show_progress=False):
     truncated = False
     total_reward = 0
     steps = 0
+    info = {}  # Initialize info dict
 
     # Optional progress bar for episode steps
     pbar = tqdm(total=env.max_episode_steps, desc="  Episode steps", leave=False, position=1) if show_progress else None
+
+    # Track trajectory for Rerun
+    trajectory_points = []
 
     while not (done or truncated):
         # Convert observation to torch tensor
@@ -104,6 +111,31 @@ def collect_episode(env, policy, device='cpu', show_progress=False):
         obs, reward, done, truncated, info = env.step(action)
         rewards.append(reward)
         total_reward += reward
+
+        # Log to Rerun in real-time (during the episode)
+        if log_rerun:
+            # Set step timeline
+            rr.set_time("step", sequence=steps)
+
+            # Log camera view
+            rr.log("training/camera", rr.Image(observations[-1]))  # Log the obs BEFORE step
+
+            # Log actions
+            rr.log("training/action/left_motor", rr.Scalars([action[0]]))
+            rr.log("training/action/right_motor", rr.Scalars([action[1]]))
+
+            # Log reward and distance
+            rr.log("training/reward", rr.Scalars([reward]))
+            rr.log("training/distance_to_target", rr.Scalars([info['distance']]))
+
+            # Log body transforms (uses current MuJoCo state)
+            rerun_logger.log_body_transforms(env, namespace="training")
+
+            # Build and log trajectory
+            trajectory_points.append(info['position'])
+            if len(trajectory_points) > 1:
+                rr.log("training/trajectory", rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]))
+
         steps += 1
 
         # Update progress bar
@@ -113,6 +145,11 @@ def collect_episode(env, policy, device='cpu', show_progress=False):
 
     if pbar:
         pbar.close()
+
+    # Log episode summary to Rerun
+    if log_rerun:
+        rr.log("training/episode_reward", rr.Scalars([total_reward]))
+        rr.log("training/episode_distance", rr.Scalars([info['distance']]))
 
     return {
         'observations': observations,
@@ -211,14 +248,28 @@ def main():
     print()
 
     # Training loop
-    num_episodes = 1000
+    num_episodes = 1000  # Baseline run
+    log_rerun_every = 10  # Log every 10th episode to Rerun
     print(f"Training for {num_episodes} episodes...")
+    print(f"  Logging every {log_rerun_every} episodes to Rerun (training.rrd)")
     print()
 
     pbar = tqdm(range(num_episodes), desc="Training", position=0)
     for episode in pbar:
-        # Collect episode (disable inner progress bar for speed)
-        episode_data = collect_episode(env, policy, device, show_progress=False)
+        # Collect episode (log to Rerun periodically for visualization)
+        should_log_rerun = (episode % log_rerun_every == 0)
+
+        # Create new recording for each logged episode
+        if should_log_rerun:
+            rr.init("mindsim-training", recording_id=f"episode-{episode}")
+            rr.save("training.rrd")
+            rerun_logger.setup_scene(env, namespace="training")
+
+        episode_data = collect_episode(
+            env, policy, device,
+            show_progress=False,
+            log_rerun=should_log_rerun
+        )
 
         # Train on episode
         loss = train_step(policy, optimizer, episode_data)
