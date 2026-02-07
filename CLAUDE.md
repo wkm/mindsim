@@ -5,6 +5,7 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 ## Quick Start
 
 **Always run with `uv`:**
+
 ```bash
 uv run python <script.py>
 ```
@@ -51,6 +52,7 @@ rerun robot_sim.rrd
 ```
 
 Creates a Rerun recording with:
+
 - 3D robot meshes from MuJoCo model
 - Camera view with proper FOV
 - Trajectory trail
@@ -69,6 +71,7 @@ Creates a Rerun recording with:
 
 4. **Respect geometry hierarchy**
    Bodies → Geoms → Meshes (each has relative transforms)
+
    ```
    world/{body}              (data.xpos, data.xquat)
      └─ {geom}               (model.geom_pos, model.geom_quat)
@@ -88,6 +91,15 @@ Creates a Rerun recording with:
 - **simple_wheeler_env.py** - Env logic (step, reset, reward)
 - **visualize.py** - Rerun logging (model-driven, no hardcoding)
 
+## Training
+
+Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy)
+
+### Future experiments to try
+
+- **Reward-Weighted Regression (RWR)** - Simpler, treat RL as weighted supervised learning
+- **PPO** - More stable, better sample efficiency, requires critic network
+
 ## Development Notes
 
-- **Clean up before committing** - Remove debug scripts (debug_*.py, test_*.py created during dev), temporary files, and .rrd recordings before making commits
+- **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
