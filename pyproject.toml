@@ -16,4 +16,5 @@ dependencies = [
     "tqdm>=4.67.2",
     "rerun-sdk[datafusion,notebook]>=0.29.0",
     "wandb>=0.24.1",
+    "torch>=2.0.0",
 ]
