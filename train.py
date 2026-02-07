@@ -292,90 +292,101 @@ def main():
     print("=" * 60)
     print()
 
+    # Single source of truth for all run configuration.
+    # This dict is passed directly to wandb.init() and used throughout training.
+    config = {
+        # Environment
+        "render_width": 64,
+        "render_height": 64,
+        "max_episode_steps": 100,
+        "control_frequency_hz": 10,
+        "mujoco_steps_per_action": 5,
+        "success_distance": 0.3,
+        "failure_distance": 5.0,
+        # Model architecture
+        "policy_type": "TinyPolicy",
+        "conv1_out_channels": 8,
+        "conv1_kernel": 8,
+        "conv1_stride": 4,
+        "conv2_out_channels": 16,
+        "conv2_kernel": 4,
+        "conv2_stride": 2,
+        "fc1_size": 32,
+        "fc2_size": 2,
+        "activation": "relu",
+        "output_activation": "tanh",
+        "init_std": 0.5,
+        # Training
+        "optimizer": "Adam",
+        "learning_rate": 1e-3,
+        "algorithm": "REINFORCE",
+        "gamma": 0.99,
+        "num_episodes": 1000,
+        "log_rerun_every": 100,
+        # Logging
+        "wandb_project": "mindsim-2wheeler",
+        "wandb_watch_log": "all",
+        "wandb_watch_log_freq": 100,
+        "recordings_dir": "recordings",
+    }
+
     # Create environment
     print("Creating environment...")
     env = TrainingEnv(
-        render_width=64,
-        render_height=64,
-        max_episode_steps=100,  # 10 seconds at 10 Hz
+        render_width=config["render_width"],
+        render_height=config["render_height"],
+        max_episode_steps=config["max_episode_steps"],
     )
     print(f"  Observation shape: {env.observation_shape}")
     print(f"  Action shape: {env.action_shape}")
-    print(f"  Control frequency: 10 Hz")
+    print(f"  Control frequency: {config['control_frequency_hz']} Hz")
     print()
 
     # Create policy
     print("Creating tiny neural network...")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    policy = TinyPolicy(image_height=64, image_width=64).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+    policy = TinyPolicy(
+        image_height=config["render_height"],
+        image_width=config["render_width"],
+        init_std=config["init_std"],
+    ).to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=config["learning_rate"])
 
-    # Count parameters
+    # Count parameters and add to config
     num_params = sum(p.numel() for p in policy.parameters())
+    config["policy_params"] = num_params
     print(f"  Policy parameters: {num_params:,}")
     print(f"  Device: {device}")
     print()
 
-    # Initialize wandb with comprehensive config
+    # Initialize wandb — config dict is the single source of truth
     run_name = f"tinypolicy-{datetime.now().strftime('%m%d-%H%M')}"
     wandb.init(
-        project="mindsim-2wheeler",
+        project=config["wandb_project"],
         name=run_name,
-        config={
-            # Environment
-            "render_width": 64,
-            "render_height": 64,
-            "max_episode_steps": 100,
-            "control_frequency_hz": 10,
-            "mujoco_steps_per_action": 5,
-            "success_distance": 0.3,
-            "failure_distance": 5.0,
-            # Model architecture
-            "policy_type": "TinyPolicy",
-            "policy_params": num_params,
-            "conv1_out_channels": 8,
-            "conv1_kernel": 8,
-            "conv1_stride": 4,
-            "conv2_out_channels": 16,
-            "conv2_kernel": 4,
-            "conv2_stride": 2,
-            "fc1_size": 32,
-            "fc2_size": 2,
-            "activation": "relu",
-            "output_activation": "tanh",
-            "init_std": 0.5,
-            # Training
-            "optimizer": "Adam",
-            "learning_rate": 1e-3,
-            "algorithm": "REINFORCE",
-            "gamma": 0.99,
-            "num_episodes": 1000,
-            "log_rerun_every": 100,
-        }
+        config=config,
     )
     print(f"  Logging to W&B: {wandb.run.url}")
     print()
 
     # Watch model for gradient/parameter logging
-    wandb.watch(policy, log="all", log_freq=100)
-    print("  Watching model gradients every 100 steps")
+    wandb.watch(policy, log=config["wandb_watch_log"], log_freq=config["wandb_watch_log_freq"])
+    print(f"  Watching model gradients every {config['wandb_watch_log_freq']} steps")
 
     # Initialize Rerun-WandB integration
-    rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+    rr_wandb = RerunWandbLogger(recordings_dir=config["recordings_dir"])
     print(f"  Rerun recordings: {rr_wandb.run_dir}/")
     print()
 
     # Training loop
-    num_episodes = 1000  # Baseline run
-    log_rerun_every = 100  # Log every 100th episode to Rerun
-    print(f"Training for {num_episodes} episodes...")
-    print(f"  Logging every {log_rerun_every} episodes to Rerun")
+    print(f"Training for {config['num_episodes']} episodes...")
+    print(f"  Logging every {config['log_rerun_every']} episodes to Rerun")
     print()
 
-    pbar = tqdm(range(num_episodes), desc="Training", position=0)
+    pbar = tqdm(range(config["num_episodes"]), desc="Training", position=0)
     for episode in pbar:
         # Collect episode (log to Rerun periodically for visualization)
-        should_log_rerun = (episode % log_rerun_every == 0)
+        should_log_rerun = (episode % config["log_rerun_every"] == 0)
 
         # Start new Rerun recording for this episode
         if should_log_rerun:
@@ -392,7 +403,7 @@ def main():
             rr_wandb.finish_episode(episode_data, upload_artifact=True)
 
         # Train on episode
-        loss, grad_norm, policy_std = train_step(policy, optimizer, episode_data)
+        loss, grad_norm, policy_std = train_step(policy, optimizer, episode_data, gamma=config["gamma"])
 
         # Log to wandb
         actions_array = np.array(episode_data['actions'])
