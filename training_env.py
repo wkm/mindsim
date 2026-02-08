@@ -7,13 +7,16 @@ Wraps SimpleWheelerEnv with:
 - Episode termination logic
 - Standard Gymnasium API (reset, step returning obs/reward/done/truncated/info)
 """
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import mujoco
 import numpy as np
+
 from simple_wheeler_env import SimpleWheelerEnv
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from config import EnvConfig
 
@@ -31,7 +34,7 @@ class TrainingEnv:
     """
 
     @classmethod
-    def from_config(cls, config: EnvConfig) -> "TrainingEnv":
+    def from_config(cls, config: EnvConfig) -> TrainingEnv:
         """Create TrainingEnv from an EnvConfig object."""
         return cls(
             render_width=config.render_width,
@@ -74,8 +77,7 @@ class TrainingEnv:
             failure_distance: Distance threshold for failure
         """
         self.env = SimpleWheelerEnv(
-            render_width=render_width,
-            render_height=render_height
+            render_width=render_width, render_height=render_height
         )
         self.max_episode_steps = max_episode_steps
         self.mujoco_steps_per_action = mujoco_steps_per_action
@@ -138,7 +140,9 @@ class TrainingEnv:
         # At progress=1: target at any angle (full circle)
         front_angle = -np.pi / 2  # -Y direction = in front of camera
         max_deviation = self.curriculum_progress * np.pi  # 0 to π
-        angle = np.random.uniform(front_angle - max_deviation, front_angle + max_deviation)
+        angle = np.random.uniform(
+            front_angle - max_deviation, front_angle + max_deviation
+        )
 
         # Random distance within bounds
         distance = np.random.uniform(self.min_target_distance, self.max_target_distance)
@@ -186,7 +190,7 @@ class TrainingEnv:
         # Run multiple MuJoCo steps with same action (10 Hz control)
         # Only render on the last step to avoid wasted work
         for i in range(self.mujoco_steps_per_action):
-            is_last_step = (i == self.mujoco_steps_per_action - 1)
+            is_last_step = i == self.mujoco_steps_per_action - 1
             camera_img = self.env.step(left_motor, right_motor, render=is_last_step)
 
         # Get observation
@@ -198,7 +202,9 @@ class TrainingEnv:
 
         # Calculate reward components:
         # 1. Distance reward: linear potential-based shaping (standard in literature)
-        distance_reward = self.distance_reward_scale * (self.prev_distance - current_distance)
+        distance_reward = self.distance_reward_scale * (
+            self.prev_distance - current_distance
+        )
 
         # 2. Movement bonus: small reward for exploring (moving at all)
         distance_moved = np.linalg.norm(current_position - self.prev_position)
@@ -246,17 +252,17 @@ class TrainingEnv:
 
         # Additional info (includes reward breakdown for visualization)
         info = {
-            'distance': current_distance,
-            'position': current_position,
-            'step': self.episode_step,
-            'distance_moved': distance_moved,
+            "distance": current_distance,
+            "position": current_position,
+            "step": self.episode_step,
+            "distance_moved": distance_moved,
             # Reward components for visualization
-            'reward_distance': distance_reward,
-            'reward_exploration': exploration_reward,
-            'reward_time': time_cost,
-            'reward_total': reward,
+            "reward_distance": distance_reward,
+            "reward_exploration": exploration_reward,
+            "reward_time": time_cost,
+            "reward_total": reward,
             # Stability info
-            'unstable': has_warnings or has_nan or out_of_bounds,
+            "unstable": has_warnings or has_nan or out_of_bounds,
         }
 
         return obs, reward, done, truncated, info

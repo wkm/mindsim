@@ -1,7 +1,8 @@
-import mujoco
-import numpy as np
 import time
 from pathlib import Path
+
+import mujoco
+import numpy as np
 
 
 class SimpleWheelerEnv:
@@ -12,7 +13,12 @@ class SimpleWheelerEnv:
     The goal is to navigate towards an orange target cube.
     """
 
-    def __init__(self, scene_path="bots/simple2wheeler/scene.xml", render_width=16, render_height=16):
+    def __init__(
+        self,
+        scene_path="bots/simple2wheeler/scene.xml",
+        render_width=16,
+        render_height=16,
+    ):
         """
         Initialize the environment.
 
@@ -30,14 +36,26 @@ class SimpleWheelerEnv:
         self.data = mujoco.MjData(self.model)
 
         # Create renderer for camera images
-        self.renderer = mujoco.Renderer(self.model, height=render_height, width=render_width)
+        self.renderer = mujoco.Renderer(
+            self.model, height=render_height, width=render_width
+        )
 
         # Get motor and body IDs for faster access
-        self.left_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_1_motor")
-        self.right_motor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_2_motor")
-        self.bot_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base")
-        self.target_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "target")
-        self.camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "camera_1_cam")
+        self.left_motor_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_1_motor"
+        )
+        self.right_motor_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_2_motor"
+        )
+        self.bot_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "base"
+        )
+        self.target_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "target"
+        )
+        self.camera_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_CAMERA, "camera_1_cam"
+        )
 
         # Viewer for debugging (optional)
         self.viewer = None
@@ -196,10 +214,12 @@ def demo_manual_control():
 
             # Print status every 100 steps
             if step_count % 100 == 0:
-                print(f"  Step {step_count}: "
-                      f"pos={env.get_bot_position()[:2]}, "
-                      f"dist={env.get_distance_to_target():.2f}, "
-                      f"camera_shape={camera_img.shape}")
+                print(
+                    f"  Step {step_count}: "
+                    f"pos={env.get_bot_position()[:2]}, "
+                    f"dist={env.get_distance_to_target():.2f}, "
+                    f"camera_shape={camera_img.shape}"
+                )
 
             step_count += 1
 

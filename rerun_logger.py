@@ -3,9 +3,10 @@ Rerun logging utilities for MuJoCo simulations.
 
 Shared logging code for both visualization and training scripts.
 """
+
+import mujoco
 import numpy as np
 import rerun as rr
-import mujoco
 
 
 def quaternion_multiply(q1, q2):
@@ -17,10 +18,10 @@ def quaternion_multiply(q1, q2):
     x1, y1, z1, w1 = q1
     x2, y2, z2, w2 = q2
 
-    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
-    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
 
     return np.array([x, y, z, w])
 
@@ -34,7 +35,7 @@ def log_mujoco_scene(env, namespace="world"):
         env: SimpleWheelerEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
-    model = env.env.model if hasattr(env, 'env') else env.model
+    model = env.env.model if hasattr(env, "env") else env.model
     mesh_count = 0
     geom_count = 0
 
@@ -55,7 +56,9 @@ def log_mujoco_scene(env, namespace="world"):
                 # If it's a mesh geometry
                 if geom_type == mujoco.mjtGeom.mjGEOM_MESH:
                     mesh_id = model.geom_dataid[geom_id]
-                    geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
 
                     # Extract mesh vertices and faces from MuJoCo model
                     vert_start = model.mesh_vertadr[mesh_id]
@@ -64,10 +67,12 @@ def log_mujoco_scene(env, namespace="world"):
                     face_num = model.mesh_facenum[mesh_id]
 
                     # Get vertices (already scaled)
-                    vertices = model.mesh_vert[vert_start:vert_start + vert_num].copy()
+                    vertices = model.mesh_vert[
+                        vert_start : vert_start + vert_num
+                    ].copy()
 
                     # Get faces (triangles)
-                    faces = model.mesh_face[face_start:face_start + face_num].copy()
+                    faces = model.mesh_face[face_start : face_start + face_num].copy()
 
                     # Get color
                     rgba = model.geom_rgba[geom_id]
@@ -82,9 +87,16 @@ def log_mujoco_scene(env, namespace="world"):
                         entity_path,
                         rr.Transform3D(
                             translation=geom_pos,
-                            rotation=rr.Quaternion(xyzw=[geom_quat[1], geom_quat[2], geom_quat[3], geom_quat[0]])
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
                         ),
-                        static=True
+                        static=True,
                     )
 
                     # Log mesh under the geom transform
@@ -93,15 +105,17 @@ def log_mujoco_scene(env, namespace="world"):
                         rr.Mesh3D(
                             vertex_positions=vertices,
                             triangle_indices=faces,
-                            vertex_colors=np.tile(rgba[:3], (len(vertices), 1))
+                            vertex_colors=np.tile(rgba[:3], (len(vertices), 1)),
                         ),
-                        static=True
+                        static=True,
                     )
                     mesh_count += 1
 
                 # Handle non-mesh geometries (boxes, spheres, etc.)
                 elif geom_type == mujoco.mjtGeom.mjGEOM_BOX:
-                    geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
                     size = model.geom_size[geom_id]
                     rgba = model.geom_rgba[geom_id]
                     geom_pos = model.geom_pos[geom_id]
@@ -114,9 +128,16 @@ def log_mujoco_scene(env, namespace="world"):
                         entity_path,
                         rr.Transform3D(
                             translation=geom_pos,
-                            rotation=rr.Quaternion(xyzw=[geom_quat[1], geom_quat[2], geom_quat[3], geom_quat[0]])
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
                         ),
-                        static=True
+                        static=True,
                     )
 
                     # Log box under transform
@@ -124,9 +145,16 @@ def log_mujoco_scene(env, namespace="world"):
                         f"{entity_path}/box",
                         rr.Boxes3D(
                             half_sizes=[size],
-                            colors=[[int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255), int(rgba[3]*255)]]
+                            colors=[
+                                [
+                                    int(rgba[0] * 255),
+                                    int(rgba[1] * 255),
+                                    int(rgba[2] * 255),
+                                    int(rgba[3] * 255),
+                                ]
+                            ],
                         ),
-                        static=True
+                        static=True,
                     )
                     geom_count += 1
 
@@ -147,7 +175,9 @@ def log_mujoco_scene(env, namespace="world"):
         frame_correction = np.array([1.0, 0.0, 0.0, 0.0])  # 180° around X (xyzw)
 
         # Invert and compose quaternions
-        inverted_mj_quat = np.array([-mj_quat_xyzw[0], -mj_quat_xyzw[1], -mj_quat_xyzw[2], mj_quat_xyzw[3]])
+        inverted_mj_quat = np.array(
+            [-mj_quat_xyzw[0], -mj_quat_xyzw[1], -mj_quat_xyzw[2], mj_quat_xyzw[3]]
+        )
         corrected_quat = quaternion_multiply(frame_correction, inverted_mj_quat)
 
         # Camera transform relative to body
@@ -155,10 +185,9 @@ def log_mujoco_scene(env, namespace="world"):
         rr.log(
             entity_path,
             rr.Transform3D(
-                translation=cam_pos,
-                rotation=rr.Quaternion(xyzw=corrected_quat)
+                translation=cam_pos, rotation=rr.Quaternion(xyzw=corrected_quat)
             ),
-            static=True
+            static=True,
         )
 
     return mesh_count, geom_count
@@ -175,12 +204,12 @@ def setup_camera(env, namespace="world"):
     Returns:
         camera_entity_path: Path to the camera entity
     """
-    model = env.env.model if hasattr(env, 'env') else env.model
-    data = env.env.data if hasattr(env, 'env') else env.data
+    model = env.env.model if hasattr(env, "env") else env.model
+    data = env.env.data if hasattr(env, "env") else env.data
 
-    cam_id = env.env.camera_id if hasattr(env, 'env') else env.camera_id
-    render_width = env.env.render_width if hasattr(env, 'env') else env.render_width
-    render_height = env.env.render_height if hasattr(env, 'env') else env.render_height
+    cam_id = env.env.camera_id if hasattr(env, "env") else env.camera_id
+    render_width = env.env.render_width if hasattr(env, "env") else env.render_width
+    render_height = env.env.render_height if hasattr(env, "env") else env.render_height
 
     cam_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_CAMERA, cam_id)
     cam_body_id = model.cam_bodyid[cam_id]
@@ -197,7 +226,7 @@ def setup_camera(env, namespace="world"):
             resolution=[render_width, render_height],
             focal_length=focal_length,
         ),
-        static=True
+        static=True,
     )
 
     return camera_entity_path
@@ -233,7 +262,7 @@ def setup_scene(env, namespace="world", floor_size=10.0):
             centers=[[0, 0, -0.005]],
             colors=[[128, 128, 128, 100]],
         ),
-        static=True
+        static=True,
     )
 
     return camera_entity_path
@@ -247,8 +276,8 @@ def log_body_transforms(env, namespace="world"):
         env: SimpleWheelerEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
-    model = env.env.model if hasattr(env, 'env') else env.model
-    data = env.env.data if hasattr(env, 'env') else env.data
+    model = env.env.model if hasattr(env, "env") else env.model
+    data = env.env.data if hasattr(env, "env") else env.data
 
     for body_id in range(model.nbody):
         body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
@@ -266,6 +295,6 @@ def log_body_transforms(env, namespace="world"):
             f"{namespace}/{body_name}",
             rr.Transform3D(
                 translation=pos,
-                rotation=rr.Quaternion(xyzw=[quat[1], quat[2], quat[3], quat[0]])
-            )
+                rotation=rr.Quaternion(xyzw=[quat[1], quat[2], quat[3], quat[0]]),
+            ),
         )

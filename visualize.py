@@ -2,11 +2,14 @@
 Visualize the 2-wheeler robot simulation using Rerun.io
 Shows motor inputs, bot state, and camera view in an interactive viewer.
 """
+
+import time
+
+import mujoco
 import numpy as np
 import rerun as rr
-import time
+
 from simple_wheeler_env import SimpleWheelerEnv
-import mujoco
 
 # Visualization constants
 CAMERA_WIDTH = 128
@@ -25,10 +28,10 @@ def quaternion_multiply(q1, q2):
     x1, y1, z1, w1 = q1
     x2, y2, z2, w2 = q2
 
-    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
-    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
 
     return np.array([x, y, z, w])
 
@@ -59,7 +62,9 @@ def log_mujoco_scene(env):
                 # If it's a mesh geometry
                 if geom_type == mujoco.mjtGeom.mjGEOM_MESH:
                     mesh_id = model.geom_dataid[geom_id]
-                    geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
 
                     # Extract mesh vertices and faces from MuJoCo model
                     # This includes the correct scaling from the XML
@@ -69,10 +74,12 @@ def log_mujoco_scene(env):
                     face_num = model.mesh_facenum[mesh_id]
 
                     # Get vertices (already scaled)
-                    vertices = model.mesh_vert[vert_start:vert_start + vert_num].copy()
+                    vertices = model.mesh_vert[
+                        vert_start : vert_start + vert_num
+                    ].copy()
 
                     # Get faces (triangles)
-                    faces = model.mesh_face[face_start:face_start + face_num].copy()
+                    faces = model.mesh_face[face_start : face_start + face_num].copy()
 
                     # Get color
                     rgba = model.geom_rgba[geom_id]
@@ -87,9 +94,16 @@ def log_mujoco_scene(env):
                         entity_path,
                         rr.Transform3D(
                             translation=geom_pos,
-                            rotation=rr.Quaternion(xyzw=[geom_quat[1], geom_quat[2], geom_quat[3], geom_quat[0]])
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
                         ),
-                        static=True
+                        static=True,
                     )
 
                     # Log mesh under the geom transform
@@ -98,15 +112,17 @@ def log_mujoco_scene(env):
                         rr.Mesh3D(
                             vertex_positions=vertices,
                             triangle_indices=faces,
-                            vertex_colors=np.tile(rgba[:3], (len(vertices), 1))
+                            vertex_colors=np.tile(rgba[:3], (len(vertices), 1)),
                         ),
-                        static=True
+                        static=True,
                     )
                     mesh_count += 1
 
                 # Handle non-mesh geometries (boxes, spheres, etc.)
                 elif geom_type == mujoco.mjtGeom.mjGEOM_BOX:
-                    geom_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
                     size = model.geom_size[geom_id]
                     rgba = model.geom_rgba[geom_id]
                     geom_pos = model.geom_pos[geom_id]
@@ -119,9 +135,16 @@ def log_mujoco_scene(env):
                         entity_path,
                         rr.Transform3D(
                             translation=geom_pos,
-                            rotation=rr.Quaternion(xyzw=[geom_quat[1], geom_quat[2], geom_quat[3], geom_quat[0]])
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
                         ),
-                        static=True
+                        static=True,
                     )
 
                     # Log box under transform
@@ -129,9 +152,16 @@ def log_mujoco_scene(env):
                         f"{entity_path}/box",
                         rr.Boxes3D(
                             half_sizes=[size],
-                            colors=[[int(rgba[0]*255), int(rgba[1]*255), int(rgba[2]*255), int(rgba[3]*255)]]
+                            colors=[
+                                [
+                                    int(rgba[0] * 255),
+                                    int(rgba[1] * 255),
+                                    int(rgba[2] * 255),
+                                    int(rgba[3] * 255),
+                                ]
+                            ],
                         ),
-                        static=True
+                        static=True,
                     )
                     geom_count += 1
 
@@ -157,7 +187,9 @@ def log_mujoco_scene(env):
         # We need to invert the MuJoCo Y-rotation (180°) to point forward
         # The MuJoCo camera has euler (0, π, 0), so inverting the Y gives us forward
         # Inverting a quaternion: negate x,y,z components (for unit quaternions)
-        inverted_mj_quat = np.array([-mj_quat_xyzw[0], -mj_quat_xyzw[1], -mj_quat_xyzw[2], mj_quat_xyzw[3]])
+        inverted_mj_quat = np.array(
+            [-mj_quat_xyzw[0], -mj_quat_xyzw[1], -mj_quat_xyzw[2], mj_quat_xyzw[3]]
+        )
 
         # Compose the rotations
         corrected_quat = quaternion_multiply(frame_correction, inverted_mj_quat)
@@ -167,13 +199,14 @@ def log_mujoco_scene(env):
         rr.log(
             entity_path,
             rr.Transform3D(
-                translation=cam_pos,
-                rotation=rr.Quaternion(xyzw=corrected_quat)
+                translation=cam_pos, rotation=rr.Quaternion(xyzw=corrected_quat)
             ),
-            static=True
+            static=True,
         )
 
-    print(f"  Loaded: {model.nbody - 1} bodies, {mesh_count} meshes, {geom_count} geoms, {model.ncam} cameras")
+    print(
+        f"  Loaded: {model.nbody - 1} bodies, {mesh_count} meshes, {geom_count} geoms, {model.ncam} cameras"
+    )
 
 
 def setup_camera(env):
@@ -194,7 +227,7 @@ def setup_camera(env):
             resolution=[env.render_width, env.render_height],
             focal_length=focal_length,
         ),
-        static=True
+        static=True,
     )
 
     return camera_entity_path
@@ -220,7 +253,7 @@ def setup_scene(env):
             centers=[[0, 0, -0.005]],
             colors=[[128, 128, 128, 100]],
         ),
-        static=True
+        static=True,
     )
 
     return camera_entity_path
@@ -248,7 +281,9 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
     sim_freq = 1.0 / env.model.opt.timestep
     log_freq = sim_freq / log_interval
 
-    print(f"Simulation: {sim_freq:.1f}Hz | Logging: {log_freq:.1f}Hz ({log_interval} step interval)")
+    print(
+        f"Simulation: {sim_freq:.1f}Hz | Logging: {log_freq:.1f}Hz ({log_interval} step interval)"
+    )
     print()
 
     for phase_name, left_motor, right_motor, num_steps in phases:
@@ -279,7 +314,9 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
 
                 # Log transforms for all bodies (automatically updates meshes)
                 for body_id in range(env.model.nbody):
-                    body_name = mujoco.mj_id2name(env.model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+                    body_name = mujoco.mj_id2name(
+                        env.model, mujoco.mjtObj.mjOBJ_BODY, body_id
+                    )
 
                     # Skip world body
                     if body_name == "world":
@@ -294,8 +331,10 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
                         f"world/{body_name}",
                         rr.Transform3D(
                             translation=pos,
-                            rotation=rr.Quaternion(xyzw=[quat[1], quat[2], quat[3], quat[0]])
-                        )
+                            rotation=rr.Quaternion(
+                                xyzw=[quat[1], quat[2], quat[3], quat[0]]
+                            ),
+                        ),
                     )
 
                 # Add to trajectory and log trail
@@ -303,7 +342,7 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
                 if len(trajectory_points) > 1:
                     rr.log(
                         "world/trajectory",
-                        rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]])
+                        rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]),
                     )
 
                 # Log camera image at the camera entity
@@ -315,7 +354,9 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
             # Print progress
             if step_count % PROGRESS_PRINT_INTERVAL == 0:
                 elapsed = time.time() - start_time
-                print(f"  Step {step_count}: pos={bot_pos[:2]}, dist={distance:.3f}m, {elapsed:.1f}s")
+                print(
+                    f"  Step {step_count}: pos={bot_pos[:2]}, dist={distance:.3f}m, {elapsed:.1f}s"
+                )
 
             step_count += 1
 
@@ -373,6 +414,7 @@ def run_manual_control_demo(output_dir="recordings", num_episodes=3, interactive
         interactive: If True, wait for Enter key between episodes
     """
     import os
+
     os.makedirs(output_dir, exist_ok=True)
 
     # Create environment
@@ -414,7 +456,9 @@ def run_manual_control_demo(output_dir="recordings", num_episodes=3, interactive
         total_steps = sum(s["total_steps"] for s in episode_stats)
         total_time = sum(s["elapsed"] for s in episode_stats)
         print(f"  Total steps: {total_steps}")
-        print(f"  Total time: {total_time:.1f}s ({total_steps/total_time:.0f} steps/sec)")
+        print(
+            f"  Total time: {total_time:.1f}s ({total_steps / total_time:.0f} steps/sec)"
+        )
         print("=" * 60)
         print()
         print(f"Recordings saved to: {output_dir}/")
