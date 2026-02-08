@@ -192,8 +192,20 @@ class TrainingEnv:
         done = False
         truncated = False
 
+        # Simulation instability check (MuJoCo warnings or invalid state)
+        has_warnings = np.any(self.env.data.warning.number > 0)
+        has_nan = np.isnan(current_distance) or np.any(np.isnan(current_position))
+        bot_z = current_position[2]
+        out_of_bounds = bot_z < -0.5 or bot_z > 1.0  # Fell through floor or launched
+
+        if has_warnings or has_nan or out_of_bounds:
+            done = True
+            reward -= 2.0  # Small penalty for unstable behavior
+            # Reset warning counters for next episode
+            self.env.data.warning.number[:] = 0
+
         # Success: reached target
-        if current_distance < self.success_distance:
+        elif current_distance < self.success_distance:
             done = True
             reward += 10.0  # Bonus for reaching target
 
@@ -218,6 +230,8 @@ class TrainingEnv:
             'reward_exploration': exploration_reward,
             'reward_time': time_cost,
             'reward_total': reward,
+            # Stability info
+            'unstable': has_warnings or has_nan or out_of_bounds,
         }
 
         return obs, reward, done, truncated, info
