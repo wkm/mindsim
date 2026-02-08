@@ -1,8 +1,11 @@
 """
 Integration between Rerun and Weights & Biases.
 
-Links Rerun episode recordings to wandb training runs for easy navigation
+Links Rerun eval episode recordings to wandb training runs for easy navigation
 from a point in training to the corresponding visualization.
+
+Uses deterministic eval episodes (mean actions, no sampling) to show
+true policy capability without exploration noise.
 """
 import os
 import wandb
@@ -39,7 +42,7 @@ class RerunWandbLogger:
         self.rrd_path = None
         self.is_recording = False
 
-    def start_episode(self, episode: int, env, namespace: str = "training"):
+    def start_episode(self, episode: int, env, namespace: str = "eval"):
         """
         Start a new Rerun recording for this episode.
 

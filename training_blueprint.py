@@ -1,7 +1,8 @@
 """
-Rerun blueprint for training visualization.
+Rerun blueprint for eval episode visualization.
 
 Imported by rerun_wandb.py to embed blueprint into recordings.
+Shows deterministic policy behavior (no exploration noise).
 """
 
 import rerun.blueprint as rrb
@@ -9,17 +10,19 @@ import rerun.blueprint as rrb
 
 def create_training_blueprint():
     """
-    Create a blueprint that organizes training metrics into logical groups.
+    Create a blueprint that organizes eval episode visualization.
+
+    Uses deterministic eval episodes (mean actions, no sampling)
+    to show true policy capability without exploration noise.
 
     Layout:
     ┌─────────────────┬──────────────────────────────┐
     │                 │  Rewards (total, cumulative) │
     │  Camera View    ├──────────────────────────────┤
-    │                 │  Distance (to target, moved) │
+    │                 │  Distance to target          │
     ├─────────────────┼──────────────────────────────┤
     │                 │  Actions (left, right motor) │
-    │    3D Scene     ├──────────────────────────────┤
-    │                 │  Policy (std, log_prob)      │
+    │    3D Scene     │                              │
     └─────────────────┴──────────────────────────────┘
     """
     return rrb.Blueprint(
@@ -28,11 +31,11 @@ def create_training_blueprint():
             rrb.Vertical(
                 rrb.Spatial2DView(
                     name="Camera",
-                    origin="training/camera",
+                    origin="eval/camera",
                 ),
                 rrb.Spatial3DView(
                     name="Scene",
-                    origin="training",
+                    origin="eval",
                 ),
                 row_shares=[1, 1],
             ),
@@ -42,36 +45,26 @@ def create_training_blueprint():
                     name="Rewards",
                     origin="/",
                     contents=[
-                        "training/reward/total",
-                        "training/reward/cumulative",
+                        "eval/reward/total",
+                        "eval/reward/cumulative",
                     ],
                 ),
                 rrb.TimeSeriesView(
                     name="Distance",
                     origin="/",
                     contents=[
-                        "training/distance_to_target",
-                        "training/distance_moved",
+                        "eval/distance_to_target",
                     ],
                 ),
                 rrb.TimeSeriesView(
                     name="Actions",
                     origin="/",
                     contents=[
-                        "training/action/left_motor",
-                        "training/action/right_motor",
+                        "eval/action/left_motor",
+                        "eval/action/right_motor",
                     ],
                 ),
-                rrb.TimeSeriesView(
-                    name="Policy",
-                    origin="/",
-                    contents=[
-                        "training/policy/std_left",
-                        "training/policy/std_right",
-                        "training/policy/log_prob",
-                    ],
-                ),
-                row_shares=[1, 1, 1, 1],
+                row_shares=[1, 1, 1],
             ),
             column_shares=[1, 2],
         ),

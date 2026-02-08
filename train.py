@@ -250,6 +250,22 @@ class LSTMPolicy(nn.Module):
         action = torch.clamp(action, -1.0, 1.0)
         return action, log_prob
 
+    def get_deterministic_action(self, x):
+        """
+        Get deterministic action (mean of distribution, no sampling).
+
+        Used for evaluation to measure true policy capability without
+        exploration noise.
+
+        Args:
+            x: Input image (B, H, W, 3)
+
+        Returns:
+            action: (B, 2) mean actions, clamped to [-1, 1]
+        """
+        mean, _ = self.forward(x)
+        return torch.clamp(mean, -1.0, 1.0)
+
     def log_prob(self, x, action):
         """
         Compute log probability of given actions for a sequence.
@@ -355,6 +371,22 @@ class TinyPolicy(nn.Module):
         action = torch.clamp(action, -1.0, 1.0)
         return action, log_prob
 
+    def get_deterministic_action(self, x):
+        """
+        Get deterministic action (mean of distribution, no sampling).
+
+        Used for evaluation to measure true policy capability without
+        exploration noise.
+
+        Args:
+            x: Input image (B, H, W, 3)
+
+        Returns:
+            action: (B, 2) mean actions, clamped to [-1, 1]
+        """
+        mean, _ = self.forward(x)
+        return torch.clamp(mean, -1.0, 1.0)
+
     def log_prob(self, x, action):
         """
         Compute log probability of given actions.
@@ -371,23 +403,28 @@ class TinyPolicy(nn.Module):
         return dist.log_prob(action).sum(dim=-1)
 
 
-def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=False):
+def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=False, deterministic=False):
     """
     Run one episode and collect data.
 
     Args:
         env: TrainingEnv instance
-        policy: Neural network policy (stochastic)
+        policy: Neural network policy
         device: torch device
         show_progress: Show progress bar for episode steps
         log_rerun: Log episode to Rerun for visualization
+        deterministic: If True, use mean actions (no sampling) for evaluation.
+                       If False, sample from policy distribution for training.
 
     Returns:
-        episode_data: Dict with observations, actions, rewards, log_probs, etc.
+        episode_data: Dict with observations, actions, rewards, log_probs (if not deterministic), etc.
     """
+    # Rerun namespace depends on mode
+    ns = "eval" if deterministic else "training"
+
     observations = []
     actions = []
-    log_probs = []
+    log_probs = []  # Only populated when not deterministic
     rewards = []
     distances = []
 
@@ -400,7 +437,7 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     truncated = False
     total_reward = 0
     steps = 0
-    info = {}  # Initialize info dict
+    info = {}
 
     # Optional progress bar for episode steps
     pbar = tqdm(total=env.max_episode_steps, desc="  Episode steps", leave=False, position=1) if show_progress else None
@@ -410,20 +447,24 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
 
     while not (done or truncated):
         # Convert observation to torch tensor
-        obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)  # (1, H, W, 3)
+        obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)
 
-        # Sample action from stochastic policy
+        # Get action (deterministic or stochastic)
         with torch.no_grad():
-            action, log_prob = policy.sample_action(obs_tensor)
-            action = action.cpu().numpy()[0]  # (2,)
-            log_prob = log_prob.cpu().numpy()[0]  # scalar
-            # Get current policy std for logging
-            policy_std = torch.exp(policy.log_std).cpu().numpy()
+            if deterministic:
+                action = policy.get_deterministic_action(obs_tensor)
+                action = action.cpu().numpy()[0]
+                log_prob = None
+            else:
+                action, log_prob = policy.sample_action(obs_tensor)
+                action = action.cpu().numpy()[0]
+                log_prob = log_prob.cpu().numpy()[0]
 
         # Store data
         observations.append(obs)
         actions.append(action)
-        log_probs.append(log_prob)
+        if not deterministic:
+            log_probs.append(log_prob)
 
         # Take step
         obs, reward, done, truncated, info = env.step(action)
@@ -431,45 +472,23 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
         distances.append(info['distance'])
         total_reward += reward
 
-        # Log to Rerun in real-time (during the episode)
+        # Log to Rerun in real-time
         if log_rerun:
-            # Set step timeline
             rr.set_time("step", sequence=steps)
+            rr.log(f"{ns}/camera", rr.Image(observations[-1]))
+            rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
+            rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
+            rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
+            rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
+            rr.log(f"{ns}/distance_to_target", rr.Scalars([info['distance']]))
 
-            # Log camera view
-            rr.log("training/camera", rr.Image(observations[-1]))  # Log the obs BEFORE step
-
-            # Log actions
-            rr.log("training/action/left_motor", rr.Scalars([action[0]]))
-            rr.log("training/action/right_motor", rr.Scalars([action[1]]))
-
-            # Log reward breakdown (individual components for debugging)
-            rr.log("training/reward/total", rr.Scalars([reward]))
-            rr.log("training/reward/distance", rr.Scalars([info['reward_distance']]))
-            rr.log("training/reward/exploration", rr.Scalars([info['reward_exploration']]))
-            rr.log("training/reward/time_penalty", rr.Scalars([info['reward_time']]))
-
-            # Log cumulative reward
-            rr.log("training/reward/cumulative", rr.Scalars([total_reward]))
-
-            # Log distance to target
-            rr.log("training/distance_to_target", rr.Scalars([info['distance']]))
-
-            # Log distance moved this step
-            rr.log("training/distance_moved", rr.Scalars([info['distance_moved']]))
-
-            # Log policy exploration level (std)
-            rr.log("training/policy/std_left", rr.Scalars([policy_std[0]]))
-            rr.log("training/policy/std_right", rr.Scalars([policy_std[1]]))
-            rr.log("training/policy/log_prob", rr.Scalars([log_prob]))
-
-            # Log body transforms (uses current MuJoCo state)
-            rerun_logger.log_body_transforms(env, namespace="training")
+            # Log body transforms
+            rerun_logger.log_body_transforms(env, namespace=ns)
 
             # Build and log trajectory
             trajectory_points.append(info['position'])
             if len(trajectory_points) > 1:
-                rr.log("training/trajectory", rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]))
+                rr.log(f"{ns}/trajectory", rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]))
 
         steps += 1
 
@@ -483,9 +502,9 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
 
     # Log episode summary to Rerun
     if log_rerun:
-        rr.log("training/episode/total_reward", rr.Scalars([total_reward]))
-        rr.log("training/episode/final_distance", rr.Scalars([info['distance']]))
-        rr.log("training/episode/steps", rr.Scalars([steps]))
+        rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
+        rr.log(f"{ns}/episode/final_distance", rr.Scalars([info['distance']]))
+        rr.log(f"{ns}/episode/steps", rr.Scalars([steps]))
 
     # Compute action statistics
     actions_array = np.array(actions)
@@ -495,10 +514,9 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     # Determine if episode was a success (reached target)
     success = done and info['distance'] < env.success_distance
 
-    return {
+    result = {
         'observations': observations,
         'actions': actions,
-        'log_probs': log_probs,
         'rewards': rewards,
         'distances': distances,
         'total_reward': total_reward,
@@ -515,6 +533,12 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
         'right_motor_min': float(np.min(right_actions)),
         'right_motor_max': float(np.max(right_actions)),
     }
+
+    # Only include log_probs for training episodes
+    if not deterministic:
+        result['log_probs'] = log_probs
+
+    return result
 
 
 def compute_episode_loss(policy, episode_data, gamma=0.99):
@@ -687,16 +711,22 @@ def main():
 
     print(f"Training until curriculum mastery (curriculum=1.0, success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)...")
     print(f"  Curriculum: performance-based (advance@{curr.advance_threshold:.0%}, retreat@{curr.retreat_threshold:.0%})")
+    if curr.use_eval_for_curriculum:
+        print(f"  Using deterministic eval ({curr.eval_episodes_per_batch} eps/batch) for curriculum decisions")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
     # Timing accumulators
     timing = {
         'collect': 0.0,
+        'eval': 0.0,
         'train': 0.0,
         'log': 0.0,
         'rerun': 0.0,
     }
+
+    # Rolling window for eval success rate (used for curriculum)
+    eval_success_history = deque(maxlen=curr.window_size)
 
     episode_count = 0
     batch_idx = 0
@@ -718,32 +748,19 @@ def main():
         batch_steps = []
         batch_successes = []
 
+        # Determine if we should log to Rerun this batch (from eval, not training)
+        log_every_n_batches = max(1, log_rerun_every // batch_size)
+        should_log_rerun_this_batch = (batch_idx % log_every_n_batches == 0)
+
         episode_pbar = tqdm(range(batch_size), desc="  Collecting", leave=False, position=1)
-        for i in episode_pbar:
-            episode = episode_count + i
-            # Log to Rerun periodically (first episode of certain batches)
-            log_every_n_batches = max(1, log_rerun_every // batch_size)  # ~6 batches = 96 episodes
-            should_log_rerun = (batch_idx % log_every_n_batches == 0) and (i == 0)
-
-            # Start new Rerun recording for this episode
-            t_rerun_start = time.perf_counter()
-            if should_log_rerun:
-                rr_wandb.start_episode(episode, env, namespace="training")
-            timing['rerun'] += time.perf_counter() - t_rerun_start
-
+        for _ in episode_pbar:
             t_collect_start = time.perf_counter()
             episode_data = collect_episode(
                 env, policy, device,
                 show_progress=False,
-                log_rerun=should_log_rerun
+                log_rerun=False  # Never log training episodes to Rerun
             )
             timing['collect'] += time.perf_counter() - t_collect_start
-
-            # Finish Rerun recording and upload to wandb
-            t_rerun_start = time.perf_counter()
-            if should_log_rerun:
-                rr_wandb.finish_episode(episode_data, upload_artifact=True)
-            timing['rerun'] += time.perf_counter() - t_rerun_start
 
             episode_batch.append(episode_data)
             batch_rewards.append(episode_data['total_reward'])
@@ -768,20 +785,52 @@ def main():
         best_reward = np.max(batch_rewards)
         worst_reward = np.min(batch_rewards)
 
-        # Track success rate for curriculum advancement
+        # Track training success rate (for logging, not curriculum)
         batch_success_rate = np.mean(batch_successes)
         success_history.append(batch_success_rate)
         rolling_success_rate = np.mean(success_history)
 
-        # Update curriculum based on rolling success rate
-        if len(success_history) >= curr.window_size:
-            if rolling_success_rate > curr.advance_threshold:
+        # Run deterministic evaluation episodes for curriculum decisions
+        t_eval_start = time.perf_counter()
+        eval_successes = []
+        if curr.use_eval_for_curriculum:
+            for eval_idx in range(curr.eval_episodes_per_batch):
+                # Log first eval episode to Rerun if this is a logging batch
+                log_this_eval = should_log_rerun_this_batch and (eval_idx == 0)
+
+                if log_this_eval:
+                    t_rerun_start = time.perf_counter()
+                    rr_wandb.start_episode(episode_count, env, namespace="eval")
+                    timing['rerun'] += time.perf_counter() - t_rerun_start
+
+                eval_data = collect_episode(env, policy, device, log_rerun=log_this_eval, deterministic=True)
+                eval_successes.append(eval_data['success'])
+
+                if log_this_eval:
+                    t_rerun_start = time.perf_counter()
+                    rr_wandb.finish_episode(eval_data, upload_artifact=True)
+                    timing['rerun'] += time.perf_counter() - t_rerun_start
+
+            eval_success_rate = np.mean(eval_successes)
+            eval_success_history.append(eval_success_rate)
+            rolling_eval_success_rate = np.mean(eval_success_history)
+        else:
+            # Fall back to training success rate if eval disabled
+            eval_success_rate = batch_success_rate
+            rolling_eval_success_rate = rolling_success_rate
+        timing['eval'] += time.perf_counter() - t_eval_start
+
+        # Update curriculum based on EVAL success rate (deterministic)
+        if len(eval_success_history) >= curr.window_size or not curr.use_eval_for_curriculum:
+            rate_for_curriculum = rolling_eval_success_rate if curr.use_eval_for_curriculum else rolling_success_rate
+            if rate_for_curriculum > curr.advance_threshold:
                 curriculum_progress = min(1.0, curriculum_progress + curr.advance_rate)
-            elif rolling_success_rate < curr.retreat_threshold:
+            elif rate_for_curriculum < curr.retreat_threshold:
                 curriculum_progress = max(0.0, curriculum_progress - curr.retreat_rate)
 
-        # Check for mastery: curriculum at max AND maintaining high success rate
-        if curriculum_progress >= 1.0 and rolling_success_rate >= cfg.training.mastery_threshold:
+        # Check for mastery: curriculum at max AND maintaining high eval success rate
+        mastery_rate = rolling_eval_success_rate if curr.use_eval_for_curriculum else rolling_success_rate
+        if curriculum_progress >= 1.0 and mastery_rate >= cfg.training.mastery_threshold:
             mastery_count += 1
             if mastery_count >= cfg.training.mastery_batches:
                 mastered = True
@@ -798,8 +847,12 @@ def main():
             # Curriculum
             "curriculum/progress": curriculum_progress,
             "curriculum/max_angle_deviation_deg": curriculum_progress * 180,  # 0° to 180°
-            "curriculum/batch_success_rate": batch_success_rate,
-            "curriculum/rolling_success_rate": rolling_success_rate,
+            # Training success rate (stochastic, with exploration noise)
+            "curriculum/train_batch_success_rate": batch_success_rate,
+            "curriculum/train_rolling_success_rate": rolling_success_rate,
+            # Eval success rate (deterministic, no exploration noise)
+            "curriculum/eval_batch_success_rate": eval_success_rate,
+            "curriculum/eval_rolling_success_rate": rolling_eval_success_rate,
             # Batch metrics
             "batch/avg_reward": avg_reward,
             "batch/best_reward": best_reward,
@@ -831,10 +884,10 @@ def main():
         # Update progress bar
         pbar.set_postfix({
             'avg_r': f"{avg_reward:.2f}",
-            'succ': f"{rolling_success_rate:.0%}",
+            'eval': f"{rolling_eval_success_rate:.0%}",
+            'train': f"{rolling_success_rate:.0%}",
             'curr': f"{curriculum_progress:.2f}",
             'mstr': f"{mastery_count}/{cfg.training.mastery_batches}",
-            'loss': f"{loss:.4f}",
         })
         pbar.update(1)
         batch_idx += 1
@@ -849,6 +902,7 @@ def main():
     print("Timing Summary")
     print("=" * 60)
     print(f"  Episode collection: {timing['collect']:>8.2f}s ({100*timing['collect']/total_time:>5.1f}%)")
+    print(f"  Eval episodes:      {timing['eval']:>8.2f}s ({100*timing['eval']/total_time:>5.1f}%)")
     print(f"  Training step:      {timing['train']:>8.2f}s ({100*timing['train']/total_time:>5.1f}%)")
     print(f"  Wandb logging:      {timing['log']:>8.2f}s ({100*timing['log']/total_time:>5.1f}%)")
     print(f"  Rerun recording:    {timing['rerun']:>8.2f}s ({100*timing['rerun']/total_time:>5.1f}%)")
