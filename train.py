@@ -14,6 +14,7 @@ import time
 import wandb
 import rerun as rr
 import sys
+import subprocess
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
@@ -23,6 +24,21 @@ def set_terminal_title(title):
     """Set terminal tab/window title using ANSI escape sequence."""
     sys.stdout.write(f"\033]0;{title}\007")
     sys.stdout.flush()
+
+
+def notify_completion(run_name, message=None):
+    """Show macOS notification and play sound when training completes."""
+    if message is None:
+        message = f"Training run '{run_name}' has finished."
+
+    # macOS notification
+    subprocess.run([
+        "osascript", "-e",
+        f'display notification "{message}" with title "MindSim Training Complete" sound name "Glass"'
+    ], check=False)
+
+    # Fallback beep in case notification sound doesn't play
+    print("\a", end="", flush=True)
 
 
 class LSTMPolicy(nn.Module):
@@ -736,6 +752,7 @@ def main():
 
     # Clean up
     set_terminal_title(f"Done: {run_name}")
+    notify_completion(run_name)
     wandb.finish()
     env.close()
     print("Training complete!")
