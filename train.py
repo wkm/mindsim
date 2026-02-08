@@ -61,6 +61,7 @@ def notify_completion(run_name, message=None):
 
 
 def generate_run_notes():
+    return "<no internet to summarize>"
     """
     Use Claude CLI to generate a summary of what changed since last run.
 
