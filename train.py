@@ -15,6 +15,7 @@ import wandb
 import rerun as rr
 import sys
 import subprocess
+import os
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
@@ -58,6 +59,93 @@ def notify_completion(run_name, message=None):
 
     # Fallback beep in case notification sound doesn't play
     print("\a", end="", flush=True)
+
+
+def generate_run_notes():
+    """
+    Use Claude to generate a summary of what changed since last run.
+
+    Returns:
+        str: Markdown-formatted notes for W&B, or None if generation fails
+    """
+    # Check for API key
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("  Note: ANTHROPIC_API_KEY not set, skipping run notes generation")
+        return None
+
+    try:
+        import anthropic
+
+        # Get git info
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Get diff from parent commit
+        diff = subprocess.run(
+            ["git", "diff", "HEAD~1", "--stat"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Get full diff for context (limited to avoid token limits)
+        full_diff = subprocess.run(
+            ["git", "diff", "HEAD~1"],
+            capture_output=True, text=True, check=True
+        ).stdout[:4000]  # Limit to ~4k chars
+
+        # Get recent commit message
+        commit_msg = subprocess.run(
+            ["git", "log", "-1", "--pretty=%B"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Call Claude to summarize
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": f"""Summarize this training run in 2-3 sentences for experiment tracking.
+
+Branch: {branch}
+Recent commit: {commit_msg}
+
+Changes:
+{diff}
+
+Diff excerpt:
+{full_diff}
+
+Focus on: What hypothesis is being tested? What changed from the baseline?
+Be concise and technical. Start directly with the summary, no preamble."""
+            }]
+        )
+
+        # Extract text from response (first text block)
+        summary = ""
+        for block in response.content:
+            text = getattr(block, "text", None)
+            if text:
+                summary = text
+                break
+
+        # Format as markdown notes
+        notes = f"""## Run Summary (auto-generated)
+
+{summary}
+
+---
+**Branch:** `{branch}`
+**Commit:** {commit_msg.split(chr(10))[0][:60]}
+"""
+        return notes
+
+    except Exception as e:
+        print(f"  Note: Could not generate run notes: {e}")
+        return None
 
 
 class LSTMPolicy(nn.Module):
@@ -557,12 +645,20 @@ def main():
     print(f"  Device: {device}")
     print()
 
+    # Generate run notes using Claude (summarizes git changes)
+    print("Generating run notes...")
+    run_notes = generate_run_notes()
+    if run_notes:
+        print("  Run notes generated successfully")
+    print()
+
     # Initialize wandb with comprehensive config
     policy_name = "LSTMPolicy" if use_lstm else "TinyPolicy"
     run_name = f"{policy_name.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
+        notes=run_notes,
         config={
             # Environment
             "render_width": 64,
