@@ -15,7 +15,6 @@ import wandb
 import rerun as rr
 import sys
 import subprocess
-import os
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
@@ -63,20 +62,12 @@ def notify_completion(run_name, message=None):
 
 def generate_run_notes():
     """
-    Use Claude to generate a summary of what changed since last run.
+    Use Claude CLI to generate a summary of what changed since last run.
 
     Returns:
         str: Markdown-formatted notes for W&B, or None if generation fails
     """
-    # Check for API key
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("  Note: ANTHROPIC_API_KEY not set, skipping run notes generation")
-        return None
-
     try:
-        import anthropic
-
         # Get git info
         branch = subprocess.run(
             ["git", "branch", "--show-current"],
@@ -101,14 +92,8 @@ def generate_run_notes():
             capture_output=True, text=True, check=True
         ).stdout.strip()
 
-        # Call Claude to summarize
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            messages=[{
-                "role": "user",
-                "content": f"""Summarize this training run in 2-3 sentences for experiment tracking.
+        # Build prompt for Claude CLI
+        prompt = f"""Summarize this training run in 2-3 sentences for experiment tracking.
 
 Branch: {branch}
 Recent commit: {commit_msg}
@@ -121,16 +106,13 @@ Diff excerpt:
 
 Focus on: What hypothesis is being tested? What changed from the baseline?
 Be concise and technical. Start directly with the summary, no preamble."""
-            }]
-        )
 
-        # Extract text from response (first text block)
-        summary = ""
-        for block in response.content:
-            text = getattr(block, "text", None)
-            if text:
-                summary = text
-                break
+        # Call Claude CLI (handles auth automatically)
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--model", "haiku"],
+            capture_output=True, text=True, check=True
+        )
+        summary = result.stdout.strip()
 
         # Format as markdown notes
         notes = f"""## Run Summary (auto-generated)
@@ -671,7 +653,9 @@ def main():
             "min_target_distance": 0.8,
             "max_target_distance": 2.5,
             "randomize_target": True,
-            "movement_bonus": 0.05,
+            "distance_reward_scale": 20.0,
+            "distance_reward_type": "linear",  # standard potential-based shaping
+            "movement_bonus": 0.0,
             "time_penalty": 0.005,
             # Curriculum (warmup over first 50% of training)
             "curriculum_warmup_episodes": 5000,
