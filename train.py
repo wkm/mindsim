@@ -693,7 +693,7 @@ def main():
             "training_mode": "run_until_mastery",
             "mastery_threshold": 0.7,
             "mastery_batches": 20,
-            "batch_size": 16,
+            "batch_size": 64,
             "log_rerun_every": 100,
         }
     )
@@ -711,7 +711,7 @@ def main():
     print()
 
     # Training loop
-    batch_size = 16  # Episodes per gradient update
+    batch_size = 64  # Episodes per gradient update
     log_rerun_every = 100  # Log every 100th episode to Rerun
 
     # Curriculum schedule: performance-based advancement
