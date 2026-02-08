@@ -38,6 +38,9 @@ class TrainingEnv:
         failure_distance=5.0,  # Failure if beyond 5m from target
         min_target_distance=0.8,  # Minimum spawn distance from robot
         max_target_distance=2.5,  # Maximum spawn distance from robot
+        # Reward shaping coefficients
+        movement_bonus=0.05,  # Small reward per meter moved (encourages exploration)
+        time_penalty=0.005,  # Tiny penalty per step (discourages dawdling)
     ):
         """
         Initialize training environment.
@@ -58,10 +61,13 @@ class TrainingEnv:
         self.failure_distance = failure_distance
         self.min_target_distance = min_target_distance
         self.max_target_distance = max_target_distance
+        self.movement_bonus = movement_bonus
+        self.time_penalty = time_penalty
 
         # Episode tracking
         self.episode_step = 0
         self.prev_distance = None
+        self.prev_position = None
 
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
@@ -102,6 +108,7 @@ class TrainingEnv:
         camera_img = self.env.get_camera_image()
 
         self.prev_distance = self.env.get_distance_to_target()
+        self.prev_position = self.env.get_bot_position()
 
         # Normalize to [0, 1]
         obs = camera_img.astype(np.float32) / 255.0
@@ -132,10 +139,26 @@ class TrainingEnv:
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
 
-        # Calculate reward (negative distance change = reward for getting closer)
+        # Get current state
         current_distance = self.env.get_distance_to_target()
-        reward = self.prev_distance - current_distance  # Positive if getting closer
+        current_position = self.env.get_bot_position()
+
+        # Calculate reward components:
+        # 1. Distance reward: positive if getting closer to target
+        distance_reward = self.prev_distance - current_distance
+
+        # 2. Movement bonus: small reward for exploring (moving at all)
+        distance_moved = np.linalg.norm(current_position - self.prev_position)
+        exploration_reward = self.movement_bonus * distance_moved
+
+        # 3. Time penalty: tiny cost per step to encourage efficiency
+        time_cost = -self.time_penalty
+
+        reward = distance_reward + exploration_reward + time_cost
+
+        # Update state for next step
         self.prev_distance = current_distance
+        self.prev_position = current_position
 
         # Check termination conditions
         done = False
@@ -159,8 +182,9 @@ class TrainingEnv:
         # Additional info
         info = {
             'distance': current_distance,
-            'position': self.env.get_bot_position(),
+            'position': current_position,
             'step': self.episode_step,
+            'distance_moved': distance_moved,
         }
 
         return obs, reward, done, truncated, info

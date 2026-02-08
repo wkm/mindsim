@@ -488,6 +488,8 @@ def main():
             "min_target_distance": 0.8,
             "max_target_distance": 2.5,
             "randomize_target": True,
+            "movement_bonus": 0.05,
+            "time_penalty": 0.005,
             # Model architecture
             "policy_type": policy_name,
             "policy_params": num_params,
