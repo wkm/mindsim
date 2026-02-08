@@ -18,7 +18,7 @@ def create_training_blueprint():
     │                 │  Distance (to target, moved) │
     ├─────────────────┼──────────────────────────────┤
     │                 │  Actions (left, right motor) │
-    │  3D Trajectory  ├──────────────────────────────┤
+    │    3D Scene     ├──────────────────────────────┤
     │                 │  Policy (std, log_prob)      │
     └─────────────────┴──────────────────────────────┘
     """
@@ -31,8 +31,8 @@ def create_training_blueprint():
                     origin="training/camera",
                 ),
                 rrb.Spatial3DView(
-                    name="Trajectory",
-                    origin="training/trajectory",
+                    name="Scene",
+                    origin="training",
                 ),
                 row_shares=[1, 1],
             ),
@@ -75,5 +75,5 @@ def create_training_blueprint():
             ),
             column_shares=[1, 2],
         ),
-        collapse_panels=True,
+        collapse_panels=False,  # Keep sources panel open for episode navigation
     )
