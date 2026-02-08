@@ -600,10 +600,12 @@ def main():
         batch_distances = []
         batch_steps = []
 
-        for i in range(batch_size):
+        episode_pbar = tqdm(range(batch_size), desc="  Collecting", leave=False, position=1)
+        for i in episode_pbar:
             episode = episode_count + i
-            # Log to Rerun periodically (first episode of batch if it's time)
-            should_log_rerun = (episode % log_rerun_every == 0) and (i == 0)
+            # Log to Rerun periodically (first episode of certain batches)
+            log_every_n_batches = max(1, log_rerun_every // batch_size)  # ~6 batches = 96 episodes
+            should_log_rerun = (batch_idx % log_every_n_batches == 0) and (i == 0)
 
             # Start new Rerun recording for this episode
             t_rerun_start = time.perf_counter()
@@ -630,6 +632,9 @@ def main():
             batch_distances.append(episode_data['final_distance'])
             batch_steps.append(episode_data['steps'])
 
+            episode_pbar.set_postfix({'r': f"{episode_data['total_reward']:.2f}"})
+
+        episode_pbar.close()
         episode_count += batch_size
 
         # Train on batch of episodes
