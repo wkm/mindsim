@@ -2,7 +2,7 @@
 <mujoco model="Simple2Wheel">
   <compiler angle="radian" meshdir="meshes" />
   <default>
-    <motor ctrlrange="-1 1" gear="1" />
+    <motor ctrlrange="-1 1" gear="1.0" />
   </default>
   <asset>
     <mesh name="body_body" file="body_body.stl" scale="0.001000 0.001000 0.001000" />
@@ -15,21 +15,21 @@
       <freejoint name="root" />
       <body name="body_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
         <inertial pos="-0.050000 0.070000 0.000000" mass="8.124999999999996" fullinertia="5.376042e-02 8.463542e-02 5.376042e-02 0.000000e+00 0.000000e+00 0.000000e+00" />
-        <geom type="mesh" mesh="body_body" rgba="0.9647058823529412 0.9647058823529412 0.9529411764705882 1.0" />
+        <geom type="mesh" mesh="body_body" rgba="0.9647058823529412 0.9647058823529412 0.9529411764705882 1.0" friction="0.001 0.005 0.0001" />
         <body name="l_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
           <inertial pos="0.095000 0.075000 0.000000" mass="0.9000000000000001" fullinertia="3.375000e-03 1.807500e-03 1.807500e-03 0.000000e+00 0.000000e+00 0.000000e+00" />
-          <joint name="Revolute_1" type="hinge" pos="0.075000 0.075000 0.000000" axis="-1.000000 0.000000 0.000000" />
+          <joint name="Revolute_1" type="hinge" pos="0.075000 0.075000 0.000000" axis="-1.000000 0.000000 0.000000" damping="0.1" />
           <geom type="mesh" mesh="l_wheel_l_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
         </body>
         <body name="r_wheel_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
           <inertial pos="-0.195000 0.075000 0.000000" mass="0.9000000000000002" fullinertia="3.375000e-03 1.807500e-03 1.807500e-03 0.000000e+00 0.000000e+00 0.000000e+00" />
-          <joint name="Revolute_2" type="hinge" pos="-0.175000 0.075000 0.000000" axis="1.000000 0.000000 0.000000" />
+          <joint name="Revolute_2" type="hinge" pos="-0.175000 0.075000 0.000000" axis="1.000000 0.000000 0.000000" damping="0.1" />
           <geom type="mesh" mesh="r_wheel_r_wheel" rgba="0.15294117647058825 0.15294117647058825 0.15294117647058825 1.0" />
         </body>
         <body name="camera_1" pos="0.000000 0.000000 0.000000" quat="1.000000 0.000000 0.000000 0.000000">
           <inertial pos="-0.050000 0.148736 -0.086472" mass="0.02022509319841813" fullinertia="4.895318e-06 4.895318e-06 1.363515e-06 0.000000e+00 0.000000e+00 0.000000e+00" />
           <geom type="mesh" mesh="camera_camera" rgba="1.0 1.0 1.0 1.0" />
-          <camera name="camera_1_cam" fovy="45.0" pos="-0.050000 0.148736 -0.061472" euler="0 3.141592653589793 0" />
+          <camera name="camera_1_cam" fovy="90.0" pos="-0.050000 0.148736 -0.061472" euler="0 3.141592653589793 0" />
         </body>
       </body>
     </body>

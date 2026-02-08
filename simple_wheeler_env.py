@@ -51,16 +51,17 @@ class SimpleWheelerEnv:
         mujoco.mj_forward(self.model, self.data)  # Compute forward kinematics
         return self.get_camera_image()
 
-    def step(self, left_motor, right_motor):
+    def step(self, left_motor, right_motor, render=True):
         """
         Step the simulation with given motor commands.
 
         Args:
             left_motor: Left motor strength [-1, 1]
             right_motor: Right motor strength [-1, 1]
+            render: Whether to render camera image (default True)
 
         Returns:
-            camera_image: RGB image from bot camera as numpy array (H, W, 3)
+            camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         # Clip motor values to valid range
         left_motor = np.clip(left_motor, -1.0, 1.0)
@@ -75,10 +76,12 @@ class SimpleWheelerEnv:
 
         # Update viewer if running
         if self.viewer is not None and self.viewer.is_running():
-            self.viewer.sync() 
+            self.viewer.sync()
 
-        # Return camera image
-        return self.get_camera_image()
+        # Return camera image only if requested
+        if render:
+            return self.get_camera_image()
+        return None
 
     def get_camera_image(self):
         """
