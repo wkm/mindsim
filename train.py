@@ -481,7 +481,7 @@ def main():
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=64).to(device)
     else:
         policy = TinyPolicy(image_height=64, image_width=64).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=1e-3)
+    optimizer = optim.Adam(policy.parameters(), lr=3e-2)
 
     # Count parameters
     num_params = sum(p.numel() for p in policy.parameters())
@@ -527,7 +527,7 @@ def main():
             "init_std": 0.5,
             # Training
             "optimizer": "Adam",
-            "learning_rate": 1e-3,
+            "learning_rate": 3e-2,
             "algorithm": "REINFORCE",
             "gamma": 0.99,
             "num_episodes": 10000,
