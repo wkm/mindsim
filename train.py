@@ -13,9 +13,16 @@ from tqdm import tqdm
 import time
 import wandb
 import rerun as rr
+import sys
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
+
+
+def set_terminal_title(title):
+    """Set terminal tab/window title using ANSI escape sequence."""
+    sys.stdout.write(f"\033]0;{title}\007")
+    sys.stdout.flush()
 
 
 class LSTMPolicy(nn.Module):
@@ -605,6 +612,10 @@ def main():
         curriculum_progress = min(1.0, episode_count / curriculum_warmup_episodes)
         env.set_curriculum_progress(curriculum_progress)
 
+        # Update terminal title with progress
+        progress_pct = 100 * episode_count / num_episodes
+        set_terminal_title(f"{progress_pct:.0f}% {run_name}")
+
         # Collect a batch of episodes
         episode_batch = []
         batch_rewards = []
@@ -724,6 +735,7 @@ def main():
     print()
 
     # Clean up
+    set_terminal_title(f"Done: {run_name}")
     wandb.finish()
     env.close()
     print("Training complete!")
