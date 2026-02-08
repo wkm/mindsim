@@ -535,6 +535,8 @@ def main():
             "randomize_target": True,
             "movement_bonus": 0.05,
             "time_penalty": 0.005,
+            # Curriculum (warmup over first 50% of training)
+            "curriculum_warmup_episodes": 5000,
             # Model architecture
             "policy_type": policy_name,
             "policy_params": num_params,
@@ -579,7 +581,12 @@ def main():
     batch_size = 16  # Episodes per gradient update
     log_rerun_every = 100  # Log every 100th episode to Rerun
     num_batches = num_episodes // batch_size
+
+    # Curriculum schedule: progress from 0 (target in front) to 1 (random)
+    # curriculum_warmup_episodes: episodes to go from 0 to 1
+    curriculum_warmup_episodes = num_episodes // 2  # First 50% of training
     print(f"Training for {num_episodes} episodes ({num_batches} batches of {batch_size})...")
+    print(f"  Curriculum: target in front → random over {curriculum_warmup_episodes} episodes")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
@@ -594,6 +601,10 @@ def main():
     episode_count = 0
     pbar = tqdm(range(num_batches), desc="Training", position=0)
     for batch_idx in pbar:
+        # Update curriculum progress (0 → 1 over warmup period)
+        curriculum_progress = min(1.0, episode_count / curriculum_warmup_episodes)
+        env.set_curriculum_progress(curriculum_progress)
+
         # Collect a batch of episodes
         episode_batch = []
         batch_rewards = []
@@ -656,6 +667,9 @@ def main():
         log_dict = {
             "episode": episode_count,
             "batch": batch_idx,
+            # Curriculum
+            "curriculum/progress": curriculum_progress,
+            "curriculum/max_angle_deviation_deg": curriculum_progress * 180,  # 0° to 180°
             # Batch metrics
             "batch/avg_reward": avg_reward,
             "batch/best_reward": best_reward,
