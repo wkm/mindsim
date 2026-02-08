@@ -42,6 +42,10 @@ class CurriculumConfig:
     advance_rate: float = 0.02  # Per-batch advancement
     retreat_rate: float = 0.01  # Per-batch retreat
 
+    # Deterministic evaluation for curriculum decisions
+    eval_episodes_per_batch: int = 8  # Deterministic eval episodes per batch
+    use_eval_for_curriculum: bool = True  # Use eval success rate for curriculum
+
 
 @dataclass
 class PolicyConfig:
