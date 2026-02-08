@@ -179,12 +179,17 @@ class TrainingEnv:
         if self.episode_step >= self.max_episode_steps:
             truncated = True
 
-        # Additional info
+        # Additional info (includes reward breakdown for visualization)
         info = {
             'distance': current_distance,
             'position': current_position,
             'step': self.episode_step,
             'distance_moved': distance_moved,
+            # Reward components for visualization
+            'reward_distance': distance_reward,
+            'reward_exploration': exploration_reward,
+            'reward_time': time_cost,
+            'reward_total': reward,
         }
 
         return obs, reward, done, truncated, info
