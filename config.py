@@ -53,15 +53,15 @@ class PolicyConfig:
     image_width: int = 64
 
     # CNN architecture
-    conv1_out_channels: int = 8
+    conv1_out_channels: int = 32
     conv1_kernel: int = 8
     conv1_stride: int = 4
-    conv2_out_channels: int = 16
+    conv2_out_channels: int = 64
     conv2_kernel: int = 4
     conv2_stride: int = 2
 
     # FC / LSTM layers
-    hidden_size: int = 64  # FC1 for TinyPolicy, LSTM hidden for LSTMPolicy
+    hidden_size: int = 256  # FC1 for TinyPolicy, LSTM hidden for LSTMPolicy
     fc_output_size: int = 2  # Motor commands
 
     # Activation

@@ -150,11 +150,11 @@ class LSTMPolicy(nn.Module):
         self.hidden_size = hidden_size
 
         # CNN feature extractor (same as TinyPolicy)
-        self.conv1 = nn.Conv2d(3, 8, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(8, 16, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
 
         # Flattened CNN output size
-        conv_out_size = 16 * 6 * 6  # 576
+        conv_out_size = 64 * 6 * 6  # 2304
 
         # LSTM for temporal memory
         self.lstm = nn.LSTM(input_size=conv_out_size, hidden_size=hidden_size, batch_first=True)
@@ -292,16 +292,16 @@ class TinyPolicy(nn.Module):
     def __init__(self, image_height=64, image_width=64, init_std=0.5):
         super().__init__()
 
-        # Tiny CNN: just 2 conv layers
-        self.conv1 = nn.Conv2d(3, 8, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(8, 16, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        # CNN: 2 conv layers
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
 
         # Calculate flattened size
-        conv_out_size = 16 * 6 * 6  # 576
+        conv_out_size = 64 * 6 * 6  # 2304
 
-        # Tiny FC layers
-        self.fc1 = nn.Linear(conv_out_size, 32)
-        self.fc2 = nn.Linear(32, 2)  # Output: mean of [left_motor, right_motor]
+        # FC layers
+        self.fc1 = nn.Linear(conv_out_size, 128)
+        self.fc2 = nn.Linear(128, 2)  # Output: mean of [left_motor, right_motor]
 
         # Learnable log_std (state-independent)
         # Using log_std ensures std is always positive when we exp() it
