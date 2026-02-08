@@ -398,18 +398,17 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     }
 
 
-def train_step(policy, optimizer, episode_data, gamma=0.99):
+def compute_episode_loss(policy, episode_data, gamma=0.99):
     """
-    REINFORCE policy gradient training step.
-
-    Maximizes expected reward by increasing log probability of actions
-    that led to higher-than-average returns.
+    Compute REINFORCE loss for a single episode (no gradient step).
 
     Args:
         policy: Stochastic neural network policy
-        optimizer: PyTorch optimizer
         episode_data: Data from collect_episode
         gamma: Discount factor for reward-to-go
+
+    Returns:
+        loss: Scalar tensor (with grad)
     """
     observations = torch.from_numpy(np.array(episode_data['observations']))  # (T, H, W, 3)
     actions = torch.from_numpy(np.array(episode_data['actions']))  # (T, 2)
@@ -433,11 +432,38 @@ def train_step(policy, optimizer, episode_data, gamma=0.99):
 
     # REINFORCE loss: -E[advantage * log_prob]
     # Negative because we want to maximize expected reward
-    policy_loss = -torch.mean(advantage * log_probs)
+    return -torch.mean(advantage * log_probs)
 
-    # Backward pass
+
+def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
+    """
+    REINFORCE policy gradient training step on a batch of episodes.
+
+    Collects gradients from multiple episodes and averages them before
+    taking an optimizer step. This reduces variance in gradient estimates.
+
+    Args:
+        policy: Stochastic neural network policy
+        optimizer: PyTorch optimizer
+        episode_batch: List of episode_data dicts from collect_episode
+        gamma: Discount factor for reward-to-go
+
+    Returns:
+        avg_loss: Average loss across batch
+        grad_norm: Gradient norm after averaging
+        policy_std: Current policy standard deviation
+    """
     optimizer.zero_grad()
-    policy_loss.backward()
+
+    # Accumulate losses from all episodes
+    total_loss = 0.0
+    for episode_data in episode_batch:
+        loss = compute_episode_loss(policy, episode_data, gamma)
+        # Scale by 1/batch_size so gradients average correctly
+        (loss / len(episode_batch)).backward()
+        total_loss += loss.item()
+
+    avg_loss = total_loss / len(episode_batch)
 
     # Compute gradient norm before optimizer step
     total_grad_norm = 0.0
@@ -451,7 +477,7 @@ def train_step(policy, optimizer, episode_data, gamma=0.99):
     # Get current policy std for logging
     policy_std = torch.exp(policy.log_std).detach().cpu().numpy()
 
-    return policy_loss.item(), total_grad_norm, policy_std
+    return avg_loss, total_grad_norm, policy_std
 
 
 def main():
@@ -531,6 +557,7 @@ def main():
             "algorithm": "REINFORCE",
             "gamma": 0.99,
             "num_episodes": 10000,
+            "batch_size": 16,
             "log_rerun_every": 100,
         }
     )
@@ -549,8 +576,10 @@ def main():
 
     # Training loop
     num_episodes = 10000  # Baseline run
+    batch_size = 16  # Episodes per gradient update
     log_rerun_every = 100  # Log every 100th episode to Rerun
-    print(f"Training for {num_episodes} episodes...")
+    num_batches = num_episodes // batch_size
+    print(f"Training for {num_episodes} episodes ({num_batches} batches of {batch_size})...")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
@@ -562,80 +591,88 @@ def main():
         'rerun': 0.0,
     }
 
-    pbar = tqdm(range(num_episodes), desc="Training", position=0)
-    for episode in pbar:
-        # Collect episode (log to Rerun periodically for visualization)
-        should_log_rerun = (episode % log_rerun_every == 0)
+    episode_count = 0
+    pbar = tqdm(range(num_batches), desc="Training", position=0)
+    for batch_idx in pbar:
+        # Collect a batch of episodes
+        episode_batch = []
+        batch_rewards = []
+        batch_distances = []
+        batch_steps = []
 
-        # Start new Rerun recording for this episode
-        t_rerun_start = time.perf_counter()
-        if should_log_rerun:
-            rr_wandb.start_episode(episode, env, namespace="training")
-        timing['rerun'] += time.perf_counter() - t_rerun_start
+        for i in range(batch_size):
+            episode = episode_count + i
+            # Log to Rerun periodically (first episode of batch if it's time)
+            should_log_rerun = (episode % log_rerun_every == 0) and (i == 0)
 
-        t_collect_start = time.perf_counter()
-        episode_data = collect_episode(
-            env, policy, device,
-            show_progress=False,
-            log_rerun=should_log_rerun
-        )
-        timing['collect'] += time.perf_counter() - t_collect_start
+            # Start new Rerun recording for this episode
+            t_rerun_start = time.perf_counter()
+            if should_log_rerun:
+                rr_wandb.start_episode(episode, env, namespace="training")
+            timing['rerun'] += time.perf_counter() - t_rerun_start
 
-        # Finish Rerun recording and upload to wandb
-        t_rerun_start = time.perf_counter()
-        if should_log_rerun:
-            rr_wandb.finish_episode(episode_data, upload_artifact=True)
-        timing['rerun'] += time.perf_counter() - t_rerun_start
+            t_collect_start = time.perf_counter()
+            episode_data = collect_episode(
+                env, policy, device,
+                show_progress=False,
+                log_rerun=should_log_rerun
+            )
+            timing['collect'] += time.perf_counter() - t_collect_start
 
-        # Train on episode
+            # Finish Rerun recording and upload to wandb
+            t_rerun_start = time.perf_counter()
+            if should_log_rerun:
+                rr_wandb.finish_episode(episode_data, upload_artifact=True)
+            timing['rerun'] += time.perf_counter() - t_rerun_start
+
+            episode_batch.append(episode_data)
+            batch_rewards.append(episode_data['total_reward'])
+            batch_distances.append(episode_data['final_distance'])
+            batch_steps.append(episode_data['steps'])
+
+        episode_count += batch_size
+
+        # Train on batch of episodes
         t_train_start = time.perf_counter()
-        loss, grad_norm, policy_std = train_step(policy, optimizer, episode_data)
+        loss, grad_norm, policy_std = train_step_batched(policy, optimizer, episode_batch)
         timing['train'] += time.perf_counter() - t_train_start
 
-        # Log to wandb
-        actions_array = np.array(episode_data['actions'])
-        left_actions = actions_array[:, 0]
-        right_actions = actions_array[:, 1]
+        # Aggregate batch statistics
+        avg_reward = np.mean(batch_rewards)
+        avg_distance = np.mean(batch_distances)
+        avg_steps = np.mean(batch_steps)
+        best_reward = np.max(batch_rewards)
+        worst_reward = np.min(batch_rewards)
+
+        # Collect all actions from batch for histograms
+        all_left_actions = np.concatenate([np.array(ep['actions'])[:, 0] for ep in episode_batch])
+        all_right_actions = np.concatenate([np.array(ep['actions'])[:, 1] for ep in episode_batch])
 
         log_dict = {
-            "episode": episode,
-            # Episode metrics
-            "episode/reward": episode_data['total_reward'],
-            "episode/final_distance": episode_data['final_distance'],
-            "episode/steps": episode_data['steps'],
-            "episode/loss": loss,
+            "episode": episode_count,
+            "batch": batch_idx,
+            # Batch metrics
+            "batch/avg_reward": avg_reward,
+            "batch/best_reward": best_reward,
+            "batch/worst_reward": worst_reward,
+            "batch/avg_final_distance": avg_distance,
+            "batch/avg_steps": avg_steps,
+            "batch/loss": loss,
             "training/grad_norm": grad_norm,
             # Policy std (exploration level)
             "policy/std_left": policy_std[0],
             "policy/std_right": policy_std[1],
-            # Action statistics
-            "actions/left_motor_mean": episode_data['left_motor_mean'],
-            "actions/left_motor_std": episode_data['left_motor_std'],
-            "actions/right_motor_mean": episode_data['right_motor_mean'],
-            "actions/right_motor_std": episode_data['right_motor_std'],
-            # Action histograms (distribution of actions in this episode)
-            "actions/left_motor_hist": wandb.Histogram(left_actions.tolist(), num_bins=20),
-            "actions/right_motor_hist": wandb.Histogram(right_actions.tolist(), num_bins=20),
-            # Reward histogram
-            "episode/reward_hist": wandb.Histogram(list(episode_data['rewards']), num_bins=20),
+            # Action statistics (across entire batch)
+            "actions/left_motor_mean": float(np.mean(all_left_actions)),
+            "actions/left_motor_std": float(np.std(all_left_actions)),
+            "actions/right_motor_mean": float(np.mean(all_right_actions)),
+            "actions/right_motor_std": float(np.std(all_right_actions)),
+            # Action histograms (distribution across batch)
+            "actions/left_motor_hist": wandb.Histogram(all_left_actions.tolist(), num_bins=20),
+            "actions/right_motor_hist": wandb.Histogram(all_right_actions.tolist(), num_bins=20),
+            # Reward histogram across batch
+            "batch/reward_hist": wandb.Histogram(batch_rewards, num_bins=20),
         }
-
-        # Log action time series as a table (for line charts in wandb)
-        # This creates a chart showing motor values (y) over time steps (x)
-        if should_log_rerun:  # Only log detailed time series periodically
-            action_table = wandb.Table(
-                columns=["step", "left_motor", "right_motor", "reward", "distance"],
-                data=[
-                    [t, left_actions[t], right_actions[t], episode_data['rewards'][t], episode_data['distances'][t]]
-                    for t in range(len(left_actions))
-                ]
-            )
-            log_dict["episode/action_timeseries"] = action_table
-
-            # Log a sample camera image from the episode
-            sample_idx = len(episode_data['observations']) // 2  # Middle of episode
-            sample_img = (episode_data['observations'][sample_idx] * 255).astype(np.uint8)
-            log_dict["episode/sample_camera"] = wandb.Image(sample_img, caption=f"Episode {episode}, step {sample_idx}")
 
         t_log_start = time.perf_counter()
         wandb.log(log_dict)
@@ -643,10 +680,10 @@ def main():
 
         # Update progress bar
         pbar.set_postfix({
-            'reward': f"{episode_data['total_reward']:.3f}",
-            'dist': f"{episode_data['final_distance']:.3f}m",
-            'steps': episode_data['steps'],
-            'loss': f"{loss:.6f}",
+            'avg_r': f"{avg_reward:.3f}",
+            'best_r': f"{best_reward:.3f}",
+            'dist': f"{avg_distance:.2f}m",
+            'loss': f"{loss:.4f}",
         })
 
     # Print timing summary
@@ -662,9 +699,9 @@ def main():
     print("  " + "─" * 40)
     print(f"  Total:              {total_time:>8.2f}s")
     print()
-    print(f"  Per-episode average:")
-    print(f"    Collection: {1000*timing['collect']/num_episodes:.1f}ms")
-    print(f"    Training:   {1000*timing['train']/num_episodes:.1f}ms")
+    print(f"  Per-batch average ({batch_size} episodes/batch):")
+    print(f"    Collection: {1000*timing['collect']/num_batches:.1f}ms")
+    print(f"    Training:   {1000*timing['train']/num_batches:.1f}ms")
     print()
 
     # Clean up
