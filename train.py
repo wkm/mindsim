@@ -302,6 +302,8 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
             action, log_prob = policy.sample_action(obs_tensor)
             action = action.cpu().numpy()[0]  # (2,)
             log_prob = log_prob.cpu().numpy()[0]  # scalar
+            # Get current policy std for logging
+            policy_std = torch.exp(policy.log_std).cpu().numpy()
 
         # Store data
         observations.append(obs)
@@ -326,9 +328,25 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
             rr.log("training/action/left_motor", rr.Scalars([action[0]]))
             rr.log("training/action/right_motor", rr.Scalars([action[1]]))
 
-            # Log reward and distance
-            rr.log("training/reward", rr.Scalars([reward]))
+            # Log reward breakdown (individual components for debugging)
+            rr.log("training/reward/total", rr.Scalars([reward]))
+            rr.log("training/reward/distance", rr.Scalars([info['reward_distance']]))
+            rr.log("training/reward/exploration", rr.Scalars([info['reward_exploration']]))
+            rr.log("training/reward/time_penalty", rr.Scalars([info['reward_time']]))
+
+            # Log cumulative reward
+            rr.log("training/reward/cumulative", rr.Scalars([total_reward]))
+
+            # Log distance to target
             rr.log("training/distance_to_target", rr.Scalars([info['distance']]))
+
+            # Log distance moved this step
+            rr.log("training/distance_moved", rr.Scalars([info['distance_moved']]))
+
+            # Log policy exploration level (std)
+            rr.log("training/policy/std_left", rr.Scalars([policy_std[0]]))
+            rr.log("training/policy/std_right", rr.Scalars([policy_std[1]]))
+            rr.log("training/policy/log_prob", rr.Scalars([log_prob]))
 
             # Log body transforms (uses current MuJoCo state)
             rerun_logger.log_body_transforms(env, namespace="training")
@@ -350,8 +368,9 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
 
     # Log episode summary to Rerun
     if log_rerun:
-        rr.log("training/episode_reward", rr.Scalars([total_reward]))
-        rr.log("training/episode_distance", rr.Scalars([info['distance']]))
+        rr.log("training/episode/total_reward", rr.Scalars([total_reward]))
+        rr.log("training/episode/final_distance", rr.Scalars([info['distance']]))
+        rr.log("training/episode/steps", rr.Scalars([steps]))
 
     # Compute action statistics
     actions_array = np.array(actions)
@@ -518,9 +537,10 @@ def main():
     print(f"  Logging to W&B: {wandb.run.url}")
     print()
 
-    # Watch model for gradient/parameter logging
-    wandb.watch(policy, log="all", log_freq=100)
-    print("  Watching model gradients every 100 steps")
+    # Watch model for gradient/parameter histograms
+    # log_freq is in backward passes (episodes), not steps
+    wandb.watch(policy, log="all", log_freq=10)
+    print("  Watching model gradients every 10 episodes")
 
     # Initialize Rerun-WandB integration
     rr_wandb = RerunWandbLogger(recordings_dir="recordings")

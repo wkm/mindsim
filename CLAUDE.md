@@ -103,3 +103,24 @@ Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy
 ## Development Notes
 
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
+
+## Commit Message Format
+
+Commits should follow this structure:
+
+```text
+Short summary (one sentence)
+
+Detailed description of the changes in 1-2 paragraphs using markdown.
+Explain the motivation, what was changed, and any important decisions made.
+
+## Session Summary
+
+Brief summary of what was discussed and decided during the Claude Code session.
+
+Session: <link to Claude session>
+```
+
+- **First line**: Concise summary of what changed (imperative mood)
+- **Body**: More verbose explanation (~1-2 paragraphs) with context and reasoning
+- **Session section**: Summary of the development session conversation + link to the Claude session
