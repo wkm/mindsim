@@ -103,9 +103,17 @@ class TrainingEnv:
         self.episode_step = 0
 
         # Randomize target position with curriculum-based angle constraint
-        # At progress=0: target directly in front (+Y direction, angle=π/2)
+        #
+        # Coordinate system (looking down from above):
+        #   +X = right
+        #   +Y = backward (behind robot)
+        #   -Y = forward (camera looks this way)
+        #
+        # Angles: 0=+X, π/2=+Y (behind), π=-X, -π/2=-Y (front)
+        #
+        # At progress=0: target directly in front (angle=-π/2)
         # At progress=1: target at any angle (full circle)
-        front_angle = np.pi / 2  # +Y direction = "in front of camera"
+        front_angle = -np.pi / 2  # -Y direction = in front of camera
         max_deviation = self.curriculum_progress * np.pi  # 0 to π
         angle = np.random.uniform(front_angle - max_deviation, front_angle + max_deviation)
 
