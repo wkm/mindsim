@@ -26,6 +26,25 @@ def set_terminal_title(title):
     sys.stdout.flush()
 
 
+def set_terminal_progress(percent):
+    """
+    Set terminal progress indicator using OSC 9;4 sequence.
+
+    Supported by iTerm2, Windows Terminal, and others.
+    Shows progress bar in terminal tab.
+
+    Args:
+        percent: 0-100 for progress, or -1 to clear
+    """
+    if percent < 0:
+        # Clear progress indicator
+        sys.stdout.write("\033]9;4;0\007")
+    else:
+        # Set progress (state=1 means normal progress)
+        sys.stdout.write(f"\033]9;4;1;{int(percent)}\007")
+    sys.stdout.flush()
+
+
 def notify_completion(run_name, message=None):
     """Show macOS notification and play sound when training completes."""
     if message is None:
@@ -628,9 +647,10 @@ def main():
         curriculum_progress = min(1.0, episode_count / curriculum_warmup_episodes)
         env.set_curriculum_progress(curriculum_progress)
 
-        # Update terminal title with progress
+        # Update terminal title and progress indicator
         progress_pct = 100 * episode_count / num_episodes
         set_terminal_title(f"{progress_pct:.0f}% {run_name}")
+        set_terminal_progress(progress_pct)
 
         # Collect a batch of episodes
         episode_batch = []
@@ -752,6 +772,7 @@ def main():
 
     # Clean up
     set_terminal_title(f"Done: {run_name}")
+    set_terminal_progress(-1)  # Clear progress indicator
     notify_completion(run_name)
     wandb.finish()
     env.close()
