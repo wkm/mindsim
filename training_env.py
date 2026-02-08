@@ -7,14 +7,15 @@ Wraps SimpleWheelerEnv with:
 - Episode termination logic
 - Standard Gymnasium API (reset, step returning obs/reward/done/truncated/info)
 """
+from __future__ import annotations
+
 import mujoco
 import numpy as np
 from simple_wheeler_env import SimpleWheelerEnv
 
-# Control frequency: 10 Hz (1 action every 0.1 seconds)
-# MuJoCo timestep: 0.02s (50 Hz simulation)
-# Therefore: 5 MuJoCo steps per action
-MUJOCO_STEPS_PER_ACTION = 5
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from config import EnvConfig
 
 
 class TrainingEnv:
@@ -29,11 +30,29 @@ class TrainingEnv:
     Reward: Negative distance change to target
     """
 
+    @classmethod
+    def from_config(cls, config: EnvConfig) -> "TrainingEnv":
+        """Create TrainingEnv from an EnvConfig object."""
+        return cls(
+            render_width=config.render_width,
+            render_height=config.render_height,
+            max_episode_steps=config.max_episode_steps,
+            mujoco_steps_per_action=config.mujoco_steps_per_action,
+            success_distance=config.success_distance,
+            failure_distance=config.failure_distance,
+            min_target_distance=config.min_target_distance,
+            max_target_distance=config.max_target_distance,
+            distance_reward_scale=config.distance_reward_scale,
+            movement_bonus=config.movement_bonus,
+            time_penalty=config.time_penalty,
+        )
+
     def __init__(
         self,
         render_width=64,
         render_height=64,
         max_episode_steps=100,  # 10 seconds at 10 Hz
+        mujoco_steps_per_action=5,  # 10 Hz control (50 Hz sim / 5 = 10 Hz)
         success_distance=0.3,  # Success if within 0.3m of target
         failure_distance=5.0,  # Failure if beyond 5m from target
         min_target_distance=0.8,  # Minimum spawn distance from robot
@@ -50,6 +69,7 @@ class TrainingEnv:
             render_width: Camera image width
             render_height: Camera image height
             max_episode_steps: Maximum steps before episode truncation (default 100 = 10 seconds)
+            mujoco_steps_per_action: MuJoCo steps per action (controls sim-to-control ratio)
             success_distance: Distance threshold for success
             failure_distance: Distance threshold for failure
         """
@@ -58,6 +78,7 @@ class TrainingEnv:
             render_height=render_height
         )
         self.max_episode_steps = max_episode_steps
+        self.mujoco_steps_per_action = mujoco_steps_per_action
         self.success_distance = success_distance
         self.failure_distance = failure_distance
         self.min_target_distance = min_target_distance
@@ -148,7 +169,7 @@ class TrainingEnv:
         """
         Take action and advance simulation.
 
-        Runs MUJOCO_STEPS_PER_ACTION (5) MuJoCo steps to achieve 10 Hz control.
+        Runs mujoco_steps_per_action MuJoCo steps to achieve desired control frequency.
 
         Args:
             action: [left_motor, right_motor] in range [-1, 1]
@@ -164,8 +185,8 @@ class TrainingEnv:
 
         # Run multiple MuJoCo steps with same action (10 Hz control)
         # Only render on the last step to avoid wasted work
-        for i in range(MUJOCO_STEPS_PER_ACTION):
-            is_last_step = (i == MUJOCO_STEPS_PER_ACTION - 1)
+        for i in range(self.mujoco_steps_per_action):
+            is_last_step = (i == self.mujoco_steps_per_action - 1)
             camera_img = self.env.step(left_motor, right_motor, render=is_last_step)
 
         # Get observation

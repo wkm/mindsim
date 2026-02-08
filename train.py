@@ -19,6 +19,7 @@ import subprocess
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
+from config import Config
 
 
 def set_terminal_title(title):
@@ -600,32 +601,39 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
 
 def main():
     """Main training loop."""
+    # Load centralized configuration
+    cfg = Config()
+
     print("=" * 60)
     print("Training 2-Wheeler Robot with Tiny Neural Network")
     print("=" * 60)
     print()
 
-    # Create environment
+    # Create environment from config
     print("Creating environment...")
-    env = TrainingEnv(
-        render_width=64,
-        render_height=64,
-        max_episode_steps=100,  # 10 seconds at 10 Hz
-    )
+    env = TrainingEnv.from_config(cfg.env)
     print(f"  Observation shape: {env.observation_shape}")
     print(f"  Action shape: {env.action_shape}")
-    print(f"  Control frequency: 10 Hz")
+    print(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
     print()
 
-    # Create policy (choose between TinyPolicy and LSTMPolicy)
-    use_lstm = True  # Set to False to use feedforward policy
-    print(f"Creating {'LSTM' if use_lstm else 'feedforward'} neural network...")
+    # Create policy from config
+    print(f"Creating {'LSTM' if cfg.policy.use_lstm else 'feedforward'} neural network...")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if use_lstm:
-        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=64).to(device)
+    if cfg.policy.use_lstm:
+        policy = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+            init_std=cfg.policy.init_std,
+        ).to(device)
     else:
-        policy = TinyPolicy(image_height=64, image_width=64).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=3e-2)
+        policy = TinyPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            init_std=cfg.policy.init_std,
+        ).to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
 
     # Count parameters
     num_params = sum(p.numel() for p in policy.parameters())
@@ -640,61 +648,16 @@ def main():
         print("  Run notes generated successfully")
     print()
 
-    # Initialize wandb with comprehensive config
-    policy_name = "LSTMPolicy" if use_lstm else "TinyPolicy"
-    run_name = f"{policy_name.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
+    # Initialize wandb with config from centralized config
+    run_name = f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
         notes=run_notes,
         config={
-            # Environment
-            "render_width": 64,
-            "render_height": 64,
-            "max_episode_steps": 100,
-            "control_frequency_hz": 10,
-            "mujoco_steps_per_action": 5,
-            "success_distance": 0.3,
-            "failure_distance": 5.0,
-            "min_target_distance": 0.8,
-            "max_target_distance": 2.5,
-            "randomize_target": True,
-            "distance_reward_scale": 20.0,
-            "distance_reward_type": "linear",  # standard potential-based shaping
-            "movement_bonus": 0.0,
-            "time_penalty": 0.005,
-            # Curriculum (performance-based)
-            "curriculum_window_size": 10,
-            "curriculum_advance_threshold": 0.6,
-            "curriculum_retreat_threshold": 0.3,
-            "curriculum_advance_rate": 0.02,
-            "curriculum_retreat_rate": 0.01,
-            # Model architecture
-            "policy_type": policy_name,
+            **cfg.to_wandb_config(),
+            # Add computed values not in config
             "policy_params": num_params,
-            "use_lstm": use_lstm,
-            "lstm_hidden_size": 64 if use_lstm else None,
-            "conv1_out_channels": 8,
-            "conv1_kernel": 8,
-            "conv1_stride": 4,
-            "conv2_out_channels": 16,
-            "conv2_kernel": 4,
-            "conv2_stride": 2,
-            "fc1_size": 32 if not use_lstm else 64,
-            "fc2_size": 2,
-            "activation": "relu",
-            "output_activation": "tanh",
-            "init_std": 0.5,
-            # Training
-            "optimizer": "Adam",
-            "learning_rate": 3e-2,
-            "algorithm": "REINFORCE",
-            "gamma": 0.99,
-            "training_mode": "run_until_mastery",
-            "mastery_threshold": 0.7,
-            "mastery_batches": 20,
-            "batch_size": 64,
-            "log_rerun_every": 100,
         }
     )
     print(f"  Logging to W&B: {wandb.run.url}")
@@ -710,27 +673,20 @@ def main():
     print(f"  Rerun recordings: {rr_wandb.run_dir}/")
     print()
 
-    # Training loop
-    batch_size = 64  # Episodes per gradient update
-    log_rerun_every = 100  # Log every 100th episode to Rerun
+    # Training loop - use config values
+    batch_size = cfg.training.batch_size
+    log_rerun_every = cfg.training.log_rerun_every
 
-    # Curriculum schedule: performance-based advancement
-    # Advances when rolling success rate exceeds threshold, holds/retreats otherwise
-    curriculum_window_size = 10  # Number of batches to average over
-    curriculum_advance_threshold = 0.6  # Advance when success rate > 60%
-    curriculum_retreat_threshold = 0.3  # Retreat when success rate < 30%
-    curriculum_advance_rate = 0.02  # How much to advance per batch when above threshold
-    curriculum_retreat_rate = 0.01  # How much to retreat per batch when below threshold
-    mastery_threshold = 0.7  # Success rate required at curriculum=1.0 to declare mastery
-    mastery_batches = 20  # Must maintain mastery for this many batches
+    # Curriculum config (shorthand for readability)
+    curr = cfg.curriculum
 
     # Rolling window for success rate tracking
-    success_history = deque(maxlen=curriculum_window_size)
+    success_history = deque(maxlen=curr.window_size)
     curriculum_progress = 0.0  # Start with target in front
     mastery_count = 0  # Count of consecutive batches at mastery level
 
-    print(f"Training until curriculum mastery (curriculum=1.0, success>={mastery_threshold:.0%} for {mastery_batches} batches)...")
-    print(f"  Curriculum: performance-based (advance@{curriculum_advance_threshold:.0%}, retreat@{curriculum_retreat_threshold:.0%})")
+    print(f"Training until curriculum mastery (curriculum=1.0, success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)...")
+    print(f"  Curriculum: performance-based (advance@{curr.advance_threshold:.0%}, retreat@{curr.retreat_threshold:.0%})")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
@@ -818,16 +774,16 @@ def main():
         rolling_success_rate = np.mean(success_history)
 
         # Update curriculum based on rolling success rate
-        if len(success_history) >= curriculum_window_size:
-            if rolling_success_rate > curriculum_advance_threshold:
-                curriculum_progress = min(1.0, curriculum_progress + curriculum_advance_rate)
-            elif rolling_success_rate < curriculum_retreat_threshold:
-                curriculum_progress = max(0.0, curriculum_progress - curriculum_retreat_rate)
+        if len(success_history) >= curr.window_size:
+            if rolling_success_rate > curr.advance_threshold:
+                curriculum_progress = min(1.0, curriculum_progress + curr.advance_rate)
+            elif rolling_success_rate < curr.retreat_threshold:
+                curriculum_progress = max(0.0, curriculum_progress - curr.retreat_rate)
 
         # Check for mastery: curriculum at max AND maintaining high success rate
-        if curriculum_progress >= 1.0 and rolling_success_rate >= mastery_threshold:
+        if curriculum_progress >= 1.0 and rolling_success_rate >= cfg.training.mastery_threshold:
             mastery_count += 1
-            if mastery_count >= mastery_batches:
+            if mastery_count >= cfg.training.mastery_batches:
                 mastered = True
         else:
             mastery_count = 0  # Reset if we drop below mastery level
@@ -877,7 +833,7 @@ def main():
             'avg_r': f"{avg_reward:.2f}",
             'succ': f"{rolling_success_rate:.0%}",
             'curr': f"{curriculum_progress:.2f}",
-            'mstr': f"{mastery_count}/{mastery_batches}",
+            'mstr': f"{mastery_count}/{cfg.training.mastery_batches}",
             'loss': f"{loss:.4f}",
         })
         pbar.update(1)
