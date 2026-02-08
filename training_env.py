@@ -39,7 +39,8 @@ class TrainingEnv:
         min_target_distance=0.8,  # Minimum spawn distance from robot
         max_target_distance=2.5,  # Maximum spawn distance from robot
         # Reward shaping coefficients
-        movement_bonus=0.05,  # Small reward per meter moved (encourages exploration)
+        distance_reward_scale=20.0,  # Scale factor for distance-based reward
+        movement_bonus=0.0,  # Disabled: was rewarding spinning in place
         time_penalty=0.005,  # Tiny penalty per step (discourages dawdling)
     ):
         """
@@ -61,6 +62,7 @@ class TrainingEnv:
         self.failure_distance = failure_distance
         self.min_target_distance = min_target_distance
         self.max_target_distance = max_target_distance
+        self.distance_reward_scale = distance_reward_scale
         self.movement_bonus = movement_bonus
         self.time_penalty = time_penalty
 
@@ -172,8 +174,8 @@ class TrainingEnv:
         current_position = self.env.get_bot_position()
 
         # Calculate reward components:
-        # 1. Distance reward: positive if getting closer to target
-        distance_reward = self.prev_distance - current_distance
+        # 1. Distance reward: linear potential-based shaping (standard in literature)
+        distance_reward = self.distance_reward_scale * (self.prev_distance - current_distance)
 
         # 2. Movement bonus: small reward for exploring (moving at all)
         distance_moved = np.linalg.norm(current_position - self.prev_position)
