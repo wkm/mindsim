@@ -129,7 +129,7 @@ Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy
 
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
 
-## Commit Message Format
+## Commit Message Formatit's
 
 Commits should follow this structure:
 
