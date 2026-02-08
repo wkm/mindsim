@@ -7,10 +7,13 @@ from a point in training to the corresponding visualization.
 Uses deterministic eval episodes (mean actions, no sampling) to show
 true policy capability without exploration noise.
 """
+
 import os
-import wandb
+
 import rerun as rr
+
 import rerun_logger
+import wandb
 from training_blueprint import create_training_blueprint
 
 
@@ -30,7 +33,9 @@ class RerunWandbLogger:
             recordings_dir: Base directory for storing .rrd files
         """
         if wandb.run is None:
-            raise RuntimeError("wandb.init() must be called before creating RerunWandbLogger")
+            raise RuntimeError(
+                "wandb.init() must be called before creating RerunWandbLogger"
+            )
 
         self.recordings_dir = recordings_dir
         self.run_id = wandb.run.id
@@ -65,12 +70,16 @@ class RerunWandbLogger:
         rr.send_blueprint(create_training_blueprint())
 
         # Log wandb context into Rerun for reverse lookup
-        rr.log("meta/wandb", rr.TextDocument(
-            f"Run: {self.run_name}\n"
-            f"ID: {self.run_id}\n"
-            f"Episode: {episode}\n"
-            f"URL: {wandb.run.url}"
-        ), static=True)
+        rr.log(
+            "meta/wandb",
+            rr.TextDocument(
+                f"Run: {self.run_name}\n"
+                f"ID: {self.run_id}\n"
+                f"Episode: {episode}\n"
+                f"URL: {wandb.run.url}"
+            ),
+            static=True,
+        )
 
         # Set up the 3D scene
         rerun_logger.setup_scene(env, namespace=namespace)
@@ -109,7 +118,7 @@ class RerunWandbLogger:
                 metadata={
                     "episode": self.current_episode,
                     "run_id": self.run_id,
-                }
+                },
             )
             artifact.add_file(self.rrd_path)
             wandb.log_artifact(artifact)
@@ -124,8 +133,10 @@ class RerunWandbLogger:
         """List all .rrd files for this run."""
         if not os.path.exists(self.run_dir):
             return []
-        return sorted([
-            os.path.join(self.run_dir, f)
-            for f in os.listdir(self.run_dir)
-            if f.endswith(".rrd")
-        ])
+        return sorted(
+            [
+                os.path.join(self.run_dir, f)
+                for f in os.listdir(self.run_dir)
+                if f.endswith(".rrd")
+            ]
+        )

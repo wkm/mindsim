@@ -2,7 +2,9 @@
 Simple test script for manual control of the 2-wheeler robot.
 This demonstrates the API without requiring a GUI viewer.
 """
+
 import numpy as np
+
 from simple_wheeler_env import SimpleWheelerEnv
 
 
@@ -104,9 +106,16 @@ def test_basic_api():
     # Check if orange is visible
     # Orange is approximately [255, 127, 0] in RGB
     # Let's check for pixels with high red, medium green, low blue
-    is_orange = (camera_img[:,:,0] > 200) & (camera_img[:,:,1] > 50) & (camera_img[:,:,1] < 150) & (camera_img[:,:,2] < 100)
+    is_orange = (
+        (camera_img[:, :, 0] > 200)
+        & (camera_img[:, :, 1] > 50)
+        & (camera_img[:, :, 1] < 150)
+        & (camera_img[:, :, 2] < 100)
+    )
     orange_pixels = np.sum(is_orange)
-    print(f"\nOrange-ish pixels detected: {orange_pixels} / {camera_img.shape[0] * camera_img.shape[1]}")
+    print(
+        f"\nOrange-ish pixels detected: {orange_pixels} / {camera_img.shape[0] * camera_img.shape[1]}"
+    )
 
     if orange_pixels > 0:
         print("✓ Target cube may be visible in camera!")

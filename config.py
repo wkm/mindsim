@@ -4,13 +4,15 @@ Centralized configuration for training.
 All hyperparameters and settings in one place.
 Automatically converts to dict for W&B logging.
 """
-from dataclasses import dataclass, field, asdict
-from typing import Literal, Optional
+
+from dataclasses import asdict, dataclass, field
+from typing import Literal
 
 
 @dataclass
 class EnvConfig:
     """Environment configuration."""
+
     render_width: int = 64
     render_height: int = 64
     max_episode_steps: int = 100  # 10 seconds at 10 Hz
@@ -36,6 +38,7 @@ class EnvConfig:
 @dataclass
 class CurriculumConfig:
     """Curriculum learning configuration."""
+
     window_size: int = 10  # Batches to average for success rate
     advance_threshold: float = 0.6  # Advance when success rate > 60%
     retreat_threshold: float = 0.3  # Retreat when success rate < 30%
@@ -50,6 +53,7 @@ class CurriculumConfig:
 @dataclass
 class PolicyConfig:
     """Neural network policy configuration."""
+
     policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
 
     # Image input
@@ -83,6 +87,7 @@ class PolicyConfig:
 @dataclass
 class TrainingConfig:
     """Training loop configuration."""
+
     # Optimizer
     optimizer: str = "Adam"
     learning_rate: float = 3e-2
@@ -106,6 +111,7 @@ class TrainingConfig:
 @dataclass
 class Config:
     """Complete training configuration."""
+
     env: EnvConfig = field(default_factory=EnvConfig)
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)

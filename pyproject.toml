@@ -5,7 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "black>=25.12.0",
     "brax>=0.14.0",
     "mediapy>=1.2.5",
     "mujoco>=3.4.0",
@@ -18,4 +17,18 @@ dependencies = [
     "wandb>=0.24.1",
     "torch>=2.0.0",
     "anthropic>=0.79.0",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (formatter handles what it can)
 ]
