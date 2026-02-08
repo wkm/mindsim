@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from collections import deque
 from datetime import datetime
 from tqdm import tqdm
 import time
@@ -490,6 +491,9 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     left_actions = actions_array[:, 0]
     right_actions = actions_array[:, 1]
 
+    # Determine if episode was a success (reached target)
+    success = done and info['distance'] < env.success_distance
+
     return {
         'observations': observations,
         'actions': actions,
@@ -499,6 +503,7 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
         'total_reward': total_reward,
         'steps': steps,
         'final_distance': info['distance'],
+        'success': success,
         # Action statistics for logging
         'left_motor_mean': float(np.mean(left_actions)),
         'left_motor_std': float(np.std(left_actions)),
@@ -658,8 +663,12 @@ def main():
             "distance_reward_type": "linear",  # standard potential-based shaping
             "movement_bonus": 0.0,
             "time_penalty": 0.005,
-            # Curriculum (warmup over first 50% of training)
-            "curriculum_warmup_episodes": 5000,
+            # Curriculum (performance-based)
+            "curriculum_window_size": 10,
+            "curriculum_advance_threshold": 0.6,
+            "curriculum_retreat_threshold": 0.3,
+            "curriculum_advance_rate": 0.02,
+            "curriculum_retreat_rate": 0.01,
             # Model architecture
             "policy_type": policy_name,
             "policy_params": num_params,
@@ -705,11 +714,20 @@ def main():
     log_rerun_every = 100  # Log every 100th episode to Rerun
     num_batches = num_episodes // batch_size
 
-    # Curriculum schedule: progress from 0 (target in front) to 1 (random)
-    # curriculum_warmup_episodes: episodes to go from 0 to 1
-    curriculum_warmup_episodes = num_episodes // 2  # First 50% of training
+    # Curriculum schedule: performance-based advancement
+    # Advances when rolling success rate exceeds threshold, holds/retreats otherwise
+    curriculum_window_size = 10  # Number of batches to average over
+    curriculum_advance_threshold = 0.6  # Advance when success rate > 60%
+    curriculum_retreat_threshold = 0.3  # Retreat when success rate < 30%
+    curriculum_advance_rate = 0.02  # How much to advance per batch when above threshold
+    curriculum_retreat_rate = 0.01  # How much to retreat per batch when below threshold
+
+    # Rolling window for success rate tracking
+    success_history = deque(maxlen=curriculum_window_size)
+    curriculum_progress = 0.0  # Start with target in front
+
     print(f"Training for {num_episodes} episodes ({num_batches} batches of {batch_size})...")
-    print(f"  Curriculum: target in front → random over {curriculum_warmup_episodes} episodes")
+    print(f"  Curriculum: performance-based (advance@{curriculum_advance_threshold:.0%}, retreat@{curriculum_retreat_threshold:.0%})")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
@@ -724,8 +742,7 @@ def main():
     episode_count = 0
     pbar = tqdm(range(num_batches), desc="Training", position=0)
     for batch_idx in pbar:
-        # Update curriculum progress (0 → 1 over warmup period)
-        curriculum_progress = min(1.0, episode_count / curriculum_warmup_episodes)
+        # Set curriculum progress for this batch
         env.set_curriculum_progress(curriculum_progress)
 
         # Update terminal title and progress indicator
@@ -738,6 +755,7 @@ def main():
         batch_rewards = []
         batch_distances = []
         batch_steps = []
+        batch_successes = []
 
         episode_pbar = tqdm(range(batch_size), desc="  Collecting", leave=False, position=1)
         for i in episode_pbar:
@@ -770,6 +788,7 @@ def main():
             batch_rewards.append(episode_data['total_reward'])
             batch_distances.append(episode_data['final_distance'])
             batch_steps.append(episode_data['steps'])
+            batch_successes.append(episode_data['success'])
 
             episode_pbar.set_postfix({'r': f"{episode_data['total_reward']:.2f}"})
 
@@ -788,6 +807,18 @@ def main():
         best_reward = np.max(batch_rewards)
         worst_reward = np.min(batch_rewards)
 
+        # Track success rate for curriculum advancement
+        batch_success_rate = np.mean(batch_successes)
+        success_history.append(batch_success_rate)
+        rolling_success_rate = np.mean(success_history)
+
+        # Update curriculum based on rolling success rate
+        if len(success_history) >= curriculum_window_size:
+            if rolling_success_rate > curriculum_advance_threshold:
+                curriculum_progress = min(1.0, curriculum_progress + curriculum_advance_rate)
+            elif rolling_success_rate < curriculum_retreat_threshold:
+                curriculum_progress = max(0.0, curriculum_progress - curriculum_retreat_rate)
+
         # Collect all actions from batch for histograms
         all_left_actions = np.concatenate([np.array(ep['actions'])[:, 0] for ep in episode_batch])
         all_right_actions = np.concatenate([np.array(ep['actions'])[:, 1] for ep in episode_batch])
@@ -798,12 +829,15 @@ def main():
             # Curriculum
             "curriculum/progress": curriculum_progress,
             "curriculum/max_angle_deviation_deg": curriculum_progress * 180,  # 0° to 180°
+            "curriculum/batch_success_rate": batch_success_rate,
+            "curriculum/rolling_success_rate": rolling_success_rate,
             # Batch metrics
             "batch/avg_reward": avg_reward,
             "batch/best_reward": best_reward,
             "batch/worst_reward": worst_reward,
             "batch/avg_final_distance": avg_distance,
             "batch/avg_steps": avg_steps,
+            "batch/success_rate": batch_success_rate,
             "batch/loss": loss,
             "training/grad_norm": grad_norm,
             # Policy std (exploration level)
@@ -827,9 +861,9 @@ def main():
 
         # Update progress bar
         pbar.set_postfix({
-            'avg_r': f"{avg_reward:.3f}",
-            'best_r': f"{best_reward:.3f}",
-            'dist': f"{avg_distance:.2f}m",
+            'avg_r': f"{avg_reward:.2f}",
+            'succ': f"{rolling_success_rate:.0%}",
+            'curr': f"{curriculum_progress:.2f}",
             'loss': f"{loss:.4f}",
         })
 
