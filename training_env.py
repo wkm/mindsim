@@ -69,9 +69,25 @@ class TrainingEnv:
         self.prev_distance = None
         self.prev_position = None
 
+        # Curriculum learning: controls target spawn angle variance
+        # 0.0 = target always directly in front of camera
+        # 1.0 = target at random angle (full circle)
+        self.curriculum_progress = 1.0  # Default: full randomization
+
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (2,)  # [left_motor, right_motor]
+
+    def set_curriculum_progress(self, progress):
+        """
+        Set curriculum progress for target spawn positioning.
+
+        Args:
+            progress: Float in [0, 1]
+                0.0 = target always directly in front of camera (+Y direction)
+                1.0 = target at random angle (full 360° randomization)
+        """
+        self.curriculum_progress = np.clip(progress, 0.0, 1.0)
 
     def reset(self):
         """
@@ -86,9 +102,13 @@ class TrainingEnv:
         camera_img = self.env.reset()
         self.episode_step = 0
 
-        # Randomize target position
-        # Random angle (full circle around the robot)
-        angle = np.random.uniform(0, 2 * np.pi)
+        # Randomize target position with curriculum-based angle constraint
+        # At progress=0: target directly in front (+Y direction, angle=π/2)
+        # At progress=1: target at any angle (full circle)
+        front_angle = np.pi / 2  # +Y direction = "in front of camera"
+        max_deviation = self.curriculum_progress * np.pi  # 0 to π
+        angle = np.random.uniform(front_angle - max_deviation, front_angle + max_deviation)
+
         # Random distance within bounds
         distance = np.random.uniform(self.min_target_distance, self.max_target_distance)
 
