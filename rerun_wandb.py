@@ -31,7 +31,7 @@ class RerunWandbLogger:
         self.recordings_dir = recordings_dir
         self.run_id = wandb.run.id
         self.run_name = wandb.run.name
-        self.run_dir = os.path.join(recordings_dir, self.run_id)
+        self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
         os.makedirs(self.run_dir, exist_ok=True)
 
         self.current_episode = None
