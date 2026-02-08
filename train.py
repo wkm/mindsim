@@ -690,7 +690,9 @@ def main():
             "learning_rate": 3e-2,
             "algorithm": "REINFORCE",
             "gamma": 0.99,
-            "num_episodes": 10000,
+            "training_mode": "run_until_mastery",
+            "mastery_threshold": 0.7,
+            "mastery_batches": 20,
             "batch_size": 16,
             "log_rerun_every": 100,
         }
@@ -709,10 +711,8 @@ def main():
     print()
 
     # Training loop
-    num_episodes = 10000  # Baseline run
     batch_size = 16  # Episodes per gradient update
     log_rerun_every = 100  # Log every 100th episode to Rerun
-    num_batches = num_episodes // batch_size
 
     # Curriculum schedule: performance-based advancement
     # Advances when rolling success rate exceeds threshold, holds/retreats otherwise
@@ -721,12 +721,15 @@ def main():
     curriculum_retreat_threshold = 0.3  # Retreat when success rate < 30%
     curriculum_advance_rate = 0.02  # How much to advance per batch when above threshold
     curriculum_retreat_rate = 0.01  # How much to retreat per batch when below threshold
+    mastery_threshold = 0.7  # Success rate required at curriculum=1.0 to declare mastery
+    mastery_batches = 20  # Must maintain mastery for this many batches
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curriculum_window_size)
     curriculum_progress = 0.0  # Start with target in front
+    mastery_count = 0  # Count of consecutive batches at mastery level
 
-    print(f"Training for {num_episodes} episodes ({num_batches} batches of {batch_size})...")
+    print(f"Training until curriculum mastery (curriculum=1.0, success>={mastery_threshold:.0%} for {mastery_batches} batches)...")
     print(f"  Curriculum: performance-based (advance@{curriculum_advance_threshold:.0%}, retreat@{curriculum_retreat_threshold:.0%})")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
@@ -740,14 +743,16 @@ def main():
     }
 
     episode_count = 0
-    pbar = tqdm(range(num_batches), desc="Training", position=0)
-    for batch_idx in pbar:
+    batch_idx = 0
+    mastered = False
+    pbar = tqdm(desc="Training", position=0, unit="batch")
+    while not mastered:
         # Set curriculum progress for this batch
         env.set_curriculum_progress(curriculum_progress)
 
-        # Update terminal title and progress indicator
-        progress_pct = 100 * episode_count / num_episodes
-        set_terminal_title(f"{progress_pct:.0f}% {run_name}")
+        # Update terminal title and progress indicator (use curriculum as progress)
+        progress_pct = 100 * curriculum_progress
+        set_terminal_title(f"{progress_pct:.0f}% curr={curriculum_progress:.2f} {run_name}")
         set_terminal_progress(progress_pct)
 
         # Collect a batch of episodes
@@ -819,6 +824,14 @@ def main():
             elif rolling_success_rate < curriculum_retreat_threshold:
                 curriculum_progress = max(0.0, curriculum_progress - curriculum_retreat_rate)
 
+        # Check for mastery: curriculum at max AND maintaining high success rate
+        if curriculum_progress >= 1.0 and rolling_success_rate >= mastery_threshold:
+            mastery_count += 1
+            if mastery_count >= mastery_batches:
+                mastered = True
+        else:
+            mastery_count = 0  # Reset if we drop below mastery level
+
         # Collect all actions from batch for histograms
         all_left_actions = np.concatenate([np.array(ep['actions'])[:, 0] for ep in episode_batch])
         all_right_actions = np.concatenate([np.array(ep['actions'])[:, 1] for ep in episode_batch])
@@ -864,8 +877,14 @@ def main():
             'avg_r': f"{avg_reward:.2f}",
             'succ': f"{rolling_success_rate:.0%}",
             'curr': f"{curriculum_progress:.2f}",
+            'mstr': f"{mastery_count}/{mastery_batches}",
             'loss': f"{loss:.4f}",
         })
+        pbar.update(1)
+        batch_idx += 1
+
+    pbar.close()
+    total_batches = batch_idx  # Store final count for timing summary
 
     # Print timing summary
     total_time = sum(timing.values())
@@ -880,9 +899,9 @@ def main():
     print("  " + "─" * 40)
     print(f"  Total:              {total_time:>8.2f}s")
     print()
-    print(f"  Per-batch average ({batch_size} episodes/batch):")
-    print(f"    Collection: {1000*timing['collect']/num_batches:.1f}ms")
-    print(f"    Training:   {1000*timing['train']/num_batches:.1f}ms")
+    print(f"  Per-batch average ({batch_size} episodes/batch, {total_batches} batches):")
+    print(f"    Collection: {1000*timing['collect']/total_batches:.1f}ms")
+    print(f"    Training:   {1000*timing['train']/total_batches:.1f}ms")
     print()
 
     # Clean up
