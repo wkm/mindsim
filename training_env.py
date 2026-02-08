@@ -163,8 +163,10 @@ class TrainingEnv:
         left_motor, right_motor = action
 
         # Run multiple MuJoCo steps with same action (10 Hz control)
-        for _ in range(MUJOCO_STEPS_PER_ACTION):
-            camera_img = self.env.step(left_motor, right_motor)
+        # Only render on the last step to avoid wasted work
+        for i in range(MUJOCO_STEPS_PER_ACTION):
+            is_last_step = (i == MUJOCO_STEPS_PER_ACTION - 1)
+            camera_img = self.env.step(left_motor, right_motor, render=is_last_step)
 
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
