@@ -18,6 +18,151 @@ import rerun_logger
 from rerun_wandb import RerunWandbLogger
 
 
+class LSTMPolicy(nn.Module):
+    """
+    LSTM-based stochastic policy network with memory.
+
+    Input: RGB image (64x64x3)
+    Output: Mean of Gaussian distribution over motor commands [left, right]
+
+    Uses CNN to extract features, then LSTM to maintain temporal context.
+    This allows the policy to remember past observations and actions.
+    """
+
+    def __init__(self, image_height=64, image_width=64, hidden_size=64, init_std=0.5):
+        super().__init__()
+
+        self.hidden_size = hidden_size
+
+        # CNN feature extractor (same as TinyPolicy)
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=8, stride=4)  # 64x64 -> 15x15
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=4, stride=2)  # 15x15 -> 6x6
+
+        # Flattened CNN output size
+        conv_out_size = 16 * 6 * 6  # 576
+
+        # LSTM for temporal memory
+        self.lstm = nn.LSTM(input_size=conv_out_size, hidden_size=hidden_size, batch_first=True)
+
+        # Output layers
+        self.fc = nn.Linear(hidden_size, 2)  # Output: mean of [left_motor, right_motor]
+
+        # Learnable log_std (state-independent)
+        self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
+
+        # Hidden state (will be set during episode)
+        self.hidden = None
+
+    def reset_hidden(self, batch_size=1, device='cpu'):
+        """Reset LSTM hidden state at the start of each episode."""
+        self.hidden = (
+            torch.zeros(1, batch_size, self.hidden_size, device=device),
+            torch.zeros(1, batch_size, self.hidden_size, device=device)
+        )
+
+    def forward(self, x, hidden=None):
+        """
+        Forward pass - returns action distribution parameters.
+
+        Args:
+            x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
+            hidden: Optional LSTM hidden state tuple (h, c)
+
+        Returns:
+            mean: (B, 2) or (B, T, 2) mean motor commands in range [-1, 1]
+            std: (2,) standard deviation (shared across batch)
+            hidden: Updated hidden state
+        """
+        # Handle both single timestep and sequence inputs
+        is_sequence = x.dim() == 5
+        if is_sequence:
+            B, T, H, W, C = x.shape
+            # Reshape to process all frames through CNN
+            x = x.reshape(B * T, H, W, C)
+        else:
+            B = x.size(0)
+            T = 1
+
+        # Permute to (B*T, 3, H, W) for PyTorch conv layers
+        x = x.permute(0, 3, 1, 2)
+
+        # CNN feature extraction
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+
+        # Flatten CNN output
+        x = x.reshape(x.size(0), -1)  # (B*T, 576)
+
+        # Reshape for LSTM: (B, T, features)
+        x = x.reshape(B, T, -1)
+
+        # Use stored hidden if none provided
+        if hidden is None:
+            hidden = self.hidden
+
+        # LSTM forward pass
+        lstm_out, hidden = self.lstm(x, hidden)  # lstm_out: (B, T, hidden_size)
+
+        # Store updated hidden state
+        self.hidden = hidden
+
+        # Output layer
+        if is_sequence:
+            mean = torch.tanh(self.fc(lstm_out))  # (B, T, 2)
+        else:
+            mean = torch.tanh(self.fc(lstm_out.squeeze(1)))  # (B, 2)
+
+        std = torch.exp(self.log_std)
+        return mean, std
+
+    def sample_action(self, x):
+        """
+        Sample an action from the policy distribution.
+
+        Args:
+            x: Input image (B, H, W, 3)
+
+        Returns:
+            action: (B, 2) sampled actions, clamped to [-1, 1]
+            log_prob: (B,) log probability of the sampled actions
+        """
+        mean, std = self.forward(x)
+        dist = torch.distributions.Normal(mean, std)
+        action = dist.sample()
+        log_prob = dist.log_prob(action).sum(dim=-1)
+
+        # Clamp action to valid range
+        action = torch.clamp(action, -1.0, 1.0)
+        return action, log_prob
+
+    def log_prob(self, x, action):
+        """
+        Compute log probability of given actions for a sequence.
+
+        For REINFORCE training, we need to recompute log probs for the
+        entire episode. This resets hidden state and processes sequentially.
+
+        Args:
+            x: Input images (T, H, W, 3) - full episode
+            action: (T, 2) actions to evaluate
+
+        Returns:
+            log_prob: (T,) log probability of actions
+        """
+        device = x.device
+
+        # Reset hidden state for fresh forward pass
+        self.reset_hidden(batch_size=1, device=device)
+
+        # Process entire sequence at once
+        x = x.unsqueeze(0)  # (1, T, H, W, 3)
+        mean, std = self.forward(x)  # mean: (1, T, 2)
+        mean = mean.squeeze(0)  # (T, 2)
+
+        dist = torch.distributions.Normal(mean, std)
+        return dist.log_prob(action).sum(dim=-1)
+
+
 class TinyPolicy(nn.Module):
     """
     Stochastic policy network for REINFORCE.
@@ -132,6 +277,10 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     distances = []
 
     obs = env.reset()
+
+    # Reset LSTM hidden state if policy has one
+    if hasattr(policy, 'reset_hidden'):
+        policy.reset_hidden(batch_size=1, device=device)
     done = False
     truncated = False
     total_reward = 0
@@ -305,10 +454,14 @@ def main():
     print(f"  Control frequency: 10 Hz")
     print()
 
-    # Create policy
-    print("Creating tiny neural network...")
+    # Create policy (choose between TinyPolicy and LSTMPolicy)
+    use_lstm = True  # Set to False to use feedforward policy
+    print(f"Creating {'LSTM' if use_lstm else 'feedforward'} neural network...")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    policy = TinyPolicy(image_height=64, image_width=64).to(device)
+    if use_lstm:
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=64).to(device)
+    else:
+        policy = TinyPolicy(image_height=64, image_width=64).to(device)
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 
     # Count parameters
@@ -318,7 +471,8 @@ def main():
     print()
 
     # Initialize wandb with comprehensive config
-    run_name = f"tinypolicy-{datetime.now().strftime('%m%d-%H%M')}"
+    policy_name = "LSTMPolicy" if use_lstm else "TinyPolicy"
+    run_name = f"{policy_name.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
@@ -331,16 +485,21 @@ def main():
             "mujoco_steps_per_action": 5,
             "success_distance": 0.3,
             "failure_distance": 5.0,
+            "min_target_distance": 0.8,
+            "max_target_distance": 2.5,
+            "randomize_target": True,
             # Model architecture
-            "policy_type": "TinyPolicy",
+            "policy_type": policy_name,
             "policy_params": num_params,
+            "use_lstm": use_lstm,
+            "lstm_hidden_size": 64 if use_lstm else None,
             "conv1_out_channels": 8,
             "conv1_kernel": 8,
             "conv1_stride": 4,
             "conv2_out_channels": 16,
             "conv2_kernel": 4,
             "conv2_stride": 2,
-            "fc1_size": 32,
+            "fc1_size": 32 if not use_lstm else 64,
             "fc2_size": 2,
             "activation": "relu",
             "output_activation": "tanh",

@@ -7,6 +7,7 @@ Wraps SimpleWheelerEnv with:
 - Episode termination logic
 - Standard Gymnasium API (reset, step returning obs/reward/done/truncated/info)
 """
+import mujoco
 import numpy as np
 from simple_wheeler_env import SimpleWheelerEnv
 
@@ -35,6 +36,8 @@ class TrainingEnv:
         max_episode_steps=100,  # 10 seconds at 10 Hz
         success_distance=0.3,  # Success if within 0.3m of target
         failure_distance=5.0,  # Failure if beyond 5m from target
+        min_target_distance=0.8,  # Minimum spawn distance from robot
+        max_target_distance=2.5,  # Maximum spawn distance from robot
     ):
         """
         Initialize training environment.
@@ -53,6 +56,8 @@ class TrainingEnv:
         self.max_episode_steps = max_episode_steps
         self.success_distance = success_distance
         self.failure_distance = failure_distance
+        self.min_target_distance = min_target_distance
+        self.max_target_distance = max_target_distance
 
         # Episode tracking
         self.episode_step = 0
@@ -64,13 +69,38 @@ class TrainingEnv:
 
     def reset(self):
         """
-        Reset environment to initial state.
+        Reset environment to initial state with randomized target position.
+
+        Target is placed at a random angle around the robot, at a distance
+        between min_target_distance and max_target_distance.
 
         Returns:
             observation: Camera image normalized to [0, 1]
         """
         camera_img = self.env.reset()
         self.episode_step = 0
+
+        # Randomize target position
+        # Random angle (full circle around the robot)
+        angle = np.random.uniform(0, 2 * np.pi)
+        # Random distance within bounds
+        distance = np.random.uniform(self.min_target_distance, self.max_target_distance)
+
+        # Calculate new target position (robot starts at origin)
+        target_x = distance * np.cos(angle)
+        target_y = distance * np.sin(angle)
+        target_z = 0.08  # Keep same height as original (on ground)
+
+        # Update target body position in MuJoCo model
+        target_body_id = self.env.target_body_id
+        self.env.model.body_pos[target_body_id] = [target_x, target_y, target_z]
+
+        # Re-run forward kinematics to update positions
+        mujoco.mj_forward(self.env.model, self.env.data)
+
+        # Get updated camera image after target move
+        camera_img = self.env.get_camera_image()
+
         self.prev_distance = self.env.get_distance_to_target()
 
         # Normalize to [0, 1]
