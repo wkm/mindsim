@@ -39,7 +39,8 @@ class TrainingEnv:
         min_target_distance=0.8,  # Minimum spawn distance from robot
         max_target_distance=2.5,  # Maximum spawn distance from robot
         # Reward shaping coefficients
-        movement_bonus=0.05,  # Small reward per meter moved (encourages exploration)
+        distance_reward_scale=20.0,  # Scale factor for distance-based reward
+        movement_bonus=0.0,  # Disabled: was rewarding spinning in place
         time_penalty=0.005,  # Tiny penalty per step (discourages dawdling)
     ):
         """
@@ -61,6 +62,7 @@ class TrainingEnv:
         self.failure_distance = failure_distance
         self.min_target_distance = min_target_distance
         self.max_target_distance = max_target_distance
+        self.distance_reward_scale = distance_reward_scale
         self.movement_bonus = movement_bonus
         self.time_penalty = time_penalty
 
@@ -69,9 +71,25 @@ class TrainingEnv:
         self.prev_distance = None
         self.prev_position = None
 
+        # Curriculum learning: controls target spawn angle variance
+        # 0.0 = target always directly in front of camera
+        # 1.0 = target at random angle (full circle)
+        self.curriculum_progress = 1.0  # Default: full randomization
+
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (2,)  # [left_motor, right_motor]
+
+    def set_curriculum_progress(self, progress):
+        """
+        Set curriculum progress for target spawn positioning.
+
+        Args:
+            progress: Float in [0, 1]
+                0.0 = target always directly in front of camera (+Y direction)
+                1.0 = target at random angle (full 360° randomization)
+        """
+        self.curriculum_progress = np.clip(progress, 0.0, 1.0)
 
     def reset(self):
         """
@@ -86,9 +104,21 @@ class TrainingEnv:
         camera_img = self.env.reset()
         self.episode_step = 0
 
-        # Randomize target position
-        # Random angle (full circle around the robot)
-        angle = np.random.uniform(0, 2 * np.pi)
+        # Randomize target position with curriculum-based angle constraint
+        #
+        # Coordinate system (looking down from above):
+        #   +X = right
+        #   +Y = backward (behind robot)
+        #   -Y = forward (camera looks this way)
+        #
+        # Angles: 0=+X, π/2=+Y (behind), π=-X, -π/2=-Y (front)
+        #
+        # At progress=0: target directly in front (angle=-π/2)
+        # At progress=1: target at any angle (full circle)
+        front_angle = -np.pi / 2  # -Y direction = in front of camera
+        max_deviation = self.curriculum_progress * np.pi  # 0 to π
+        angle = np.random.uniform(front_angle - max_deviation, front_angle + max_deviation)
+
         # Random distance within bounds
         distance = np.random.uniform(self.min_target_distance, self.max_target_distance)
 
@@ -133,8 +163,10 @@ class TrainingEnv:
         left_motor, right_motor = action
 
         # Run multiple MuJoCo steps with same action (10 Hz control)
-        for _ in range(MUJOCO_STEPS_PER_ACTION):
-            camera_img = self.env.step(left_motor, right_motor)
+        # Only render on the last step to avoid wasted work
+        for i in range(MUJOCO_STEPS_PER_ACTION):
+            is_last_step = (i == MUJOCO_STEPS_PER_ACTION - 1)
+            camera_img = self.env.step(left_motor, right_motor, render=is_last_step)
 
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
@@ -144,8 +176,8 @@ class TrainingEnv:
         current_position = self.env.get_bot_position()
 
         # Calculate reward components:
-        # 1. Distance reward: positive if getting closer to target
-        distance_reward = self.prev_distance - current_distance
+        # 1. Distance reward: linear potential-based shaping (standard in literature)
+        distance_reward = self.distance_reward_scale * (self.prev_distance - current_distance)
 
         # 2. Movement bonus: small reward for exploring (moving at all)
         distance_moved = np.linalg.norm(current_position - self.prev_position)
@@ -164,8 +196,20 @@ class TrainingEnv:
         done = False
         truncated = False
 
+        # Simulation instability check (MuJoCo warnings or invalid state)
+        has_warnings = np.any(self.env.data.warning.number > 0)
+        has_nan = np.isnan(current_distance) or np.any(np.isnan(current_position))
+        bot_z = current_position[2]
+        out_of_bounds = bot_z < -0.5 or bot_z > 1.0  # Fell through floor or launched
+
+        if has_warnings or has_nan or out_of_bounds:
+            done = True
+            reward -= 2.0  # Small penalty for unstable behavior
+            # Reset warning counters for next episode
+            self.env.data.warning.number[:] = 0
+
         # Success: reached target
-        if current_distance < self.success_distance:
+        elif current_distance < self.success_distance:
             done = True
             reward += 10.0  # Bonus for reaching target
 
@@ -190,6 +234,8 @@ class TrainingEnv:
             'reward_exploration': exploration_reward,
             'reward_time': time_cost,
             'reward_total': reward,
+            # Stability info
+            'unstable': has_warnings or has_nan or out_of_bounds,
         }
 
         return obs, reward, done, truncated, info

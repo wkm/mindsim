@@ -100,11 +100,36 @@ Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy
 - **Reward-Weighted Regression (RWR)** - Simpler, treat RL as weighted supervised learning
 - **PPO** - More stable, better sample efficiency, requires critic network
 
+## Experiment Organization
+
+**Hyperparameter tweaks** → Commits on main + W&B experiments
+
+- Learning rate, batch size, reward coefficients, etc.
+- W&B tracks the params; git tracks when/why they changed
+
+**Simple implementation changes / bugfixes** → Commits on main
+
+- Bug fixes, small refactors, code cleanup
+- Changes that are clearly improvements, not experiments
+
+**Larger experimental changes** → Branches with `exp/` prefix
+
+- Significant code changes exploring a hypothesis
+- Examples: `exp/curriculum-target-distance`, `exp/ppo-baseline`, `exp/reward-shaping-v2`
+- Keeps mainline clean; avoids disabled feature-flag complexity
+
+**Tracking experiments**: Maintain `EXPERIMENTS.md` in main with:
+
+- Branch name
+- Hypothesis (what you're testing)
+- Outcome (worked / didn't / partially / merged to main)
+- Link to relevant W&B runs
+
 ## Development Notes
 
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
 
-## Commit Message Format
+## Commit Message Formatit's
 
 Commits should follow this structure:
 

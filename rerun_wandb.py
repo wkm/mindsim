@@ -8,6 +8,7 @@ import os
 import wandb
 import rerun as rr
 import rerun_logger
+from training_blueprint import create_training_blueprint
 
 
 class RerunWandbLogger:
@@ -56,6 +57,9 @@ class RerunWandbLogger:
         # Initialize Rerun with unique recording ID
         rr.init("mindsim-training", recording_id=f"{self.run_id}-ep{episode}")
         rr.save(self.rrd_path)
+
+        # Embed blueprint into recording
+        rr.send_blueprint(create_training_blueprint())
 
         # Log wandb context into Rerun for reverse lookup
         rr.log("meta/wandb", rr.TextDocument(

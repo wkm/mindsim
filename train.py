@@ -8,14 +8,128 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from collections import deque
 from datetime import datetime
 from tqdm import tqdm
 import time
 import wandb
 import rerun as rr
+import sys
+import subprocess
 from training_env import TrainingEnv
 import rerun_logger
 from rerun_wandb import RerunWandbLogger
+
+
+def set_terminal_title(title):
+    """Set terminal tab/window title using ANSI escape sequence."""
+    sys.stdout.write(f"\033]0;{title}\007")
+    sys.stdout.flush()
+
+
+def set_terminal_progress(percent):
+    """
+    Set terminal progress indicator using OSC 9;4 sequence.
+
+    Supported by iTerm2, Windows Terminal, and others.
+    Shows progress bar in terminal tab.
+
+    Args:
+        percent: 0-100 for progress, or -1 to clear
+    """
+    if percent < 0:
+        # Clear progress indicator
+        sys.stdout.write("\033]9;4;0\007")
+    else:
+        # Set progress (state=1 means normal progress)
+        sys.stdout.write(f"\033]9;4;1;{int(percent)}\007")
+    sys.stdout.flush()
+
+
+def notify_completion(run_name, message=None):
+    """Show macOS notification and play sound when training completes."""
+    if message is None:
+        message = f"Training run '{run_name}' has finished."
+
+    # macOS notification
+    subprocess.run([
+        "osascript", "-e",
+        f'display notification "{message}" with title "MindSim Training Complete" sound name "Glass"'
+    ], check=False)
+
+    # Fallback beep in case notification sound doesn't play
+    print("\a", end="", flush=True)
+
+
+def generate_run_notes():
+    # return "<no internet to summarize>"
+    """
+    Use Claude CLI to generate a summary of what changed since last run.
+
+    Returns:
+        str: Markdown-formatted notes for W&B, or None if generation fails
+    """
+    try:
+        # Get git info
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Get diff from parent commit
+        diff = subprocess.run(
+            ["git", "diff", "HEAD~1", "--stat"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Get full diff for context (limited to avoid token limits)
+        full_diff = subprocess.run(
+            ["git", "diff", "HEAD~1"],
+            capture_output=True, text=True, check=True
+        ).stdout[:4000]  # Limit to ~4k chars
+
+        # Get recent commit message
+        commit_msg = subprocess.run(
+            ["git", "log", "-1", "--pretty=%B"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Build prompt for Claude CLI
+        prompt = f"""Summarize this training run in 2-3 sentences for experiment tracking.
+
+Branch: {branch}
+Recent commit: {commit_msg}
+
+Changes:
+{diff}
+
+Diff excerpt:
+{full_diff}
+
+Focus on: What hypothesis is being tested? What changed from the baseline?
+Be concise and technical. Start directly with the summary, no preamble."""
+
+        # Call Claude CLI (handles auth automatically)
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--model", "haiku"],
+            capture_output=True, text=True, check=True
+        )
+        summary = result.stdout.strip()
+
+        # Format as markdown notes
+        notes = f"""## Run Summary (auto-generated)
+
+{summary}
+
+---
+**Branch:** `{branch}`
+**Commit:** {commit_msg.split(chr(10))[0][:60]}
+"""
+        return notes
+
+    except Exception as e:
+        print(f"  Note: Could not generate run notes: {e}")
+        return None
 
 
 class LSTMPolicy(nn.Module):
@@ -377,6 +491,9 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
     left_actions = actions_array[:, 0]
     right_actions = actions_array[:, 1]
 
+    # Determine if episode was a success (reached target)
+    success = done and info['distance'] < env.success_distance
+
     return {
         'observations': observations,
         'actions': actions,
@@ -386,6 +503,7 @@ def collect_episode(env, policy, device='cpu', show_progress=False, log_rerun=Fa
         'total_reward': total_reward,
         'steps': steps,
         'final_distance': info['distance'],
+        'success': success,
         # Action statistics for logging
         'left_motor_mean': float(np.mean(left_actions)),
         'left_motor_std': float(np.std(left_actions)),
@@ -515,12 +633,20 @@ def main():
     print(f"  Device: {device}")
     print()
 
+    # Generate run notes using Claude (summarizes git changes)
+    print("Generating run notes...")
+    run_notes = generate_run_notes()
+    if run_notes:
+        print("  Run notes generated successfully")
+    print()
+
     # Initialize wandb with comprehensive config
     policy_name = "LSTMPolicy" if use_lstm else "TinyPolicy"
     run_name = f"{policy_name.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
+        notes=run_notes,
         config={
             # Environment
             "render_width": 64,
@@ -533,8 +659,16 @@ def main():
             "min_target_distance": 0.8,
             "max_target_distance": 2.5,
             "randomize_target": True,
-            "movement_bonus": 0.05,
+            "distance_reward_scale": 20.0,
+            "distance_reward_type": "linear",  # standard potential-based shaping
+            "movement_bonus": 0.0,
             "time_penalty": 0.005,
+            # Curriculum (performance-based)
+            "curriculum_window_size": 10,
+            "curriculum_advance_threshold": 0.6,
+            "curriculum_retreat_threshold": 0.3,
+            "curriculum_advance_rate": 0.02,
+            "curriculum_retreat_rate": 0.01,
             # Model architecture
             "policy_type": policy_name,
             "policy_params": num_params,
@@ -556,7 +690,9 @@ def main():
             "learning_rate": 3e-2,
             "algorithm": "REINFORCE",
             "gamma": 0.99,
-            "num_episodes": 10000,
+            "training_mode": "run_until_mastery",
+            "mastery_threshold": 0.7,
+            "mastery_batches": 20,
             "batch_size": 16,
             "log_rerun_every": 100,
         }
@@ -575,11 +711,26 @@ def main():
     print()
 
     # Training loop
-    num_episodes = 10000  # Baseline run
     batch_size = 16  # Episodes per gradient update
     log_rerun_every = 100  # Log every 100th episode to Rerun
-    num_batches = num_episodes // batch_size
-    print(f"Training for {num_episodes} episodes ({num_batches} batches of {batch_size})...")
+
+    # Curriculum schedule: performance-based advancement
+    # Advances when rolling success rate exceeds threshold, holds/retreats otherwise
+    curriculum_window_size = 10  # Number of batches to average over
+    curriculum_advance_threshold = 0.6  # Advance when success rate > 60%
+    curriculum_retreat_threshold = 0.3  # Retreat when success rate < 30%
+    curriculum_advance_rate = 0.02  # How much to advance per batch when above threshold
+    curriculum_retreat_rate = 0.01  # How much to retreat per batch when below threshold
+    mastery_threshold = 0.7  # Success rate required at curriculum=1.0 to declare mastery
+    mastery_batches = 20  # Must maintain mastery for this many batches
+
+    # Rolling window for success rate tracking
+    success_history = deque(maxlen=curriculum_window_size)
+    curriculum_progress = 0.0  # Start with target in front
+    mastery_count = 0  # Count of consecutive batches at mastery level
+
+    print(f"Training until curriculum mastery (curriculum=1.0, success>={mastery_threshold:.0%} for {mastery_batches} batches)...")
+    print(f"  Curriculum: performance-based (advance@{curriculum_advance_threshold:.0%}, retreat@{curriculum_retreat_threshold:.0%})")
     print(f"  Logging every {log_rerun_every} episodes to Rerun")
     print()
 
@@ -592,13 +743,24 @@ def main():
     }
 
     episode_count = 0
-    pbar = tqdm(range(num_batches), desc="Training", position=0)
-    for batch_idx in pbar:
+    batch_idx = 0
+    mastered = False
+    pbar = tqdm(desc="Training", position=0, unit="batch")
+    while not mastered:
+        # Set curriculum progress for this batch
+        env.set_curriculum_progress(curriculum_progress)
+
+        # Update terminal title and progress indicator (use curriculum as progress)
+        progress_pct = 100 * curriculum_progress
+        set_terminal_title(f"{progress_pct:.0f}% curr={curriculum_progress:.2f} {run_name}")
+        set_terminal_progress(progress_pct)
+
         # Collect a batch of episodes
         episode_batch = []
         batch_rewards = []
         batch_distances = []
         batch_steps = []
+        batch_successes = []
 
         episode_pbar = tqdm(range(batch_size), desc="  Collecting", leave=False, position=1)
         for i in episode_pbar:
@@ -631,6 +793,7 @@ def main():
             batch_rewards.append(episode_data['total_reward'])
             batch_distances.append(episode_data['final_distance'])
             batch_steps.append(episode_data['steps'])
+            batch_successes.append(episode_data['success'])
 
             episode_pbar.set_postfix({'r': f"{episode_data['total_reward']:.2f}"})
 
@@ -649,6 +812,26 @@ def main():
         best_reward = np.max(batch_rewards)
         worst_reward = np.min(batch_rewards)
 
+        # Track success rate for curriculum advancement
+        batch_success_rate = np.mean(batch_successes)
+        success_history.append(batch_success_rate)
+        rolling_success_rate = np.mean(success_history)
+
+        # Update curriculum based on rolling success rate
+        if len(success_history) >= curriculum_window_size:
+            if rolling_success_rate > curriculum_advance_threshold:
+                curriculum_progress = min(1.0, curriculum_progress + curriculum_advance_rate)
+            elif rolling_success_rate < curriculum_retreat_threshold:
+                curriculum_progress = max(0.0, curriculum_progress - curriculum_retreat_rate)
+
+        # Check for mastery: curriculum at max AND maintaining high success rate
+        if curriculum_progress >= 1.0 and rolling_success_rate >= mastery_threshold:
+            mastery_count += 1
+            if mastery_count >= mastery_batches:
+                mastered = True
+        else:
+            mastery_count = 0  # Reset if we drop below mastery level
+
         # Collect all actions from batch for histograms
         all_left_actions = np.concatenate([np.array(ep['actions'])[:, 0] for ep in episode_batch])
         all_right_actions = np.concatenate([np.array(ep['actions'])[:, 1] for ep in episode_batch])
@@ -656,12 +839,18 @@ def main():
         log_dict = {
             "episode": episode_count,
             "batch": batch_idx,
+            # Curriculum
+            "curriculum/progress": curriculum_progress,
+            "curriculum/max_angle_deviation_deg": curriculum_progress * 180,  # 0° to 180°
+            "curriculum/batch_success_rate": batch_success_rate,
+            "curriculum/rolling_success_rate": rolling_success_rate,
             # Batch metrics
             "batch/avg_reward": avg_reward,
             "batch/best_reward": best_reward,
             "batch/worst_reward": worst_reward,
             "batch/avg_final_distance": avg_distance,
             "batch/avg_steps": avg_steps,
+            "batch/success_rate": batch_success_rate,
             "batch/loss": loss,
             "training/grad_norm": grad_norm,
             # Policy std (exploration level)
@@ -685,11 +874,17 @@ def main():
 
         # Update progress bar
         pbar.set_postfix({
-            'avg_r': f"{avg_reward:.3f}",
-            'best_r': f"{best_reward:.3f}",
-            'dist': f"{avg_distance:.2f}m",
+            'avg_r': f"{avg_reward:.2f}",
+            'succ': f"{rolling_success_rate:.0%}",
+            'curr': f"{curriculum_progress:.2f}",
+            'mstr': f"{mastery_count}/{mastery_batches}",
             'loss': f"{loss:.4f}",
         })
+        pbar.update(1)
+        batch_idx += 1
+
+    pbar.close()
+    total_batches = batch_idx  # Store final count for timing summary
 
     # Print timing summary
     total_time = sum(timing.values())
@@ -704,12 +899,15 @@ def main():
     print("  " + "─" * 40)
     print(f"  Total:              {total_time:>8.2f}s")
     print()
-    print(f"  Per-batch average ({batch_size} episodes/batch):")
-    print(f"    Collection: {1000*timing['collect']/num_batches:.1f}ms")
-    print(f"    Training:   {1000*timing['train']/num_batches:.1f}ms")
+    print(f"  Per-batch average ({batch_size} episodes/batch, {total_batches} batches):")
+    print(f"    Collection: {1000*timing['collect']/total_batches:.1f}ms")
+    print(f"    Training:   {1000*timing['train']/total_batches:.1f}ms")
     print()
 
     # Clean up
+    set_terminal_title(f"Done: {run_name}")
+    set_terminal_progress(-1)  # Clear progress indicator
+    notify_completion(run_name)
     wandb.finish()
     env.close()
     print("Training complete!")
