@@ -81,8 +81,11 @@ class RerunWandbLogger:
             static=True,
         )
 
-        # Set up the 3D scene
-        rerun_logger.setup_scene(env, namespace=namespace)
+        # Set up the 3D scene (pass arena boundary if available)
+        arena_boundary = getattr(env, "arena_boundary", None)
+        rerun_logger.setup_scene(
+            env, namespace=namespace, arena_boundary=arena_boundary
+        )
 
         self.is_recording = True
         return self.rrd_path

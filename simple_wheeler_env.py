@@ -56,6 +56,10 @@ class SimpleWheelerEnv:
         self.camera_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_CAMERA, "camera_1_cam"
         )
+        self.distractor_body_ids = [
+            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"distractor_{i}")
+            for i in range(4)
+        ]
 
         # Viewer for debugging (optional)
         self.viewer = None

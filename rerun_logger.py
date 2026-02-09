@@ -26,16 +26,23 @@ def quaternion_multiply(q1, q2):
     return np.array([x, y, z, w])
 
 
+def _is_body_hidden(data, body_id):
+    """Check if a body is hidden off-screen (y > 50)."""
+    return data.xpos[body_id][1] > 50
+
+
 def log_mujoco_scene(env, namespace="world"):
     """
     Automatically log all bodies and meshes from the MuJoCo model.
     Extracts mesh data directly from MuJoCo (with correct scaling already applied).
+    Skips bodies hidden off-screen (e.g. distractors at y=100).
 
     Args:
         env: SimpleWheelerEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
     model = env.env.model if hasattr(env, "env") else env.model
+    data = env.env.data if hasattr(env, "env") else env.data
     mesh_count = 0
     geom_count = 0
 
@@ -43,8 +50,8 @@ def log_mujoco_scene(env, namespace="world"):
     for body_id in range(model.nbody):
         body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
 
-        # Skip the world body
-        if body_name == "world":
+        # Skip the world body and hidden bodies (e.g. distractors at y=100)
+        if body_name == "world" or _is_body_hidden(data, body_id):
             continue
 
         # Check if this body has any geometries
@@ -205,7 +212,6 @@ def setup_camera(env, namespace="world"):
         camera_entity_path: Path to the camera entity
     """
     model = env.env.model if hasattr(env, "env") else env.model
-    data = env.env.data if hasattr(env, "env") else env.data
 
     cam_id = env.env.camera_id if hasattr(env, "env") else env.camera_id
     render_width = env.env.render_width if hasattr(env, "env") else env.render_width
@@ -232,7 +238,7 @@ def setup_camera(env, namespace="world"):
     return camera_entity_path
 
 
-def setup_scene(env, namespace="world", floor_size=10.0):
+def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None):
     """
     Log static scene elements (world origin, bodies, meshes, floor).
 
@@ -240,6 +246,7 @@ def setup_scene(env, namespace="world", floor_size=10.0):
         env: SimpleWheelerEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
         floor_size: Size of floor plane in meters (default 10.0)
+        arena_boundary: If set, log arena boundary lines at ±boundary (meters)
 
     Returns:
         camera_entity_path: Path to the camera entity
@@ -265,6 +272,23 @@ def setup_scene(env, namespace="world", floor_size=10.0):
         static=True,
     )
 
+    # Log arena boundary if specified
+    if arena_boundary is not None:
+        b = arena_boundary
+        z = 0.02  # Slightly above floor
+        corners = [
+            [b, b, z],
+            [-b, b, z],
+            [-b, -b, z],
+            [b, -b, z],
+            [b, b, z],  # Close the loop
+        ]
+        rr.log(
+            f"{namespace}/arena_boundary",
+            rr.LineStrips3D([corners], colors=[[255, 100, 100, 180]]),
+            static=True,
+        )
+
     return camera_entity_path
 
 
@@ -282,8 +306,8 @@ def log_body_transforms(env, namespace="world"):
     for body_id in range(model.nbody):
         body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
 
-        # Skip world body
-        if body_name == "world":
+        # Skip world body and hidden bodies (e.g. distractors at y=100)
+        if body_name == "world" or _is_body_hidden(data, body_id):
             continue
 
         # Get position and rotation from MuJoCo data

@@ -1,4 +1,8 @@
-.PHONY: train
+.PHONY: train quick-sim
+
+quick-sim:
+	uv run python quick_sim.py
+	rerun quick_sim.rrd
 
 train:
 	@# Ensure working tree is clean
