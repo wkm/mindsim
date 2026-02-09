@@ -5,6 +5,8 @@ All hyperparameters and settings in one place.
 Automatically converts to dict for W&B logging.
 """
 
+from __future__ import annotations
+
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
@@ -116,6 +118,9 @@ class TrainingConfig:
     # Logging
     log_rerun_every: int = 100  # Episodes between Rerun recordings
 
+    # Limits
+    max_batches: int | None = None  # None = run until mastery
+
 
 @dataclass
 class Config:
@@ -156,6 +161,34 @@ class Config:
             "policy": asdict(self.policy),
             "training": asdict(self.training),
         }
+
+
+    @classmethod
+    def for_smoketest(cls) -> Config:
+        """Config for fast end-to-end validation. Runs in seconds."""
+        return cls(
+            env=EnvConfig(
+                max_episode_steps=10,  # Very short episodes
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,  # Always advance
+                advance_rate=1.0,  # Jump to full progress immediately
+                eval_episodes_per_batch=1,
+                num_stages=3,
+            ),
+            policy=PolicyConfig(
+                policy_type="LSTMPolicy",
+                hidden_size=32,  # Tiny network
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,  # Always consider mastered
+                max_batches=3,  # Just a few batches
+                log_rerun_every=9999,  # Effectively disable
+            ),
+        )
 
 
 # Default configuration

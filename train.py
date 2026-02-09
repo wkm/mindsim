@@ -5,6 +5,7 @@ Starts with a trivially small neural network to validate the training loop.
 Can be extended with more sophisticated networks and RL algorithms.
 """
 
+import argparse
 import subprocess
 import sys
 import time
@@ -648,10 +649,27 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
     return avg_loss, total_grad_norm, policy_std
 
 
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Train 2-wheeler robot")
+    parser.add_argument(
+        "--smoketest",
+        action="store_true",
+        help="Run a fast end-to-end smoketest (tiny config, no wandb, no rerun)",
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main training loop."""
-    # Load centralized configuration
-    cfg = Config()
+    args = parse_args()
+
+    # Load configuration
+    if args.smoketest:
+        cfg = Config.for_smoketest()
+        print("[SMOKETEST MODE] Running fast end-to-end validation...")
+    else:
+        cfg = Config()
 
     print("=" * 60)
     print("Training 2-Wheeler Robot with Tiny Neural Network")
@@ -693,20 +711,25 @@ def main():
     print()
 
     # Generate run notes using Claude (summarizes git changes)
-    print("Generating run notes...")
-    run_notes = generate_run_notes()
-    if run_notes:
-        print("  Run notes generated successfully")
-    print()
+    if args.smoketest:
+        run_notes = None
+    else:
+        print("Generating run notes...")
+        run_notes = generate_run_notes()
+        if run_notes:
+            print("  Run notes generated successfully")
+        print()
 
     # Initialize wandb with config from centralized config
     run_name = (
         f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     )
+    wandb_mode = "disabled" if args.smoketest else "online"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
         notes=run_notes,
+        mode=wandb_mode,
         config={
             **cfg.to_wandb_config(),
             # Add computed values not in config
@@ -716,18 +739,22 @@ def main():
     # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
     wandb.define_metric("batch")
     wandb.define_metric("*", step_metric="batch")
-    print(f"  Logging to W&B: {wandb.run.url}")
-    print()
+    if not args.smoketest:
+        print(f"  Logging to W&B: {wandb.run.url}")
+        print()
 
     # Watch model for gradient/parameter histograms
     # log_freq is in backward passes (episodes), not steps
     wandb.watch(policy, log="all", log_freq=10)
-    print("  Watching model gradients every 10 episodes")
+    if not args.smoketest:
+        print("  Watching model gradients every 10 episodes")
 
-    # Initialize Rerun-WandB integration
-    rr_wandb = RerunWandbLogger(recordings_dir="recordings")
-    print(f"  Rerun recordings: {rr_wandb.run_dir}/")
-    print()
+    # Initialize Rerun-WandB integration (skip in smoketest)
+    rr_wandb = None
+    if not args.smoketest:
+        rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+        print(f"  Rerun recordings: {rr_wandb.run_dir}/")
+        print()
 
     # Training loop - use config values
     batch_size = cfg.training.batch_size
@@ -771,8 +798,11 @@ def main():
     episode_count = 0
     batch_idx = 0
     mastered = False
-    pbar = tqdm(desc="Training", position=0, unit="batch")
-    while not mastered:
+    max_batches = cfg.training.max_batches
+    pbar = tqdm(
+        desc="Training", position=0, unit="batch", total=max_batches
+    )
+    while not mastered and (max_batches is None or batch_idx < max_batches):
         # Set curriculum stage for this batch
         env.set_curriculum_stage(curriculum_stage, stage_progress)
 
@@ -793,7 +823,9 @@ def main():
 
         # Determine if we should log to Rerun this batch (from eval, not training)
         log_every_n_batches = max(1, log_rerun_every // batch_size)
-        should_log_rerun_this_batch = batch_idx % log_every_n_batches == 0
+        should_log_rerun_this_batch = (
+            rr_wandb is not None and batch_idx % log_every_n_batches == 0
+        )
 
         episode_pbar = tqdm(
             range(batch_size), desc="  Collecting", leave=False, position=1
@@ -1014,10 +1046,14 @@ def main():
     # Clean up
     set_terminal_title(f"Done: {run_name}")
     set_terminal_progress(-1)  # Clear progress indicator
-    notify_completion(run_name)
+    if not args.smoketest:
+        notify_completion(run_name)
     wandb.finish()
     env.close()
-    print("Training complete!")
+    if args.smoketest:
+        print(f"Smoketest passed! ({batch_idx} batches, {episode_count} episodes)")
+    else:
+        print("Training complete!")
 
 
 if __name__ == "__main__":

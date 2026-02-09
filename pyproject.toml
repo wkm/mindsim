@@ -17,7 +17,13 @@ dependencies = [
     "wandb>=0.24.1",
     "torch>=2.0.0",
     "anthropic>=0.79.0",
+    "pytest>=8.0.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Add project root to sys.path so tests can import modules
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 88
