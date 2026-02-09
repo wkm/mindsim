@@ -1,4 +1,4 @@
-.PHONY: train quick-sim
+.PHONY: train quick-sim test smoketest
 
 quick-sim:
 	uv run python quick_sim.py
@@ -15,3 +15,9 @@ train:
 	@echo "Last commit: $$(git log -1 --oneline)"
 	@echo ""
 	uv run python train.py
+
+test:
+	uv run pytest tests/ -v
+
+smoketest:
+	uv run python train.py --smoketest
