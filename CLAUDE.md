@@ -102,34 +102,53 @@ Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy
 
 ## Experiment Organization
 
-**Hyperparameter tweaks** → Commits on main + W&B experiments
+### Before ANY non-trivial change
+
+**Always bookmark your starting point before writing code.** This is the most important rule. You must be able to get back to a known-good state.
+
+1. **Ensure the working tree is clean.** All current work must be committed. Run `git status` to verify. If there are uncommitted changes, commit or stash them first.
+2. **Classify the change** — decide which category it falls into (see below) and follow the corresponding workflow.
+
+### Change categories
+
+**Hyperparameter tweaks** → Commit directly on main
 
 - Learning rate, batch size, reward coefficients, etc.
-- W&B tracks the params; git tracks when/why they changed
+- Working tree must be clean before starting (rule above).
+- W&B tracks the run params; git tracks when/why they changed.
 
-**Simple implementation changes / bugfixes** → Commits on main
+**Simple implementation changes / bugfixes** → Commit directly on main
 
-- Bug fixes, small refactors, code cleanup
-- Changes that are clearly improvements, not experiments
+- Bug fixes, small refactors, code cleanup.
+- Changes that are clearly improvements, not experiments.
+- Working tree must be clean before starting (rule above).
 
-**Larger experimental changes** → Branches with `exp/` prefix
+**Larger experimental changes** → Create an `exp/` branch BEFORE writing any code
 
-- Significant code changes exploring a hypothesis
-- Examples: `exp/curriculum-target-distance`, `exp/ppo-baseline`, `exp/reward-shaping-v2`
-- Keeps mainline clean; avoids disabled feature-flag complexity
+- This includes: new algorithms, significant architecture changes, new reward structures, new training approaches, or anything where the outcome is uncertain.
+- Workflow:
+  1. Ensure working tree is clean (committed to main).
+  2. Create and switch to the experiment branch: `git checkout -b exp/<descriptive-name>`
+  3. Add an entry to `EXPERIMENTS.md` on the branch (see tracking below).
+  4. Now begin writing code.
+- Branch naming examples: `exp/curriculum-target-distance`, `exp/ppo-baseline`, `exp/reward-shaping-v2`
+- If the experiment succeeds, merge to main. If it fails, the branch stays as a record and main is untouched.
 
-**Tracking experiments**: Maintain `EXPERIMENTS.md` in main with:
+### Tracking experiments
+
+Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
 
 - Branch name
-- Hypothesis (what you're testing)
-- Outcome (worked / didn't / partially / merged to main)
+- Hypothesis (what you're testing and why)
+- Status (in-progress / succeeded / failed / partially worked / merged to main)
+- Outcome notes (what was learned)
 - Link to relevant W&B runs
 
 ## Development Notes
 
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
 
-## Commit Message Formatit's
+## Commit Message Format
 
 Commits should follow this structure:
 
