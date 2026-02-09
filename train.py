@@ -638,12 +638,9 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
 
     avg_loss = total_loss / len(episode_batch)
 
-    # Compute gradient norm before optimizer step
-    total_grad_norm = 0.0
-    for p in policy.parameters():
-        if p.grad is not None:
-            total_grad_norm += p.grad.data.norm(2).item() ** 2
-    total_grad_norm = total_grad_norm**0.5
+    # Clip gradients and record norm
+    total_grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=0.5)
+    total_grad_norm = total_grad_norm.item()
 
     optimizer.step()
 

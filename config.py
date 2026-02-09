@@ -90,7 +90,7 @@ class TrainingConfig:
 
     # Optimizer
     optimizer: str = "Adam"
-    learning_rate: float = 3e-2
+    learning_rate: float = 1e-3
 
     # Algorithm
     algorithm: str = "REINFORCE"
