@@ -713,6 +713,9 @@ def main():
             "policy_params": num_params,
         },
     )
+    # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
+    wandb.define_metric("batch")
+    wandb.define_metric("*", step_metric="batch")
     print(f"  Logging to W&B: {wandb.run.url}")
     print()
 
@@ -742,7 +745,7 @@ def main():
         f"Training until curriculum mastery (curriculum=1.0, success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
     )
     print(
-        f"  Curriculum: performance-based (advance@{curr.advance_threshold:.0%}, retreat@{curr.retreat_threshold:.0%})"
+        f"  Curriculum: monotonic ramp-up (advance@{curr.advance_threshold:.0%})"
     )
     if curr.use_eval_for_curriculum:
         print(
@@ -877,8 +880,6 @@ def main():
             )
             if rate_for_curriculum > curr.advance_threshold:
                 curriculum_progress = min(1.0, curriculum_progress + curr.advance_rate)
-            elif rate_for_curriculum < curr.retreat_threshold:
-                curriculum_progress = max(0.0, curriculum_progress - curr.retreat_rate)
 
         # Check for mastery: curriculum at max AND maintaining high eval success rate
         mastery_rate = (

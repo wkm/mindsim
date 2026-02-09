@@ -41,9 +41,7 @@ class CurriculumConfig:
 
     window_size: int = 10  # Batches to average for success rate
     advance_threshold: float = 0.6  # Advance when success rate > 60%
-    retreat_threshold: float = 0.3  # Retreat when success rate < 30%
     advance_rate: float = 0.02  # Per-batch advancement
-    retreat_rate: float = 0.01  # Per-batch retreat
 
     # Deterministic evaluation for curriculum decisions
     eval_episodes_per_batch: int = 8  # Deterministic eval episodes per batch
