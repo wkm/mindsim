@@ -106,6 +106,7 @@ class TrainingConfig:
     # Algorithm
     algorithm: str = "REINFORCE"
     gamma: float = 0.99
+    entropy_coeff: float = 0.01  # Entropy bonus to prevent policy collapse
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update

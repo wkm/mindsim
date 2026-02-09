@@ -589,7 +589,7 @@ def compute_reward_to_go(rewards, gamma=0.99):
     return reward_to_go
 
 
-def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
+def train_step_batched(policy, optimizer, episode_batch, gamma=0.99, entropy_coeff=0.01):
     """
     REINFORCE policy gradient training step on a batch of episodes.
 
@@ -597,16 +597,22 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
     the entire batch (so good episodes get positive advantage, bad episodes
     get negative), then takes one optimizer step.
 
+    Includes an entropy bonus to prevent policy collapse: when advantage
+    signal is weak (all episodes similar), the entropy term provides a
+    non-zero gradient that keeps exploration alive.
+
     Args:
         policy: Stochastic neural network policy
         optimizer: PyTorch optimizer
         episode_batch: List of episode_data dicts from collect_episode
         gamma: Discount factor for reward-to-go
+        entropy_coeff: Weight for entropy bonus (0 = disabled)
 
     Returns:
         avg_loss: Average loss across batch
         grad_norm: Gradient norm after averaging
         policy_std: Current policy standard deviation
+        entropy: Policy entropy value
     """
     optimizer.zero_grad()
 
@@ -635,6 +641,17 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
         (loss / len(episode_batch)).backward()
         total_loss += loss.item()
 
+    # Entropy bonus: H(π) = 0.5 * (1 + log(2π)) + log_std per action dim
+    # Maximizing entropy prevents std from collapsing and keeps exploration alive
+    if entropy_coeff > 0:
+        std = torch.exp(policy.log_std)
+        entropy = torch.distributions.Normal(torch.zeros_like(std), std).entropy().sum()
+        entropy_loss = -entropy_coeff * entropy
+        entropy_loss.backward()
+        entropy_val = entropy.item()
+    else:
+        entropy_val = 0.0
+
     avg_loss = total_loss / len(episode_batch)
 
     # Clip gradients and record norm
@@ -646,7 +663,7 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
     # Get current policy std for logging
     policy_std = torch.exp(policy.log_std).detach().cpu().numpy()
 
-    return avg_loss, total_grad_norm, policy_std
+    return avg_loss, total_grad_norm, policy_std, entropy_val
 
 
 def parse_args():
@@ -854,8 +871,9 @@ def main():
 
         # Train on batch of episodes
         t_train_start = time.perf_counter()
-        loss, grad_norm, policy_std = train_step_batched(
-            policy, optimizer, episode_batch
+        loss, grad_norm, policy_std, entropy = train_step_batched(
+            policy, optimizer, episode_batch,
+            entropy_coeff=cfg.training.entropy_coeff,
         )
         timing["train"] += time.perf_counter() - t_train_start
 
@@ -972,6 +990,7 @@ def main():
             "batch/success_rate": batch_success_rate,
             "batch/loss": loss,
             "training/grad_norm": grad_norm,
+            "training/entropy": entropy,
             # Policy std (exploration level)
             "policy/std_left": policy_std[0],
             "policy/std_right": policy_std[1],
