@@ -22,6 +22,7 @@ from tqdm import tqdm
 import rerun_logger
 import wandb
 from config import Config
+from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from training_env import TrainingEnv
 
@@ -589,7 +590,9 @@ def compute_reward_to_go(rewards, gamma=0.99):
     return reward_to_go
 
 
-def train_step_batched(policy, optimizer, episode_batch, gamma=0.99, entropy_coeff=0.01):
+def train_step_batched(
+    policy, optimizer, episode_batch, gamma=0.99, entropy_coeff=0.01
+):
     """
     REINFORCE policy gradient training step on a batch of episodes.
 
@@ -673,6 +676,12 @@ def parse_args():
         "--smoketest",
         action="store_true",
         help="Run a fast end-to-end smoketest (tiny config, no wandb, no rerun)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers for episode collection (0=auto, 1=serial, default: from config)",
     )
     return parser.parse_args()
 
@@ -773,6 +782,21 @@ def main():
         print(f"  Rerun recordings: {rr_wandb.run_dir}/")
         print()
 
+    # Set up parallel episode collection
+    num_workers = (
+        args.num_workers if args.num_workers is not None else cfg.training.num_workers
+    )
+    num_workers = resolve_num_workers(num_workers)
+    collector = None
+    if num_workers > 1:
+        print(f"Starting {num_workers} parallel workers...")
+        collector = ParallelCollector(num_workers, cfg.env, cfg.policy)
+        print("  Workers ready")
+        print()
+    else:
+        print("Using serial episode collection (num_workers=1)")
+        print()
+
     # Training loop - use config values
     batch_size = cfg.training.batch_size
     log_rerun_every = cfg.training.log_rerun_every
@@ -816,9 +840,7 @@ def main():
     batch_idx = 0
     mastered = False
     max_batches = cfg.training.max_batches
-    pbar = tqdm(
-        desc="Training", position=0, unit="batch", total=max_batches
-    )
+    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches)
     while not mastered and (max_batches is None or batch_idx < max_batches):
         # Set curriculum stage for this batch
         env.set_curriculum_stage(curriculum_stage, stage_progress)
@@ -831,48 +853,48 @@ def main():
         )
         set_terminal_progress(progress_pct)
 
-        # Collect a batch of episodes
-        episode_batch = []
-        batch_rewards = []
-        batch_distances = []
-        batch_steps = []
-        batch_successes = []
-
         # Determine if we should log to Rerun this batch (from eval, not training)
         log_every_n_batches = max(1, log_rerun_every // batch_size)
         should_log_rerun_this_batch = (
             rr_wandb is not None and batch_idx % log_every_n_batches == 0
         )
 
-        episode_pbar = tqdm(
-            range(batch_size), desc="  Collecting", leave=False, position=1
-        )
-        for _ in episode_pbar:
-            t_collect_start = time.perf_counter()
-            episode_data = collect_episode(
-                env,
-                policy,
-                device,
-                show_progress=False,
-                log_rerun=False,  # Never log training episodes to Rerun
+        # Collect a batch of episodes
+        t_collect_start = time.perf_counter()
+        if collector is not None:
+            episode_batch = collector.collect_batch(
+                policy, batch_size, curriculum_stage, stage_progress
             )
-            timing["collect"] += time.perf_counter() - t_collect_start
+        else:
+            episode_batch = []
+            episode_pbar = tqdm(
+                range(batch_size), desc="  Collecting", leave=False, position=1
+            )
+            for _ in episode_pbar:
+                episode_data = collect_episode(
+                    env,
+                    policy,
+                    device,
+                    show_progress=False,
+                    log_rerun=False,
+                )
+                episode_batch.append(episode_data)
+                episode_pbar.set_postfix({"r": f"{episode_data['total_reward']:.2f}"})
+            episode_pbar.close()
+        timing["collect"] += time.perf_counter() - t_collect_start
 
-            episode_batch.append(episode_data)
-            batch_rewards.append(episode_data["total_reward"])
-            batch_distances.append(episode_data["final_distance"])
-            batch_steps.append(episode_data["steps"])
-            batch_successes.append(episode_data["success"])
-
-            episode_pbar.set_postfix({"r": f"{episode_data['total_reward']:.2f}"})
-
-        episode_pbar.close()
+        batch_rewards = [ep["total_reward"] for ep in episode_batch]
+        batch_distances = [ep["final_distance"] for ep in episode_batch]
+        batch_steps = [ep["steps"] for ep in episode_batch]
+        batch_successes = [ep["success"] for ep in episode_batch]
         episode_count += batch_size
 
         # Train on batch of episodes
         t_train_start = time.perf_counter()
         loss, grad_norm, policy_std, entropy = train_step_batched(
-            policy, optimizer, episode_batch,
+            policy,
+            optimizer,
+            episode_batch,
             entropy_coeff=cfg.training.entropy_coeff,
         )
         timing["train"] += time.perf_counter() - t_train_start
@@ -1063,6 +1085,8 @@ def main():
     print()
 
     # Clean up
+    if collector is not None:
+        collector.close()
     set_terminal_title(f"Done: {run_name}")
     set_terminal_progress(-1)  # Clear progress indicator
     if not args.smoketest:
