@@ -36,12 +36,19 @@ def quaternion_multiply(q1, q2):
     return np.array([x, y, z, w])
 
 
+def _is_body_hidden(data, body_id):
+    """Check if a body is hidden off-screen (y > 50)."""
+    return data.xpos[body_id][1] > 50
+
+
 def log_mujoco_scene(env):
     """
     Automatically log all bodies and meshes from the MuJoCo model.
     Extracts mesh data directly from MuJoCo (with correct scaling already applied).
+    Skips bodies hidden off-screen (e.g. distractors at y=100).
     """
     model = env.model
+    data = env.data
     mesh_count = 0
     geom_count = 0
 
@@ -49,8 +56,8 @@ def log_mujoco_scene(env):
     for body_id in range(model.nbody):
         body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
 
-        # Skip the world body
-        if body_name == "world":
+        # Skip the world body and hidden bodies
+        if body_name == "world" or _is_body_hidden(data, body_id):
             continue
 
         # Check if this body has any geometries
@@ -318,8 +325,8 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
                         env.model, mujoco.mjtObj.mjOBJ_BODY, body_id
                     )
 
-                    # Skip world body
-                    if body_name == "world":
+                    # Skip world body and hidden bodies
+                    if body_name == "world" or _is_body_hidden(env.data, body_id):
                         continue
 
                     # Get position and rotation from MuJoCo data

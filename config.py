@@ -21,12 +21,22 @@ class EnvConfig:
 
     # Termination thresholds
     success_distance: float = 0.3
-    failure_distance: float = 5.0
+    failure_distance: float = 10.0
 
     # Target spawn range
     min_target_distance: float = 0.8
     max_target_distance: float = 2.5
     randomize_target: bool = True
+
+    # Stage 2: moving target + distance
+    target_max_speed: float = 0.3  # Max target speed (m/s) at stage 2 progress=1
+    arena_boundary: float = 4.0  # Target bounces off ±boundary
+    max_target_distance_stage2: float = 4.0  # Max spawn distance at stage 2 progress=1
+
+    # Stage 3: visual distractors
+    max_distractors: int = 4  # Max distractor cubes at stage 3 progress=1
+    distractor_min_distance: float = 0.5  # Min spawn distance from origin
+    distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
     # Reward shaping
     distance_reward_scale: float = 20.0
@@ -39,6 +49,7 @@ class EnvConfig:
 class CurriculumConfig:
     """Curriculum learning configuration."""
 
+    num_stages: int = 3  # Total curriculum stages
     window_size: int = 10  # Batches to average for success rate
     advance_threshold: float = 0.6  # Advance when success rate > 60%
     advance_rate: float = 0.02  # Per-batch advancement

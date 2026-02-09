@@ -48,6 +48,12 @@ class TrainingEnv:
             distance_reward_scale=config.distance_reward_scale,
             movement_bonus=config.movement_bonus,
             time_penalty=config.time_penalty,
+            target_max_speed=config.target_max_speed,
+            arena_boundary=config.arena_boundary,
+            max_target_distance_stage2=config.max_target_distance_stage2,
+            max_distractors=config.max_distractors,
+            distractor_min_distance=config.distractor_min_distance,
+            distractor_max_distance=config.distractor_max_distance,
         )
 
     def __init__(
@@ -64,18 +70,15 @@ class TrainingEnv:
         distance_reward_scale=20.0,  # Scale factor for distance-based reward
         movement_bonus=0.0,  # Disabled: was rewarding spinning in place
         time_penalty=0.005,  # Tiny penalty per step (discourages dawdling)
+        # Stage 2: moving target + distance
+        target_max_speed=0.3,
+        arena_boundary=4.0,
+        max_target_distance_stage2=4.0,
+        # Stage 3: visual distractors
+        max_distractors=4,
+        distractor_min_distance=0.5,
+        distractor_max_distance=3.0,
     ):
-        """
-        Initialize training environment.
-
-        Args:
-            render_width: Camera image width
-            render_height: Camera image height
-            max_episode_steps: Maximum steps before episode truncation (default 100 = 10 seconds)
-            mujoco_steps_per_action: MuJoCo steps per action (controls sim-to-control ratio)
-            success_distance: Distance threshold for success
-            failure_distance: Distance threshold for failure
-        """
         self.env = SimpleWheelerEnv(
             render_width=render_width, render_height=render_height
         )
@@ -89,37 +92,58 @@ class TrainingEnv:
         self.movement_bonus = movement_bonus
         self.time_penalty = time_penalty
 
+        # Stage 2/3 params
+        self.target_max_speed = target_max_speed
+        self.arena_boundary = arena_boundary
+        self.max_target_distance_stage2 = max_target_distance_stage2
+        self.max_distractors = max_distractors
+        self.distractor_min_distance = distractor_min_distance
+        self.distractor_max_distance = distractor_max_distance
+
         # Episode tracking
         self.episode_step = 0
         self.prev_distance = None
         self.prev_position = None
 
-        # Curriculum learning: controls target spawn angle variance
-        # 0.0 = target always directly in front of camera
-        # 1.0 = target at random angle (full circle)
-        self.curriculum_progress = 1.0  # Default: full randomization
+        # Multi-stage curriculum
+        # Stage 1: angle variance (0→full 360°)
+        # Stage 2: moving target + increased distance
+        # Stage 3: visual distractors
+        self.curriculum_stage = 1
+        self.curriculum_stage_progress = 1.0  # Default: fully progressed
+
+        # Target movement state (stage 2+)
+        self.target_velocity = np.array([0.0, 0.0])  # XY velocity
+
+        # Time step for target movement (action dt = mujoco_steps * sim_dt)
+        self.action_dt = mujoco_steps_per_action * self.env.model.opt.timestep
 
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (2,)  # [left_motor, right_motor]
 
-    def set_curriculum_progress(self, progress):
+    def set_curriculum_stage(self, stage, progress):
         """
-        Set curriculum progress for target spawn positioning.
+        Set multi-stage curriculum state.
 
         Args:
-            progress: Float in [0, 1]
-                0.0 = target always directly in front of camera (+Y direction)
-                1.0 = target at random angle (full 360° randomization)
+            stage: Int 1-3
+                1 = angle variance only
+                2 = moving target + increased distance
+                3 = visual distractors
+            progress: Float in [0, 1] for current stage
+                Previous stages stay at max when advancing.
         """
-        self.curriculum_progress = np.clip(progress, 0.0, 1.0)
+        self.curriculum_stage = stage
+        self.curriculum_stage_progress = np.clip(progress, 0.0, 1.0)
 
     def reset(self):
         """
         Reset environment to initial state with randomized target position.
 
-        Target is placed at a random angle around the robot, at a distance
-        between min_target_distance and max_target_distance.
+        Stage 1: Target at curriculum-controlled angle, fixed distance range.
+        Stage 2: + moving target, increased max distance.
+        Stage 3: + visual distractor cubes.
 
         Returns:
             observation: Camera image normalized to [0, 1]
@@ -127,34 +151,67 @@ class TrainingEnv:
         camera_img = self.env.reset()
         self.episode_step = 0
 
-        # Randomize target position with curriculum-based angle constraint
-        #
+        # --- Stage 1: Angle variance (always active) ---
+        # At stage 1, progress controls angle. At stage 2+, angle is full 360°.
+        angle_progress = (
+            1.0 if self.curriculum_stage >= 2 else self.curriculum_stage_progress
+        )
+
         # Coordinate system (looking down from above):
-        #   +X = right
-        #   +Y = backward (behind robot)
-        #   -Y = forward (camera looks this way)
-        #
-        # Angles: 0=+X, π/2=+Y (behind), π=-X, -π/2=-Y (front)
-        #
+        #   +X = right, +Y = backward, -Y = forward (camera looks this way)
         # At progress=0: target directly in front (angle=-π/2)
         # At progress=1: target at any angle (full circle)
-        front_angle = -np.pi / 2  # -Y direction = in front of camera
-        max_deviation = self.curriculum_progress * np.pi  # 0 to π
+        front_angle = -np.pi / 2
+        max_deviation = angle_progress * np.pi
         angle = np.random.uniform(
             front_angle - max_deviation, front_angle + max_deviation
         )
 
+        # --- Stage 2: Increased distance + moving target ---
+        if self.curriculum_stage >= 2:
+            stage2_progress = (
+                self.curriculum_stage_progress if self.curriculum_stage == 2 else 1.0
+            )
+            # Lerp max distance from base to stage2 max
+            max_dist = self.max_target_distance + stage2_progress * (
+                self.max_target_distance_stage2 - self.max_target_distance
+            )
+            # Set random target velocity
+            speed = (
+                stage2_progress * self.target_max_speed * np.random.uniform(0.5, 1.0)
+            )
+            vel_angle = np.random.uniform(0, 2 * np.pi)
+            self.target_velocity = np.array(
+                [
+                    speed * np.cos(vel_angle),
+                    speed * np.sin(vel_angle),
+                ]
+            )
+        else:
+            max_dist = self.max_target_distance
+            self.target_velocity = np.array([0.0, 0.0])
+
         # Random distance within bounds
-        distance = np.random.uniform(self.min_target_distance, self.max_target_distance)
+        distance = np.random.uniform(self.min_target_distance, max_dist)
 
         # Calculate new target position (robot starts at origin)
         target_x = distance * np.cos(angle)
         target_y = distance * np.sin(angle)
-        target_z = 0.08  # Keep same height as original (on ground)
+        target_z = 0.08
 
         # Update target body position in MuJoCo model
         target_body_id = self.env.target_body_id
         self.env.model.body_pos[target_body_id] = [target_x, target_y, target_z]
+
+        # --- Stage 3: Visual distractors ---
+        if self.curriculum_stage >= 3:
+            stage3_progress = (
+                self.curriculum_stage_progress if self.curriculum_stage == 3 else 1.0
+            )
+            n_distractors = max(1, int(round(stage3_progress * self.max_distractors)))
+            self._place_distractors(n_distractors, target_x, target_y)
+        else:
+            self._hide_distractors()
 
         # Re-run forward kinematics to update positions
         mujoco.mj_forward(self.env.model, self.env.data)
@@ -168,6 +225,52 @@ class TrainingEnv:
         # Normalize to [0, 1]
         obs = camera_img.astype(np.float32) / 255.0
         return obs
+
+    def _place_distractors(self, n, target_x, target_y):
+        """Place n distractor cubes at random positions, hide the rest."""
+        for i, body_id in enumerate(self.env.distractor_body_ids):
+            if i < n:
+                # Place at random angle/distance from origin
+                for _ in range(20):  # Rejection sampling
+                    d_angle = np.random.uniform(0, 2 * np.pi)
+                    d_dist = np.random.uniform(
+                        self.distractor_min_distance, self.distractor_max_distance
+                    )
+                    dx = d_dist * np.cos(d_angle)
+                    dy = d_dist * np.sin(d_angle)
+                    # Reject if too close to target
+                    if np.hypot(dx - target_x, dy - target_y) > 0.2:
+                        break
+                self.env.model.body_pos[body_id] = [dx, dy, 0.08]
+            else:
+                self.env.model.body_pos[body_id] = [0.0, 100.0, 0.08]
+
+    def _hide_distractors(self):
+        """Move all distractors off-screen."""
+        for body_id in self.env.distractor_body_ids:
+            self.env.model.body_pos[body_id] = [0.0, 100.0, 0.08]
+
+    def _update_target_position(self):
+        """Move target by velocity, bounce off arena boundaries."""
+        target_body_id = self.env.target_body_id
+        pos = self.env.model.body_pos[target_body_id].copy()
+
+        # Update XY position
+        pos[0] += self.target_velocity[0] * self.action_dt
+        pos[1] += self.target_velocity[1] * self.action_dt
+
+        # Bounce off arena boundaries
+        boundary = self.arena_boundary
+        for axis in range(2):
+            if pos[axis] > boundary:
+                pos[axis] = boundary
+                self.target_velocity[axis] *= -1
+            elif pos[axis] < -boundary:
+                pos[axis] = -boundary
+                self.target_velocity[axis] *= -1
+
+        self.env.model.body_pos[target_body_id] = pos
+        mujoco.mj_forward(self.env.model, self.env.data)
 
     def step(self, action):
         """
@@ -196,7 +299,7 @@ class TrainingEnv:
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
 
-        # Get current state
+        # Get current state (before moving target, so reward reflects robot's action)
         current_distance = self.env.get_distance_to_target()
         current_position = self.env.get_bot_position()
 
@@ -215,8 +318,14 @@ class TrainingEnv:
 
         reward = distance_reward + exploration_reward + time_cost
 
-        # Update state for next step
-        self.prev_distance = current_distance
+        # Move target after reward computation (stage 2+).
+        # Next step's observation and reward will see the new position.
+        if np.any(self.target_velocity != 0):
+            self._update_target_position()
+
+        # Update state for next step (use post-move distance so next step's
+        # reward delta captures both robot movement and target movement)
+        self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = current_position
 
         # Check termination conditions

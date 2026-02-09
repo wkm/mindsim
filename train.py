@@ -738,15 +738,17 @@ def main():
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_progress = 0.0  # Start with target in front
+    curriculum_stage = 1  # Start at stage 1 (angle variance)
+    stage_progress = 0.0  # Start with target in front
     mastery_count = 0  # Count of consecutive batches at mastery level
 
     print(
-        f"Training until curriculum mastery (curriculum=1.0, success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
+        f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
     )
     print(
-        f"  Curriculum: monotonic ramp-up (advance@{curr.advance_threshold:.0%})"
+        "  Stage 1: Angle variance | Stage 2: Moving target + distance | Stage 3: Distractors"
     )
+    print(f"  Curriculum: monotonic ramp-up (advance@{curr.advance_threshold:.0%})")
     if curr.use_eval_for_curriculum:
         print(
             f"  Using deterministic eval ({curr.eval_episodes_per_batch} eps/batch) for curriculum decisions"
@@ -771,13 +773,14 @@ def main():
     mastered = False
     pbar = tqdm(desc="Training", position=0, unit="batch")
     while not mastered:
-        # Set curriculum progress for this batch
-        env.set_curriculum_progress(curriculum_progress)
+        # Set curriculum stage for this batch
+        env.set_curriculum_stage(curriculum_stage, stage_progress)
 
-        # Update terminal title and progress indicator (use curriculum as progress)
-        progress_pct = 100 * curriculum_progress
+        # Overall progress: (stage-1 + progress) / num_stages
+        overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
+        progress_pct = 100 * overall_progress
         set_terminal_title(
-            f"{progress_pct:.0f}% curr={curriculum_progress:.2f} {run_name}"
+            f"{progress_pct:.0f}% S{curriculum_stage} p={stage_progress:.2f} {run_name}"
         )
         set_terminal_progress(progress_pct)
 
@@ -879,21 +882,31 @@ def main():
                 else rolling_success_rate
             )
             if rate_for_curriculum > curr.advance_threshold:
-                curriculum_progress = min(1.0, curriculum_progress + curr.advance_rate)
+                stage_progress = min(1.0, stage_progress + curr.advance_rate)
 
-        # Check for mastery: curriculum at max AND maintaining high eval success rate
+        # Check for stage mastery: progress=1.0 AND sustained high success rate
         mastery_rate = (
             rolling_eval_success_rate
             if curr.use_eval_for_curriculum
             else rolling_success_rate
         )
-        if (
-            curriculum_progress >= 1.0
-            and mastery_rate >= cfg.training.mastery_threshold
-        ):
+        if stage_progress >= 1.0 and mastery_rate >= cfg.training.mastery_threshold:
             mastery_count += 1
             if mastery_count >= cfg.training.mastery_batches:
-                mastered = True
+                if curriculum_stage >= curr.num_stages:
+                    # Final stage mastered → training complete
+                    mastered = True
+                else:
+                    # Advance to next stage
+                    curriculum_stage += 1
+                    stage_progress = 0.0
+                    mastery_count = 0
+                    # Clear success histories so new stage starts fresh
+                    success_history.clear()
+                    eval_success_history.clear()
+                    print(
+                        f"\n  >>> Advanced to stage {curriculum_stage}/{curr.num_stages} <<<"
+                    )
         else:
             mastery_count = 0  # Reset if we drop below mastery level
 
@@ -909,9 +922,9 @@ def main():
             "episode": episode_count,
             "batch": batch_idx,
             # Curriculum
-            "curriculum/progress": curriculum_progress,
-            "curriculum/max_angle_deviation_deg": curriculum_progress
-            * 180,  # 0° to 180°
+            "curriculum/stage": curriculum_stage,
+            "curriculum/stage_progress": stage_progress,
+            "curriculum/overall_progress": overall_progress,
             # Training success rate (stochastic, with exploration noise)
             "curriculum/train_batch_success_rate": batch_success_rate,
             "curriculum/train_rolling_success_rate": rolling_success_rate,
@@ -956,7 +969,8 @@ def main():
                 "avg_r": f"{avg_reward:.2f}",
                 "eval": f"{rolling_eval_success_rate:.0%}",
                 "train": f"{rolling_success_rate:.0%}",
-                "curr": f"{curriculum_progress:.2f}",
+                "stage": f"{curriculum_stage}/{curr.num_stages}",
+                "prog": f"{stage_progress:.2f}",
                 "mstr": f"{mastery_count}/{cfg.training.mastery_batches}",
             }
         )
