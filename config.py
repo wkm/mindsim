@@ -119,6 +119,9 @@ class TrainingConfig:
     # Logging
     log_rerun_every: int = 100  # Episodes between Rerun recordings
 
+    # Parallelism
+    num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
+
     # Limits
     max_batches: int | None = None  # None = run until mastery
 
@@ -162,7 +165,6 @@ class Config:
             "policy": asdict(self.policy),
             "training": asdict(self.training),
         }
-
 
     @classmethod
     def for_smoketest(cls) -> Config:

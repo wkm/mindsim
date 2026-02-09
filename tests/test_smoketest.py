@@ -153,7 +153,9 @@ class TestTrainingStep:
         for _ in range(2):
             batch.append(collect_episode(env, policy, deterministic=False))
 
-        loss, grad_norm, policy_std, entropy = train_step_batched(policy, optimizer, batch)
+        loss, grad_norm, policy_std, entropy = train_step_batched(
+            policy, optimizer, batch
+        )
         assert isinstance(loss, float)
         assert not np.isnan(loss)
         assert grad_norm >= 0
@@ -168,9 +170,7 @@ class TestTrainingStep:
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
 
         # Snapshot params before
-        params_before = {
-            name: p.clone() for name, p in policy.named_parameters()
-        }
+        params_before = {name: p.clone() for name, p in policy.named_parameters()}
 
         batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
         train_step_batched(policy, optimizer, batch)
@@ -185,6 +185,85 @@ class TestTrainingStep:
         env.close()
 
 
+class TestParallelCollection:
+    """Test parallel episode collection with torch.multiprocessing."""
+
+    def test_parallel_collect_returns_valid_episodes(self):
+        """Parallel workers should produce valid episode data."""
+        cfg = _smoketest_config()
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+
+        from parallel import ParallelCollector
+
+        collector = ParallelCollector(
+            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+        )
+
+        episodes = collector.collect_batch(
+            policy, batch_size=2, curriculum_stage=1, stage_progress=0.5
+        )
+
+        assert len(episodes) == 2
+        for ep in episodes:
+            assert len(ep["observations"]) > 0
+            assert len(ep["actions"]) == len(ep["observations"])
+            assert len(ep["rewards"]) == len(ep["observations"])
+            assert len(ep["log_probs"]) == len(ep["observations"])
+            assert isinstance(ep["total_reward"], float)
+            assert isinstance(ep["success"], bool)
+
+        collector.close()
+
+    def test_parallel_deterministic_episodes(self):
+        """Parallel deterministic (eval) collection should work."""
+        cfg = _smoketest_config()
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+
+        from parallel import ParallelCollector
+
+        collector = ParallelCollector(
+            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+        )
+
+        episodes = collector.collect_batch(
+            policy,
+            batch_size=2,
+            curriculum_stage=1,
+            stage_progress=0.5,
+            deterministic=True,
+        )
+
+        assert len(episodes) == 2
+        for ep in episodes:
+            assert "log_probs" not in ep
+            assert len(ep["observations"]) > 0
+
+        collector.close()
+
+    def test_parallel_train_step(self):
+        """Episodes from parallel collection should work with train_step_batched."""
+        cfg = _smoketest_config()
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+        from parallel import ParallelCollector
+
+        collector = ParallelCollector(
+            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+        )
+
+        batch = collector.collect_batch(
+            policy, batch_size=2, curriculum_stage=1, stage_progress=0.0
+        )
+        loss, grad_norm, policy_std, entropy = train_step_batched(
+            policy, optimizer, batch
+        )
+        assert isinstance(loss, float)
+        assert not np.isnan(loss)
+
+        collector.close()
+
+
 class TestEndToEnd:
     """Full pipeline integration test."""
 
@@ -197,9 +276,7 @@ class TestEndToEnd:
             image_width=cfg.policy.image_width,
             hidden_size=cfg.policy.hidden_size,
         )
-        optimizer = torch.optim.Adam(
-            policy.parameters(), lr=cfg.training.learning_rate
-        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
 
         # Disable wandb
         wandb.init(mode="disabled")
