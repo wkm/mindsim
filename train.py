@@ -569,51 +569,32 @@ def collect_episode(
     return result
 
 
-def compute_episode_loss(policy, episode_data, gamma=0.99):
+def compute_reward_to_go(rewards, gamma=0.99):
     """
-    Compute REINFORCE loss for a single episode (no gradient step).
+    Compute discounted reward-to-go for a single episode.
 
     Args:
-        policy: Stochastic neural network policy
-        episode_data: Data from collect_episode
-        gamma: Discount factor for reward-to-go
+        rewards: Tensor of per-step rewards (T,)
+        gamma: Discount factor
 
     Returns:
-        loss: Scalar tensor (with grad)
+        reward_to_go: Tensor of discounted returns (T,)
     """
-    observations = torch.from_numpy(
-        np.array(episode_data["observations"])
-    )  # (T, H, W, 3)
-    actions = torch.from_numpy(np.array(episode_data["actions"]))  # (T, 2)
-    rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32)  # (T,)
-
-    # Compute discounted reward-to-go
     reward_to_go = torch.zeros_like(rewards)
     running_sum = 0
     for t in reversed(range(len(rewards))):
         running_sum = rewards[t] + gamma * running_sum
         reward_to_go[t] = running_sum
-
-    # Normalize advantages (reward-to-go centered and scaled)
-    # This reduces variance and helps training stability
-    advantage = reward_to_go
-    if advantage.std() > 1e-8:
-        advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
-
-    # Compute log probabilities of the actions taken
-    log_probs = policy.log_prob(observations, actions)  # (T,)
-
-    # REINFORCE loss: -E[advantage * log_prob]
-    # Negative because we want to maximize expected reward
-    return -torch.mean(advantage * log_probs)
+    return reward_to_go
 
 
 def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
     """
     REINFORCE policy gradient training step on a batch of episodes.
 
-    Collects gradients from multiple episodes and averages them before
-    taking an optimizer step. This reduces variance in gradient estimates.
+    Computes reward-to-go for all episodes, normalizes advantages across
+    the entire batch (so good episodes get positive advantage, bad episodes
+    get negative), then takes one optimizer step.
 
     Args:
         policy: Stochastic neural network policy
@@ -628,11 +609,28 @@ def train_step_batched(policy, optimizer, episode_batch, gamma=0.99):
     """
     optimizer.zero_grad()
 
-    # Accumulate losses from all episodes
-    total_loss = 0.0
+    # First pass: compute reward-to-go for all episodes
+    all_rtg = []
     for episode_data in episode_batch:
-        loss = compute_episode_loss(policy, episode_data, gamma)
-        # Scale by 1/batch_size so gradients average correctly
+        rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32)
+        all_rtg.append(compute_reward_to_go(rewards, gamma))
+
+    # Normalize advantages across the entire batch
+    all_rtg_cat = torch.cat(all_rtg)
+    batch_mean = all_rtg_cat.mean()
+    batch_std = all_rtg_cat.std()
+    if batch_std > 1e-8:
+        all_rtg = [(rtg - batch_mean) / (batch_std + 1e-8) for rtg in all_rtg]
+
+    # Second pass: compute losses with batch-normalized advantages
+    total_loss = 0.0
+    for episode_data, advantage in zip(episode_batch, all_rtg):
+        observations = torch.from_numpy(np.array(episode_data["observations"]))
+        actions = torch.from_numpy(np.array(episode_data["actions"]))
+
+        log_probs = policy.log_prob(observations, actions)
+        loss = -torch.mean(advantage * log_probs)
+
         (loss / len(episode_batch)).backward()
         total_loss += loss.item()
 
