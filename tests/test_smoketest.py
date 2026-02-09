@@ -153,11 +153,12 @@ class TestTrainingStep:
         for _ in range(2):
             batch.append(collect_episode(env, policy, deterministic=False))
 
-        loss, grad_norm, policy_std = train_step_batched(policy, optimizer, batch)
+        loss, grad_norm, policy_std, entropy = train_step_batched(policy, optimizer, batch)
         assert isinstance(loss, float)
         assert not np.isnan(loss)
         assert grad_norm >= 0
         assert len(policy_std) == 2
+        assert entropy > 0  # Entropy should be positive for any non-degenerate policy
         env.close()
 
     def test_train_step_updates_parameters(self):
@@ -212,7 +213,7 @@ class TestEndToEnd:
                 batch.append(collect_episode(env, policy, deterministic=False))
 
             # Train
-            loss, grad_norm, policy_std = train_step_batched(
+            loss, grad_norm, policy_std, entropy = train_step_batched(
                 policy, optimizer, batch
             )
             assert not np.isnan(loss)

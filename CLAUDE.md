@@ -12,7 +12,7 @@ uv run python <script.py>
 
 ## Project Structure
 
-```
+```txt
 mindsim/
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
@@ -72,7 +72,7 @@ Creates a Rerun recording with:
 4. **Respect geometry hierarchy**
    Bodies → Geoms → Meshes (each has relative transforms)
 
-   ```
+   ```txt
    world/{body}              (data.xpos, data.xquat)
      └─ {geom}               (model.geom_pos, model.geom_quat)
         └─ mesh              (vertices, faces)
