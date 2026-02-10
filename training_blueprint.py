@@ -68,5 +68,6 @@ def create_training_blueprint():
             ),
             column_shares=[1, 2],
         ),
-        collapse_panels=False,  # Keep sources panel open for episode navigation
+        rrb.SelectionPanel(state=rrb.PanelState.Hidden),
+        rrb.TimePanel(state=rrb.PanelState.Hidden),
     )
