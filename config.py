@@ -106,9 +106,15 @@ class TrainingConfig:
     learning_rate: float = 1e-3
 
     # Algorithm
-    algorithm: str = "REINFORCE"
+    algorithm: str = "PPO"
     gamma: float = 0.99
     entropy_coeff: float = 0.05  # Entropy bonus to prevent policy collapse
+
+    # PPO-specific
+    ppo_epochs: int = 4
+    clip_epsilon: float = 0.2
+    gae_lambda: float = 0.95
+    value_coeff: float = 0.5
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update
@@ -192,6 +198,7 @@ class Config:
                 mastery_threshold=0.0,  # Always consider mastered
                 max_batches=3,  # Just a few batches
                 log_rerun_every=9999,  # Effectively disable
+                ppo_epochs=2,
             ),
         )
 
