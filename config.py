@@ -89,6 +89,8 @@ class PolicyConfig:
 
     # Stochastic policy
     init_std: float = 0.5
+    min_log_std: float = -3.0  # min std ≈ 0.05
+    max_log_std: float = 0.7  # max std ≈ 2.0
 
     @property
     def use_lstm(self) -> bool:
@@ -106,7 +108,7 @@ class TrainingConfig:
     # Algorithm
     algorithm: str = "REINFORCE"
     gamma: float = 0.99
-    entropy_coeff: float = 0.01  # Entropy bonus to prevent policy collapse
+    entropy_coeff: float = 0.05  # Entropy bonus to prevent policy collapse
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update

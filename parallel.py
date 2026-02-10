@@ -84,6 +84,8 @@ class ParallelCollector:
             "image_height": policy_config.image_height,
             "image_width": policy_config.image_width,
             "init_std": policy_config.init_std,
+            "min_log_std": policy_config.min_log_std,
+            "max_log_std": policy_config.max_log_std,
         }
         if policy_config.use_lstm:
             policy_kwargs["hidden_size"] = policy_config.hidden_size
