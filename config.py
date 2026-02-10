@@ -130,6 +130,9 @@ class TrainingConfig:
     # Parallelism
     num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
 
+    # Checkpointing
+    checkpoint_every: int | None = 50  # Periodic checkpoint every N batches (None = disabled)
+
     # Limits
     max_batches: int | None = None  # None = run until mastery
 
