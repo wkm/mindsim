@@ -65,8 +65,8 @@ class RerunWandbLogger:
         self.current_episode = episode
         self.rrd_path = os.path.join(self.run_dir, f"episode_{episode:05d}.rrd")
 
-        # Initialize Rerun with unique recording ID
-        rr.init("mindsim-training", recording_id=f"{self.run_id}-ep{episode}")
+        # Initialize Rerun: application_id = run name, recording = episode number
+        rr.init(self.run_name, recording_id=f"{self.run_id}-ep{episode}")
         rr.save(self.rrd_path)
 
         # Stream to live viewer (spawn on first episode, reconnect on subsequent)
@@ -77,8 +77,8 @@ class RerunWandbLogger:
             else:
                 rr.connect_grpc()
 
-        # Set recording name after sinks are connected
-        rr.send_recording_name(f"ep{episode} {self.run_name}")
+        # Set recording name to just the episode number
+        rr.send_recording_name(f"episode {episode}")
 
         # Embed blueprint into recording
         rr.send_blueprint(create_training_blueprint())
