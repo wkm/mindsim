@@ -868,6 +868,9 @@ def train_step_ppo(
         policy_std: Current policy standard deviation
         clip_fraction: Fraction of clipped ratios (last epoch)
         approx_kl: Approximate KL divergence (last epoch)
+        explained_variance: How well V(s) predicts returns (1.0 = perfect)
+        mean_value: Mean V(s) across batch
+        mean_return: Mean GAE return across batch
     """
     device = next(policy.parameters()).device
 
@@ -910,8 +913,22 @@ def train_step_ppo(
             all_advantages.append(advantages)
             all_returns.append(returns)
 
-    # Normalize advantages across the entire batch
+    # Value function diagnostics (before normalization)
     all_adv_cat = torch.cat(all_advantages)
+    all_ret_cat = torch.cat(all_returns)
+    # Explained variance: 1 - Var(returns - values) / Var(returns)
+    # values = returns - advantages (before normalization)
+    all_val_cat = all_ret_cat - all_adv_cat
+    ret_var = all_ret_cat.var()
+    explained_variance = (
+        1.0 - (all_ret_cat - all_val_cat).var() / (ret_var + 1e-8)
+        if ret_var > 1e-8
+        else 0.0
+    )
+    mean_value = all_val_cat.mean().item()
+    mean_return = all_ret_cat.mean().item()
+
+    # Normalize advantages across the entire batch
     adv_mean = all_adv_cat.mean()
     adv_std = all_adv_cat.std()
     if adv_std > 1e-8:
@@ -995,6 +1012,8 @@ def train_step_ppo(
     clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
     policy_std = torch.exp(clamped).detach().cpu().numpy()
 
+    ev = explained_variance.item() if torch.is_tensor(explained_variance) else explained_variance
+
     return (
         avg_policy_loss,
         avg_value_loss,
@@ -1003,7 +1022,39 @@ def train_step_ppo(
         policy_std,
         last_clip_fraction,
         last_approx_kl,
+        ev,
+        mean_value,
+        mean_return,
     )
+
+
+def log_episode_value_trace(policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"):
+    """
+    Run a forward pass on a completed episode to log V(s_t) and A(s_t) to Rerun.
+
+    Gives per-step visibility into the value function's beliefs during the episode.
+    """
+    obs = torch.from_numpy(np.array(episode_data["observations"])).to(device)
+    acts = torch.from_numpy(np.array(episode_data["actions"])).to(device)
+    rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32, device=device)
+
+    with torch.no_grad():
+        # Use evaluate_actions even for deterministic episodes — we just need values
+        # Need dummy actions for the log_prob computation but we only use the values
+        _, values, _ = policy.evaluate_actions(obs, acts)
+        advantages, returns = compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0)
+
+    values_np = values.cpu().numpy()
+    advantages_np = advantages.cpu().numpy()
+    returns_np = returns.cpu().numpy()
+    cumulative_reward = np.cumsum(episode_data["rewards"])
+
+    for t in range(len(values_np)):
+        rr.set_time("step", sequence=t)
+        rr.log(f"{namespace}/value/V_s", rr.Scalars([values_np[t]]))
+        rr.log(f"{namespace}/value/advantage", rr.Scalars([advantages_np[t]]))
+        rr.log(f"{namespace}/value/cumulative_reward", rr.Scalars([cumulative_reward[t]]))
+        rr.log(f"{namespace}/value/gae_return", rr.Scalars([returns_np[t]]))
 
 
 def parse_args():
@@ -1241,6 +1292,9 @@ def main():
                 policy_std,
                 clip_fraction,
                 approx_kl,
+                explained_variance,
+                mean_value,
+                mean_return,
             ) = train_step_ppo(
                 policy,
                 optimizer,
@@ -1294,6 +1348,15 @@ def main():
 
                 if log_this_eval:
                     t_rerun_start = time.perf_counter()
+                    # Log per-step value function traces for PPO
+                    if cfg.training.algorithm == "PPO":
+                        log_episode_value_trace(
+                            policy, eval_data,
+                            gamma=cfg.training.gamma,
+                            gae_lambda=cfg.training.gae_lambda,
+                            device=device,
+                            namespace="eval",
+                        )
                     rr_wandb.finish_episode(eval_data, upload_artifact=True)
                     timing["rerun"] += time.perf_counter() - t_rerun_start
 
@@ -1395,6 +1458,14 @@ def main():
             "batch/reward_hist": wandb.Histogram(batch_rewards, num_bins=20),
         }
 
+        # Episode termination breakdown
+        batch_truncated = [ep.get("truncated", False) for ep in episode_batch]
+        batch_done = [ep.get("done", False) for ep in episode_batch]
+        log_dict.update({
+            "batch/truncated_fraction": np.mean(batch_truncated),
+            "batch/done_fraction": np.mean(batch_done),
+        })
+
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
             log_dict.update({
@@ -1402,6 +1473,9 @@ def main():
                 "training/value_loss": value_loss,
                 "training/clip_fraction": clip_fraction,
                 "training/approx_kl": approx_kl,
+                "training/explained_variance": explained_variance,
+                "training/mean_value": mean_value,
+                "training/mean_return": mean_return,
             })
 
         t_log_start = time.perf_counter()

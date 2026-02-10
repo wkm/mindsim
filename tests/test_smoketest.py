@@ -369,6 +369,9 @@ class TestPPO:
             policy_std,
             clip_fraction,
             approx_kl,
+            explained_variance,
+            mean_value,
+            mean_return,
         ) = train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
 
         assert isinstance(policy_loss, float)
@@ -379,6 +382,9 @@ class TestPPO:
         assert len(policy_std) == 2
         assert entropy > 0
         assert 0.0 <= clip_fraction <= 1.0
+        assert isinstance(explained_variance, float)
+        assert isinstance(mean_value, float)
+        assert isinstance(mean_return, float)
         env.close()
 
     def test_train_step_ppo_updates_parameters(self):
@@ -420,7 +426,7 @@ class TestPPO:
                 for _ in range(cfg.training.batch_size)
             ]
 
-            policy_loss, value_loss, entropy, grad_norm, policy_std, clip_frac, approx_kl = train_step_ppo(
+            policy_loss, value_loss, entropy, grad_norm, policy_std, clip_frac, approx_kl, ev, mv, mr = train_step_ppo(
                 policy, optimizer, batch, ppo_epochs=cfg.training.ppo_epochs
             )
             assert not np.isnan(policy_loss)
