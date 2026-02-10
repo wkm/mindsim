@@ -938,11 +938,17 @@ def main():
 
         # Train on batch of episodes
         t_train_start = time.perf_counter()
+        # Anneal entropy coefficient: linear decay from start to end
+        anneal_t = min(1.0, batch_idx / max(1, cfg.training.entropy_anneal_batches))
+        entropy_coeff = (
+            cfg.training.entropy_coeff_start
+            + (cfg.training.entropy_coeff_end - cfg.training.entropy_coeff_start) * anneal_t
+        )
         loss, grad_norm, policy_std, entropy = train_step_batched(
             policy,
             optimizer,
             episode_batch,
-            entropy_coeff=cfg.training.entropy_coeff,
+            entropy_coeff=entropy_coeff,
         )
         timing["train"] += time.perf_counter() - t_train_start
 
@@ -1060,6 +1066,7 @@ def main():
             "batch/loss": loss,
             "training/grad_norm": grad_norm,
             "training/entropy": entropy,
+            "training/entropy_coeff": entropy_coeff,
             # Policy std (exploration level)
             "policy/std_left": policy_std[0],
             "policy/std_right": policy_std[1],

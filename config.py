@@ -109,6 +109,9 @@ class TrainingConfig:
     algorithm: str = "REINFORCE"
     gamma: float = 0.99
     entropy_coeff: float = 0.05  # Entropy bonus to prevent policy collapse
+    entropy_coeff_start: float = 0.3  # Initial entropy coeff (high for early exploration)
+    entropy_coeff_end: float = 0.01  # Final entropy coeff after annealing
+    entropy_anneal_batches: int = 50  # Batches over which to linearly anneal
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update
