@@ -67,15 +67,17 @@ class RerunWandbLogger:
 
         # Initialize Rerun: application_id = run name, recording = episode number
         rr.init(self.run_name, recording_id=f"{self.run_id}-ep{episode}")
-        rr.save(self.rrd_path)
 
-        # Stream to live viewer (spawn on first episode, reconnect on subsequent)
+        # Spawn viewer on first episode (without connecting, we'll use set_sinks)
+        if self.live and not self._spawned:
+            rr.spawn(connect=False)
+            self._spawned = True
+
+        # Set up sinks: always save to disk, optionally stream live
+        sinks = [rr.FileSink(self.rrd_path)]
         if self.live:
-            if not self._spawned:
-                rr.spawn(connect=True)
-                self._spawned = True
-            else:
-                rr.connect_grpc()
+            sinks.append(rr.GrpcSink())
+        rr.set_sinks(*sinks)
 
         # Set recording name to just the episode number
         rr.send_recording_name(f"episode {episode}")
