@@ -159,7 +159,7 @@ class LSTMPolicy(nn.Module):
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=64, image_width=64, hidden_size=64, init_std=0.5):
+    def __init__(self, image_height=64, image_width=64, hidden_size=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -179,8 +179,10 @@ class LSTMPolicy(nn.Module):
         # Output layers
         self.fc = nn.Linear(hidden_size, 2)  # Output: mean of [left_motor, right_motor]
 
-        # Learnable log_std (state-independent)
+        # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
+        self.min_log_std = min_log_std
+        self.max_log_std = max_log_std
 
         # Hidden state (will be set during episode)
         self.hidden = None
@@ -244,7 +246,8 @@ class LSTMPolicy(nn.Module):
         else:
             mean = torch.tanh(self.fc(lstm_out.squeeze(1)))  # (B, 2)
 
-        std = torch.exp(self.log_std)
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
         return mean, std
 
     def sample_action(self, x):
@@ -322,7 +325,7 @@ class TinyPolicy(nn.Module):
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=64, image_width=64, init_std=0.5):
+    def __init__(self, image_height=64, image_width=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         # CNN: 2 conv layers
@@ -336,9 +339,10 @@ class TinyPolicy(nn.Module):
         self.fc1 = nn.Linear(conv_out_size, 128)
         self.fc2 = nn.Linear(128, 2)  # Output: mean of [left_motor, right_motor]
 
-        # Learnable log_std (state-independent)
-        # Using log_std ensures std is always positive when we exp() it
+        # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
+        self.min_log_std = min_log_std
+        self.max_log_std = max_log_std
 
     def forward(self, x):
         """
@@ -365,7 +369,8 @@ class TinyPolicy(nn.Module):
         x = torch.relu(self.fc1(x))
         mean = torch.tanh(self.fc2(x))  # Tanh to get [-1, 1] range
 
-        std = torch.exp(self.log_std)  # Ensure positive
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
         return mean, std
 
     def sample_action(self, x):
@@ -633,21 +638,26 @@ def train_step_batched(
         all_rtg = [(rtg - batch_mean) / (batch_std + 1e-8) for rtg in all_rtg]
 
     # Second pass: compute losses with batch-normalized advantages
+    # Weight each episode by its length so every timestep contributes equally,
+    # preventing long episodes from dominating the gradient.
+    total_steps = sum(len(ep["rewards"]) for ep in episode_batch)
     total_loss = 0.0
     for episode_data, advantage in zip(episode_batch, all_rtg):
         observations = torch.from_numpy(np.array(episode_data["observations"]))
         actions = torch.from_numpy(np.array(episode_data["actions"]))
 
         log_probs = policy.log_prob(observations, actions)
-        loss = -torch.mean(advantage * log_probs)
+        # Sum (not mean) within episode, then divide by total batch timesteps
+        loss = -torch.sum(advantage * log_probs) / total_steps
 
-        (loss / len(episode_batch)).backward()
+        loss.backward()
         total_loss += loss.item()
 
     # Entropy bonus: H(π) = 0.5 * (1 + log(2π)) + log_std per action dim
     # Maximizing entropy prevents std from collapsing and keeps exploration alive
     if entropy_coeff > 0:
-        std = torch.exp(policy.log_std)
+        clamped_log_std = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+        std = torch.exp(clamped_log_std)
         entropy = torch.distributions.Normal(torch.zeros_like(std), std).entropy().sum()
         entropy_loss = -entropy_coeff * entropy
         entropy_loss.backward()
@@ -664,7 +674,8 @@ def train_step_batched(
     optimizer.step()
 
     # Get current policy std for logging
-    policy_std = torch.exp(policy.log_std).detach().cpu().numpy()
+    clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+    policy_std = torch.exp(clamped).detach().cpu().numpy()
 
     return avg_loss, total_grad_norm, policy_std, entropy_val
 
@@ -721,12 +732,16 @@ def main():
             image_width=cfg.policy.image_width,
             hidden_size=cfg.policy.hidden_size,
             init_std=cfg.policy.init_std,
+            min_log_std=cfg.policy.min_log_std,
+            max_log_std=cfg.policy.max_log_std,
         ).to(device)
     else:
         policy = TinyPolicy(
             image_height=cfg.policy.image_height,
             image_width=cfg.policy.image_width,
             init_std=cfg.policy.init_std,
+            min_log_std=cfg.policy.min_log_std,
+            max_log_std=cfg.policy.max_log_std,
         ).to(device)
     optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
 
