@@ -113,6 +113,10 @@ class TrainingConfig:
     entropy_coeff_end: float = 0.01  # Final entropy coeff after annealing
     entropy_anneal_batches: int = 50  # Batches over which to linearly anneal
 
+    # Episode length annealing
+    episode_length_start: int = 50  # ~5 seconds at 10Hz, enough for close frontal targets
+    episode_length_anneal_batches: int = 50  # Batches to ramp up to full episode length
+
     # Batching
     batch_size: int = 64  # Episodes per gradient update
 

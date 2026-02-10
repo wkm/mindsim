@@ -40,7 +40,7 @@ def _collect_one(args):
     """Collect a single episode in a worker process."""
     global _worker_env, _worker_policy
 
-    state_dict_np, curriculum_stage, stage_progress, deterministic = args
+    state_dict_np, curriculum_stage, stage_progress, deterministic, max_episode_steps = args
 
     from train import collect_episode
 
@@ -48,6 +48,8 @@ def _collect_one(args):
     state_dict = {k: torch.from_numpy(v) for k, v in state_dict_np.items()}
     _worker_policy.load_state_dict(state_dict)
     _worker_env.set_curriculum_stage(curriculum_stage, stage_progress)
+    if max_episode_steps is not None:
+        _worker_env.max_episode_steps = max_episode_steps
 
     return collect_episode(
         _worker_env,
@@ -102,7 +104,13 @@ class ParallelCollector:
         )
 
     def collect_batch(
-        self, policy, batch_size, curriculum_stage, stage_progress, deterministic=False
+        self,
+        policy,
+        batch_size,
+        curriculum_stage,
+        stage_progress,
+        deterministic=False,
+        max_episode_steps=None,
     ):
         """Collect batch_size episodes in parallel.
 
@@ -117,7 +125,7 @@ class ParallelCollector:
         state_dict_np = {k: v.cpu().numpy() for k, v in policy.state_dict().items()}
 
         args_list = [
-            (state_dict_np, curriculum_stage, stage_progress, deterministic)
+            (state_dict_np, curriculum_stage, stage_progress, deterministic, max_episode_steps)
             for _ in range(batch_size)
         ]
 

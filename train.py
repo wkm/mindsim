@@ -906,11 +906,26 @@ def main():
             rr_wandb is not None and batch_idx % log_every_n_batches == 0
         )
 
+        # Anneal episode length: ramp from short to full over N batches
+        ep_anneal_t = min(
+            1.0, batch_idx / max(1, cfg.training.episode_length_anneal_batches)
+        )
+        effective_max_steps = int(
+            cfg.training.episode_length_start
+            + (cfg.env.max_episode_steps - cfg.training.episode_length_start)
+            * ep_anneal_t
+        )
+        env.max_episode_steps = effective_max_steps
+
         # Collect a batch of episodes
         t_collect_start = time.perf_counter()
         if collector is not None:
             episode_batch = collector.collect_batch(
-                policy, batch_size, curriculum_stage, stage_progress
+                policy,
+                batch_size,
+                curriculum_stage,
+                stage_progress,
+                max_episode_steps=effective_max_steps,
             )
         else:
             episode_batch = []
@@ -1067,6 +1082,7 @@ def main():
             "training/grad_norm": grad_norm,
             "training/entropy": entropy,
             "training/entropy_coeff": entropy_coeff,
+            "training/max_episode_steps": effective_max_steps,
             # Policy std (exploration level)
             "policy/std_left": policy_std[0],
             "policy/std_right": policy_std[1],
