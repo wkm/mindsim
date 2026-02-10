@@ -24,6 +24,7 @@ from tqdm import tqdm
 
 import rerun_logger
 import wandb
+from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from config import Config
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
@@ -1071,6 +1072,12 @@ def parse_args():
         default=None,
         help="Number of parallel workers for episode collection (0=auto, 1=serial, default: from config)",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Resume from checkpoint: local .pt path or wandb artifact ref (e.g. checkpoint-lstmpolicy:stage1-mastered)",
+    )
     return parser.parse_args()
 
 
@@ -1167,6 +1174,36 @@ def main():
     if not args.smoketest:
         print("  Watching model gradients every 10 episodes")
 
+    # Resume from checkpoint if requested
+    resumed_batch_idx = 0
+    resumed_episode_count = 0
+    resumed_curriculum_stage = None
+    resumed_stage_progress = None
+    resumed_mastery_count = None
+    if args.resume:
+        resume_ref = resolve_resume_ref(args.resume)
+        print(f"Loading checkpoint: {resume_ref}")
+        ckpt = load_checkpoint(resume_ref, cfg, device=str(device))
+        policy.load_state_dict(ckpt["policy_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        resumed_batch_idx = ckpt["batch_idx"]
+        resumed_episode_count = ckpt["episode_count"]
+        resumed_curriculum_stage = ckpt["curriculum_stage"]
+        resumed_stage_progress = ckpt["stage_progress"]
+        resumed_mastery_count = ckpt["mastery_count"]
+        print(f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}")
+        print(f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}")
+        wandb.config.update({"resumed_from": resume_ref}, allow_val_change=True)
+        # Add resume info to wandb notes
+        resume_note = f"\n**Resumed from:** `{resume_ref}`"
+        if run_notes:
+            run_notes += resume_note
+        else:
+            run_notes = resume_note
+        if wandb.run and not wandb.run.disabled:
+            wandb.run.notes = run_notes
+        print()
+
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
     if not args.smoketest:
@@ -1198,9 +1235,9 @@ def main():
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_stage = 1  # Start at stage 1 (angle variance)
-    stage_progress = 0.0  # Start with target in front
-    mastery_count = 0  # Count of consecutive batches at mastery level
+    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
+    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
+    mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
     print(
         f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
@@ -1228,11 +1265,12 @@ def main():
     # Rolling window for eval success rate (used for curriculum)
     eval_success_history = deque(maxlen=curr.window_size)
 
-    episode_count = 0
-    batch_idx = 0
+    episode_count = resumed_episode_count
+    batch_idx = resumed_batch_idx
     mastered = False
     max_batches = cfg.training.max_batches
-    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches)
+    batches_this_session = 0
+    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches, initial=batch_idx)
     while not mastered and (max_batches is None or batch_idx < max_batches):
         # Set curriculum stage for this batch
         env.set_curriculum_stage(curriculum_stage, stage_progress)
@@ -1383,6 +1421,9 @@ def main():
                 stage_progress = min(1.0, stage_progress + curr.advance_rate)
 
         # Check for stage mastery: progress=1.0 AND sustained high success rate
+        # Checkpoint saves are deferred until after batch_idx is incremented
+        # so the saved batch_idx represents "resume from here" correctly.
+        pending_save = None  # (trigger, aliases) or None
         mastery_rate = (
             rolling_eval_success_rate
             if curr.use_eval_for_curriculum
@@ -1393,8 +1434,11 @@ def main():
             if mastery_count >= cfg.training.mastery_batches:
                 if curriculum_stage >= curr.num_stages:
                     # Final stage mastered → training complete
+                    pending_save = ("final", [f"stage{curriculum_stage}-mastered"])
                     mastered = True
                 else:
+                    # Save before advancing to next stage
+                    pending_save = ("milestone", [f"stage{curriculum_stage}-mastered"])
                     # Advance to next stage
                     curriculum_stage += 1
                     stage_progress = 0.0
@@ -1495,9 +1539,30 @@ def main():
         )
         pbar.update(1)
         batch_idx += 1
+        batches_this_session += 1
+
+        # Save checkpoints (milestone/final take priority over periodic)
+        if pending_save:
+            trigger, aliases = pending_save
+            save_checkpoint(
+                policy, optimizer, cfg,
+                curriculum_stage, stage_progress, mastery_count,
+                batch_idx, episode_count,
+                trigger=trigger,
+                aliases=aliases,
+            )
+        elif (
+            cfg.training.checkpoint_every
+            and batch_idx % cfg.training.checkpoint_every == 0
+        ):
+            save_checkpoint(
+                policy, optimizer, cfg,
+                curriculum_stage, stage_progress, mastery_count,
+                batch_idx, episode_count,
+                trigger="periodic",
+            )
 
     pbar.close()
-    total_batches = batch_idx  # Store final count for timing summary
 
     # Print timing summary
     total_time = sum(timing.values())
@@ -1524,10 +1589,10 @@ def main():
     print(f"  Total:              {total_time:>8.2f}s")
     print()
     print(
-        f"  Per-batch average ({batch_size} episodes/batch, {total_batches} batches):"
+        f"  Per-batch average ({batch_size} episodes/batch, {batches_this_session} batches):"
     )
-    print(f"    Collection: {1000 * timing['collect'] / total_batches:.1f}ms")
-    print(f"    Training:   {1000 * timing['train'] / total_batches:.1f}ms")
+    print(f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms")
+    print(f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms")
     print()
 
     # Clean up
