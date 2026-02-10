@@ -12,10 +12,13 @@ import time
 from collections import deque
 from datetime import datetime
 
+import math
+
 import numpy as np
 import rerun as rr
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
 
@@ -148,6 +151,18 @@ Be concise and technical. Start directly with the summary, no preamble."""
         return None
 
 
+def _tanh_log_prob(gaussian_log_prob, pre_tanh_value):
+    """Correct Gaussian log-prob for tanh squashing.
+
+    For action = tanh(z) where z ~ Normal(mean, std):
+        log π(action) = log Normal(z; mean, std) - Σ log(1 - tanh(z)²)
+
+    Uses numerically stable formula: log(1 - tanh(z)²) = 2(log2 - z - softplus(-2z))
+    """
+    correction = 2 * (math.log(2) - pre_tanh_value - F.softplus(-2 * pre_tanh_value))
+    return gaussian_log_prob - correction.sum(dim=-1)
+
+
 class LSTMPolicy(nn.Module):
     """
     LSTM-based stochastic policy network with memory.
@@ -203,7 +218,7 @@ class LSTMPolicy(nn.Module):
             hidden: Optional LSTM hidden state tuple (h, c)
 
         Returns:
-            mean: (B, 2) or (B, T, 2) mean motor commands in range [-1, 1]
+            mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
             hidden: Updated hidden state
         """
@@ -240,11 +255,11 @@ class LSTMPolicy(nn.Module):
         # Store updated hidden state
         self.hidden = hidden
 
-        # Output layer
+        # Output layer (unbounded mean; tanh squashing applied at action sampling)
         if is_sequence:
-            mean = torch.tanh(self.fc(lstm_out))  # (B, T, 2)
+            mean = self.fc(lstm_out)  # (B, T, 2)
         else:
-            mean = torch.tanh(self.fc(lstm_out.squeeze(1)))  # (B, 2)
+            mean = self.fc(lstm_out.squeeze(1))  # (B, 2)
 
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
@@ -252,27 +267,29 @@ class LSTMPolicy(nn.Module):
 
     def sample_action(self, x):
         """
-        Sample an action from the policy distribution.
+        Sample an action using tanh-squashed Gaussian.
+
+        Samples z ~ Normal(mean, std), then action = tanh(z).
+        Log-prob includes the Jacobian correction for the tanh transform.
 
         Args:
             x: Input image (B, H, W, 3)
 
         Returns:
-            action: (B, 2) sampled actions, clamped to [-1, 1]
+            action: (B, 2) sampled actions in (-1, 1)
             log_prob: (B,) log probability of the sampled actions
         """
         mean, std = self.forward(x)
         dist = torch.distributions.Normal(mean, std)
-        action = dist.sample()
-        log_prob = dist.log_prob(action).sum(dim=-1)
-
-        # Clamp action to valid range
-        action = torch.clamp(action, -1.0, 1.0)
+        z = dist.sample()
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        action = torch.tanh(z)
+        log_prob = _tanh_log_prob(gaussian_log_prob, z)
         return action, log_prob
 
     def get_deterministic_action(self, x):
         """
-        Get deterministic action (mean of distribution, no sampling).
+        Get deterministic action (tanh of mean).
 
         Used for evaluation to measure true policy capability without
         exploration noise.
@@ -281,21 +298,21 @@ class LSTMPolicy(nn.Module):
             x: Input image (B, H, W, 3)
 
         Returns:
-            action: (B, 2) mean actions, clamped to [-1, 1]
+            action: (B, 2) mean actions in (-1, 1)
         """
         mean, _ = self.forward(x)
-        return torch.clamp(mean, -1.0, 1.0)
+        return torch.tanh(mean)
 
     def log_prob(self, x, action):
         """
-        Compute log probability of given actions for a sequence.
+        Compute log probability of given tanh-squashed actions for a sequence.
 
-        For REINFORCE training, we need to recompute log probs for the
-        entire episode. This resets hidden state and processes sequentially.
+        Recovers pre-tanh values via atanh, then computes Gaussian log-prob
+        with Jacobian correction.
 
         Args:
             x: Input images (T, H, W, 3) - full episode
-            action: (T, 2) actions to evaluate
+            action: (T, 2) tanh-squashed actions to evaluate
 
         Returns:
             log_prob: (T,) log probability of actions
@@ -310,8 +327,12 @@ class LSTMPolicy(nn.Module):
         mean, std = self.forward(x)  # mean: (1, T, 2)
         mean = mean.squeeze(0)  # (T, 2)
 
+        # Recover pre-tanh values
+        z = torch.atanh(action.clamp(-1 + 1e-6, 1 - 1e-6))
+
         dist = torch.distributions.Normal(mean, std)
-        return dist.log_prob(action).sum(dim=-1)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        return _tanh_log_prob(gaussian_log_prob, z)
 
 
 class TinyPolicy(nn.Module):
@@ -352,7 +373,7 @@ class TinyPolicy(nn.Module):
             x: Input image (B, H, W, 3) in range [0, 1]
 
         Returns:
-            mean: (B, 2) mean motor commands in range [-1, 1]
+            mean: (B, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
         # Permute to (B, 3, H, W) for PyTorch conv layers
@@ -365,9 +386,9 @@ class TinyPolicy(nn.Module):
         # Flatten
         x = x.reshape(x.size(0), -1)
 
-        # FC layers
+        # FC layers (unbounded mean; tanh squashing applied at action sampling)
         x = torch.relu(self.fc1(x))
-        mean = torch.tanh(self.fc2(x))  # Tanh to get [-1, 1] range
+        mean = self.fc2(x)
 
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
@@ -375,27 +396,29 @@ class TinyPolicy(nn.Module):
 
     def sample_action(self, x):
         """
-        Sample an action from the policy distribution.
+        Sample an action using tanh-squashed Gaussian.
+
+        Samples z ~ Normal(mean, std), then action = tanh(z).
+        Log-prob includes the Jacobian correction for the tanh transform.
 
         Args:
             x: Input image (B, H, W, 3)
 
         Returns:
-            action: (B, 2) sampled actions, clamped to [-1, 1]
+            action: (B, 2) sampled actions in (-1, 1)
             log_prob: (B,) log probability of the sampled actions
         """
         mean, std = self.forward(x)
         dist = torch.distributions.Normal(mean, std)
-        action = dist.sample()
-        log_prob = dist.log_prob(action).sum(dim=-1)  # Sum over action dimensions
-
-        # Clamp action to valid range
-        action = torch.clamp(action, -1.0, 1.0)
+        z = dist.sample()
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        action = torch.tanh(z)
+        log_prob = _tanh_log_prob(gaussian_log_prob, z)
         return action, log_prob
 
     def get_deterministic_action(self, x):
         """
-        Get deterministic action (mean of distribution, no sampling).
+        Get deterministic action (tanh of mean).
 
         Used for evaluation to measure true policy capability without
         exploration noise.
@@ -404,25 +427,30 @@ class TinyPolicy(nn.Module):
             x: Input image (B, H, W, 3)
 
         Returns:
-            action: (B, 2) mean actions, clamped to [-1, 1]
+            action: (B, 2) mean actions in (-1, 1)
         """
         mean, _ = self.forward(x)
-        return torch.clamp(mean, -1.0, 1.0)
+        return torch.tanh(mean)
 
     def log_prob(self, x, action):
         """
-        Compute log probability of given actions.
+        Compute log probability of given tanh-squashed actions.
+
+        Recovers pre-tanh values via atanh, then computes Gaussian log-prob
+        with Jacobian correction.
 
         Args:
             x: Input image (B, H, W, 3)
-            action: (B, 2) actions to evaluate
+            action: (B, 2) tanh-squashed actions to evaluate
 
         Returns:
             log_prob: (B,) log probability of actions
         """
         mean, std = self.forward(x)
+        z = torch.atanh(action.clamp(-1 + 1e-6, 1 - 1e-6))
         dist = torch.distributions.Normal(mean, std)
-        return dist.log_prob(action).sum(dim=-1)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        return _tanh_log_prob(gaussian_log_prob, z)
 
 
 def collect_episode(
