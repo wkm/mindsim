@@ -25,12 +25,13 @@ class RerunWandbLogger:
     Logs paths to wandb for cross-referencing.
     """
 
-    def __init__(self, recordings_dir: str = "recordings"):
+    def __init__(self, recordings_dir: str = "recordings", live: bool = True):
         """
         Initialize the logger.
 
         Args:
             recordings_dir: Base directory for storing .rrd files
+            live: If True, spawn Rerun viewer and stream data live
         """
         if wandb.run is None:
             raise RuntimeError(
@@ -42,10 +43,12 @@ class RerunWandbLogger:
         self.run_name = wandb.run.name
         self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
         os.makedirs(self.run_dir, exist_ok=True)
+        self.live = live
 
         self.current_episode = None
         self.rrd_path = None
         self.is_recording = False
+        self._spawned = False
 
     def start_episode(self, episode: int, env, namespace: str = "eval"):
         """
@@ -64,7 +67,16 @@ class RerunWandbLogger:
 
         # Initialize Rerun with unique recording ID
         rr.init("mindsim-training", recording_id=f"{self.run_id}-ep{episode}")
+        rr.send_recording_name(f"ep{episode} {self.run_name}")
         rr.save(self.rrd_path)
+
+        # Stream to live viewer (spawn on first episode, reconnect on subsequent)
+        if self.live:
+            if not self._spawned:
+                rr.spawn(connect=True)
+                self._spawned = True
+            else:
+                rr.connect_grpc()
 
         # Embed blueprint into recording
         rr.send_blueprint(create_training_blueprint())
