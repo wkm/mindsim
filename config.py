@@ -17,7 +17,7 @@ class EnvConfig:
 
     render_width: int = 64
     render_height: int = 64
-    max_episode_steps: int = 100  # 10 seconds at 10 Hz
+    max_episode_steps: int = 200  # 20 seconds at 10 Hz
     control_frequency_hz: int = 10
     mujoco_steps_per_action: int = 5
 
