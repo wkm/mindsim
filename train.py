@@ -193,6 +193,7 @@ class LSTMPolicy(nn.Module):
 
         # Output layers
         self.fc = nn.Linear(hidden_size, 2)  # Output: mean of [left_motor, right_motor]
+        self.value_fc = nn.Linear(hidden_size, 1)  # Value head for PPO
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
@@ -209,6 +210,46 @@ class LSTMPolicy(nn.Module):
             torch.zeros(1, batch_size, self.hidden_size, device=device),
         )
 
+    def _backbone(self, x, hidden=None):
+        """
+        Shared CNN+LSTM backbone.
+
+        Args:
+            x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
+            hidden: Optional LSTM hidden state tuple (h, c)
+
+        Returns:
+            features: (B, 2) or (B, T, hidden_size) LSTM output features
+            hidden: Updated hidden state
+            is_sequence: Whether the input was a sequence
+        """
+        is_sequence = x.dim() == 5
+        if is_sequence:
+            B, T, H, W, C = x.shape
+            x = x.reshape(B * T, H, W, C)
+        else:
+            B = x.size(0)
+            T = 1
+
+        x = x.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.reshape(x.size(0), -1)
+        x = x.reshape(B, T, -1)
+
+        if hidden is None:
+            hidden = self.hidden
+
+        lstm_out, hidden = self.lstm(x, hidden)
+        self.hidden = hidden
+
+        if is_sequence:
+            features = lstm_out  # (B, T, hidden_size)
+        else:
+            features = lstm_out.squeeze(1)  # (B, hidden_size)
+
+        return features, hidden, is_sequence
+
     def forward(self, x, hidden=None):
         """
         Forward pass - returns action distribution parameters.
@@ -220,50 +261,54 @@ class LSTMPolicy(nn.Module):
         Returns:
             mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
-            hidden: Updated hidden state
         """
-        # Handle both single timestep and sequence inputs
-        is_sequence = x.dim() == 5
-        if is_sequence:
-            B, T, H, W, C = x.shape
-            # Reshape to process all frames through CNN
-            x = x.reshape(B * T, H, W, C)
-        else:
-            B = x.size(0)
-            T = 1
-
-        # Permute to (B*T, 3, H, W) for PyTorch conv layers
-        x = x.permute(0, 3, 1, 2)
-
-        # CNN feature extraction
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-
-        # Flatten CNN output
-        x = x.reshape(x.size(0), -1)  # (B*T, 576)
-
-        # Reshape for LSTM: (B, T, features)
-        x = x.reshape(B, T, -1)
-
-        # Use stored hidden if none provided
-        if hidden is None:
-            hidden = self.hidden
-
-        # LSTM forward pass
-        lstm_out, hidden = self.lstm(x, hidden)  # lstm_out: (B, T, hidden_size)
-
-        # Store updated hidden state
-        self.hidden = hidden
-
-        # Output layer (unbounded mean; tanh squashing applied at action sampling)
-        if is_sequence:
-            mean = self.fc(lstm_out)  # (B, T, 2)
-        else:
-            mean = self.fc(lstm_out.squeeze(1))  # (B, 2)
-
+        features, hidden, is_sequence = self._backbone(x, hidden)
+        mean = self.fc(features)
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
+
+    def evaluate_actions(self, observations, actions):
+        """
+        Single forward pass returning everything PPO needs.
+
+        Processes full episode sequence with fresh hidden state.
+
+        Args:
+            observations: (T, H, W, 3) episode observations
+            actions: (T, 2) tanh-squashed actions
+
+        Returns:
+            log_probs: (T,) log probability of actions
+            values: (T,) state value estimates
+            entropy: scalar mean entropy
+        """
+        device = observations.device
+        self.reset_hidden(batch_size=1, device=device)
+
+        # Process entire sequence: (1, T, H, W, 3)
+        x = observations.unsqueeze(0)
+        features, _, _ = self._backbone(x)  # (1, T, hidden_size)
+        features = features.squeeze(0)  # (T, hidden_size)
+
+        # Action head
+        mean = self.fc(features)  # (T, 2)
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
+
+        # Value head
+        values = self.value_fc(features).squeeze(-1)  # (T,)
+
+        # Log prob with tanh correction
+        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
+        dist = torch.distributions.Normal(mean, std)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        log_probs = _tanh_log_prob(gaussian_log_prob, z)
+
+        # Entropy
+        entropy = dist.entropy().sum(dim=-1).mean()
+
+        return log_probs, values, entropy
 
     def sample_action(self, x):
         """
@@ -359,11 +404,28 @@ class TinyPolicy(nn.Module):
         # FC layers
         self.fc1 = nn.Linear(conv_out_size, 128)
         self.fc2 = nn.Linear(128, 2)  # Output: mean of [left_motor, right_motor]
+        self.value_fc = nn.Linear(128, 1)  # Value head for PPO
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
+
+    def _backbone(self, x):
+        """
+        Shared CNN+FC backbone.
+
+        Args:
+            x: Input image (B, H, W, 3) in range [0, 1]
+
+        Returns:
+            features: (B, 128) features after fc1+relu
+        """
+        x = x.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.reshape(x.size(0), -1)
+        return torch.relu(self.fc1(x))
 
     def forward(self, x):
         """
@@ -376,23 +438,45 @@ class TinyPolicy(nn.Module):
             mean: (B, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
-        # Permute to (B, 3, H, W) for PyTorch conv layers
-        x = x.permute(0, 3, 1, 2)
-
-        # Conv layers with ReLU
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-
-        # Flatten
-        x = x.reshape(x.size(0), -1)
-
-        # FC layers (unbounded mean; tanh squashing applied at action sampling)
-        x = torch.relu(self.fc1(x))
-        mean = self.fc2(x)
-
+        features = self._backbone(x)
+        mean = self.fc2(features)
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
+
+    def evaluate_actions(self, observations, actions):
+        """
+        Single forward pass returning everything PPO needs.
+
+        Args:
+            observations: (B, H, W, 3) observations
+            actions: (B, 2) tanh-squashed actions
+
+        Returns:
+            log_probs: (B,) log probability of actions
+            values: (B,) state value estimates
+            entropy: scalar mean entropy
+        """
+        features = self._backbone(observations)
+
+        # Action head
+        mean = self.fc2(features)
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
+
+        # Value head
+        values = self.value_fc(features).squeeze(-1)
+
+        # Log prob with tanh correction
+        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
+        dist = torch.distributions.Normal(mean, std)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        log_probs = _tanh_log_prob(gaussian_log_prob, z)
+
+        # Entropy
+        entropy = dist.entropy().sum(dim=-1).mean()
+
+        return log_probs, values, entropy
 
     def sample_action(self, x):
         """
@@ -586,6 +670,8 @@ def collect_episode(
         "steps": steps,
         "final_distance": info["distance"],
         "success": success,
+        "done": done,
+        "truncated": truncated,
         # Action statistics for logging
         "left_motor_mean": float(np.mean(left_actions)),
         "left_motor_std": float(np.std(left_actions)),
@@ -596,6 +682,10 @@ def collect_episode(
         "right_motor_min": float(np.min(right_actions)),
         "right_motor_max": float(np.max(right_actions)),
     }
+
+    # Store final observation for GAE bootstrapping on truncated episodes
+    if truncated and not done:
+        result["final_observation"] = obs
 
     # Only include log_probs for training episodes
     if not deterministic:
@@ -621,6 +711,34 @@ def compute_reward_to_go(rewards, gamma=0.99):
         running_sum = rewards[t] + gamma * running_sum
         reward_to_go[t] = running_sum
     return reward_to_go
+
+
+def compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0):
+    """
+    Compute Generalized Advantage Estimation (GAE).
+
+    Args:
+        rewards: Tensor of per-step rewards (T,)
+        values: Tensor of per-step value estimates (T,)
+        gamma: Discount factor
+        gae_lambda: GAE lambda parameter
+        next_value: Bootstrap value for the state after the last step
+                    (0 for terminated episodes, V(s_final) for truncated)
+
+    Returns:
+        advantages: Tensor of GAE advantages (T,)
+        returns: Tensor of GAE returns / value targets (T,)
+    """
+    T = len(rewards)
+    advantages = torch.zeros(T, dtype=rewards.dtype, device=rewards.device)
+    gae = 0.0
+    for t in reversed(range(T)):
+        next_val = next_value if t == T - 1 else values[t + 1]
+        delta = rewards[t] + gamma * next_val - values[t]
+        gae = delta + gamma * gae_lambda * gae
+        advantages[t] = gae
+    returns = advantages + values
+    return advantages, returns
 
 
 def train_step_batched(
@@ -712,6 +830,182 @@ def train_step_batched(
     return avg_loss, total_grad_norm, policy_std, entropy_val
 
 
+def train_step_ppo(
+    policy,
+    optimizer,
+    episode_batch,
+    gamma=0.99,
+    gae_lambda=0.95,
+    clip_epsilon=0.2,
+    ppo_epochs=4,
+    entropy_coeff=0.01,
+    value_coeff=0.5,
+    max_grad_norm=0.5,
+):
+    """
+    PPO training step on a batch of episodes.
+
+    Phase 1: Compute GAE advantages (once, before epochs).
+    Phase 2: K optimization epochs over the data with clipped surrogate objective.
+
+    Args:
+        policy: Stochastic neural network policy with evaluate_actions()
+        optimizer: PyTorch optimizer
+        episode_batch: List of episode_data dicts from collect_episode
+        gamma: Discount factor
+        gae_lambda: GAE lambda parameter
+        clip_epsilon: PPO clip range
+        ppo_epochs: Number of optimization passes over the data
+        entropy_coeff: Entropy bonus coefficient
+        value_coeff: Value loss coefficient
+        max_grad_norm: Max gradient norm for clipping
+
+    Returns:
+        policy_loss: Average policy loss across epochs
+        value_loss: Average value loss across epochs
+        entropy: Average entropy across epochs
+        grad_norm: Average gradient norm across epochs
+        policy_std: Current policy standard deviation
+        clip_fraction: Fraction of clipped ratios (last epoch)
+        approx_kl: Approximate KL divergence (last epoch)
+    """
+    device = next(policy.parameters()).device
+
+    # Phase 1: Compute advantages with current policy (no grad)
+    episode_data_tensors = []
+    all_advantages = []
+    all_returns = []
+
+    with torch.no_grad():
+        for ep in episode_batch:
+            obs = torch.from_numpy(np.array(ep["observations"])).to(device)
+            acts = torch.from_numpy(np.array(ep["actions"])).to(device)
+            rewards = torch.tensor(ep["rewards"], dtype=torch.float32, device=device)
+            old_log_probs = torch.tensor(
+                ep["log_probs"], dtype=torch.float32, device=device
+            )
+
+            _, values, _ = policy.evaluate_actions(obs, acts)
+
+            # Bootstrap value for truncated episodes
+            next_value = 0.0
+            if ep.get("truncated") and not ep.get("done") and "final_observation" in ep:
+                final_obs = torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)  # (1, H, W, 3)
+                dummy_act = torch.zeros(1, 2, device=device)  # (1, 2)
+                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act)
+                next_value = final_val[0].item()
+
+            advantages, returns = compute_gae(
+                rewards, values, gamma, gae_lambda, next_value
+            )
+
+            episode_data_tensors.append({
+                "observations": obs,
+                "actions": acts,
+                "old_log_probs": old_log_probs,
+                "advantages": advantages,
+                "returns": returns,
+            })
+
+            all_advantages.append(advantages)
+            all_returns.append(returns)
+
+    # Normalize advantages across the entire batch
+    all_adv_cat = torch.cat(all_advantages)
+    adv_mean = all_adv_cat.mean()
+    adv_std = all_adv_cat.std()
+    if adv_std > 1e-8:
+        for ep_tensors in episode_data_tensors:
+            ep_tensors["advantages"] = (ep_tensors["advantages"] - adv_mean) / (adv_std + 1e-8)
+
+    # Phase 2: PPO epochs
+    total_policy_loss = 0.0
+    total_value_loss = 0.0
+    total_entropy = 0.0
+    total_grad_norm = 0.0
+    last_clip_fraction = 0.0
+    last_approx_kl = 0.0
+
+    for epoch in range(ppo_epochs):
+        optimizer.zero_grad()
+
+        epoch_policy_loss = 0.0
+        epoch_value_loss = 0.0
+        epoch_entropy = 0.0
+        epoch_clip_count = 0
+        epoch_total_steps = 0
+        epoch_kl_sum = 0.0
+
+        total_steps = sum(len(ep["observations"]) for ep in episode_data_tensors)
+
+        # Process episodes sequentially (LSTM hidden state requirement)
+        for ep_tensors in episode_data_tensors:
+            obs = ep_tensors["observations"]
+            acts = ep_tensors["actions"]
+            old_lp = ep_tensors["old_log_probs"]
+            adv = ep_tensors["advantages"]
+            ret = ep_tensors["returns"]
+            T = len(obs)
+
+            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts)
+
+            # PPO clipped surrogate
+            ratio = torch.exp(new_log_probs - old_lp)
+            surr1 = ratio * adv
+            surr2 = torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * adv
+            policy_loss = -torch.min(surr1, surr2).sum() / total_steps
+
+            # Value loss
+            value_loss = F.mse_loss(values, ret, reduction="sum") / total_steps
+
+            # Combined loss
+            loss = policy_loss + value_coeff * value_loss - entropy_coeff * entropy
+            loss.backward()
+
+            # Track metrics
+            epoch_policy_loss += policy_loss.item() * T
+            epoch_value_loss += value_loss.item() * T
+            epoch_entropy += entropy.item() * T
+
+            with torch.no_grad():
+                clipped = ((ratio - 1.0).abs() > clip_epsilon).float().sum().item()
+                epoch_clip_count += clipped
+                epoch_total_steps += T
+                epoch_kl_sum += (old_lp - new_log_probs).mean().item() * T
+
+        grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=max_grad_norm)
+        optimizer.step()
+
+        total_policy_loss += epoch_policy_loss / epoch_total_steps
+        total_value_loss += epoch_value_loss / epoch_total_steps
+        total_entropy += epoch_entropy / epoch_total_steps
+        total_grad_norm += grad_norm.item()
+
+        if epoch == ppo_epochs - 1:
+            last_clip_fraction = epoch_clip_count / max(epoch_total_steps, 1)
+            last_approx_kl = epoch_kl_sum / max(epoch_total_steps, 1)
+
+    # Average across epochs
+    avg_policy_loss = total_policy_loss / ppo_epochs
+    avg_value_loss = total_value_loss / ppo_epochs
+    avg_entropy = total_entropy / ppo_epochs
+    avg_grad_norm = total_grad_norm / ppo_epochs
+
+    # Get current policy std for logging
+    clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+    policy_std = torch.exp(clamped).detach().cpu().numpy()
+
+    return (
+        avg_policy_loss,
+        avg_value_loss,
+        avg_entropy,
+        avg_grad_norm,
+        policy_std,
+        last_clip_fraction,
+        last_approx_kl,
+    )
+
+
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Train 2-wheeler robot")
@@ -741,7 +1035,7 @@ def main():
         cfg = Config()
 
     print("=" * 60)
-    print("Training 2-Wheeler Robot with Tiny Neural Network")
+    print(f"Training 2-Wheeler Robot ({cfg.training.algorithm})")
     print("=" * 60)
     print()
 
@@ -938,12 +1232,34 @@ def main():
 
         # Train on batch of episodes
         t_train_start = time.perf_counter()
-        loss, grad_norm, policy_std, entropy = train_step_batched(
-            policy,
-            optimizer,
-            episode_batch,
-            entropy_coeff=cfg.training.entropy_coeff,
-        )
+        if cfg.training.algorithm == "PPO":
+            (
+                policy_loss,
+                value_loss,
+                entropy,
+                grad_norm,
+                policy_std,
+                clip_fraction,
+                approx_kl,
+            ) = train_step_ppo(
+                policy,
+                optimizer,
+                episode_batch,
+                gamma=cfg.training.gamma,
+                gae_lambda=cfg.training.gae_lambda,
+                clip_epsilon=cfg.training.clip_epsilon,
+                ppo_epochs=cfg.training.ppo_epochs,
+                entropy_coeff=cfg.training.entropy_coeff,
+                value_coeff=cfg.training.value_coeff,
+            )
+            loss = policy_loss  # For backward-compatible logging
+        else:
+            loss, grad_norm, policy_std, entropy = train_step_batched(
+                policy,
+                optimizer,
+                episode_batch,
+                entropy_coeff=cfg.training.entropy_coeff,
+            )
         timing["train"] += time.perf_counter() - t_train_start
 
         # Aggregate batch statistics
@@ -1078,6 +1394,15 @@ def main():
             # Reward histogram across batch
             "batch/reward_hist": wandb.Histogram(batch_rewards, num_bins=20),
         }
+
+        # PPO-specific metrics
+        if cfg.training.algorithm == "PPO":
+            log_dict.update({
+                "training/policy_loss": policy_loss,
+                "training/value_loss": value_loss,
+                "training/clip_fraction": clip_fraction,
+                "training/approx_kl": approx_kl,
+            })
 
         t_log_start = time.perf_counter()
         wandb.log(log_dict)
