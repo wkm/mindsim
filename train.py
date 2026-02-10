@@ -681,8 +681,18 @@ def train_step_batched(
         loss.backward()
         total_loss += loss.item()
 
+    avg_loss = total_loss / len(episode_batch)
+
+    # Clip REINFORCE gradients before adding entropy bonus.
+    # This prevents large REINFORCE gradients from drowning out the
+    # entropy signal — without this, clip_grad_norm_ scales everything
+    # together and the small entropy gradient on log_std gets zeroed out.
+    total_grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=0.5)
+    total_grad_norm = total_grad_norm.item()
+
     # Entropy bonus: H(π) = 0.5 * (1 + log(2π)) + log_std per action dim
-    # Maximizing entropy prevents std from collapsing and keeps exploration alive
+    # Applied AFTER clipping so the entropy gradient reaches log_std at
+    # full strength every step, preventing std collapse.
     if entropy_coeff > 0:
         clamped_log_std = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
         std = torch.exp(clamped_log_std)
@@ -692,12 +702,6 @@ def train_step_batched(
         entropy_val = entropy.item()
     else:
         entropy_val = 0.0
-
-    avg_loss = total_loss / len(episode_batch)
-
-    # Clip gradients and record norm
-    total_grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=0.5)
-    total_grad_norm = total_grad_norm.item()
 
     optimizer.step()
 
