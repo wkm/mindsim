@@ -1530,8 +1530,8 @@ def main():
                     # Clear success histories so new stage starts fresh
                     success_history.clear()
                     eval_success_history.clear()
-                    print(
-                        f"\n  >>> Advanced to stage {curriculum_stage}/{curr.num_stages} <<<"
+                    dashboard.message(
+                        f"  >>> Advanced to stage {curriculum_stage}/{curr.num_stages} <<<"
                     )
         else:
             mastery_count = 0  # Reset if we drop below mastery level
