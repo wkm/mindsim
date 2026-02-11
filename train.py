@@ -29,6 +29,7 @@ from config import Config
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from training_env import TrainingEnv
+from tweaks import apply_tweaks, load_tweaks
 
 
 def set_terminal_title(title):
@@ -679,6 +680,7 @@ def collect_episode(
         "success": success,
         "done": done,
         "truncated": truncated,
+        "patience_truncated": info.get("patience_truncated", False),
         # Action statistics for logging
         "left_motor_mean": float(np.mean(left_actions)),
         "left_motor_std": float(np.std(left_actions)),
@@ -1279,7 +1281,17 @@ def main():
     pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches, initial=batch_idx)
     while not mastered and (max_batches is None or batch_idx < max_batches):
         # Set curriculum stage for this batch
-        env.set_curriculum_stage(curriculum_stage, stage_progress)
+        env.set_curriculum_stage(curriculum_stage, stage_progress, curr.num_stages)
+
+        # Check for live hyperparameter tweaks
+        tweaks = load_tweaks()
+        if tweaks:
+            changes = apply_tweaks(cfg, optimizer, env, tweaks)
+            batch_size = cfg.training.batch_size
+            for name, old, new in changes:
+                tqdm.write(f"  tweak: {name} {old} -> {new}")
+            if changes:
+                wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -1299,7 +1311,8 @@ def main():
         t_collect_start = time.perf_counter()
         if collector is not None:
             episode_batch = collector.collect_batch(
-                policy, batch_size, curriculum_stage, stage_progress
+                policy, batch_size, curriculum_stage, stage_progress,
+                num_stages=curr.num_stages,
             )
         else:
             episode_batch = []
@@ -1473,6 +1486,7 @@ def main():
             "curriculum/stage": curriculum_stage,
             "curriculum/stage_progress": stage_progress,
             "curriculum/overall_progress": overall_progress,
+            "curriculum/max_episode_steps": env.max_episode_steps,
             # Training success rate (stochastic, with exploration noise)
             "curriculum/train_batch_success_rate": batch_success_rate,
             "curriculum/train_rolling_success_rate": rolling_success_rate,
@@ -1514,6 +1528,9 @@ def main():
         log_dict.update({
             "batch/truncated_fraction": np.mean(batch_truncated),
             "batch/done_fraction": np.mean(batch_done),
+            "batch/patience_truncated_fraction": np.mean([
+                ep.get("patience_truncated", False) for ep in episode_batch
+            ]),
         })
 
         # PPO-specific metrics
