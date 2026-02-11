@@ -1285,8 +1285,8 @@ def main():
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
-    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
+    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 3
+    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 1.0
     mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
     print(
