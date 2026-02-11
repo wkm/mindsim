@@ -353,7 +353,7 @@ def run_simulation(env, camera_entity_path, phases, episode_index=0):
                     )
 
                 # Log camera image at the camera entity
-                rr.log(camera_entity_path, rr.Image(camera_img))
+                rr.log(camera_entity_path, rr.Image(camera_img).compress(jpeg_quality=85))
 
                 # Log current phase
                 rr.log("info/phase", rr.TextLog(phase_name))
