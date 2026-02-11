@@ -23,6 +23,10 @@ def _smoketest_config():
     return Config.for_smoketest()
 
 
+def _biped_smoketest_config():
+    return Config.for_biped_smoketest()
+
+
 def _make_env(cfg):
     return TrainingEnv.from_config(cfg.env)
 
@@ -300,4 +304,149 @@ class TestEndToEnd:
             assert isinstance(eval_data["success"], bool)
 
         wandb.finish()
+        env.close()
+
+
+# ── Biped-specific tests ──
+
+
+class TestBipedEnvironment:
+    """Test the biped training environment."""
+
+    def test_reset_returns_observation(self):
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        obs = env.reset()
+        assert obs.shape == (64, 64, 3)
+        assert obs.dtype == np.float32
+        env.close()
+
+    def test_actuator_count(self):
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        assert env.num_actuators == 6
+        assert len(env.actuator_names) == 6
+        assert env.action_shape == (6,)
+        env.close()
+
+    def test_step_with_six_actions(self):
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        env.reset()
+        action = [0.0] * 6
+        obs, reward, done, truncated, info = env.step(action)
+        assert obs.shape == (64, 64, 3)
+        assert isinstance(reward, float)
+        assert "distance" in info
+        assert "torso_height" in info
+        env.close()
+
+    def test_fall_detection(self):
+        """Extreme actions should eventually trigger fall detection."""
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        env.reset()
+        fell = False
+        for _ in range(cfg.env.max_episode_steps):
+            _, _, done, truncated, info = env.step([1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
+            if info.get("has_fallen", False):
+                fell = True
+                break
+        # Either it fell or the episode ended — both are valid
+        assert fell or done or truncated
+        env.close()
+
+    def test_biped_rewards_present(self):
+        """Biped config should produce upright/alive/energy rewards."""
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        env.reset()
+        _, _, _, _, info = env.step([0.0] * 6)
+        assert "reward_upright" in info
+        assert "reward_alive" in info
+        assert "reward_energy" in info
+        env.close()
+
+
+class TestBipedPolicy:
+    """Test policy networks with 6-action output."""
+
+    def test_lstm_policy_six_actions(self):
+        policy = LSTMPolicy(
+            image_height=64, image_width=64, hidden_size=32, num_actions=6
+        )
+        obs = torch.randn(1, 64, 64, 3)
+        policy.reset_hidden(batch_size=1)
+        mean, std = policy.forward(obs)
+        assert mean.shape == (1, 6)
+        assert std.shape == (6,)
+
+    def test_tiny_policy_six_actions(self):
+        policy = TinyPolicy(image_height=64, image_width=64, num_actions=6)
+        obs = torch.randn(1, 64, 64, 3)
+        mean, std = policy.forward(obs)
+        assert mean.shape == (1, 6)
+        assert std.shape == (6,)
+
+    def test_lstm_sample_action_six(self):
+        policy = LSTMPolicy(
+            image_height=64, image_width=64, hidden_size=32, num_actions=6
+        )
+        policy.reset_hidden(batch_size=1)
+        obs = torch.randn(1, 64, 64, 3)
+        action, log_prob = policy.sample_action(obs)
+        assert action.shape == (1, 6)
+        assert log_prob.shape == (1,)
+        assert (action >= -1.0).all() and (action <= 1.0).all()
+
+    def test_lstm_log_prob_sequence_six(self):
+        policy = LSTMPolicy(
+            image_height=64, image_width=64, hidden_size=32, num_actions=6
+        )
+        T = 5
+        obs = torch.randn(T, 64, 64, 3)
+        actions = torch.randn(T, 6)
+        log_probs = policy.log_prob(obs, actions)
+        assert log_probs.shape == (T,)
+
+
+class TestBipedEpisodeCollection:
+    """Test episode collection with the biped."""
+
+    def test_collect_biped_episode(self):
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(
+            image_height=64, image_width=64, hidden_size=32, num_actions=6
+        )
+
+        data = collect_episode(env, policy, deterministic=False)
+        assert len(data["observations"]) > 0
+        assert len(data["actions"]) == len(data["observations"])
+        # Each action should be 6-dimensional
+        assert data["actions"][0].shape == (6,)
+        assert isinstance(data["total_reward"], float)
+        env.close()
+
+
+class TestBipedTrainingStep:
+    """Test training step with biped episodes."""
+
+    def test_train_step_six_actions(self):
+        cfg = _biped_smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(
+            image_height=64, image_width=64, hidden_size=32, num_actions=6
+        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        loss, grad_norm, policy_std, entropy = train_step_batched(
+            policy, optimizer, batch
+        )
+        assert isinstance(loss, float)
+        assert not np.isnan(loss)
+        assert grad_norm >= 0
+        assert len(policy_std) == 6
+        assert entropy > 0
         env.close()

@@ -83,6 +83,7 @@ class ParallelCollector:
         policy_kwargs = {
             "image_height": policy_config.image_height,
             "image_width": policy_config.image_width,
+            "num_actions": policy_config.fc_output_size,
             "init_std": policy_config.init_std,
             "min_log_std": policy_config.min_log_std,
             "max_log_std": policy_config.max_log_std,

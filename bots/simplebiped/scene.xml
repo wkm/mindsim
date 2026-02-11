@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<mujoco model="Simple2Wheel_scene">
-  <option timestep="0.02" />
+<mujoco model="SimpleBiped_scene">
+  <option timestep="0.005" />
   <include file="bot.xml" />
   <statistic extent="5" center="0 0 0" />
   <visual>
@@ -16,7 +16,7 @@
   <worldbody>
     <light directional="true" diffuse=".8 .8 .8" pos="0 0 10" dir="0 0 -1" />
     <geom name="floor" type="plane" size="5 5 0.1" material="groundplane" />
-    <!-- Arena curbs at ±4m (short lips to contain the robot) -->
+    <!-- Arena curbs at +/-4m (short lips to contain the robot) -->
     <geom name="curb_north" type="box" size="4.05 0.05 0.03" pos="0 4 0.03" rgba="0.35 0.35 0.35 1.0" />
     <geom name="curb_south" type="box" size="4.05 0.05 0.03" pos="0 -4 0.03" rgba="0.35 0.35 0.35 1.0" />
     <geom name="curb_east" type="box" size="0.05 4.05 0.03" pos="4 0 0.03" rgba="0.35 0.35 0.35 1.0" />
