@@ -168,24 +168,27 @@ class LSTMPolicy(nn.Module):
     """
     LSTM-based stochastic policy network with memory.
 
-    Input: RGB image (64x64x3)
+    Input: RGB image (HxWx3)
     Output: Mean of Gaussian distribution over motor commands [left, right]
 
     Uses CNN to extract features, then LSTM to maintain temporal context.
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=64, image_width=64, hidden_size=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, hidden_size=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         self.hidden_size = hidden_size
 
         # CNN feature extractor (same as TinyPolicy)
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
 
-        # Flattened CNN output size
-        conv_out_size = 64 * 6 * 6  # 2304
+        # Compute flattened CNN output size from input dimensions
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, image_height, image_width)
+            dummy = self.conv2(self.conv1(dummy))
+            conv_out_size = dummy.numel()
 
         # LSTM for temporal memory
         self.lstm = nn.LSTM(
@@ -385,22 +388,25 @@ class TinyPolicy(nn.Module):
     """
     Stochastic policy network for REINFORCE.
 
-    Input: RGB image (64x64x3)
+    Input: RGB image (HxWx3)
     Output: Mean of Gaussian distribution over motor commands [left, right]
 
     The policy is stochastic: actions are sampled from N(mean, std).
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=64, image_width=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         # CNN: 2 conv layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
 
-        # Calculate flattened size
-        conv_out_size = 64 * 6 * 6  # 2304
+        # Compute flattened CNN output size from input dimensions
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, image_height, image_width)
+            dummy = self.conv2(self.conv1(dummy))
+            conv_out_size = dummy.numel()
 
         # FC layers
         self.fc1 = nn.Linear(conv_out_size, 128)
