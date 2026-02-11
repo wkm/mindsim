@@ -42,7 +42,7 @@ class EnvConfig:
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
     # Distance-patience early truncation
-    patience_window: int = 30  # Steps to look back (3 sec at 10Hz, 0=disabled)
+    patience_window: int = 0  # Steps to look back (3 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
     # Reward shaping
