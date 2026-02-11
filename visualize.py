@@ -125,7 +125,60 @@ def log_mujoco_scene(env):
                     )
                     mesh_count += 1
 
-                # Handle non-mesh geometries (boxes, spheres, etc.)
+                # Handle capsule geometries (limbs)
+                elif geom_type == mujoco.mjtGeom.mjGEOM_CAPSULE:
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    radius = model.geom_size[geom_id][0]
+                    half_length = model.geom_size[geom_id][1]
+                    rgba = model.geom_rgba[geom_id]
+                    geom_pos = model.geom_pos[geom_id]
+                    geom_quat = model.geom_quat[geom_id]
+
+                    entity_path = f"world/{body_name}/{geom_name or 'geom'}"
+
+                    # Log geom transform
+                    rr.log(
+                        entity_path,
+                        rr.Transform3D(
+                            translation=geom_pos,
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
+                        ),
+                        static=True,
+                    )
+
+                    # Capsules3D places one end at origin along +Z by default.
+                    # MuJoCo capsules are centered at geom_pos, so shift down
+                    # by half the total length to center it.
+                    cylinder_length = 2.0 * half_length
+                    rr.log(
+                        f"{entity_path}/capsule",
+                        rr.Capsules3D(
+                            lengths=[cylinder_length],
+                            radii=[radius],
+                            translations=[[0, 0, -cylinder_length / 2.0]],
+                            colors=[
+                                [
+                                    int(rgba[0] * 255),
+                                    int(rgba[1] * 255),
+                                    int(rgba[2] * 255),
+                                    int(rgba[3] * 255),
+                                ]
+                            ],
+                        ),
+                        static=True,
+                    )
+                    geom_count += 1
+
+                # Handle box geometries
                 elif geom_type == mujoco.mjtGeom.mjGEOM_BOX:
                     geom_name = mujoco.mj_id2name(
                         model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
