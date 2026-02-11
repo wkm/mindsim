@@ -17,7 +17,8 @@ class EnvConfig:
 
     render_width: int = 128
     render_height: int = 128
-    max_episode_steps: int = 200  # 20 seconds at 10 Hz
+    max_episode_steps: int = 200  # 20 seconds at 10 Hz (stage 1 baseline)
+    max_episode_steps_final: int = 500  # 50 seconds at 10 Hz (at full curriculum)
     control_frequency_hz: int = 10
     mujoco_steps_per_action: int = 5
 
@@ -39,6 +40,10 @@ class EnvConfig:
     max_distractors: int = 4  # Max distractor cubes at stage 3 progress=1
     distractor_min_distance: float = 0.5  # Min spawn distance from origin
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
+
+    # Distance-patience early truncation
+    patience_window: int = 30  # Steps to look back (3 sec at 10Hz, 0=disabled)
+    patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
     # Reward shaping
     distance_reward_scale: float = 20.0
