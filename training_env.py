@@ -10,6 +10,7 @@ Wraps SimpleWheelerEnv with:
 
 from __future__ import annotations
 
+from collections import deque
 from typing import TYPE_CHECKING
 
 import mujoco
@@ -40,6 +41,7 @@ class TrainingEnv:
             render_width=config.render_width,
             render_height=config.render_height,
             max_episode_steps=config.max_episode_steps,
+            max_episode_steps_final=config.max_episode_steps_final,
             mujoco_steps_per_action=config.mujoco_steps_per_action,
             success_distance=config.success_distance,
             failure_distance=config.failure_distance,
@@ -60,6 +62,8 @@ class TrainingEnv:
             energy_penalty_scale=config.energy_penalty_scale,
             fall_height_threshold=config.fall_height_threshold,
             fall_tilt_threshold=config.fall_tilt_threshold,
+            patience_window=config.patience_window,
+            patience_min_delta=config.patience_min_delta,
         )
 
     def __init__(
@@ -68,6 +72,7 @@ class TrainingEnv:
         render_width=64,
         render_height=64,
         max_episode_steps=100,  # 10 seconds at 10 Hz
+        max_episode_steps_final=None,  # Scheduled max at full curriculum (None = no scheduling)
         mujoco_steps_per_action=5,  # 10 Hz control (50 Hz sim / 5 = 10 Hz)
         success_distance=0.3,  # Success if within 0.3m of target
         failure_distance=5.0,  # Failure if beyond 5m from target
@@ -91,12 +96,17 @@ class TrainingEnv:
         energy_penalty_scale=0.0,
         fall_height_threshold=0.0,  # 0 = disabled; 0.3 for biped
         fall_tilt_threshold=0.7,    # cos(tilt) below this = fallen
+        # Distance-patience early truncation
+        patience_window=30,
+        patience_min_delta=0.0,
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
             render_width=render_width,
             render_height=render_height,
         )
+        self.base_episode_steps = max_episode_steps
+        self.max_episode_steps_final = max_episode_steps_final or max_episode_steps
         self.max_episode_steps = max_episode_steps
         self.mujoco_steps_per_action = mujoco_steps_per_action
         self.success_distance = success_distance
@@ -121,6 +131,11 @@ class TrainingEnv:
         self.energy_penalty_scale = energy_penalty_scale
         self.fall_height_threshold = fall_height_threshold
         self.fall_tilt_threshold = fall_tilt_threshold
+
+        # Distance-patience early truncation
+        self.patience_window = patience_window
+        self.patience_min_delta = patience_min_delta
+        self._distance_deltas = deque(maxlen=patience_window) if patience_window > 0 else None
 
         # Episode tracking
         self.episode_step = 0
@@ -148,7 +163,14 @@ class TrainingEnv:
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (self.num_actuators,)
 
-    def set_curriculum_stage(self, stage, progress):
+    def update_episode_limits(self, base=None, final=None):
+        """Update episode step scheduling limits for live tweaks."""
+        if base is not None:
+            self.base_episode_steps = base
+        if final is not None:
+            self.max_episode_steps_final = final
+
+    def set_curriculum_stage(self, stage, progress, num_stages=3):
         """
         Set multi-stage curriculum state.
 
@@ -159,9 +181,17 @@ class TrainingEnv:
                 3 = visual distractors
             progress: Float in [0, 1] for current stage
                 Previous stages stay at max when advancing.
+            num_stages: Total number of curriculum stages (for episode length scheduling)
         """
         self.curriculum_stage = stage
         self.curriculum_stage_progress = np.clip(progress, 0.0, 1.0)
+
+        # Schedule episode length: lerp from base to final based on overall progress
+        overall = (stage - 1 + self.curriculum_stage_progress) / num_stages
+        self.max_episode_steps = int(
+            self.base_episode_steps
+            + overall * (self.max_episode_steps_final - self.base_episode_steps)
+        )
 
     def reset(self):
         """
@@ -176,6 +206,8 @@ class TrainingEnv:
         """
         camera_img = self.env.reset()
         self.episode_step = 0
+        if self._distance_deltas is not None:
+            self._distance_deltas.clear()
 
         # --- Stage 1: Angle variance (always active) ---
         # At stage 1, progress controls angle. At stage 2+, angle is full 360°.
@@ -358,6 +390,9 @@ class TrainingEnv:
         reward = (distance_reward + exploration_reward + time_cost
                   + upright_reward + alive_reward + energy_cost)
 
+        # Track distance delta for patience (before prev_distance is updated)
+        distance_delta = self.prev_distance - current_distance
+
         # Move target after reward computation (stage 2+).
         # Next step's observation and reward will see the new position.
         if np.any(self.target_velocity != 0):
@@ -407,6 +442,20 @@ class TrainingEnv:
             done = True
             reward -= 5.0  # Penalty for going too far
 
+        # Distance-patience truncation: no net progress over rolling window
+        patience_truncated = False
+        if (
+            not done
+            and self._distance_deltas is not None
+        ):
+            self._distance_deltas.append(distance_delta)
+            if (
+                len(self._distance_deltas) == self._distance_deltas.maxlen
+                and sum(self._distance_deltas) <= self.patience_min_delta
+            ):
+                truncated = True
+                patience_truncated = True
+
         # Timeout: max steps reached
         self.episode_step += 1
         if self.episode_step >= self.max_episode_steps:
@@ -430,6 +479,8 @@ class TrainingEnv:
             "unstable": has_warnings or has_nan or out_of_bounds,
             "has_fallen": has_fallen,
             "torso_height": bot_z,
+            # Patience truncation
+            "patience_truncated": patience_truncated,
         }
 
         return obs, reward, done, truncated, info

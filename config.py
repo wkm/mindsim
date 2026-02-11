@@ -16,9 +16,10 @@ class EnvConfig:
     """Environment configuration."""
 
     scene_path: str = "bots/simple2wheeler/scene.xml"  # Selects which bot to load
-    render_width: int = 64
-    render_height: int = 64
-    max_episode_steps: int = 200  # 20 seconds at 10 Hz
+    render_width: int = 128
+    render_height: int = 128
+    max_episode_steps: int = 200  # 20 seconds at 10 Hz (stage 1 baseline)
+    max_episode_steps_final: int = 500  # 50 seconds at 10 Hz (at full curriculum)
     control_frequency_hz: int = 10
     mujoco_steps_per_action: int = 5
 
@@ -40,6 +41,10 @@ class EnvConfig:
     max_distractors: int = 4  # Max distractor cubes at stage 3 progress=1
     distractor_min_distance: float = 0.5  # Min spawn distance from origin
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
+
+    # Distance-patience early truncation
+    patience_window: int = 30  # Steps to look back (3 sec at 10Hz, 0=disabled)
+    patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
     # Reward shaping
     distance_reward_scale: float = 20.0
@@ -76,8 +81,8 @@ class PolicyConfig:
     policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
 
     # Image input
-    image_height: int = 64
-    image_width: int = 64
+    image_height: int = 128
+    image_width: int = 128
 
     # CNN architecture
     conv1_out_channels: int = 32
@@ -114,9 +119,15 @@ class TrainingConfig:
     learning_rate: float = 1e-3
 
     # Algorithm
-    algorithm: str = "REINFORCE"
+    algorithm: str = "PPO"
     gamma: float = 0.99
     entropy_coeff: float = 0.05  # Entropy bonus to prevent policy collapse
+
+    # PPO-specific
+    ppo_epochs: int = 4
+    clip_epsilon: float = 0.2
+    gae_lambda: float = 0.95
+    value_coeff: float = 0.5
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update
@@ -131,6 +142,9 @@ class TrainingConfig:
 
     # Parallelism
     num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
+
+    # Checkpointing
+    checkpoint_every: int | None = 50  # Periodic checkpoint every N batches (None = disabled)
 
     # Limits
     max_batches: int | None = None  # None = run until mastery
@@ -181,6 +195,8 @@ class Config:
         """Config for fast end-to-end validation. Runs in seconds."""
         return cls(
             env=EnvConfig(
+                render_width=64,
+                render_height=64,
                 max_episode_steps=10,  # Very short episodes
             ),
             curriculum=CurriculumConfig(
@@ -192,6 +208,8 @@ class Config:
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
                 hidden_size=32,  # Tiny network
             ),
             training=TrainingConfig(
@@ -200,6 +218,7 @@ class Config:
                 mastery_threshold=0.0,  # Always consider mastered
                 max_batches=3,  # Just a few batches
                 log_rerun_every=9999,  # Effectively disable
+                ppo_epochs=2,
             ),
         )
 
@@ -242,6 +261,7 @@ class Config:
             training=TrainingConfig(
                 learning_rate=3e-4,
                 batch_size=64,
+                algorithm="PPO",
             ),
         )
 
@@ -251,6 +271,8 @@ class Config:
         return cls(
             env=EnvConfig(
                 scene_path="bots/simplebiped/scene.xml",
+                render_width=64,
+                render_height=64,
                 max_episode_steps=10,
                 mujoco_steps_per_action=20,
                 upright_reward_scale=1.0,
@@ -270,6 +292,8 @@ class Config:
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
                 hidden_size=32,
                 fc_output_size=6,
             ),
@@ -279,6 +303,7 @@ class Config:
                 mastery_threshold=0.0,
                 max_batches=3,
                 log_rerun_every=9999,
+                ppo_epochs=2,
             ),
         )
 
