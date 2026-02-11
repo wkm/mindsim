@@ -17,12 +17,13 @@ def create_training_blueprint():
 
     Layout:
     ┌─────────────────┬──────────────────────────────┐
-    │                 │  Rewards (total, cumulative) │
+    │                 │  Value Function (V, returns) │
     │  Camera View    ├──────────────────────────────┤
-    │                 │  Distance to target          │
+    │                 │  Advantage                   │
     ├─────────────────┼──────────────────────────────┤
+    │                 │  Rewards + Distance           │
+    │    3D Scene     ├──────────────────────────────┤
     │                 │  Actions (left, right motor) │
-    │    3D Scene     │                              │
     └─────────────────┴──────────────────────────────┘
     """
     return rrb.Blueprint(
@@ -42,17 +43,27 @@ def create_training_blueprint():
             # Right column: time series metrics
             rrb.Vertical(
                 rrb.TimeSeriesView(
-                    name="Rewards",
+                    name="Value Function",
+                    origin="/",
+                    contents=[
+                        "eval/value/V_s",
+                        "eval/value/cumulative_reward",
+                        "eval/value/gae_return",
+                    ],
+                ),
+                rrb.TimeSeriesView(
+                    name="Advantage",
+                    origin="/",
+                    contents=[
+                        "eval/value/advantage",
+                    ],
+                ),
+                rrb.TimeSeriesView(
+                    name="Rewards & Distance",
                     origin="/",
                     contents=[
                         "eval/reward/total",
                         "eval/reward/cumulative",
-                    ],
-                ),
-                rrb.TimeSeriesView(
-                    name="Distance",
-                    origin="/",
-                    contents=[
                         "eval/distance_to_target",
                     ],
                 ),
@@ -64,7 +75,7 @@ def create_training_blueprint():
                         "eval/action/right_motor",
                     ],
                 ),
-                row_shares=[1, 1, 1],
+                row_shares=[2, 1, 1, 1],
             ),
             column_shares=[1, 2],
         ),
