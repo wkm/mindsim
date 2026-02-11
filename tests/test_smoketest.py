@@ -5,16 +5,23 @@ Validates that env, policy, episode collection, training step,
 and curriculum all work together. Runs in seconds.
 """
 
+import os
+import warnings
+
 import numpy as np
+import pytest
 import torch
 
 import wandb
+from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
 from config import Config
 from train import (
     LSTMPolicy,
     TinyPolicy,
     collect_episode,
+    compute_gae,
     train_step_batched,
+    train_step_ppo,
 )
 from training_env import TrainingEnv
 
@@ -301,3 +308,299 @@ class TestEndToEnd:
 
         wandb.finish()
         env.close()
+
+
+class TestPPO:
+    """Test PPO-specific components."""
+
+    def test_evaluate_actions_lstm_shapes(self):
+        """evaluate_actions should return correct shapes for LSTMPolicy."""
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        T = 5
+        obs = torch.randn(T, 64, 64, 3)
+        actions = torch.tanh(torch.randn(T, 2))
+        log_probs, values, entropy = policy.evaluate_actions(obs, actions)
+        assert log_probs.shape == (T,)
+        assert values.shape == (T,)
+        assert entropy.shape == ()
+
+    def test_evaluate_actions_tiny_shapes(self):
+        """evaluate_actions should return correct shapes for TinyPolicy."""
+        policy = TinyPolicy(image_height=64, image_width=64)
+        B = 4
+        obs = torch.randn(B, 64, 64, 3)
+        actions = torch.tanh(torch.randn(B, 2))
+        log_probs, values, entropy = policy.evaluate_actions(obs, actions)
+        assert log_probs.shape == (B,)
+        assert values.shape == (B,)
+        assert entropy.shape == ()
+
+    def test_compute_gae_known_values(self):
+        """GAE with lambda=1 should equal discounted returns minus values."""
+        rewards = torch.tensor([1.0, 1.0, 1.0])
+        values = torch.tensor([0.5, 0.5, 0.5])
+        gamma = 0.99
+        # lambda=1 makes GAE equivalent to full discounted returns - V
+        advantages, returns = compute_gae(rewards, values, gamma, gae_lambda=1.0, next_value=0.0)
+        assert advantages.shape == (3,)
+        assert returns.shape == (3,)
+        # Check last step: delta = 1.0 + 0.99*0 - 0.5 = 0.5
+        assert abs(advantages[2].item() - 0.5) < 1e-5
+        # returns = advantages + values
+        assert torch.allclose(returns, advantages + values)
+
+    def test_compute_gae_with_bootstrap(self):
+        """GAE should bootstrap from next_value for truncated episodes."""
+        rewards = torch.tensor([1.0, 1.0])
+        values = torch.tensor([0.5, 0.5])
+        adv_no_boot, _ = compute_gae(rewards, values, 0.99, 0.95, next_value=0.0)
+        adv_with_boot, _ = compute_gae(rewards, values, 0.99, 0.95, next_value=10.0)
+        # Bootstrapping should increase advantages
+        assert adv_with_boot[-1] > adv_no_boot[-1]
+
+    def test_train_step_ppo_produces_loss(self):
+        """PPO training step should produce valid losses."""
+        cfg = _smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        (
+            policy_loss,
+            value_loss,
+            entropy,
+            grad_norm,
+            policy_std,
+            clip_fraction,
+            approx_kl,
+            explained_variance,
+            mean_value,
+            mean_return,
+        ) = train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
+
+        assert isinstance(policy_loss, float)
+        assert isinstance(value_loss, float)
+        assert not np.isnan(policy_loss)
+        assert not np.isnan(value_loss)
+        assert grad_norm >= 0
+        assert len(policy_std) == 2
+        assert entropy > 0
+        assert 0.0 <= clip_fraction <= 1.0
+        assert isinstance(explained_variance, float)
+        assert isinstance(mean_value, float)
+        assert isinstance(mean_return, float)
+        env.close()
+
+    def test_train_step_ppo_updates_parameters(self):
+        """PPO training step should update at least some parameters."""
+        cfg = _smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+        params_before = {name: p.clone() for name, p in policy.named_parameters()}
+        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
+
+        any_changed = False
+        for name, p in policy.named_parameters():
+            if not torch.equal(p, params_before[name]):
+                any_changed = True
+                break
+        assert any_changed, "PPO training step should update at least some parameters"
+        env.close()
+
+    def test_ppo_end_to_end_pipeline(self):
+        """Full PPO pipeline: collect -> train -> eval cycle."""
+        cfg = _smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+
+        wandb.init(mode="disabled")
+
+        for batch_idx in range(2):
+            env.set_curriculum_stage(1, min(1.0, batch_idx * 0.5))
+            batch = [
+                collect_episode(env, policy, deterministic=False)
+                for _ in range(cfg.training.batch_size)
+            ]
+
+            policy_loss, value_loss, entropy, grad_norm, policy_std, clip_frac, approx_kl, ev, mv, mr = train_step_ppo(
+                policy, optimizer, batch, ppo_epochs=cfg.training.ppo_epochs
+            )
+            assert not np.isnan(policy_loss)
+            assert not np.isnan(value_loss)
+
+            eval_data = collect_episode(env, policy, deterministic=True)
+            assert isinstance(eval_data["success"], bool)
+
+        wandb.finish()
+        env.close()
+
+    def test_collect_episode_returns_done_truncated(self):
+        """collect_episode should return done and truncated fields."""
+        cfg = _smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+
+        data = collect_episode(env, policy, deterministic=False)
+        assert "done" in data
+        assert "truncated" in data
+        assert isinstance(data["done"], bool)
+        assert isinstance(data["truncated"], bool)
+        env.close()
+
+
+class TestCheckpoint:
+    """Test checkpoint save/load roundtrip."""
+
+    def test_roundtrip_save_load(self, tmp_path):
+        """Save checkpoint, load into fresh policy, verify state matches."""
+        cfg = _smoketest_config()
+        env = _make_env(cfg)
+        policy = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+
+        wandb.init(mode="disabled")
+
+        # Do a training step so optimizer has state
+        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
+
+        # Save checkpoint
+        ckpt_path = tmp_path / "test_ckpt.pt"
+        ckpt = {
+            "policy_state_dict": policy.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "curriculum_stage": 2,
+            "stage_progress": 0.75,
+            "mastery_count": 5,
+            "batch_idx": 42,
+            "episode_count": 1000,
+            "config": cfg.to_wandb_config(),
+        }
+        torch.save(ckpt, ckpt_path)
+
+        # Load into fresh policy
+        policy2 = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+        )
+        optimizer2 = torch.optim.Adam(policy2.parameters(), lr=cfg.training.learning_rate)
+
+        loaded = load_checkpoint(str(ckpt_path), cfg)
+        policy2.load_state_dict(loaded["policy_state_dict"])
+        optimizer2.load_state_dict(loaded["optimizer_state_dict"])
+
+        # Verify state matches
+        for (n1, p1), (n2, p2) in zip(
+            policy.named_parameters(), policy2.named_parameters()
+        ):
+            assert n1 == n2
+            assert torch.equal(p1, p2), f"Parameter {n1} mismatch after load"
+
+        assert loaded["curriculum_stage"] == 2
+        assert loaded["stage_progress"] == 0.75
+        assert loaded["mastery_count"] == 5
+        assert loaded["batch_idx"] == 42
+        assert loaded["episode_count"] == 1000
+
+        wandb.finish()
+        env.close()
+
+    def test_architecture_mismatch_raises(self):
+        """Loading checkpoint with different hidden_size should raise ValueError."""
+        ckpt_config = {
+            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 256, "image_height": 64, "image_width": 64},
+            "training": {},
+            "curriculum": {},
+            "env": {},
+        }
+        current_config = {
+            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "training": {},
+            "curriculum": {},
+            "env": {},
+        }
+        with pytest.raises(ValueError, match="Architecture mismatch"):
+            validate_checkpoint_config(ckpt_config, current_config)
+
+    def test_policy_type_mismatch_raises(self):
+        """Loading checkpoint with different policy_type should raise ValueError."""
+        ckpt_config = {
+            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "training": {},
+            "curriculum": {},
+            "env": {},
+        }
+        current_config = {
+            "policy": {"policy_type": "TinyPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "training": {},
+            "curriculum": {},
+            "env": {},
+        }
+        with pytest.raises(ValueError, match="Architecture mismatch"):
+            validate_checkpoint_config(ckpt_config, current_config)
+
+    def test_training_param_change_warns(self):
+        """Changing training params should warn but not error."""
+        ckpt_config = {
+            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "training": {"learning_rate": 0.001},
+            "curriculum": {},
+            "env": {},
+        }
+        current_config = {
+            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "training": {"learning_rate": 0.0001},
+            "curriculum": {},
+            "env": {},
+        }
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            validate_checkpoint_config(ckpt_config, current_config)
+            assert len(w) == 1
+            assert "learning_rate" in str(w[0].message)
+
+    def test_save_checkpoint_creates_file(self, tmp_path, monkeypatch):
+        """save_checkpoint should create a local .pt file."""
+        cfg = _smoketest_config()
+        policy = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+
+        wandb.init(mode="disabled")
+
+        # Use tmp_path as working directory so checkpoints/ goes there
+        monkeypatch.chdir(tmp_path)
+
+        path = save_checkpoint(
+            policy, optimizer, cfg,
+            curriculum_stage=1, stage_progress=0.5, mastery_count=3,
+            batch_idx=10, episode_count=100,
+            trigger="periodic",
+        )
+        assert os.path.isfile(path)
+
+        # Verify contents
+        ckpt = torch.load(path, weights_only=False)
+        assert "policy_state_dict" in ckpt
+        assert "optimizer_state_dict" in ckpt
+        assert ckpt["curriculum_stage"] == 1
+        assert ckpt["batch_idx"] == 10
+
+        wandb.finish()
