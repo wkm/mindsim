@@ -24,10 +24,12 @@ from tqdm import tqdm
 
 import rerun_logger
 import wandb
+from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from config import Config
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from training_env import TrainingEnv
+from tweaks import apply_tweaks, load_tweaks
 
 
 def set_terminal_title(title):
@@ -167,14 +169,14 @@ class LSTMPolicy(nn.Module):
     """
     LSTM-based stochastic policy network with memory.
 
-    Input: RGB image (64x64x3)
+    Input: RGB image (HxWx3)
     Output: Mean of Gaussian distribution over motor commands [left, right]
 
     Uses CNN to extract features, then LSTM to maintain temporal context.
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=64, image_width=64, hidden_size=64, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, hidden_size=64, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -197,6 +199,7 @@ class LSTMPolicy(nn.Module):
 
         # Output layers
         self.fc = nn.Linear(hidden_size, num_actions)
+        self.value_fc = nn.Linear(hidden_size, 1)  # Value head for PPO
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
@@ -213,6 +216,46 @@ class LSTMPolicy(nn.Module):
             torch.zeros(1, batch_size, self.hidden_size, device=device),
         )
 
+    def _backbone(self, x, hidden=None):
+        """
+        Shared CNN+LSTM backbone.
+
+        Args:
+            x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
+            hidden: Optional LSTM hidden state tuple (h, c)
+
+        Returns:
+            features: (B, 2) or (B, T, hidden_size) LSTM output features
+            hidden: Updated hidden state
+            is_sequence: Whether the input was a sequence
+        """
+        is_sequence = x.dim() == 5
+        if is_sequence:
+            B, T, H, W, C = x.shape
+            x = x.reshape(B * T, H, W, C)
+        else:
+            B = x.size(0)
+            T = 1
+
+        x = x.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.reshape(x.size(0), -1)
+        x = x.reshape(B, T, -1)
+
+        if hidden is None:
+            hidden = self.hidden
+
+        lstm_out, hidden = self.lstm(x, hidden)
+        self.hidden = hidden
+
+        if is_sequence:
+            features = lstm_out  # (B, T, hidden_size)
+        else:
+            features = lstm_out.squeeze(1)  # (B, hidden_size)
+
+        return features, hidden, is_sequence
+
     def forward(self, x, hidden=None):
         """
         Forward pass - returns action distribution parameters.
@@ -224,50 +267,54 @@ class LSTMPolicy(nn.Module):
         Returns:
             mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
-            hidden: Updated hidden state
         """
-        # Handle both single timestep and sequence inputs
-        is_sequence = x.dim() == 5
-        if is_sequence:
-            B, T, H, W, C = x.shape
-            # Reshape to process all frames through CNN
-            x = x.reshape(B * T, H, W, C)
-        else:
-            B = x.size(0)
-            T = 1
-
-        # Permute to (B*T, 3, H, W) for PyTorch conv layers
-        x = x.permute(0, 3, 1, 2)
-
-        # CNN feature extraction
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-
-        # Flatten CNN output
-        x = x.reshape(x.size(0), -1)  # (B*T, 576)
-
-        # Reshape for LSTM: (B, T, features)
-        x = x.reshape(B, T, -1)
-
-        # Use stored hidden if none provided
-        if hidden is None:
-            hidden = self.hidden
-
-        # LSTM forward pass
-        lstm_out, hidden = self.lstm(x, hidden)  # lstm_out: (B, T, hidden_size)
-
-        # Store updated hidden state
-        self.hidden = hidden
-
-        # Output layer (unbounded mean; tanh squashing applied at action sampling)
-        if is_sequence:
-            mean = self.fc(lstm_out)  # (B, T, 2)
-        else:
-            mean = self.fc(lstm_out.squeeze(1))  # (B, 2)
-
+        features, hidden, is_sequence = self._backbone(x, hidden)
+        mean = self.fc(features)
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
+
+    def evaluate_actions(self, observations, actions):
+        """
+        Single forward pass returning everything PPO needs.
+
+        Processes full episode sequence with fresh hidden state.
+
+        Args:
+            observations: (T, H, W, 3) episode observations
+            actions: (T, 2) tanh-squashed actions
+
+        Returns:
+            log_probs: (T,) log probability of actions
+            values: (T,) state value estimates
+            entropy: scalar mean entropy
+        """
+        device = observations.device
+        self.reset_hidden(batch_size=1, device=device)
+
+        # Process entire sequence: (1, T, H, W, 3)
+        x = observations.unsqueeze(0)
+        features, _, _ = self._backbone(x)  # (1, T, hidden_size)
+        features = features.squeeze(0)  # (T, hidden_size)
+
+        # Action head
+        mean = self.fc(features)  # (T, 2)
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
+
+        # Value head
+        values = self.value_fc(features).squeeze(-1)  # (T,)
+
+        # Log prob with tanh correction
+        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
+        dist = torch.distributions.Normal(mean, std)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        log_probs = _tanh_log_prob(gaussian_log_prob, z)
+
+        # Entropy
+        entropy = dist.entropy().sum(dim=-1).mean()
+
+        return log_probs, values, entropy
 
     def sample_action(self, x):
         """
@@ -343,14 +390,14 @@ class TinyPolicy(nn.Module):
     """
     Stochastic policy network for REINFORCE.
 
-    Input: RGB image (64x64x3)
+    Input: RGB image (HxWx3)
     Output: Mean of Gaussian distribution over motor commands [left, right]
 
     The policy is stochastic: actions are sampled from N(mean, std).
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=64, image_width=64, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         self.num_actions = num_actions
@@ -368,11 +415,28 @@ class TinyPolicy(nn.Module):
         # FC layers
         self.fc1 = nn.Linear(conv_out_size, 128)
         self.fc2 = nn.Linear(128, num_actions)
+        self.value_fc = nn.Linear(128, 1)  # Value head for PPO
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
+
+    def _backbone(self, x):
+        """
+        Shared CNN+FC backbone.
+
+        Args:
+            x: Input image (B, H, W, 3) in range [0, 1]
+
+        Returns:
+            features: (B, 128) features after fc1+relu
+        """
+        x = x.permute(0, 3, 1, 2)
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = x.reshape(x.size(0), -1)
+        return torch.relu(self.fc1(x))
 
     def forward(self, x):
         """
@@ -385,23 +449,45 @@ class TinyPolicy(nn.Module):
             mean: (B, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
-        # Permute to (B, 3, H, W) for PyTorch conv layers
-        x = x.permute(0, 3, 1, 2)
-
-        # Conv layers with ReLU
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-
-        # Flatten
-        x = x.reshape(x.size(0), -1)
-
-        # FC layers (unbounded mean; tanh squashing applied at action sampling)
-        x = torch.relu(self.fc1(x))
-        mean = self.fc2(x)
-
+        features = self._backbone(x)
+        mean = self.fc2(features)
         clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
+
+    def evaluate_actions(self, observations, actions):
+        """
+        Single forward pass returning everything PPO needs.
+
+        Args:
+            observations: (B, H, W, 3) observations
+            actions: (B, 2) tanh-squashed actions
+
+        Returns:
+            log_probs: (B,) log probability of actions
+            values: (B,) state value estimates
+            entropy: scalar mean entropy
+        """
+        features = self._backbone(observations)
+
+        # Action head
+        mean = self.fc2(features)
+        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        std = torch.exp(clamped_log_std)
+
+        # Value head
+        values = self.value_fc(features).squeeze(-1)
+
+        # Log prob with tanh correction
+        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
+        dist = torch.distributions.Normal(mean, std)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        log_probs = _tanh_log_prob(gaussian_log_prob, z)
+
+        # Entropy
+        entropy = dist.entropy().sum(dim=-1).mean()
+
+        return log_probs, values, entropy
 
     def sample_action(self, x):
         """
@@ -595,12 +681,17 @@ def collect_episode(
         "success": success,
         "done": done,
         "truncated": truncated,
+        "patience_truncated": info.get("patience_truncated", False),
     }
     # Per-actuator stats keyed by actuator name
     for i, name in enumerate(env.actuator_names):
         motor_actions = actions_array[:, i]
         result[f"{name}_mean"] = float(np.mean(motor_actions))
         result[f"{name}_std"] = float(np.std(motor_actions))
+
+    # Store final observation for GAE bootstrapping on truncated episodes
+    if truncated and not done:
+        result["final_observation"] = obs
 
     # Only include log_probs for training episodes
     if not deterministic:
@@ -626,6 +717,34 @@ def compute_reward_to_go(rewards, gamma=0.99):
         running_sum = rewards[t] + gamma * running_sum
         reward_to_go[t] = running_sum
     return reward_to_go
+
+
+def compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0):
+    """
+    Compute Generalized Advantage Estimation (GAE).
+
+    Args:
+        rewards: Tensor of per-step rewards (T,)
+        values: Tensor of per-step value estimates (T,)
+        gamma: Discount factor
+        gae_lambda: GAE lambda parameter
+        next_value: Bootstrap value for the state after the last step
+                    (0 for terminated episodes, V(s_final) for truncated)
+
+    Returns:
+        advantages: Tensor of GAE advantages (T,)
+        returns: Tensor of GAE returns / value targets (T,)
+    """
+    T = len(rewards)
+    advantages = torch.zeros(T, dtype=rewards.dtype, device=rewards.device)
+    gae = 0.0
+    for t in reversed(range(T)):
+        next_val = next_value if t == T - 1 else values[t + 1]
+        delta = rewards[t] + gamma * next_val - values[t]
+        gae = delta + gamma * gae_lambda * gae
+        advantages[t] = gae
+    returns = advantages + values
+    return advantages, returns
 
 
 def train_step_batched(
@@ -717,6 +836,233 @@ def train_step_batched(
     return avg_loss, total_grad_norm, policy_std, entropy_val
 
 
+def train_step_ppo(
+    policy,
+    optimizer,
+    episode_batch,
+    gamma=0.99,
+    gae_lambda=0.95,
+    clip_epsilon=0.2,
+    ppo_epochs=4,
+    entropy_coeff=0.01,
+    value_coeff=0.5,
+    max_grad_norm=0.5,
+):
+    """
+    PPO training step on a batch of episodes.
+
+    Phase 1: Compute GAE advantages (once, before epochs).
+    Phase 2: K optimization epochs over the data with clipped surrogate objective.
+
+    Args:
+        policy: Stochastic neural network policy with evaluate_actions()
+        optimizer: PyTorch optimizer
+        episode_batch: List of episode_data dicts from collect_episode
+        gamma: Discount factor
+        gae_lambda: GAE lambda parameter
+        clip_epsilon: PPO clip range
+        ppo_epochs: Number of optimization passes over the data
+        entropy_coeff: Entropy bonus coefficient
+        value_coeff: Value loss coefficient
+        max_grad_norm: Max gradient norm for clipping
+
+    Returns:
+        policy_loss: Average policy loss across epochs
+        value_loss: Average value loss across epochs
+        entropy: Average entropy across epochs
+        grad_norm: Average gradient norm across epochs
+        policy_std: Current policy standard deviation
+        clip_fraction: Fraction of clipped ratios (last epoch)
+        approx_kl: Approximate KL divergence (last epoch)
+        explained_variance: How well V(s) predicts returns (1.0 = perfect)
+        mean_value: Mean V(s) across batch
+        mean_return: Mean GAE return across batch
+    """
+    device = next(policy.parameters()).device
+
+    # Phase 1: Compute advantages with current policy (no grad)
+    episode_data_tensors = []
+    all_advantages = []
+    all_returns = []
+
+    with torch.no_grad():
+        for ep in episode_batch:
+            obs = torch.from_numpy(np.array(ep["observations"])).to(device)
+            acts = torch.from_numpy(np.array(ep["actions"])).to(device)
+            rewards = torch.tensor(ep["rewards"], dtype=torch.float32, device=device)
+            old_log_probs = torch.tensor(
+                ep["log_probs"], dtype=torch.float32, device=device
+            )
+
+            _, values, _ = policy.evaluate_actions(obs, acts)
+
+            # Bootstrap value for truncated episodes
+            next_value = 0.0
+            if ep.get("truncated") and not ep.get("done") and "final_observation" in ep:
+                final_obs = torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)  # (1, H, W, 3)
+                dummy_act = torch.zeros(1, 2, device=device)  # (1, 2)
+                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act)
+                next_value = final_val[0].item()
+
+            advantages, returns = compute_gae(
+                rewards, values, gamma, gae_lambda, next_value
+            )
+
+            episode_data_tensors.append({
+                "observations": obs,
+                "actions": acts,
+                "old_log_probs": old_log_probs,
+                "advantages": advantages,
+                "returns": returns,
+            })
+
+            all_advantages.append(advantages)
+            all_returns.append(returns)
+
+    # Value function diagnostics (before normalization)
+    all_adv_cat = torch.cat(all_advantages)
+    all_ret_cat = torch.cat(all_returns)
+    # Explained variance: 1 - Var(returns - values) / Var(returns)
+    # values = returns - advantages (before normalization)
+    all_val_cat = all_ret_cat - all_adv_cat
+    ret_var = all_ret_cat.var()
+    explained_variance = (
+        1.0 - (all_ret_cat - all_val_cat).var() / (ret_var + 1e-8)
+        if ret_var > 1e-8
+        else 0.0
+    )
+    mean_value = all_val_cat.mean().item()
+    mean_return = all_ret_cat.mean().item()
+
+    # Normalize advantages across the entire batch
+    adv_mean = all_adv_cat.mean()
+    adv_std = all_adv_cat.std()
+    if adv_std > 1e-8:
+        for ep_tensors in episode_data_tensors:
+            ep_tensors["advantages"] = (ep_tensors["advantages"] - adv_mean) / (adv_std + 1e-8)
+
+    # Phase 2: PPO epochs
+    total_policy_loss = 0.0
+    total_value_loss = 0.0
+    total_entropy = 0.0
+    total_grad_norm = 0.0
+    last_clip_fraction = 0.0
+    last_approx_kl = 0.0
+
+    for epoch in range(ppo_epochs):
+        optimizer.zero_grad()
+
+        epoch_policy_loss = 0.0
+        epoch_value_loss = 0.0
+        epoch_entropy = 0.0
+        epoch_clip_count = 0
+        epoch_total_steps = 0
+        epoch_kl_sum = 0.0
+
+        total_steps = sum(len(ep["observations"]) for ep in episode_data_tensors)
+
+        # Process episodes sequentially (LSTM hidden state requirement)
+        for ep_tensors in episode_data_tensors:
+            obs = ep_tensors["observations"]
+            acts = ep_tensors["actions"]
+            old_lp = ep_tensors["old_log_probs"]
+            adv = ep_tensors["advantages"]
+            ret = ep_tensors["returns"]
+            T = len(obs)
+
+            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts)
+
+            # PPO clipped surrogate
+            ratio = torch.exp(new_log_probs - old_lp)
+            surr1 = ratio * adv
+            surr2 = torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * adv
+            policy_loss = -torch.min(surr1, surr2).sum() / total_steps
+
+            # Value loss
+            value_loss = F.mse_loss(values, ret, reduction="sum") / total_steps
+
+            # Combined loss
+            loss = policy_loss + value_coeff * value_loss - entropy_coeff * entropy
+            loss.backward()
+
+            # Track metrics
+            epoch_policy_loss += policy_loss.item() * T
+            epoch_value_loss += value_loss.item() * T
+            epoch_entropy += entropy.item() * T
+
+            with torch.no_grad():
+                clipped = ((ratio - 1.0).abs() > clip_epsilon).float().sum().item()
+                epoch_clip_count += clipped
+                epoch_total_steps += T
+                epoch_kl_sum += (old_lp - new_log_probs).mean().item() * T
+
+        grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=max_grad_norm)
+        optimizer.step()
+
+        total_policy_loss += epoch_policy_loss / epoch_total_steps
+        total_value_loss += epoch_value_loss / epoch_total_steps
+        total_entropy += epoch_entropy / epoch_total_steps
+        total_grad_norm += grad_norm.item()
+
+        if epoch == ppo_epochs - 1:
+            last_clip_fraction = epoch_clip_count / max(epoch_total_steps, 1)
+            last_approx_kl = epoch_kl_sum / max(epoch_total_steps, 1)
+
+    # Average across epochs
+    avg_policy_loss = total_policy_loss / ppo_epochs
+    avg_value_loss = total_value_loss / ppo_epochs
+    avg_entropy = total_entropy / ppo_epochs
+    avg_grad_norm = total_grad_norm / ppo_epochs
+
+    # Get current policy std for logging
+    clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+    policy_std = torch.exp(clamped).detach().cpu().numpy()
+
+    ev = explained_variance.item() if torch.is_tensor(explained_variance) else explained_variance
+
+    return (
+        avg_policy_loss,
+        avg_value_loss,
+        avg_entropy,
+        avg_grad_norm,
+        policy_std,
+        last_clip_fraction,
+        last_approx_kl,
+        ev,
+        mean_value,
+        mean_return,
+    )
+
+
+def log_episode_value_trace(policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"):
+    """
+    Run a forward pass on a completed episode to log V(s_t) and A(s_t) to Rerun.
+
+    Gives per-step visibility into the value function's beliefs during the episode.
+    """
+    obs = torch.from_numpy(np.array(episode_data["observations"])).to(device)
+    acts = torch.from_numpy(np.array(episode_data["actions"])).to(device)
+    rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32, device=device)
+
+    with torch.no_grad():
+        # Use evaluate_actions even for deterministic episodes — we just need values
+        # Need dummy actions for the log_prob computation but we only use the values
+        _, values, _ = policy.evaluate_actions(obs, acts)
+        advantages, returns = compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0)
+
+    values_np = values.cpu().numpy()
+    advantages_np = advantages.cpu().numpy()
+    returns_np = returns.cpu().numpy()
+    cumulative_reward = np.cumsum(episode_data["rewards"])
+
+    for t in range(len(values_np)):
+        rr.set_time("step", sequence=t)
+        rr.log(f"{namespace}/value/V_s", rr.Scalars([values_np[t]]))
+        rr.log(f"{namespace}/value/advantage", rr.Scalars([advantages_np[t]]))
+        rr.log(f"{namespace}/value/cumulative_reward", rr.Scalars([cumulative_reward[t]]))
+        rr.log(f"{namespace}/value/gae_return", rr.Scalars([returns_np[t]]))
+
+
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Train MuJoCo robot")
@@ -736,6 +1082,12 @@ def parse_args():
         default=None,
         help="Number of parallel workers for episode collection (0=auto, 1=serial, default: from config)",
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        help="Resume from checkpoint: local .pt path or wandb artifact ref (e.g. checkpoint-lstmpolicy:stage1-mastered)",
+    )
     return parser.parse_args()
 
 
@@ -754,7 +1106,7 @@ def main():
 
     robot_name = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
     print("=" * 60)
-    print(f"Training {robot_name} Robot ({cfg.env.scene_path})")
+    print(f"Training {robot_name} Robot ({cfg.env.scene_path}, {cfg.training.algorithm})")
     print("=" * 60)
     print()
 
@@ -838,6 +1190,36 @@ def main():
     if not args.smoketest:
         print("  Watching model gradients every 10 episodes")
 
+    # Resume from checkpoint if requested
+    resumed_batch_idx = 0
+    resumed_episode_count = 0
+    resumed_curriculum_stage = None
+    resumed_stage_progress = None
+    resumed_mastery_count = None
+    if args.resume:
+        resume_ref = resolve_resume_ref(args.resume)
+        print(f"Loading checkpoint: {resume_ref}")
+        ckpt = load_checkpoint(resume_ref, cfg, device=str(device))
+        policy.load_state_dict(ckpt["policy_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        resumed_batch_idx = ckpt["batch_idx"]
+        resumed_episode_count = ckpt["episode_count"]
+        resumed_curriculum_stage = ckpt["curriculum_stage"]
+        resumed_stage_progress = ckpt["stage_progress"]
+        resumed_mastery_count = ckpt["mastery_count"]
+        print(f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}")
+        print(f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}")
+        wandb.config.update({"resumed_from": resume_ref}, allow_val_change=True)
+        # Add resume info to wandb notes
+        resume_note = f"\n**Resumed from:** `{resume_ref}`"
+        if run_notes:
+            run_notes += resume_note
+        else:
+            run_notes = resume_note
+        if wandb.run and not wandb.run.disabled:
+            wandb.run.notes = run_notes
+        print()
+
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
     if not args.smoketest:
@@ -869,9 +1251,9 @@ def main():
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_stage = 1  # Start at stage 1 (angle variance)
-    stage_progress = 0.0  # Start with target in front
-    mastery_count = 0  # Count of consecutive batches at mastery level
+    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
+    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
+    mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
     print(
         f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
@@ -899,14 +1281,25 @@ def main():
     # Rolling window for eval success rate (used for curriculum)
     eval_success_history = deque(maxlen=curr.window_size)
 
-    episode_count = 0
-    batch_idx = 0
+    episode_count = resumed_episode_count
+    batch_idx = resumed_batch_idx
     mastered = False
     max_batches = cfg.training.max_batches
-    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches)
+    batches_this_session = 0
+    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches, initial=batch_idx)
     while not mastered and (max_batches is None or batch_idx < max_batches):
         # Set curriculum stage for this batch
-        env.set_curriculum_stage(curriculum_stage, stage_progress)
+        env.set_curriculum_stage(curriculum_stage, stage_progress, curr.num_stages)
+
+        # Check for live hyperparameter tweaks
+        tweaks = load_tweaks()
+        if tweaks:
+            changes = apply_tweaks(cfg, optimizer, env, tweaks)
+            batch_size = cfg.training.batch_size
+            for name, old, new in changes:
+                tqdm.write(f"  tweak: {name} {old} -> {new}")
+            if changes:
+                wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -926,7 +1319,8 @@ def main():
         t_collect_start = time.perf_counter()
         if collector is not None:
             episode_batch = collector.collect_batch(
-                policy, batch_size, curriculum_stage, stage_progress
+                policy, batch_size, curriculum_stage, stage_progress,
+                num_stages=curr.num_stages,
             )
         else:
             episode_batch = []
@@ -954,12 +1348,37 @@ def main():
 
         # Train on batch of episodes
         t_train_start = time.perf_counter()
-        loss, grad_norm, policy_std, entropy = train_step_batched(
-            policy,
-            optimizer,
-            episode_batch,
-            entropy_coeff=cfg.training.entropy_coeff,
-        )
+        if cfg.training.algorithm == "PPO":
+            (
+                policy_loss,
+                value_loss,
+                entropy,
+                grad_norm,
+                policy_std,
+                clip_fraction,
+                approx_kl,
+                explained_variance,
+                mean_value,
+                mean_return,
+            ) = train_step_ppo(
+                policy,
+                optimizer,
+                episode_batch,
+                gamma=cfg.training.gamma,
+                gae_lambda=cfg.training.gae_lambda,
+                clip_epsilon=cfg.training.clip_epsilon,
+                ppo_epochs=cfg.training.ppo_epochs,
+                entropy_coeff=cfg.training.entropy_coeff,
+                value_coeff=cfg.training.value_coeff,
+            )
+            loss = policy_loss  # For backward-compatible logging
+        else:
+            loss, grad_norm, policy_std, entropy = train_step_batched(
+                policy,
+                optimizer,
+                episode_batch,
+                entropy_coeff=cfg.training.entropy_coeff,
+            )
         timing["train"] += time.perf_counter() - t_train_start
 
         # Aggregate batch statistics
@@ -994,6 +1413,15 @@ def main():
 
                 if log_this_eval:
                     t_rerun_start = time.perf_counter()
+                    # Log per-step value function traces for PPO
+                    if cfg.training.algorithm == "PPO":
+                        log_episode_value_trace(
+                            policy, eval_data,
+                            gamma=cfg.training.gamma,
+                            gae_lambda=cfg.training.gae_lambda,
+                            device=device,
+                            namespace="eval",
+                        )
                     rr_wandb.finish_episode(eval_data, upload_artifact=True)
                     timing["rerun"] += time.perf_counter() - t_rerun_start
 
@@ -1020,6 +1448,9 @@ def main():
                 stage_progress = min(1.0, stage_progress + curr.advance_rate)
 
         # Check for stage mastery: progress=1.0 AND sustained high success rate
+        # Checkpoint saves are deferred until after batch_idx is incremented
+        # so the saved batch_idx represents "resume from here" correctly.
+        pending_save = None  # (trigger, aliases) or None
         mastery_rate = (
             rolling_eval_success_rate
             if curr.use_eval_for_curriculum
@@ -1030,8 +1461,11 @@ def main():
             if mastery_count >= cfg.training.mastery_batches:
                 if curriculum_stage >= curr.num_stages:
                     # Final stage mastered → training complete
+                    pending_save = ("final", [f"stage{curriculum_stage}-mastered"])
                     mastered = True
                 else:
+                    # Save before advancing to next stage
+                    pending_save = ("milestone", [f"stage{curriculum_stage}-mastered"])
                     # Advance to next stage
                     curriculum_stage += 1
                     stage_progress = 0.0
@@ -1052,6 +1486,7 @@ def main():
             "curriculum/stage": curriculum_stage,
             "curriculum/stage_progress": stage_progress,
             "curriculum/overall_progress": overall_progress,
+            "curriculum/max_episode_steps": env.max_episode_steps,
             # Training success rate (stochastic, with exploration noise)
             "curriculum/train_batch_success_rate": batch_success_rate,
             "curriculum/train_rolling_success_rate": rolling_success_rate,
@@ -1085,6 +1520,29 @@ def main():
             if i < len(policy_std):
                 log_dict[f"policy/std_{name}"] = policy_std[i]
 
+        # Episode termination breakdown
+        batch_truncated = [ep.get("truncated", False) for ep in episode_batch]
+        batch_done = [ep.get("done", False) for ep in episode_batch]
+        log_dict.update({
+            "batch/truncated_fraction": np.mean(batch_truncated),
+            "batch/done_fraction": np.mean(batch_done),
+            "batch/patience_truncated_fraction": np.mean([
+                ep.get("patience_truncated", False) for ep in episode_batch
+            ]),
+        })
+
+        # PPO-specific metrics
+        if cfg.training.algorithm == "PPO":
+            log_dict.update({
+                "training/policy_loss": policy_loss,
+                "training/value_loss": value_loss,
+                "training/clip_fraction": clip_fraction,
+                "training/approx_kl": approx_kl,
+                "training/explained_variance": explained_variance,
+                "training/mean_value": mean_value,
+                "training/mean_return": mean_return,
+            })
+
         t_log_start = time.perf_counter()
         wandb.log(log_dict)
         timing["log"] += time.perf_counter() - t_log_start
@@ -1102,9 +1560,30 @@ def main():
         )
         pbar.update(1)
         batch_idx += 1
+        batches_this_session += 1
+
+        # Save checkpoints (milestone/final take priority over periodic)
+        if pending_save:
+            trigger, aliases = pending_save
+            save_checkpoint(
+                policy, optimizer, cfg,
+                curriculum_stage, stage_progress, mastery_count,
+                batch_idx, episode_count,
+                trigger=trigger,
+                aliases=aliases,
+            )
+        elif (
+            cfg.training.checkpoint_every
+            and batch_idx % cfg.training.checkpoint_every == 0
+        ):
+            save_checkpoint(
+                policy, optimizer, cfg,
+                curriculum_stage, stage_progress, mastery_count,
+                batch_idx, episode_count,
+                trigger="periodic",
+            )
 
     pbar.close()
-    total_batches = batch_idx  # Store final count for timing summary
 
     # Print timing summary
     total_time = sum(timing.values())
@@ -1131,10 +1610,10 @@ def main():
     print(f"  Total:              {total_time:>8.2f}s")
     print()
     print(
-        f"  Per-batch average ({batch_size} episodes/batch, {total_batches} batches):"
+        f"  Per-batch average ({batch_size} episodes/batch, {batches_this_session} batches):"
     )
-    print(f"    Collection: {1000 * timing['collect'] / total_batches:.1f}ms")
-    print(f"    Training:   {1000 * timing['train'] / total_batches:.1f}ms")
+    print(f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms")
+    print(f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms")
     print()
 
     # Clean up
