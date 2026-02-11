@@ -254,6 +254,8 @@ class Config:
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
                 hidden_size=256,
                 fc_output_size=6,  # 6 joint motors
                 init_std=0.3,  # Lower initial exploration
