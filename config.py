@@ -15,6 +15,7 @@ from typing import Literal
 class EnvConfig:
     """Environment configuration."""
 
+    scene_path: str = "bots/simple2wheeler/scene.xml"  # Selects which bot to load
     render_width: int = 64
     render_height: int = 64
     max_episode_steps: int = 200  # 20 seconds at 10 Hz
@@ -45,6 +46,13 @@ class EnvConfig:
     distance_reward_type: str = "linear"  # potential-based shaping
     movement_bonus: float = 0.0  # Disabled: was rewarding spinning
     time_penalty: float = 0.005
+
+    # Biped-specific reward shaping (all 0.0 = disabled for wheeler)
+    upright_reward_scale: float = 0.0
+    alive_bonus: float = 0.0
+    energy_penalty_scale: float = 0.0
+    fall_height_threshold: float = 0.0  # 0 = disabled; 0.3 for biped
+    fall_tilt_threshold: float = 0.7    # cos(tilt) below this = fallen
 
 
 @dataclass
@@ -192,6 +200,85 @@ class Config:
                 mastery_threshold=0.0,  # Always consider mastered
                 max_batches=3,  # Just a few batches
                 log_rerun_every=9999,  # Effectively disable
+            ),
+        )
+
+    @classmethod
+    def for_biped(cls) -> Config:
+        """Config for the 6-joint biped walking experiment."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplebiped/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=200,
+                mujoco_steps_per_action=20,  # 0.005s timestep * 20 = 10 Hz control
+                success_distance=0.3,
+                failure_distance=10.0,
+                min_target_distance=0.8,
+                max_target_distance=1.5,  # Closer targets initially
+                # Biped rewards
+                upright_reward_scale=1.0,
+                alive_bonus=0.1,
+                energy_penalty_scale=0.001,
+                fall_height_threshold=0.3,
+                fall_tilt_threshold=0.5,
+                # Distance reward lower scale — upright is priority early
+                distance_reward_scale=10.0,
+                time_penalty=0.0,  # Disabled: alive_bonus replaces time_penalty
+            ),
+            curriculum=CurriculumConfig(
+                num_stages=3,
+                window_size=10,
+                advance_threshold=0.4,  # Lower threshold — walking is harder
+                advance_rate=0.01,
+            ),
+            policy=PolicyConfig(
+                policy_type="LSTMPolicy",
+                hidden_size=256,
+                fc_output_size=6,  # 6 joint motors
+                init_std=0.3,  # Lower initial exploration
+            ),
+            training=TrainingConfig(
+                learning_rate=3e-4,
+                batch_size=64,
+            ),
+        )
+
+    @classmethod
+    def for_biped_smoketest(cls) -> Config:
+        """Config for fast biped end-to-end validation."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplebiped/scene.xml",
+                max_episode_steps=10,
+                mujoco_steps_per_action=20,
+                upright_reward_scale=1.0,
+                alive_bonus=0.1,
+                energy_penalty_scale=0.001,
+                fall_height_threshold=0.3,
+                fall_tilt_threshold=0.5,
+                distance_reward_scale=10.0,
+                time_penalty=0.0,
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,
+                advance_rate=1.0,
+                eval_episodes_per_batch=1,
+                num_stages=3,
+            ),
+            policy=PolicyConfig(
+                policy_type="LSTMPolicy",
+                hidden_size=32,
+                fc_output_size=6,
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,
+                max_batches=3,
+                log_rerun_every=9999,
             ),
         )
 

@@ -1,10 +1,10 @@
 """
-Training-ready Gymnasium wrapper for the 2-wheeler robot.
+Training-ready Gymnasium wrapper for MuJoCo robot environments.
 
 Wraps SimpleWheelerEnv with:
 - 10 Hz control frequency (1 action per 0.1 seconds)
-- Reward function (distance-based)
-- Episode termination logic
+- Reward function (distance-based + optional biped rewards)
+- Episode termination logic (+ optional fall detection)
 - Standard Gymnasium API (reset, step returning obs/reward/done/truncated/info)
 """
 
@@ -23,20 +23,20 @@ if TYPE_CHECKING:
 
 class TrainingEnv:
     """
-    Gymnasium-style training environment for the 2-wheeler robot.
+    Gymnasium-style training environment for MuJoCo robots.
 
-    Control: 10 Hz (10 actions per second)
-    Episodes: 10 seconds (100 steps)
+    Works with any bot — action dimensions and actuator names are
+    discovered from the loaded MuJoCo model.
 
     Observation: Camera RGB image (H, W, 3) normalized to [0, 1]
-    Action: [left_motor, right_motor] in range [-1, 1]
-    Reward: Negative distance change to target
+    Action: Array of motor commands, length = num_actuators, each in [-1, 1]
     """
 
     @classmethod
     def from_config(cls, config: EnvConfig) -> TrainingEnv:
         """Create TrainingEnv from an EnvConfig object."""
         return cls(
+            scene_path=config.scene_path,
             render_width=config.render_width,
             render_height=config.render_height,
             max_episode_steps=config.max_episode_steps,
@@ -54,10 +54,17 @@ class TrainingEnv:
             max_distractors=config.max_distractors,
             distractor_min_distance=config.distractor_min_distance,
             distractor_max_distance=config.distractor_max_distance,
+            # Biped-specific rewards (all default to 0 = disabled)
+            upright_reward_scale=config.upright_reward_scale,
+            alive_bonus=config.alive_bonus,
+            energy_penalty_scale=config.energy_penalty_scale,
+            fall_height_threshold=config.fall_height_threshold,
+            fall_tilt_threshold=config.fall_tilt_threshold,
         )
 
     def __init__(
         self,
+        scene_path="bots/simple2wheeler/scene.xml",
         render_width=64,
         render_height=64,
         max_episode_steps=100,  # 10 seconds at 10 Hz
@@ -78,9 +85,17 @@ class TrainingEnv:
         max_distractors=4,
         distractor_min_distance=0.5,
         distractor_max_distance=3.0,
+        # Biped-specific reward params (all 0.0 = disabled for wheeler)
+        upright_reward_scale=0.0,
+        alive_bonus=0.0,
+        energy_penalty_scale=0.0,
+        fall_height_threshold=0.0,  # 0 = disabled; 0.3 for biped
+        fall_tilt_threshold=0.7,    # cos(tilt) below this = fallen
     ):
         self.env = SimpleWheelerEnv(
-            render_width=render_width, render_height=render_height
+            scene_path=scene_path,
+            render_width=render_width,
+            render_height=render_height,
         )
         self.max_episode_steps = max_episode_steps
         self.mujoco_steps_per_action = mujoco_steps_per_action
@@ -100,6 +115,13 @@ class TrainingEnv:
         self.distractor_min_distance = distractor_min_distance
         self.distractor_max_distance = distractor_max_distance
 
+        # Biped-specific rewards
+        self.upright_reward_scale = upright_reward_scale
+        self.alive_bonus = alive_bonus
+        self.energy_penalty_scale = energy_penalty_scale
+        self.fall_height_threshold = fall_height_threshold
+        self.fall_tilt_threshold = fall_tilt_threshold
+
         # Episode tracking
         self.episode_step = 0
         self.prev_distance = None
@@ -118,9 +140,13 @@ class TrainingEnv:
         # Time step for target movement (action dt = mujoco_steps * sim_dt)
         self.action_dt = mujoco_steps_per_action * self.env.model.opt.timestep
 
+        # Expose actuator info from inner env (drives policy output size)
+        self.num_actuators = self.env.num_actuators
+        self.actuator_names = self.env.actuator_names
+
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
-        self.action_shape = (2,)  # [left_motor, right_motor]
+        self.action_shape = (self.num_actuators,)
 
     def set_curriculum_stage(self, stage, progress):
         """
@@ -199,9 +225,9 @@ class TrainingEnv:
         target_y = distance * np.sin(angle)
         target_z = 0.08
 
-        # Update target body position in MuJoCo model
-        target_body_id = self.env.target_body_id
-        self.env.model.body_pos[target_body_id] = [target_x, target_y, target_z]
+        # Update target mocap position
+        mocap_id = self.env.target_mocap_id
+        self.env.data.mocap_pos[mocap_id] = [target_x, target_y, target_z]
 
         # --- Stage 3: Visual distractors ---
         if self.curriculum_stage >= 3:
@@ -252,8 +278,8 @@ class TrainingEnv:
 
     def _update_target_position(self):
         """Move target by velocity, bounce off arena boundaries."""
-        target_body_id = self.env.target_body_id
-        pos = self.env.model.body_pos[target_body_id].copy()
+        mocap_id = self.env.target_mocap_id
+        pos = self.env.data.mocap_pos[mocap_id].copy()
 
         # Update XY position
         pos[0] += self.target_velocity[0] * self.action_dt
@@ -269,8 +295,7 @@ class TrainingEnv:
                 pos[axis] = -boundary
                 self.target_velocity[axis] *= -1
 
-        self.env.model.body_pos[target_body_id] = pos
-        mujoco.mj_forward(self.env.model, self.env.data)
+        self.env.data.mocap_pos[mocap_id] = pos
 
     def step(self, action):
         """
@@ -279,7 +304,7 @@ class TrainingEnv:
         Runs mujoco_steps_per_action MuJoCo steps to achieve desired control frequency.
 
         Args:
-            action: [left_motor, right_motor] in range [-1, 1]
+            action: Array of motor commands, length num_actuators, each in [-1, 1]
 
         Returns:
             observation: Camera image normalized to [0, 1]
@@ -288,13 +313,13 @@ class TrainingEnv:
             truncated: Boolean indicating episode timeout
             info: Dict with additional information
         """
-        left_motor, right_motor = action
+        action = np.asarray(action, dtype=np.float64)
 
         # Run multiple MuJoCo steps with same action (10 Hz control)
         # Only render on the last step to avoid wasted work
         for i in range(self.mujoco_steps_per_action):
             is_last_step = i == self.mujoco_steps_per_action - 1
-            camera_img = self.env.step(left_motor, right_motor, render=is_last_step)
+            camera_img = self.env.step(action, render=is_last_step)
 
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
@@ -316,7 +341,22 @@ class TrainingEnv:
         # 3. Time penalty: tiny cost per step to encourage efficiency
         time_cost = -self.time_penalty
 
-        reward = distance_reward + exploration_reward + time_cost
+        # 4. Upright reward (biped only, 0 when disabled)
+        upright_reward = 0.0
+        if self.upright_reward_scale > 0:
+            up_vec = self.env.get_torso_up_vector()
+            upright_reward = self.upright_reward_scale * up_vec[2]
+
+        # 5. Alive bonus (biped only, 0 when disabled)
+        alive_reward = self.alive_bonus
+
+        # 6. Energy penalty (biped only, 0 when disabled)
+        energy_cost = 0.0
+        if self.energy_penalty_scale > 0:
+            energy_cost = -self.energy_penalty_scale * np.sum(action ** 2)
+
+        reward = (distance_reward + exploration_reward + time_cost
+                  + upright_reward + alive_reward + energy_cost)
 
         # Move target after reward computation (stage 2+).
         # Next step's observation and reward will see the new position.
@@ -336,13 +376,26 @@ class TrainingEnv:
         has_warnings = np.any(self.env.data.warning.number > 0)
         has_nan = np.isnan(current_distance) or np.any(np.isnan(current_position))
         bot_z = current_position[2]
-        out_of_bounds = bot_z < -0.5 or bot_z > 1.0  # Fell through floor or launched
+        out_of_bounds = bot_z < -0.5 or bot_z > 2.0  # Fell through floor or launched
+
+        # Fall detection (biped only, disabled when fall_height_threshold == 0)
+        has_fallen = False
+        if self.fall_height_threshold > 0:
+            if bot_z < self.fall_height_threshold:
+                has_fallen = True
+            up_vec = self.env.get_torso_up_vector()
+            if up_vec[2] < self.fall_tilt_threshold:
+                has_fallen = True
 
         if has_warnings or has_nan or out_of_bounds:
             done = True
             reward -= 2.0  # Small penalty for unstable behavior
             # Reset warning counters for next episode
             self.env.data.warning.number[:] = 0
+
+        elif has_fallen:
+            done = True
+            reward -= 5.0  # Penalty for falling
 
         # Success: reached target
         elif current_distance < self.success_distance:
@@ -369,9 +422,14 @@ class TrainingEnv:
             "reward_distance": distance_reward,
             "reward_exploration": exploration_reward,
             "reward_time": time_cost,
+            "reward_upright": upright_reward,
+            "reward_alive": alive_reward,
+            "reward_energy": energy_cost,
             "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
+            "has_fallen": has_fallen,
+            "torso_height": bot_z,
         }
 
         return obs, reward, done, truncated, info

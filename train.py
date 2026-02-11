@@ -174,17 +174,21 @@ class LSTMPolicy(nn.Module):
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=64, image_width=64, hidden_size=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=64, image_width=64, hidden_size=64, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
         self.hidden_size = hidden_size
+        self.num_actions = num_actions
 
         # CNN feature extractor (same as TinyPolicy)
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
 
-        # Flattened CNN output size
-        conv_out_size = 64 * 6 * 6  # 2304
+        # Compute flattened CNN output size from input dimensions
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, image_height, image_width)
+            dummy = self.conv2(self.conv1(dummy))
+            conv_out_size = dummy.numel()
 
         # LSTM for temporal memory
         self.lstm = nn.LSTM(
@@ -192,10 +196,10 @@ class LSTMPolicy(nn.Module):
         )
 
         # Output layers
-        self.fc = nn.Linear(hidden_size, 2)  # Output: mean of [left_motor, right_motor]
+        self.fc = nn.Linear(hidden_size, num_actions)
 
         # Learnable log_std (state-independent), clamped in forward()
-        self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
+        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
 
@@ -346,22 +350,27 @@ class TinyPolicy(nn.Module):
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=64, image_width=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=64, image_width=64, num_actions=2, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
         super().__init__()
 
-        # CNN: 2 conv layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # 64x64 -> 15x15
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)  # 15x15 -> 6x6
+        self.num_actions = num_actions
 
-        # Calculate flattened size
-        conv_out_size = 64 * 6 * 6  # 2304
+        # CNN: 2 conv layers
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+
+        # Compute flattened CNN output size from input dimensions
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, image_height, image_width)
+            dummy = self.conv2(self.conv1(dummy))
+            conv_out_size = dummy.numel()
 
         # FC layers
         self.fc1 = nn.Linear(conv_out_size, 128)
-        self.fc2 = nn.Linear(128, 2)  # Output: mean of [left_motor, right_motor]
+        self.fc2 = nn.Linear(128, num_actions)
 
         # Learnable log_std (state-independent), clamped in forward()
-        self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
+        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
         self.min_log_std = min_log_std
         self.max_log_std = max_log_std
 
@@ -534,8 +543,8 @@ def collect_episode(
         if log_rerun:
             rr.set_time("step", sequence=steps)
             rr.log(f"{ns}/camera", rr.Image(observations[-1]))
-            rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
-            rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
+            for i, name in enumerate(env.actuator_names):
+                rr.log(f"{ns}/action/{name}", rr.Scalars([action[i]]))
             rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
             rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
             rr.log(f"{ns}/distance_to_target", rr.Scalars([info["distance"]]))
@@ -569,10 +578,8 @@ def collect_episode(
         rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
         rr.log(f"{ns}/episode/steps", rr.Scalars([steps]))
 
-    # Compute action statistics
+    # Compute action statistics (per-actuator by name)
     actions_array = np.array(actions)
-    left_actions = actions_array[:, 0]
-    right_actions = actions_array[:, 1]
 
     # Determine if episode was a success (reached target)
     success = done and info["distance"] < env.success_distance
@@ -586,16 +593,14 @@ def collect_episode(
         "steps": steps,
         "final_distance": info["distance"],
         "success": success,
-        # Action statistics for logging
-        "left_motor_mean": float(np.mean(left_actions)),
-        "left_motor_std": float(np.std(left_actions)),
-        "left_motor_min": float(np.min(left_actions)),
-        "left_motor_max": float(np.max(left_actions)),
-        "right_motor_mean": float(np.mean(right_actions)),
-        "right_motor_std": float(np.std(right_actions)),
-        "right_motor_min": float(np.min(right_actions)),
-        "right_motor_max": float(np.max(right_actions)),
+        "done": done,
+        "truncated": truncated,
     }
+    # Per-actuator stats keyed by actuator name
+    for i, name in enumerate(env.actuator_names):
+        motor_actions = actions_array[:, i]
+        result[f"{name}_mean"] = float(np.mean(motor_actions))
+        result[f"{name}_std"] = float(np.std(motor_actions))
 
     # Only include log_probs for training episodes
     if not deterministic:
@@ -714,11 +719,16 @@ def train_step_batched(
 
 def parse_args():
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Train 2-wheeler robot")
+    parser = argparse.ArgumentParser(description="Train MuJoCo robot")
     parser.add_argument(
         "--smoketest",
         action="store_true",
         help="Run a fast end-to-end smoketest (tiny config, no wandb, no rerun)",
+    )
+    parser.add_argument(
+        "--biped",
+        action="store_true",
+        help="Use biped robot configuration (6-joint humanoid)",
     )
     parser.add_argument(
         "--num-workers",
@@ -737,11 +747,14 @@ def main():
     if args.smoketest:
         cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
+    elif args.biped:
+        cfg = Config.for_biped()
     else:
         cfg = Config()
 
+    robot_name = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
     print("=" * 60)
-    print("Training 2-Wheeler Robot with Tiny Neural Network")
+    print(f"Training {robot_name} Robot ({cfg.env.scene_path})")
     print("=" * 60)
     print()
 
@@ -763,6 +776,7 @@ def main():
             image_height=cfg.policy.image_height,
             image_width=cfg.policy.image_width,
             hidden_size=cfg.policy.hidden_size,
+            num_actions=cfg.policy.fc_output_size,
             init_std=cfg.policy.init_std,
             min_log_std=cfg.policy.min_log_std,
             max_log_std=cfg.policy.max_log_std,
@@ -771,6 +785,7 @@ def main():
         policy = TinyPolicy(
             image_height=cfg.policy.image_height,
             image_width=cfg.policy.image_width,
+            num_actions=cfg.policy.fc_output_size,
             init_std=cfg.policy.init_std,
             min_log_std=cfg.policy.min_log_std,
             max_log_std=cfg.policy.max_log_std,
@@ -798,8 +813,9 @@ def main():
         f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     )
     wandb_mode = "disabled" if args.smoketest else "online"
+    wandb_project = "mindsim-biped" if "biped" in cfg.env.scene_path else "mindsim-2wheeler"
     wandb.init(
-        project="mindsim-2wheeler",
+        project=wandb_project,
         name=run_name,
         notes=run_notes,
         mode=wandb_mode,
@@ -1029,14 +1045,6 @@ def main():
         else:
             mastery_count = 0  # Reset if we drop below mastery level
 
-        # Collect all actions from batch for histograms
-        all_left_actions = np.concatenate(
-            [np.array(ep["actions"])[:, 0] for ep in episode_batch]
-        )
-        all_right_actions = np.concatenate(
-            [np.array(ep["actions"])[:, 1] for ep in episode_batch]
-        )
-
         log_dict = {
             "episode": episode_count,
             "batch": batch_idx,
@@ -1060,24 +1068,22 @@ def main():
             "batch/loss": loss,
             "training/grad_norm": grad_norm,
             "training/entropy": entropy,
-            # Policy std (exploration level)
-            "policy/std_left": policy_std[0],
-            "policy/std_right": policy_std[1],
-            # Action statistics (across entire batch)
-            "actions/left_motor_mean": float(np.mean(all_left_actions)),
-            "actions/left_motor_std": float(np.std(all_left_actions)),
-            "actions/right_motor_mean": float(np.mean(all_right_actions)),
-            "actions/right_motor_std": float(np.std(all_right_actions)),
-            # Action histograms (distribution across batch)
-            "actions/left_motor_hist": wandb.Histogram(
-                all_left_actions.tolist(), num_bins=20
-            ),
-            "actions/right_motor_hist": wandb.Histogram(
-                all_right_actions.tolist(), num_bins=20
-            ),
             # Reward histogram across batch
             "batch/reward_hist": wandb.Histogram(batch_rewards, num_bins=20),
         }
+
+        # Per-actuator action stats and policy std (works for any bot)
+        for i, name in enumerate(env.actuator_names):
+            motor_actions = np.concatenate(
+                [np.array(ep["actions"])[:, i] for ep in episode_batch]
+            )
+            log_dict[f"actions/{name}_mean"] = float(np.mean(motor_actions))
+            log_dict[f"actions/{name}_std"] = float(np.std(motor_actions))
+            log_dict[f"actions/{name}_hist"] = wandb.Histogram(
+                motor_actions.tolist(), num_bins=20
+            )
+            if i < len(policy_std):
+                log_dict[f"policy/std_{name}"] = policy_std[i]
 
         t_log_start = time.perf_counter()
         wandb.log(log_dict)

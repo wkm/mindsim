@@ -7,10 +7,10 @@ import numpy as np
 
 class SimpleWheelerEnv:
     """
-    Simple 2-wheeler robot environment with camera for manual control and testing.
+    Bot-agnostic MuJoCo simulation environment.
 
-    The robot has two motors (left and right wheels) and a forward-facing camera.
-    The goal is to navigate towards an orange target cube.
+    Discovers actuators from the loaded model so it works with any robot
+    (2-wheel, biped, etc.). The scene_path constructor arg selects which bot.
     """
 
     def __init__(
@@ -40,19 +40,21 @@ class SimpleWheelerEnv:
             self.model, height=render_height, width=render_width
         )
 
-        # Get motor and body IDs for faster access
-        self.left_motor_id = mujoco.mj_name2id(
-            self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_1_motor"
-        )
-        self.right_motor_id = mujoco.mj_name2id(
-            self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, "Revolute_2_motor"
-        )
+        # Discover actuators from model (works for any bot)
+        self.num_actuators = self.model.nu
+        self.actuator_names = [
+            mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+            for i in range(self.num_actuators)
+        ]
+
+        # Standard body/camera IDs (convention: all bots use these names)
         self.bot_body_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "base"
         )
         self.target_body_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "target"
         )
+        self.target_mocap_id = self.model.body_mocapid[self.target_body_id]
         self.camera_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_CAMERA, "camera_1_cam"
         )
@@ -73,25 +75,19 @@ class SimpleWheelerEnv:
         mujoco.mj_forward(self.model, self.data)  # Compute forward kinematics
         return self.get_camera_image()
 
-    def step(self, left_motor, right_motor, render=True):
+    def step(self, actions, render=True):
         """
         Step the simulation with given motor commands.
 
         Args:
-            left_motor: Left motor strength [-1, 1]
-            right_motor: Right motor strength [-1, 1]
+            actions: Array of motor commands, length num_actuators, each in [-1, 1]
             render: Whether to render camera image (default True)
 
         Returns:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
-        # Clip motor values to valid range
-        left_motor = np.clip(left_motor, -1.0, 1.0)
-        right_motor = np.clip(right_motor, -1.0, 1.0)
-
-        # Set motor controls
-        self.data.ctrl[self.left_motor_id] = left_motor
-        self.data.ctrl[self.right_motor_id] = right_motor
+        actions = np.clip(actions, -1.0, 1.0)
+        self.data.ctrl[:self.num_actuators] = actions
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -143,6 +139,19 @@ class SimpleWheelerEnv:
         bot_pos = self.get_bot_position()
         target_pos = self.get_target_position()
         return np.linalg.norm(target_pos - bot_pos)
+
+    def get_torso_up_vector(self):
+        """
+        Get the torso's local Z-axis in world frame (uprightness indicator).
+
+        Returns [0, 0, 1] when perfectly upright.
+        """
+        quat = self.data.xquat[self.bot_body_id]
+        w, x, y, z = quat
+        up_x = 2 * (x * z + w * y)
+        up_y = 2 * (y * z - w * x)
+        up_z = 1 - 2 * (x * x + y * y)
+        return np.array([up_x, up_y, up_z])
 
     def launch_viewer(self):
         """Launch interactive 3D viewer for debugging."""
@@ -202,19 +211,16 @@ def demo_manual_control():
 
             # Simple control: drive forward
             if step_count < 300:
-                left_motor = 0.5
-                right_motor = 0.5
+                actions = [0.5, 0.5]
             # Turn right
             elif step_count < 600:
-                left_motor = 0.5
-                right_motor = -0.5
+                actions = [0.5, -0.5]
             # Drive forward again
             else:
-                left_motor = 0.5
-                right_motor = 0.5
+                actions = [0.5, 0.5]
 
             # Step simulation
-            camera_img = env.step(left_motor, right_motor)
+            camera_img = env.step(actions)
 
             # Print status every 100 steps
             if step_count % 100 == 0:

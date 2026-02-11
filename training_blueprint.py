@@ -58,11 +58,7 @@ def create_training_blueprint():
                 ),
                 rrb.TimeSeriesView(
                     name="Actions",
-                    origin="/",
-                    contents=[
-                        "eval/action/left_motor",
-                        "eval/action/right_motor",
-                    ],
+                    origin="eval/action",
                 ),
                 row_shares=[1, 1, 1],
             ),
