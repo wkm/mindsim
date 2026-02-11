@@ -15,8 +15,8 @@ from typing import Literal
 class EnvConfig:
     """Environment configuration."""
 
-    render_width: int = 64
-    render_height: int = 64
+    render_width: int = 128
+    render_height: int = 128
     max_episode_steps: int = 200  # 20 seconds at 10 Hz
     control_frequency_hz: int = 10
     mujoco_steps_per_action: int = 5
@@ -68,8 +68,8 @@ class PolicyConfig:
     policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
 
     # Image input
-    image_height: int = 64
-    image_width: int = 64
+    image_height: int = 128
+    image_width: int = 128
 
     # CNN architecture
     conv1_out_channels: int = 32
@@ -182,6 +182,8 @@ class Config:
         """Config for fast end-to-end validation. Runs in seconds."""
         return cls(
             env=EnvConfig(
+                render_width=64,
+                render_height=64,
                 max_episode_steps=10,  # Very short episodes
             ),
             curriculum=CurriculumConfig(
@@ -193,6 +195,8 @@ class Config:
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
                 hidden_size=32,  # Tiny network
             ),
             training=TrainingConfig(
