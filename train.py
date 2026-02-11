@@ -593,6 +593,15 @@ def collect_episode(
     # Track trajectory for Rerun
     trajectory_points = []
 
+    # Set up video encoder for Rerun (H.264 instead of per-frame JPEG)
+    video_encoder = None
+    if log_rerun:
+        video_encoder = rerun_logger.VideoEncoder(
+            f"{ns}/camera",
+            width=env.observation_shape[1],
+            height=env.observation_shape[0],
+        )
+
     while not (done or truncated):
         # Convert observation to torch tensor
         obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)
@@ -623,7 +632,7 @@ def collect_episode(
         # Log to Rerun in real-time
         if log_rerun:
             rr.set_time("step", sequence=steps)
-            rr.log(f"{ns}/camera", rr.Image(observations[-1]).compress(jpeg_quality=85))
+            video_encoder.log_frame(observations[-1])
             rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
             rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
             rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
@@ -653,8 +662,9 @@ def collect_episode(
     if pbar:
         pbar.close()
 
-    # Log episode summary to Rerun
+    # Flush video encoder and log episode summary
     if log_rerun:
+        video_encoder.flush()
         rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
         rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
         rr.log(f"{ns}/episode/steps", rr.Scalars([steps]))
@@ -718,6 +728,12 @@ def replay_episode(env, episode_data):
 
     env.reset_to_config(episode_data["env_config"])
 
+    video_encoder = rerun_logger.VideoEncoder(
+        f"{ns}/camera",
+        width=env.observation_shape[1],
+        height=env.observation_shape[0],
+    )
+
     trajectory_points = []
     total_reward = 0
 
@@ -726,7 +742,7 @@ def replay_episode(env, episode_data):
         total_reward += reward
 
         rr.set_time("step", sequence=step_idx)
-        rr.log(f"{ns}/camera", rr.Image(episode_data["observations"][step_idx]).compress(jpeg_quality=85))
+        video_encoder.log_frame(episode_data["observations"][step_idx])
         rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
         rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
         rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
@@ -744,6 +760,8 @@ def replay_episode(env, episode_data):
 
         if done or truncated:
             break
+
+    video_encoder.flush()
 
     # Log episode summary
     rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
@@ -1285,8 +1303,8 @@ def main():
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 3
-    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 1.0
+    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
+    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
     mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
     print(
