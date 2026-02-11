@@ -20,12 +20,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from tqdm import tqdm
-
 import rerun_logger
 import wandb
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from config import Config
+from dashboard import Dashboard
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from training_env import TrainingEnv
@@ -190,9 +189,12 @@ class LSTMPolicy(nn.Module):
             dummy = self.conv2(self.conv1(dummy))
             conv_out_size = dummy.numel()
 
-        # LSTM for temporal memory
+        # Compress CNN spatial features to compact vector before LSTM
+        self.fc_embed = nn.Linear(conv_out_size, hidden_size)
+
+        # LSTM for temporal memory (operates on compact feature vector)
         self.lstm = nn.LSTM(
-            input_size=conv_out_size, hidden_size=hidden_size, batch_first=True
+            input_size=hidden_size, hidden_size=hidden_size, batch_first=True
         )
 
         # Output layers
@@ -238,6 +240,7 @@ class LSTMPolicy(nn.Module):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
         x = x.reshape(x.size(0), -1)
+        x = torch.relu(self.fc_embed(x))
         x = x.reshape(B, T, -1)
 
         if hidden is None:
@@ -581,14 +584,7 @@ def collect_episode(
     steps = 0
     info = {}
 
-    # Optional progress bar for episode steps
-    pbar = (
-        tqdm(
-            total=env.max_episode_steps, desc="  Episode steps", leave=False, position=1
-        )
-        if show_progress
-        else None
-    )
+    pbar = None  # Progress bar removed (dashboard handles display)
 
     # Track trajectory for Rerun
     trajectory_points = []
@@ -1338,8 +1334,9 @@ def main():
     mastered = False
     max_batches = cfg.training.max_batches
     batches_this_session = 0
-    pbar = tqdm(desc="Training", position=0, unit="batch", total=max_batches, initial=batch_idx)
+    dashboard = Dashboard(total_batches=max_batches, algorithm=cfg.training.algorithm)
     while not mastered and (max_batches is None or batch_idx < max_batches):
+        batch_start_time = time.perf_counter()
         # Set curriculum stage for this batch
         env.set_curriculum_stage(curriculum_stage, stage_progress, curr.num_stages)
 
@@ -1349,7 +1346,7 @@ def main():
             changes = apply_tweaks(cfg, optimizer, env, tweaks)
             batch_size = cfg.training.batch_size
             for name, old, new in changes:
-                tqdm.write(f"  tweak: {name} {old} -> {new}")
+                dashboard.message(f"  tweak: {name} {old} -> {new}")
             if changes:
                 wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
@@ -1376,10 +1373,7 @@ def main():
             )
         else:
             episode_batch = []
-            episode_pbar = tqdm(
-                range(batch_size), desc="  Collecting", leave=False, position=1
-            )
-            for _ in episode_pbar:
+            for _ in range(batch_size):
                 episode_data = collect_episode(
                     env,
                     policy,
@@ -1388,9 +1382,8 @@ def main():
                     log_rerun=False,
                 )
                 episode_batch.append(episode_data)
-                episode_pbar.set_postfix({"r": f"{episode_data['total_reward']:.2f}"})
-            episode_pbar.close()
-        timing["collect"] += time.perf_counter() - t_collect_start
+        timing["collect_batch"] = time.perf_counter() - t_collect_start
+        timing["collect"] += timing["collect_batch"]
 
         batch_rewards = [ep["total_reward"] for ep in episode_batch]
         batch_distances = [ep["final_distance"] for ep in episode_batch]
@@ -1431,7 +1424,8 @@ def main():
                 episode_batch,
                 entropy_coeff=cfg.training.entropy_coeff,
             )
-        timing["train"] += time.perf_counter() - t_train_start
+        timing["train_batch"] = time.perf_counter() - t_train_start
+        timing["train"] += timing["train_batch"]
 
         # Aggregate batch statistics
         avg_reward = np.mean(batch_rewards)
@@ -1484,7 +1478,8 @@ def main():
             # Fall back to training success rate if eval disabled
             eval_success_rate = batch_success_rate
             rolling_eval_success_rate = rolling_success_rate
-        timing["eval"] += time.perf_counter() - t_eval_start
+        timing["eval_batch"] = time.perf_counter() - t_eval_start
+        timing["eval"] += timing["eval_batch"]
 
         # Replay worst training episode with Rerun logging
         if should_log_rerun_this_batch and rr_wandb is not None:
@@ -1619,18 +1614,53 @@ def main():
         wandb.log(log_dict)
         timing["log"] += time.perf_counter() - t_log_start
 
-        # Update progress bar
-        pbar.set_postfix(
-            {
-                "avg_r": f"{avg_reward:.2f}",
-                "eval": f"{rolling_eval_success_rate:.0%}",
-                "train": f"{rolling_success_rate:.0%}",
-                "stage": f"{curriculum_stage}/{curr.num_stages}",
-                "prog": f"{stage_progress:.2f}",
-                "mstr": f"{mastery_count}/{cfg.training.mastery_batches}",
-            }
-        )
-        pbar.update(1)
+        # Compute batch timing
+        batch_time = time.perf_counter() - batch_start_time
+
+        # Update dashboard
+        dash_metrics = {
+            # Episode performance
+            "avg_reward": avg_reward,
+            "best_reward": best_reward,
+            "worst_reward": worst_reward,
+            "avg_distance": avg_distance,
+            "avg_steps": avg_steps,
+            # Success rates
+            "rolling_eval_success_rate": rolling_eval_success_rate,
+            "eval_success_rate": eval_success_rate,
+            "batch_success_rate": batch_success_rate,
+            # Optimization
+            "grad_norm": grad_norm,
+            "entropy": entropy,
+            "policy_std": policy_std,
+            # Curriculum
+            "curriculum_stage": curriculum_stage,
+            "num_stages": curr.num_stages,
+            "stage_progress": stage_progress,
+            "mastery_count": mastery_count,
+            "mastery_batches": cfg.training.mastery_batches,
+            "max_episode_steps": env.max_episode_steps,
+            # Timing
+            "batch_time": batch_time,
+            "collect_time": timing["collect_batch"],
+            "train_time": timing["train_batch"],
+            "eval_time": timing["eval_batch"],
+            "batch_size": batch_size,
+        }
+        if cfg.training.algorithm == "PPO":
+            dash_metrics.update({
+                "policy_loss": policy_loss,
+                "value_loss": value_loss,
+                "clip_fraction": clip_fraction,
+                "approx_kl": approx_kl,
+                "explained_variance": explained_variance,
+                "mean_value": mean_value,
+                "mean_return": mean_return,
+            })
+        else:
+            dash_metrics["loss"] = loss
+
+        dashboard.update(batch_idx, dash_metrics)
         batch_idx += 1
         batches_this_session += 1
 
@@ -1655,10 +1685,10 @@ def main():
                 trigger="periodic",
             )
 
-    pbar.close()
+    dashboard.finish()
 
     # Print timing summary
-    total_time = sum(timing.values())
+    total_time = timing["collect"] + timing["eval"] + timing["train"] + timing["log"] + timing["rerun"]
     print()
     print("=" * 60)
     print("Timing Summary")
