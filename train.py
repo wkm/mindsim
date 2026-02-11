@@ -570,6 +570,7 @@ def collect_episode(
     distances = []
 
     obs = env.reset()
+    env_config = env.last_reset_config
 
     # Reset LSTM hidden state if policy has one
     if hasattr(policy, "reset_hidden"):
@@ -675,6 +676,7 @@ def collect_episode(
         "steps": steps,
         "final_distance": info["distance"],
         "success": success,
+        "env_config": env_config,
         "done": done,
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
@@ -698,6 +700,55 @@ def collect_episode(
         result["log_probs"] = log_probs
 
     return result
+
+
+def replay_episode(env, episode_data):
+    """
+    Replay a recorded episode with Rerun logging.
+
+    Resets the environment to the saved configuration and replays the
+    exact actions from the episode, logging each step to Rerun under
+    the "worst" namespace.
+
+    Args:
+        env: TrainingEnv instance
+        episode_data: Dict from collect_episode (must include env_config and actions)
+    """
+    ns = "worst"
+
+    env.reset_to_config(episode_data["env_config"])
+
+    trajectory_points = []
+    total_reward = 0
+
+    for step_idx, action in enumerate(episode_data["actions"]):
+        obs, reward, done, truncated, info = env.step(action)
+        total_reward += reward
+
+        rr.set_time("step", sequence=step_idx)
+        rr.log(f"{ns}/camera", rr.Image(episode_data["observations"][step_idx]).compress(jpeg_quality=85))
+        rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
+        rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
+        rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
+        rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
+        rr.log(f"{ns}/distance_to_target", rr.Scalars([info["distance"]]))
+
+        rerun_logger.log_body_transforms(env, namespace=ns)
+
+        trajectory_points.append(info["position"])
+        if len(trajectory_points) > 1:
+            rr.log(
+                f"{ns}/trajectory",
+                rr.LineStrips3D([trajectory_points], colors=[[255, 100, 100]]),
+            )
+
+        if done or truncated:
+            break
+
+    # Log episode summary
+    rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
+    rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
+    rr.log(f"{ns}/episode/steps", rr.Scalars([step_idx + 1]))
 
 
 def compute_reward_to_go(rewards, gamma=0.99):
@@ -1416,6 +1467,16 @@ def main():
             eval_success_rate = batch_success_rate
             rolling_eval_success_rate = rolling_success_rate
         timing["eval"] += time.perf_counter() - t_eval_start
+
+        # Replay worst training episode with Rerun logging
+        if should_log_rerun_this_batch and rr_wandb is not None:
+            t_rerun_start = time.perf_counter()
+            worst_idx = int(np.argmin(batch_rewards))
+            worst_ep = episode_batch[worst_idx]
+            rr_wandb.start_episode(episode_count, env, namespace="worst")
+            replay_episode(env, worst_ep)
+            rr_wandb.finish_episode(worst_ep, upload_artifact=True)
+            timing["rerun"] += time.perf_counter() - t_rerun_start
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
