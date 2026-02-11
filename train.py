@@ -114,7 +114,7 @@ def generate_run_notes():
         ).stdout.strip()
 
         # Build prompt for Claude CLI
-        prompt = f"""Summarize this training run in 2-3 sentences for experiment tracking.
+        prompt = f"""Summarize what changed in this training run as a short bullet-point list for experiment tracking.
 
 Branch: {branch}
 Recent commit: {commit_msg}
@@ -125,8 +125,11 @@ Changes:
 Diff excerpt:
 {full_diff}
 
-Focus on: What hypothesis is being tested? What changed from the baseline?
-Be concise and technical. Start directly with the summary, no preamble."""
+Rules:
+- Output ONLY markdown bullet points (- ...), nothing else
+- 2-5 bullets covering: what changed, what hypothesis is being tested, key parameter/architecture differences from baseline
+- Be concise and technical, each bullet one line
+- No preamble, no headings, no trailing text"""
 
         # Call Claude CLI (handles auth automatically)
         result = subprocess.run(
@@ -138,14 +141,10 @@ Be concise and technical. Start directly with the summary, no preamble."""
         summary = result.stdout.strip()
 
         # Format as markdown notes
-        notes = f"""## Run Summary (auto-generated)
-
-{summary}
+        notes = f"""{summary}
 
 ---
-**Branch:** `{branch}`
-**Commit:** {commit_msg.split(chr(10))[0][:60]}
-"""
+**Branch:** `{branch}` | **Commit:** {commit_msg.split(chr(10))[0][:60]}"""
         return notes
 
     except Exception as e:
@@ -176,7 +175,7 @@ class LSTMPolicy(nn.Module):
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=128, image_width=128, hidden_size=64, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, hidden_size=64, init_std=0.5, max_log_std=0.7):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -202,7 +201,6 @@ class LSTMPolicy(nn.Module):
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
-        self.min_log_std = min_log_std
         self.max_log_std = max_log_std
 
         # Hidden state (will be set during episode)
@@ -269,7 +267,7 @@ class LSTMPolicy(nn.Module):
         """
         features, hidden, is_sequence = self._backbone(x, hidden)
         mean = self.fc(features)
-        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
 
@@ -298,7 +296,7 @@ class LSTMPolicy(nn.Module):
 
         # Action head
         mean = self.fc(features)  # (T, 2)
-        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
 
         # Value head
@@ -396,7 +394,7 @@ class TinyPolicy(nn.Module):
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=128, image_width=128, init_std=0.5, min_log_std=-3.0, max_log_std=0.7):
+    def __init__(self, image_height=128, image_width=128, init_std=0.5, max_log_std=0.7):
         super().__init__()
 
         # CNN: 2 conv layers
@@ -416,7 +414,6 @@ class TinyPolicy(nn.Module):
 
         # Learnable log_std (state-independent), clamped in forward()
         self.log_std = nn.Parameter(torch.ones(2) * np.log(init_std))
-        self.min_log_std = min_log_std
         self.max_log_std = max_log_std
 
     def _backbone(self, x):
@@ -448,7 +445,7 @@ class TinyPolicy(nn.Module):
         """
         features = self._backbone(x)
         mean = self.fc2(features)
-        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
 
@@ -469,7 +466,7 @@ class TinyPolicy(nn.Module):
 
         # Action head
         mean = self.fc2(features)
-        clamped_log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
 
         # Value head
@@ -625,7 +622,7 @@ def collect_episode(
         # Log to Rerun in real-time
         if log_rerun:
             rr.set_time("step", sequence=steps)
-            rr.log(f"{ns}/camera", rr.Image(observations[-1]))
+            rr.log(f"{ns}/camera", rr.Image(observations[-1]).compress(jpeg_quality=85))
             rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
             rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
             rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
@@ -821,7 +818,7 @@ def train_step_batched(
     # Applied AFTER clipping so the entropy gradient reaches log_std at
     # full strength every step, preventing std collapse.
     if entropy_coeff > 0:
-        clamped_log_std = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+        clamped_log_std = policy.log_std.clamp(max=policy.max_log_std)
         std = torch.exp(clamped_log_std)
         entropy = torch.distributions.Normal(torch.zeros_like(std), std).entropy().sum()
         entropy_loss = -entropy_coeff * entropy
@@ -833,7 +830,7 @@ def train_step_batched(
     optimizer.step()
 
     # Get current policy std for logging
-    clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+    clamped = policy.log_std.clamp(max=policy.max_log_std)
     policy_std = torch.exp(clamped).detach().cpu().numpy()
 
     return avg_loss, total_grad_norm, policy_std, entropy_val
@@ -1018,7 +1015,7 @@ def train_step_ppo(
     avg_grad_norm = total_grad_norm / ppo_epochs
 
     # Get current policy std for logging
-    clamped = policy.log_std.clamp(policy.min_log_std, policy.max_log_std)
+    clamped = policy.log_std.clamp(max=policy.max_log_std)
     policy_std = torch.exp(clamped).detach().cpu().numpy()
 
     ev = explained_variance.item() if torch.is_tensor(explained_variance) else explained_variance
@@ -1105,44 +1102,6 @@ def main():
     print("=" * 60)
     print()
 
-    # Create environment from config
-    print("Creating environment...")
-    env = TrainingEnv.from_config(cfg.env)
-    print(f"  Observation shape: {env.observation_shape}")
-    print(f"  Action shape: {env.action_shape}")
-    print(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
-    print()
-
-    # Create policy from config
-    print(
-        f"Creating {'LSTM' if cfg.policy.use_lstm else 'feedforward'} neural network..."
-    )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if cfg.policy.use_lstm:
-        policy = LSTMPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            hidden_size=cfg.policy.hidden_size,
-            init_std=cfg.policy.init_std,
-            min_log_std=cfg.policy.min_log_std,
-            max_log_std=cfg.policy.max_log_std,
-        ).to(device)
-    else:
-        policy = TinyPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            init_std=cfg.policy.init_std,
-            min_log_std=cfg.policy.min_log_std,
-            max_log_std=cfg.policy.max_log_std,
-        ).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
-
-    # Count parameters
-    num_params = sum(p.numel() for p in policy.parameters())
-    print(f"  Policy parameters: {num_params:,}")
-    print(f"  Device: {device}")
-    print()
-
     # Generate run notes using Claude (summarizes git changes)
     if args.smoketest:
         run_notes = None
@@ -1150,10 +1109,11 @@ def main():
         print("Generating run notes...")
         run_notes = generate_run_notes()
         if run_notes:
-            print("  Run notes generated successfully")
+            print()
+            print(run_notes)
         print()
 
-    # Initialize wandb with config from centralized config
+    # Initialize wandb early so the run URL and summary are available
     run_name = (
         f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     )
@@ -1163,24 +1123,55 @@ def main():
         name=run_name,
         notes=run_notes,
         mode=wandb_mode,
-        config={
-            **cfg.to_wandb_config(),
-            # Add computed values not in config
-            "policy_params": num_params,
-        },
+        config=cfg.to_wandb_config(),
     )
     # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
     wandb.define_metric("batch")
     wandb.define_metric("*", step_metric="batch")
     if not args.smoketest:
-        print(f"  Logging to W&B: {wandb.run.url}")
+        print(f"  W&B run: {wandb.run.url}")
         print()
+
+    # Create environment from config
+    print("Creating environment...")
+    env = TrainingEnv.from_config(cfg.env)
+    print(f"  Observation shape: {env.observation_shape}")
+    print(f"  Action shape: {env.action_shape}")
+    print(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
+    print()
+
+    # Create policy from config
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if cfg.policy.use_lstm:
+        policy = LSTMPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            hidden_size=cfg.policy.hidden_size,
+            init_std=cfg.policy.init_std,
+            max_log_std=cfg.policy.max_log_std,
+        ).to(device)
+    else:
+        policy = TinyPolicy(
+            image_height=cfg.policy.image_height,
+            image_width=cfg.policy.image_width,
+            init_std=cfg.policy.init_std,
+            max_log_std=cfg.policy.max_log_std,
+        ).to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+
+    # Print architecture and parameter count
+    num_params = sum(p.numel() for p in policy.parameters())
+    print(f"Policy ({device}):")
+    print(policy)
+    print(f"\n  Total parameters: {num_params:,}")
+    print()
+
+    # Log model info to wandb
+    wandb.config.update({"policy_params": num_params}, allow_val_change=True)
 
     # Watch model for gradient/parameter histograms
     # log_freq is in backward passes (episodes), not steps
     wandb.watch(policy, log="all", log_freq=10)
-    if not args.smoketest:
-        print("  Watching model gradients every 10 episodes")
 
     # Resume from checkpoint if requested
     resumed_batch_idx = 0
