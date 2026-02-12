@@ -19,6 +19,7 @@ dependencies = [
     "anthropic>=0.79.0",
     "pytest>=8.0.0",
     "av>=16.1.0",
+    "textual>=1.0.0",
 ]
 
 [tool.pytest.ini_options]

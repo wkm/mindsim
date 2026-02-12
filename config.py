@@ -15,6 +15,7 @@ from typing import Literal
 class EnvConfig:
     """Environment configuration."""
 
+    scene_path: str = "bots/simple2wheeler/scene.xml"
     render_width: int = 64
     render_height: int = 64
     max_episode_steps: int = 200  # 20 seconds at 10 Hz (stage 1 baseline)
