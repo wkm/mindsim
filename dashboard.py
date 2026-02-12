@@ -1,8 +1,11 @@
 """
 Terminal dashboard for training progress.
 
-Renders a two-column layout with ANSI cursor movement,
-replacing tqdm for richer metric display.
+Two implementations:
+- TuiDashboard: Delegates to a Textual TUI app via call_from_thread.
+- AnsiDashboard: Hand-rolled ANSI cursor movement (headless fallback).
+
+Factory function `Dashboard()` picks the right one based on context.
 """
 
 import shutil
@@ -42,15 +45,36 @@ def _fmt_time(seconds, width=8):
     return f"{m}m{s:02d}s".rjust(width)
 
 
-class Dashboard:
+class TuiDashboard:
     """
-    In-place terminal dashboard for training progress.
+    Dashboard that delegates to a Textual TUI app.
 
-    Usage:
-        dash = Dashboard(total_batches=200)
-        dash.update(batch=5, metrics={...})
-        dash.message("Advanced to stage 2")
-        dash.finish()
+    Same update/message/finish API as AnsiDashboard.
+    Training code doesn't need to know which backend is active.
+    """
+
+    def __init__(self, app, total_batches=None, algorithm="PPO"):
+        self.app = app
+        self.total_batches = total_batches
+        self.algorithm = algorithm
+        # Push total_batches to the TUI
+        self.app.call_from_thread(self.app.set_total_batches, total_batches)
+
+    def update(self, batch, metrics):
+        self.app.call_from_thread(self.app.update_metrics, batch, metrics)
+
+    def message(self, text):
+        self.app.call_from_thread(self.app.log_message, text)
+
+    def finish(self):
+        self.app.call_from_thread(self.app.mark_finished)
+
+
+class AnsiDashboard:
+    """
+    In-place terminal dashboard using ANSI cursor movement.
+
+    Headless fallback when no TUI is active (e.g. `python train.py --smoketest`).
     """
 
     def __init__(self, total_batches=None, algorithm="PPO"):
@@ -58,11 +82,10 @@ class Dashboard:
         self.algorithm = algorithm
         self._lines_printed = 0
         self._last_render = 0.0
-        self._min_interval = 0.1  # Don't redraw faster than 10 Hz
+        self._min_interval = 0.1
         self._finished = False
 
     def _get_width(self):
-        """Get terminal width, clamped to reasonable range."""
         try:
             w = shutil.get_terminal_size().columns
         except Exception:
@@ -70,26 +93,16 @@ class Dashboard:
         return max(60, min(w, 120))
 
     def _progress_bar(self, batch, total, width):
-        """Render a progress bar string."""
         if total is None or total <= 0:
             return f"  batch {batch:,}"
-
         frac = min(batch / total, 1.0)
-        bar_width = width - 40  # Leave room for text
-        bar_width = max(10, bar_width)
+        bar_width = max(10, width - 40)
         filled = int(bar_width * frac)
         bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
         pct = f"{100 * frac:5.1f}%"
         return f"  {bar}  {pct}   batch {batch:,}"
 
     def update(self, batch, metrics):
-        """
-        Redraw the dashboard with current metrics.
-
-        Args:
-            batch: Current batch index (0-based)
-            metrics: Dict of metric values (missing keys shown as blanks)
-        """
         now = time.monotonic()
         if now - self._last_render < self._min_interval:
             return
@@ -99,23 +112,18 @@ class Dashboard:
         width = self._get_width()
         is_ppo = self.algorithm == "PPO"
 
-        # Build lines
         lines = []
         header = " MindSim Training "
         rule = "\u2500" * ((width - len(header)) // 2)
         lines.append(f"\u2500\u2500{header}{rule}")
-
-        # Progress bar
         lines.append(self._progress_bar(batch, self.total_batches, width))
         lines.append("")
 
-        # Two-column sections
         col1_label = "  EPISODE PERFORMANCE"
         col2_label = "OPTIMIZATION"
         pad = max(2, 36 - len(col1_label))
         lines.append(f"{col1_label}{' ' * pad}{col2_label}")
 
-        # Row helper: left metric + right metric
         def row(l_name, l_val, r_name, r_val):
             left = f"  {l_name:<18s}{l_val}"
             right = f"{r_name:<17s}{r_val}" if r_name else ""
@@ -156,15 +164,11 @@ class Dashboard:
 
         lines.append("")
 
-        # Success rates + more optimization
         col1_label2 = "  SUCCESS RATES"
-        col2_label2 = "OPTIMIZATION" if not is_ppo else ""
-        if is_ppo:
-            col2_label2 = ""
+        col2_label2 = ""
         pad2 = max(2, 36 - len(col1_label2))
         lines.append(f"{col1_label2}{' ' * pad2}{col2_label2}")
 
-        # Format policy std
         ps = m.get("policy_std")
         if ps is not None:
             try:
@@ -197,7 +201,6 @@ class Dashboard:
 
         lines.append("")
 
-        # Curriculum + Timing
         col1_label3 = "  CURRICULUM"
         col2_label3 = "TIMING"
         pad3 = max(2, 36 - len(col1_label3))
@@ -212,39 +215,20 @@ class Dashboard:
         train_time = m.get("train_time")
         eval_time = m.get("eval_time")
 
-        lines.append(row(
-            "stage", stage_str.rjust(8),
-            "last batch", _fmt_time(batch_time),
-        ))
-        lines.append(row(
-            "progress", _fmt_float(m.get("stage_progress"), precision=2),
-            "\u251c collection", _fmt_time(collect_time),
-        ))
-        lines.append(row(
-            "mastery", f"{int(m.get('mastery_count', 0)):>3d} / {int(m.get('mastery_batches', 20))}".rjust(8),
-            "\u251c train", _fmt_time(train_time),
-        ))
+        lines.append(row("stage", stage_str.rjust(8), "last batch", _fmt_time(batch_time)))
+        lines.append(row("progress", _fmt_float(m.get("stage_progress"), precision=2), "\u251c collection", _fmt_time(collect_time)))
+        lines.append(row("mastery", f"{int(m.get('mastery_count', 0)):>3d} / {int(m.get('mastery_batches', 20))}".rjust(8), "\u251c train", _fmt_time(train_time)))
 
-        # Throughput
         throughput = None
         if batch_time and batch_time > 0:
             bs = m.get("batch_size")
             if bs:
                 throughput = bs / batch_time
 
-        lines.append(row(
-            "max steps", _fmt_int(m.get("max_episode_steps")),
-            "\u251c eval", _fmt_time(eval_time),
-        ))
-        lines.append(row(
-            "", "",
-            "\u2514 throughput", f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8),
-        ))
-
-        # Bottom rule
+        lines.append(row("max steps", _fmt_int(m.get("max_episode_steps")), "\u251c eval", _fmt_time(eval_time)))
+        lines.append(row("", "", "\u2514 throughput", f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8)))
         lines.append("\u2500" * width)
 
-        # Move cursor up to overwrite previous output
         if self._lines_printed > 0:
             sys.stdout.write(f"\033[{self._lines_printed}A\033[J")
 
@@ -254,20 +238,12 @@ class Dashboard:
         self._lines_printed = len(lines)
 
     def message(self, text):
-        """
-        Print a message above the dashboard.
-
-        Clears the current dashboard, prints the message,
-        then redraws on next update().
-        """
         if self._lines_printed > 0:
             sys.stdout.write(f"\033[{self._lines_printed}A\033[J")
             self._lines_printed = 0
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
-        # Force redraw on next update
         self._last_render = 0.0
 
     def finish(self):
-        """Mark training as complete (no-op, keeps final dashboard visible)."""
         self._finished = True

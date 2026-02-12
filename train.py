@@ -24,7 +24,7 @@ import rerun_logger
 import wandb
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from config import Config
-from dashboard import Dashboard
+from dashboard import AnsiDashboard, TuiDashboard
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from training_env import TrainingEnv
@@ -1151,38 +1151,162 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    """Main training loop."""
-    args = parse_args()
+def _get_git_branch() -> str:
+    try:
+        return (
+            subprocess.run(
+                ["git", "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            .stdout.strip()
+        )
+    except Exception:
+        return "unknown"
 
-    # Load configuration
-    if args.smoketest:
-        cfg = Config.for_smoketest()
-        print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    else:
-        cfg = Config()
 
-    print("=" * 60)
-    print(f"Training 2-Wheeler Robot ({cfg.training.algorithm})")
-    print("=" * 60)
-    print()
+def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
+    """
+    Drain commands from the TUI command queue.
+
+    Returns:
+        (stage_progress, pending_save, should_stop, force_rerun)
+    """
+    if queue is None:
+        return stage_progress, pending_save, False, False
+
+    should_stop = False
+    force_rerun = False
+
+    while not queue.empty():
+        try:
+            cmd = queue.get_nowait()
+        except Exception:
+            break
+
+        if cmd == "checkpoint":
+            pending_save = ("manual", [])
+            dashboard.message("Checkpoint will be saved after this batch")
+        elif cmd == "log_rerun":
+            force_rerun = True
+            dashboard.message("Rerun recording queued for next eval")
+        elif cmd == "advance_curriculum":
+            old = stage_progress
+            stage_progress = min(1.0, stage_progress + 0.1)
+            dashboard.message(f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}")
+        elif cmd == "regress_curriculum":
+            old = stage_progress
+            stage_progress = max(0.0, stage_progress - 0.1)
+            dashboard.message(f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}")
+        elif cmd == "stop":
+            should_stop = True
+            dashboard.message("Stopping after this batch...")
+        # pause/unpause/step handled by _wait_if_paused
+
+    return stage_progress, pending_save, should_stop, force_rerun
+
+
+def _wait_if_paused(queue):
+    """
+    Block the training thread while paused.
+
+    Checks the queue for unpause/step/stop commands.
+    Returns True if training should stop, False otherwise.
+    """
+    if queue is None:
+        return False
+
+    paused = False
+
+    # Check for pause command without blocking
+    while not queue.empty():
+        try:
+            cmd = queue.get_nowait()
+        except Exception:
+            break
+        if cmd == "pause":
+            paused = True
+        elif cmd == "unpause":
+            paused = False
+        elif cmd == "step":
+            return False  # Run one batch then re-check
+        elif cmd == "stop":
+            return True
+        else:
+            # Put non-pause commands back for _drain_command_queue
+            queue.put(cmd)
+
+    # If paused, block until unpaused/stepped/stopped
+    while paused:
+        time.sleep(0.05)  # 50ms poll interval
+        while not queue.empty():
+            try:
+                cmd = queue.get_nowait()
+            except Exception:
+                break
+            if cmd == "unpause":
+                paused = False
+            elif cmd == "step":
+                return False  # Run one batch
+            elif cmd == "stop":
+                return True
+            elif cmd == "pause":
+                pass  # Already paused
+            else:
+                queue.put(cmd)
+
+    return False
+
+
+def _train_loop(
+    cfg,
+    dashboard,
+    smoketest=False,
+    resume=None,
+    num_workers_override=None,
+    command_queue=None,
+    app=None,
+    log_fn=print,
+):
+    """
+    Core training loop.
+
+    Args:
+        cfg: Config object
+        dashboard: Dashboard instance (TuiDashboard or AnsiDashboard)
+        smoketest: Whether this is a smoketest run
+        resume: Resume ref string (local path or wandb artifact)
+        num_workers_override: Override num_workers from config
+        command_queue: Optional Queue for TUI commands
+        app: Optional TUI app for pushing metadata
+        log_fn: Function for print-style logging (print or dashboard.message).
+                In TUI mode this is dashboard.message (shows in log area).
+                In CLI mode this is print (shows in terminal).
+    """
+    # In TUI mode, verbose setup messages are noise in the log area.
+    # Use _verbose for setup chatter, log_fn for important events only.
+    is_tui = app is not None
+    _verbose = (lambda msg: None) if is_tui else log_fn
+
+    _verbose("=" * 60)
+    _verbose(f"Training 2-Wheeler Robot ({cfg.training.algorithm})")
+    _verbose("=" * 60)
 
     # Generate run notes using Claude (summarizes git changes)
-    if args.smoketest:
+    if smoketest:
         run_notes = None
     else:
-        print("Generating run notes...")
+        _verbose("Generating run notes...")
         run_notes = generate_run_notes()
         if run_notes:
-            print()
-            print(run_notes)
-        print()
+            _verbose(run_notes)
 
     # Initialize wandb early so the run URL and summary are available
     run_name = (
         f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     )
-    wandb_mode = "disabled" if args.smoketest else "online"
+    wandb_mode = "disabled" if smoketest else "online"
     wandb.init(
         project="mindsim-2wheeler",
         name=run_name,
@@ -1193,17 +1317,36 @@ def main():
     # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
     wandb.define_metric("batch")
     wandb.define_metric("*", step_metric="batch")
-    if not args.smoketest:
-        print(f"  W&B run: {wandb.run.url}")
-        print()
+
+    wandb_url = None
+    if not smoketest and wandb.run:
+        wandb_url = wandb.run.url
+        _verbose(f"  W&B run: {wandb_url}")
+
+    # Push run metadata to TUI header
+    if app is not None:
+        branch = _get_git_branch()
+        app.call_from_thread(
+            app.set_header, run_name, branch, cfg.training.algorithm, wandb_url
+        )
 
     # Create environment from config
-    print("Creating environment...")
+    _verbose("Creating environment...")
     env = TrainingEnv.from_config(cfg.env)
-    print(f"  Observation shape: {env.observation_shape}")
-    print(f"  Action shape: {env.action_shape}")
-    print(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
-    print()
+    _verbose(f"  Observation shape: {env.observation_shape}")
+    _verbose(f"  Action shape: {env.action_shape}")
+    _verbose(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
+
+    # Log bot model info
+    mj_model = env.env.model
+    bot_scene = env.env.scene_path.name
+    bot_info = (
+        f"Bot: {bot_scene} | "
+        f"{mj_model.nbody} bodies, {mj_model.njnt} joints, "
+        f"{mj_model.nu} actuators, {mj_model.ncam} cameras"
+    )
+    _verbose(f"  {bot_info}")
+    log_fn(bot_info)
 
     # Create policy from config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -1226,10 +1369,8 @@ def main():
 
     # Print architecture and parameter count
     num_params = sum(p.numel() for p in policy.parameters())
-    print(f"Policy ({device}):")
-    print(policy)
-    print(f"\n  Total parameters: {num_params:,}")
-    print()
+    _verbose(f"Policy ({device}): {num_params:,} parameters")
+    log_fn(f"Policy: {cfg.policy.policy_type} ({num_params:,} params) on {device}")
 
     # Log model info to wandb
     wandb.config.update({"policy_params": num_params}, allow_val_change=True)
@@ -1244,9 +1385,9 @@ def main():
     resumed_curriculum_stage = None
     resumed_stage_progress = None
     resumed_mastery_count = None
-    if args.resume:
-        resume_ref = resolve_resume_ref(args.resume)
-        print(f"Loading checkpoint: {resume_ref}")
+    if resume:
+        resume_ref = resolve_resume_ref(resume)
+        log_fn(f"Loading checkpoint: {resume_ref}")
         ckpt = load_checkpoint(resume_ref, cfg, device=str(device))
         policy.load_state_dict(ckpt["policy_state_dict"])
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -1255,8 +1396,8 @@ def main():
         resumed_curriculum_stage = ckpt["curriculum_stage"]
         resumed_stage_progress = ckpt["stage_progress"]
         resumed_mastery_count = ckpt["mastery_count"]
-        print(f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}")
-        print(f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}")
+        log_fn(f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}")
+        _verbose(f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}")
         wandb.config.update({"resumed_from": resume_ref}, allow_val_change=True)
         # Add resume info to wandb notes
         resume_note = f"\n**Resumed from:** `{resume_ref}`"
@@ -1266,29 +1407,28 @@ def main():
             run_notes = resume_note
         if wandb.run and not wandb.run.disabled:
             wandb.run.notes = run_notes
-        print()
 
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
-    if not args.smoketest:
+    if not smoketest:
         rr_wandb = RerunWandbLogger(recordings_dir="recordings")
-        print(f"  Rerun recordings: {rr_wandb.run_dir}/")
-        print()
+        _verbose(f"  Rerun recordings: {rr_wandb.run_dir}/")
 
     # Set up parallel episode collection
     num_workers = (
-        args.num_workers if args.num_workers is not None else cfg.training.num_workers
+        num_workers_override if num_workers_override is not None else cfg.training.num_workers
     )
     num_workers = resolve_num_workers(num_workers)
     collector = None
     if num_workers > 1:
-        print(f"Starting {num_workers} parallel workers...")
+        _verbose(f"Starting {num_workers} parallel workers...")
         collector = ParallelCollector(num_workers, cfg.env, cfg.policy)
-        print("  Workers ready")
-        print()
+        if is_tui:
+            log_fn(f"Started {num_workers} parallel workers")
+        else:
+            _verbose("  Workers ready")
     else:
-        print("Using serial episode collection (num_workers=1)")
-        print()
+        _verbose("Using serial episode collection (num_workers=1)")
 
     # Training loop - use config values
     batch_size = cfg.training.batch_size
@@ -1303,19 +1443,11 @@ def main():
     stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
     mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
-    print(
+    _verbose(
         f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
     )
-    print(
-        "  Stage 1: Angle variance | Stage 2: Moving target + distance | Stage 3: Distractors"
-    )
-    print(f"  Curriculum: monotonic ramp-up (advance@{curr.advance_threshold:.0%})")
-    if curr.use_eval_for_curriculum:
-        print(
-            f"  Using deterministic eval ({curr.eval_episodes_per_batch} eps/batch) for curriculum decisions"
-        )
-    print(f"  Logging every {log_rerun_every} episodes to Rerun")
-    print()
+    if is_tui:
+        log_fn(f"Training started: {curr.num_stages}-stage curriculum, batch_size={batch_size}")
 
     # Timing accumulators
     timing = {
@@ -1334,8 +1466,14 @@ def main():
     mastered = False
     max_batches = cfg.training.max_batches
     batches_this_session = 0
-    dashboard = Dashboard(total_batches=max_batches, algorithm=cfg.training.algorithm)
-    while not mastered and (max_batches is None or batch_idx < max_batches):
+    stop_requested = False
+    while not mastered and not stop_requested and (max_batches is None or batch_idx < max_batches):
+        # Block while paused (checks for unpause/step/stop)
+        if _wait_if_paused(command_queue):
+            stop_requested = True
+            dashboard.message("Stopping...")
+            break
+
         batch_start_time = time.perf_counter()
         # Set curriculum stage for this batch
         env.set_curriculum_stage(curriculum_stage, stage_progress, curr.num_stages)
@@ -1350,6 +1488,13 @@ def main():
             if changes:
                 wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
+        # Drain TUI command queue
+        pending_save = None  # (trigger, aliases) or None
+        force_rerun = False
+        stage_progress, pending_save, stop_requested, force_rerun = _drain_command_queue(
+            command_queue, dashboard, stage_progress, curr, pending_save
+        )
+
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
         progress_pct = 100 * overall_progress
@@ -1361,7 +1506,7 @@ def main():
         # Determine if we should log to Rerun this batch (from eval, not training)
         log_every_n_batches = max(1, log_rerun_every // batch_size)
         should_log_rerun_this_batch = (
-            rr_wandb is not None and batch_idx % log_every_n_batches == 0
+            rr_wandb is not None and (batch_idx % log_every_n_batches == 0 or force_rerun)
         )
 
         # Collect a batch of episodes
@@ -1507,7 +1652,7 @@ def main():
         # Check for stage mastery: progress=1.0 AND sustained high success rate
         # Checkpoint saves are deferred until after batch_idx is incremented
         # so the saved batch_idx represents "resume from here" correctly.
-        pending_save = None  # (trigger, aliases) or None
+        # pending_save may already be set by command queue (manual checkpoint)
         mastery_rate = (
             rolling_eval_success_rate
             if curr.use_eval_for_curriculum
@@ -1687,50 +1832,109 @@ def main():
 
     dashboard.finish()
 
-    # Print timing summary
+    # Print timing summary (verbose in CLI, compact in TUI)
     total_time = timing["collect"] + timing["eval"] + timing["train"] + timing["log"] + timing["rerun"]
-    print()
-    print("=" * 60)
-    print("Timing Summary")
-    print("=" * 60)
-    print(
-        f"  Episode collection: {timing['collect']:>8.2f}s ({100 * timing['collect'] / total_time:>5.1f}%)"
-    )
-    print(
-        f"  Eval episodes:      {timing['eval']:>8.2f}s ({100 * timing['eval'] / total_time:>5.1f}%)"
-    )
-    print(
-        f"  Training step:      {timing['train']:>8.2f}s ({100 * timing['train'] / total_time:>5.1f}%)"
-    )
-    print(
-        f"  Wandb logging:      {timing['log']:>8.2f}s ({100 * timing['log'] / total_time:>5.1f}%)"
-    )
-    print(
-        f"  Rerun recording:    {timing['rerun']:>8.2f}s ({100 * timing['rerun'] / total_time:>5.1f}%)"
-    )
-    print("  " + "─" * 40)
-    print(f"  Total:              {total_time:>8.2f}s")
-    print()
-    print(
-        f"  Per-batch average ({batch_size} episodes/batch, {batches_this_session} batches):"
-    )
-    print(f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms")
-    print(f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms")
-    print()
+    if total_time > 0 and batches_this_session > 0:
+        _verbose("=" * 60)
+        _verbose("Timing Summary")
+        _verbose("=" * 60)
+        _verbose(
+            f"  Episode collection: {timing['collect']:>8.2f}s ({100 * timing['collect'] / total_time:>5.1f}%)"
+        )
+        _verbose(
+            f"  Eval episodes:      {timing['eval']:>8.2f}s ({100 * timing['eval'] / total_time:>5.1f}%)"
+        )
+        _verbose(
+            f"  Training step:      {timing['train']:>8.2f}s ({100 * timing['train'] / total_time:>5.1f}%)"
+        )
+        _verbose(
+            f"  Wandb logging:      {timing['log']:>8.2f}s ({100 * timing['log'] / total_time:>5.1f}%)"
+        )
+        _verbose(
+            f"  Rerun recording:    {timing['rerun']:>8.2f}s ({100 * timing['rerun'] / total_time:>5.1f}%)"
+        )
+        _verbose(f"  Total:              {total_time:>8.2f}s")
+        _verbose(
+            f"  Per-batch average ({batch_size} episodes/batch, {batches_this_session} batches):"
+        )
+        _verbose(f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms")
+        _verbose(f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms")
 
     # Clean up
     if collector is not None:
         collector.close()
     set_terminal_title(f"Done: {run_name}")
     set_terminal_progress(-1)  # Clear progress indicator
-    if not args.smoketest:
+    if not smoketest:
         notify_completion(run_name)
     wandb.finish()
     env.close()
-    if args.smoketest:
-        print(f"Smoketest passed! ({batch_idx} batches, {episode_count} episodes)")
+    if smoketest:
+        log_fn(f"Smoketest passed! ({batch_idx} batches, {episode_count} episodes)")
     else:
-        print("Training complete!")
+        log_fn("Training complete!")
+
+
+def run_training(app, command_queue, smoketest=False, resume=None, num_workers=None, scene_path=None):
+    """
+    Entry point for TUI-driven training (called from worker thread).
+
+    Args:
+        app: MindSimApp instance
+        command_queue: Queue for TUI commands
+        smoketest: Whether to use smoketest config
+        resume: Checkpoint resume reference
+        num_workers: Worker count override
+        scene_path: Override bot scene XML path
+    """
+    if smoketest:
+        cfg = Config.for_smoketest()
+    else:
+        cfg = Config()
+
+    if scene_path:
+        cfg.env.scene_path = scene_path
+
+    dashboard = TuiDashboard(
+        app=app,
+        total_batches=cfg.training.max_batches,
+        algorithm=cfg.training.algorithm,
+    )
+
+    _train_loop(
+        cfg=cfg,
+        dashboard=dashboard,
+        smoketest=smoketest,
+        resume=resume,
+        num_workers_override=num_workers,
+        command_queue=command_queue,
+        app=app,
+        log_fn=dashboard.message,
+    )
+
+
+def main():
+    """CLI entry point (headless, no TUI)."""
+    args = parse_args()
+
+    if args.smoketest:
+        cfg = Config.for_smoketest()
+        print("[SMOKETEST MODE] Running fast end-to-end validation...")
+    else:
+        cfg = Config()
+
+    dashboard = AnsiDashboard(
+        total_batches=cfg.training.max_batches,
+        algorithm=cfg.training.algorithm,
+    )
+
+    _train_loop(
+        cfg=cfg,
+        dashboard=dashboard,
+        smoketest=args.smoketest,
+        resume=args.resume,
+        num_workers_override=args.num_workers,
+    )
 
 
 if __name__ == "__main__":

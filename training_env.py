@@ -38,6 +38,7 @@ class TrainingEnv:
     def from_config(cls, config: EnvConfig) -> TrainingEnv:
         """Create TrainingEnv from an EnvConfig object."""
         return cls(
+            scene_path=config.scene_path,
             render_width=config.render_width,
             render_height=config.render_height,
             max_episode_steps=config.max_episode_steps,
@@ -62,6 +63,7 @@ class TrainingEnv:
 
     def __init__(
         self,
+        scene_path="bots/simple2wheeler/scene.xml",
         render_width=64,
         render_height=64,
         max_episode_steps=100,  # 10 seconds at 10 Hz
@@ -88,7 +90,9 @@ class TrainingEnv:
         patience_min_delta=0.0,
     ):
         self.env = SimpleWheelerEnv(
-            render_width=render_width, render_height=render_height
+            scene_path=scene_path,
+            render_width=render_width,
+            render_height=render_height,
         )
         self.base_episode_steps = max_episode_steps
         self.max_episode_steps_final = max_episode_steps_final or max_episode_steps
