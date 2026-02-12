@@ -118,7 +118,47 @@ def log_mujoco_scene(env, namespace="world"):
                     )
                     mesh_count += 1
 
-                # Handle non-mesh geometries (boxes, spheres, etc.)
+                # Handle capsule geometries (biped limbs) — draw as line
+                elif geom_type == mujoco.mjtGeom.mjGEOM_CAPSULE:
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    half_length = model.geom_size[geom_id][1]
+                    rgba = model.geom_rgba[geom_id]
+                    geom_pos = model.geom_pos[geom_id]
+                    geom_quat = model.geom_quat[geom_id]
+
+                    entity_path = f"{namespace}/{body_name}/{geom_name or 'geom'}"
+
+                    rr.log(
+                        entity_path,
+                        rr.Transform3D(
+                            translation=geom_pos,
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
+                        ),
+                        static=True,
+                    )
+
+                    color = [int(c * 255) for c in rgba[:4]]
+                    rr.log(
+                        f"{entity_path}/line",
+                        rr.LineStrips3D(
+                            [[[0, 0, -half_length], [0, 0, half_length]]],
+                            colors=[color],
+                            radii=[0.008],
+                        ),
+                        static=True,
+                    )
+                    geom_count += 1
+
+                # Handle box geometries
                 elif geom_type == mujoco.mjtGeom.mjGEOM_BOX:
                     geom_name = mujoco.mj_id2name(
                         model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
@@ -175,17 +215,14 @@ def log_mujoco_scene(env, namespace="world"):
         cam_pos = model.cam_pos[cam_id]
         cam_quat = model.cam_quat[cam_id]  # [w, x, y, z] format
 
-        # Convert MuJoCo quaternion to xyzw format
+        # Convert MuJoCo quaternion (wxyz) to xyzw format
         mj_quat_xyzw = np.array([cam_quat[1], cam_quat[2], cam_quat[3], cam_quat[0]])
 
-        # MuJoCo to Rerun coordinate frame correction
+        # MuJoCo cameras: -Z forward, +Y up
+        # Rerun Pinhole: +Z forward, +Y down (OpenCV)
+        # Fix: post-multiply 180° around local X to flip both Y and Z
         frame_correction = np.array([1.0, 0.0, 0.0, 0.0])  # 180° around X (xyzw)
-
-        # Invert and compose quaternions
-        inverted_mj_quat = np.array(
-            [-mj_quat_xyzw[0], -mj_quat_xyzw[1], -mj_quat_xyzw[2], mj_quat_xyzw[3]]
-        )
-        corrected_quat = quaternion_multiply(frame_correction, inverted_mj_quat)
+        corrected_quat = quaternion_multiply(mj_quat_xyzw, frame_correction)
 
         # Camera transform relative to body
         entity_path = f"{namespace}/{body_name}/{cam_name}"
@@ -256,6 +293,10 @@ def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None):
 
     # Log all bodies and meshes from MuJoCo model
     mesh_count, geom_count = log_mujoco_scene(env, namespace)
+    model = env.env.model if hasattr(env, "env") else env.model
+    print(
+        f"  Scene: {model.nbody - 1} bodies, {mesh_count} meshes, {geom_count} primitive geoms, {model.ncam} cameras"
+    )
 
     # Set up camera
     camera_entity_path = setup_camera(env, namespace)
