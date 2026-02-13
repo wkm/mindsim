@@ -4,9 +4,73 @@ Rerun logging utilities for MuJoCo simulations.
 Shared logging code for both visualization and training scripts.
 """
 
+from __future__ import annotations
+
 import mujoco
 import numpy as np
 import rerun as rr
+
+
+class VideoEncoder:
+    """H.264 video stream encoder for Rerun.
+
+    Encodes frames on-the-fly and logs them as a VideoStream,
+    dramatically reducing .rrd file sizes compared to per-frame JPEG images.
+
+    Usage:
+        encoder = VideoEncoder("eval/camera", width=128, height=128)
+        for step, obs in enumerate(observations):
+            rr.set_time("step", sequence=step)
+            encoder.log_frame(obs)
+        encoder.flush()
+    """
+
+    def __init__(self, entity_path: str, width: int, height: int, fps: int = 10):
+        import av
+
+        self.entity_path = entity_path
+
+        # Set up H.264 encoder via pyav
+        self.container = av.open("/dev/null", "w", format="h264")
+        self.stream = self.container.add_stream("libx264", rate=fps)
+        assert isinstance(self.stream, av.video.stream.VideoStream)
+        self.stream.width = width
+        self.stream.height = height
+        self.stream.pix_fmt = "yuv420p"
+        self.stream.max_b_frames = 0  # B-frames not yet supported by Rerun
+        self.stream.options = {"preset": "ultrafast", "tune": "zerolatency"}
+
+        # Log codec once as static metadata
+        rr.log(entity_path, rr.VideoStream(codec=rr.VideoCodec.H264), static=True)
+
+    def log_frame(self, image: np.ndarray) -> None:
+        """Encode and log a single RGB frame.
+
+        Args:
+            image: (H, W, 3) RGB array — uint8 [0,255] or float32 [0,1].
+        """
+        import av
+
+        if image.dtype != np.uint8:
+            image = (image * 255).clip(0, 255).astype(np.uint8)
+
+        frame = av.VideoFrame.from_ndarray(image, format="rgb24")
+        for packet in self.stream.encode(frame):
+            if packet.pts is not None:
+                rr.log(
+                    self.entity_path,
+                    rr.VideoStream.from_fields(sample=bytes(packet)),
+                )
+
+    def flush(self) -> None:
+        """Flush remaining encoded frames and close the encoder."""
+        for packet in self.stream.encode():
+            if packet.pts is not None:
+                rr.log(
+                    self.entity_path,
+                    rr.VideoStream.from_fields(sample=bytes(packet)),
+                )
+        self.container.close()
 
 
 def quaternion_multiply(q1, q2):

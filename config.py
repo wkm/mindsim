@@ -15,8 +15,9 @@ from typing import Literal
 class EnvConfig:
     """Environment configuration."""
 
-    render_width: int = 128
-    render_height: int = 128
+    scene_path: str = "bots/simple2wheeler/scene.xml"
+    render_width: int = 64
+    render_height: int = 64
     max_episode_steps: int = 200  # 20 seconds at 10 Hz (stage 1 baseline)
     max_episode_steps_final: int = 500  # 50 seconds at 10 Hz (at full curriculum)
     control_frequency_hz: int = 10
@@ -42,7 +43,7 @@ class EnvConfig:
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
     # Distance-patience early truncation
-    patience_window: int = 30  # Steps to look back (3 sec at 10Hz, 0=disabled)
+    patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
     # Reward shaping
@@ -73,8 +74,8 @@ class PolicyConfig:
     policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
 
     # Image input
-    image_height: int = 128
-    image_width: int = 128
+    image_height: int = 64
+    image_width: int = 64
 
     # CNN architecture
     conv1_out_channels: int = 32
@@ -129,7 +130,7 @@ class TrainingConfig:
     mastery_batches: int = 20  # Must maintain mastery for N batches
 
     # Logging
-    log_rerun_every: int = 100  # Episodes between Rerun recordings
+    log_rerun_every: int = 500  # Episodes between Rerun recordings
 
     # Parallelism
     num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
