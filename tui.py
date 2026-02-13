@@ -89,6 +89,14 @@ def _fmt_time(seconds, width=8):
 class LauncherScreen(Screen):
     """Mode selection screen shown on startup."""
 
+    BINDINGS = [
+        Binding("v", "launch('btn-view')", "View", priority=True),
+        Binding("s", "launch('btn-smoketest')", "Smoketest", priority=True),
+        Binding("t", "launch('btn-train')", "Train", priority=True),
+        Binding("p", "launch('btn-play')", "Play", priority=True),
+        Binding("q", "launch('btn-quit')", "Quit", priority=True),
+    ]
+
     CSS = """
     LauncherScreen {
         align: center middle;
@@ -145,10 +153,12 @@ class LauncherScreen(Screen):
             else:
                 yield Static("  No bots found in bots/*/scene.xml")
             yield Static("Mode:", classes="launcher-section")
-            yield Button("View", id="btn-view", classes="launcher-btn")
-            yield Button("Smoketest", id="btn-smoketest", classes="launcher-btn")
-            yield Button("Train", id="btn-train", classes="launcher-btn")
-            yield Button("Quit", id="btn-quit", classes="launcher-btn", variant="error")
+            yield Button("[v] View", id="btn-view", classes="launcher-btn")
+            yield Button("[s] Smoketest", id="btn-smoketest", classes="launcher-btn")
+            yield Button("[t] Train", id="btn-train", classes="launcher-btn")
+            yield Button("[p] Play", id="btn-play", classes="launcher-btn")
+            yield Button("[q] Quit", id="btn-quit", classes="launcher-btn", variant="error")
+        yield Footer()
 
     def _get_selected_scene(self) -> str | None:
         """Get scene_path for the selected bot."""
@@ -163,6 +173,14 @@ class LauncherScreen(Screen):
             pass
         return self._bots[0]["scene_path"] if self._bots else None
 
+    def action_launch(self, button_id: str) -> None:
+        """Handle keyboard shortcut by simulating button press."""
+        try:
+            btn = self.query_one(f"#{button_id}", Button)
+            btn.press()
+        except Exception:
+            pass
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         scene_path = self._get_selected_scene()
         if event.button.id == "btn-train":
@@ -171,6 +189,8 @@ class LauncherScreen(Screen):
             self.app.start_training(smoketest=True, scene_path=scene_path)
         elif event.button.id == "btn-view":
             self.app.start_viewing(scene_path=scene_path)
+        elif event.button.id == "btn-play":
+            self.app.start_playing(scene_path=scene_path)
         elif event.button.id == "btn-quit":
             self.app.exit()
 
@@ -457,17 +477,26 @@ class MindSimApp(App):
         super().__init__(**kwargs)
         self.command_queue: Queue[str] = Queue()
         self._dashboard: TrainingDashboard | None = None
+        # Set by launcher to dispatch after app.run() returns
+        self.next_action: str | None = None
+        self.next_scene: str | None = None
 
     def on_mount(self) -> None:
         self.push_screen(LauncherScreen())
 
     def start_viewing(self, scene_path: str | None = None):
-        """Launch MuJoCo viewer as a subprocess."""
+        """Exit TUI, then main() will launch the MuJoCo viewer."""
         if not scene_path:
-            self.log_message("No scene selected.")
             return
-        subprocess.Popen([sys.executable, "view.py", scene_path])
-        self.notify(f"Launched viewer for {scene_path}")
+        self.next_action = "view"
+        self.next_scene = scene_path
+        self.exit()
+
+    def start_playing(self, scene_path: str | None = None):
+        """Exit TUI, then main() will launch play mode."""
+        self.next_action = "play"
+        self.next_scene = scene_path
+        self.exit()
 
     def start_training(self, smoketest: bool = False, scene_path: str | None = None):
         """Called by launcher to start training."""
@@ -522,6 +551,24 @@ class MindSimApp(App):
 def main():
     app = MindSimApp()
     app.run()
+
+    # Dispatch to selected mode after TUI exits
+    if app.next_action == "view":
+        import mujoco
+        import mujoco.viewer
+        model = mujoco.MjModel.from_xml_path(app.next_scene)
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        mujoco.viewer.launch(model, data)
+
+    elif app.next_action == "play":
+        from play import main as play_main
+        # Override sys.argv so play.py sees the right args
+        argv = ["play.py", "latest"]
+        if app.next_scene:
+            argv.append(app.next_scene)
+        sys.argv = argv
+        play_main()
 
 
 if __name__ == "__main__":
