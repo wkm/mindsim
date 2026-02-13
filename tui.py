@@ -10,6 +10,8 @@ Usage:
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -143,8 +145,9 @@ class LauncherScreen(Screen):
             else:
                 yield Static("  No bots found in bots/*/scene.xml")
             yield Static("Mode:", classes="launcher-section")
-            yield Button("Train", id="btn-train", classes="launcher-btn", variant="primary")
-            yield Button("Smoketest", id="btn-smoketest", classes="launcher-btn", variant="warning")
+            yield Button("View", id="btn-view", classes="launcher-btn")
+            yield Button("Smoketest", id="btn-smoketest", classes="launcher-btn")
+            yield Button("Train", id="btn-train", classes="launcher-btn")
             yield Button("Quit", id="btn-quit", classes="launcher-btn", variant="error")
 
     def _get_selected_scene(self) -> str | None:
@@ -166,6 +169,8 @@ class LauncherScreen(Screen):
             self.app.start_training(smoketest=False, scene_path=scene_path)
         elif event.button.id == "btn-smoketest":
             self.app.start_training(smoketest=True, scene_path=scene_path)
+        elif event.button.id == "btn-view":
+            self.app.start_viewing(scene_path=scene_path)
         elif event.button.id == "btn-quit":
             self.app.exit()
 
@@ -455,6 +460,14 @@ class MindSimApp(App):
 
     def on_mount(self) -> None:
         self.push_screen(LauncherScreen())
+
+    def start_viewing(self, scene_path: str | None = None):
+        """Launch MuJoCo viewer as a subprocess."""
+        if not scene_path:
+            self.log_message("No scene selected.")
+            return
+        subprocess.Popen([sys.executable, "view.py", scene_path])
+        self.notify(f"Launched viewer for {scene_path}")
 
     def start_training(self, smoketest: bool = False, scene_path: str | None = None):
         """Called by launcher to start training."""
