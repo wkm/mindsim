@@ -1,4 +1,9 @@
-.PHONY: train quick-sim test smoketest
+.PHONY: tui train quick-sim test smoketest view
+
+tui:
+	uv run python tui.py
+
+.DEFAULT_GOAL := tui
 
 quick-sim:
 	uv run python quick_sim.py
@@ -21,3 +26,6 @@ test:
 
 smoketest:
 	uv run python train.py --smoketest
+
+view:
+	uv run python view.py bots/simple2wheeler/scene.xml
