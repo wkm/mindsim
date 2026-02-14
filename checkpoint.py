@@ -8,7 +8,6 @@ run produced each checkpoint and which run consumed it.
 
 import os
 import subprocess
-import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -153,14 +152,19 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
     """
     Validate that a checkpoint is compatible with the current config.
 
-    Raises ValueError on architecture mismatches (would cause load failures).
-    Warns on training parameter changes (intentional and fine).
+    Two categories:
+        Hard keys: Must match exactly. Mismatch raises ValueError because the
+            checkpoint's state_dict is structurally incompatible (wrong bot,
+            wrong network shape).
+        Soft keys: May differ intentionally. Logged for visibility but the
+            current config always wins — the checkpoint's values for these
+            are informational only.
 
     Args:
         ckpt_config: Config dict from the checkpoint (nested format from to_wandb_config)
         current_config: Config dict from the current run (same format)
     """
-    # Architecture keys that MUST match (different values = broken state_dict)
+    # Hard keys: mismatch = ValueError (incompatible checkpoint)
     hard_keys = [
         ("env", "scene_path"),
         ("policy", "policy_type"),
@@ -179,7 +183,7 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
                 f"current config has {curr_val}. Cannot resume."
             )
 
-    # Training keys that are OK to change but worth noting
+    # Soft keys: current config wins, log deltas for visibility
     soft_keys = [
         ("training", "learning_rate"),
         ("training", "entropy_coeff"),
@@ -194,10 +198,8 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
         ckpt_val = ckpt_config.get(section, {}).get(key)
         curr_val = current_config.get(section, {}).get(key)
         if ckpt_val is not None and curr_val is not None and ckpt_val != curr_val:
-            warnings.warn(
-                f"Config changed: {section}/{key} was {ckpt_val} in checkpoint, "
-                f"now {curr_val}. This is fine but noted for tracking.",
-                stacklevel=2,
+            print(
+                f"  Resume: {section}/{key} changed {ckpt_val} -> {curr_val} (using current config)"
             )
 
 

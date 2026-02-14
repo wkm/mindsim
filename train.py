@@ -1382,6 +1382,10 @@ def _train_loop(
         ckpt = load_checkpoint(resume_ref, cfg, device=str(device))
         policy.load_state_dict(ckpt["policy_state_dict"])
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        # optimizer.load_state_dict restores LR from checkpoint — override
+        # with current config so soft key changes are respected
+        for pg in optimizer.param_groups:
+            pg["lr"] = cfg.training.learning_rate
         resumed_batch_idx = ckpt["batch_idx"]
         resumed_episode_count = ckpt["episode_count"]
         resumed_curriculum_stage = ckpt["curriculum_stage"]
@@ -1443,6 +1447,23 @@ def _train_loop(
         resumed_stage_progress if resumed_stage_progress is not None else 0.0
     )
     mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
+
+    # If resuming with proven mastery and more stages are now available, advance
+    # immediately. This handles resuming a "final" checkpoint from a run with
+    # fewer stages (e.g., 3-stage checkpoint resumed with num_stages=4).
+    if (
+        resume
+        and stage_progress >= 1.0
+        and mastery_count >= cfg.training.mastery_batches
+        and curriculum_stage < curr.num_stages
+    ):
+        old_stage = curriculum_stage
+        curriculum_stage += 1
+        stage_progress = 0.0
+        mastery_count = 0
+        log_fn(
+            f"  Checkpoint had mastered stage {old_stage} — advancing to stage {curriculum_stage}/{curr.num_stages}"
+        )
 
     _verbose(
         f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
