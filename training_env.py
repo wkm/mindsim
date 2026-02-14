@@ -135,7 +135,9 @@ class TrainingEnv:
         # Distance-patience early truncation
         self.patience_window = patience_window
         self.patience_min_delta = patience_min_delta
-        self._distance_deltas = deque(maxlen=patience_window) if patience_window > 0 else None
+        self._distance_deltas = (
+            deque(maxlen=patience_window) if patience_window > 0 else None
+        )
 
         # Episode tracking
         self.episode_step = 0
@@ -274,6 +276,18 @@ class TrainingEnv:
         # Re-run forward kinematics to update positions
         mujoco.mj_forward(self.env.model, self.env.data)
 
+        # Save reset configuration for replay
+        self.last_reset_config = {
+            "target_pos": [target_x, target_y, target_z],
+            "target_velocity": self.target_velocity.copy().tolist(),
+            "distractor_positions": [
+                self.env.model.body_pos[bid].copy().tolist()
+                for bid in self.env.distractor_body_ids
+            ],
+            "curriculum_stage": self.curriculum_stage,
+            "curriculum_stage_progress": self.curriculum_stage_progress,
+        }
+
         # Get updated camera image after target move
         camera_img = self.env.get_camera_image()
 
@@ -281,6 +295,48 @@ class TrainingEnv:
         self.prev_position = self.env.get_bot_position()
 
         # Normalize to [0, 1]
+        obs = camera_img.astype(np.float32) / 255.0
+        return obs
+
+    def reset_to_config(self, config):
+        """
+        Reset environment to a specific saved configuration for replay.
+
+        Args:
+            config: Dict from last_reset_config saved during reset()
+
+        Returns:
+            observation: Camera image normalized to [0, 1]
+        """
+        self.env.reset()
+        self.episode_step = 0
+        if self._distance_deltas is not None:
+            self._distance_deltas.clear()
+
+        # Restore target position
+        target_pos = config["target_pos"]
+        self.env.model.body_pos[self.env.target_body_id] = target_pos
+
+        # Restore target velocity
+        self.target_velocity = np.array(config["target_velocity"])
+
+        # Restore distractor positions
+        for bid, pos in zip(
+            self.env.distractor_body_ids, config["distractor_positions"]
+        ):
+            self.env.model.body_pos[bid] = pos
+
+        # Restore curriculum state
+        self.curriculum_stage = config["curriculum_stage"]
+        self.curriculum_stage_progress = config["curriculum_stage_progress"]
+
+        # Re-run forward kinematics
+        mujoco.mj_forward(self.env.model, self.env.data)
+
+        camera_img = self.env.get_camera_image()
+        self.prev_distance = self.env.get_distance_to_target()
+        self.prev_position = self.env.get_bot_position()
+
         obs = camera_img.astype(np.float32) / 255.0
         return obs
 
@@ -444,10 +500,7 @@ class TrainingEnv:
 
         # Distance-patience truncation: no net progress over rolling window
         patience_truncated = False
-        if (
-            not done
-            and self._distance_deltas is not None
-        ):
+        if not done and self._distance_deltas is not None:
             self._distance_deltas.append(distance_delta)
             if (
                 len(self._distance_deltas) == self._distance_deltas.maxlen

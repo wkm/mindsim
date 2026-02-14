@@ -16,8 +16,8 @@ class EnvConfig:
     """Environment configuration."""
 
     scene_path: str = "bots/simple2wheeler/scene.xml"  # Selects which bot to load
-    render_width: int = 128
-    render_height: int = 128
+    render_width: int = 64
+    render_height: int = 64
     max_episode_steps: int = 200  # 20 seconds at 10 Hz (stage 1 baseline)
     max_episode_steps_final: int = 500  # 50 seconds at 10 Hz (at full curriculum)
     control_frequency_hz: int = 10
@@ -30,8 +30,6 @@ class EnvConfig:
     # Target spawn range
     min_target_distance: float = 0.8
     max_target_distance: float = 2.5
-    randomize_target: bool = True
-
     # Stage 2: moving target + distance
     target_max_speed: float = 0.3  # Max target speed (m/s) at stage 2 progress=1
     arena_boundary: float = 4.0  # Target bounces off ±boundary
@@ -43,12 +41,11 @@ class EnvConfig:
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
     # Distance-patience early truncation
-    patience_window: int = 30  # Steps to look back (3 sec at 10Hz, 0=disabled)
+    patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
     # Reward shaping
     distance_reward_scale: float = 20.0
-    distance_reward_type: str = "linear"  # potential-based shaping
     movement_bonus: float = 0.0  # Disabled: was rewarding spinning
     time_penalty: float = 0.005
 
@@ -81,28 +78,15 @@ class PolicyConfig:
     policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
 
     # Image input
-    image_height: int = 128
-    image_width: int = 128
-
-    # CNN architecture
-    conv1_out_channels: int = 32
-    conv1_kernel: int = 8
-    conv1_stride: int = 4
-    conv2_out_channels: int = 64
-    conv2_kernel: int = 4
-    conv2_stride: int = 2
+    image_height: int = 64
+    image_width: int = 64
 
     # FC / LSTM layers
     hidden_size: int = 256  # FC1 for TinyPolicy, LSTM hidden for LSTMPolicy
     fc_output_size: int = 2  # Motor commands
 
-    # Activation
-    activation: str = "relu"
-    output_activation: str = "tanh"
-
     # Stochastic policy
     init_std: float = 0.5
-    min_log_std: float = -3.0  # min std ≈ 0.05
     max_log_std: float = 0.7  # max std ≈ 2.0
 
     @property
@@ -114,8 +98,6 @@ class PolicyConfig:
 class TrainingConfig:
     """Training loop configuration."""
 
-    # Optimizer
-    optimizer: str = "Adam"
     learning_rate: float = 1e-3
 
     # Algorithm
@@ -133,18 +115,19 @@ class TrainingConfig:
     batch_size: int = 64  # Episodes per gradient update
 
     # Mastery criteria
-    training_mode: str = "run_until_mastery"
     mastery_threshold: float = 0.7  # Success rate required at curriculum=1.0
     mastery_batches: int = 20  # Must maintain mastery for N batches
 
     # Logging
-    log_rerun_every: int = 100  # Episodes between Rerun recordings
+    log_rerun_every: int = 500  # Episodes between Rerun recordings
 
     # Parallelism
     num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
 
     # Checkpointing
-    checkpoint_every: int | None = 50  # Periodic checkpoint every N batches (None = disabled)
+    checkpoint_every: int | None = (
+        50  # Periodic checkpoint every N batches (None = disabled)
+    )
 
     # Limits
     max_batches: int | None = None  # None = run until mastery
@@ -221,6 +204,7 @@ class Config:
                 ppo_epochs=2,
             ),
         )
+
 
     @classmethod
     def for_biped(cls) -> Config:
@@ -308,9 +292,3 @@ class Config:
                 ppo_epochs=2,
             ),
         )
-
-
-# Default configuration
-def get_default_config() -> Config:
-    """Get the default training configuration."""
-    return Config()
