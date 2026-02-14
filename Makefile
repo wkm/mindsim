@@ -1,12 +1,12 @@
 .PHONY: tui train quick-sim test smoketest view play
 
 tui:
-	uv run mjpython tui.py
+	uv run mjpython main.py
 
 .DEFAULT_GOAL := tui
 
 quick-sim:
-	uv run mjpython tui.py quicksim
+	uv run mjpython main.py quicksim
 	rerun quick_sim.rrd
 
 train:
@@ -19,16 +19,16 @@ train:
 	@echo "Git status: clean"
 	@echo "Last commit: $$(git log -1 --oneline)"
 	@echo ""
-	uv run mjpython tui.py train
+	uv run mjpython main.py train
 
 test:
 	uv run pytest tests/ -v
 
 smoketest:
-	uv run mjpython tui.py smoketest
+	uv run mjpython main.py smoketest
 
 view:
-	uv run mjpython tui.py view
+	uv run mjpython main.py view
 
 play:
-	uv run mjpython tui.py play
+	uv run mjpython main.py play
