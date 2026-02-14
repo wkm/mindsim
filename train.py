@@ -667,7 +667,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     actions_array = np.array(actions)
 
     # Determine if episode was a success (reached target)
-    success = done and info["distance"] < env.success_distance
+    success = bool(done and info["distance"] < env.success_distance)
 
     result = {
         "observations": observations,
