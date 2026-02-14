@@ -38,7 +38,7 @@ class VideoEncoder:
         self.stream.height = height
         self.stream.pix_fmt = "yuv420p"
         self.stream.max_b_frames = 0  # B-frames not yet supported by Rerun
-        self.stream.options = {"preset": "ultrafast", "tune": "zerolatency"}
+        self.stream.options = {"preset": "medium", "crf": "18"}
 
         # Log codec once as static metadata
         rr.log(entity_path, rr.VideoStream(codec=rr.VideoCodec.H264), static=True)
