@@ -162,10 +162,12 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
     """
     # Architecture keys that MUST match (different values = broken state_dict)
     hard_keys = [
+        ("env", "scene_path"),
         ("policy", "policy_type"),
         ("policy", "hidden_size"),
         ("policy", "image_height"),
         ("policy", "image_width"),
+        ("policy", "fc_output_size"),
     ]
 
     for section, key in hard_keys:
@@ -184,6 +186,7 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
         ("training", "batch_size"),
         ("curriculum", "advance_threshold"),
         ("curriculum", "advance_rate"),
+        ("curriculum", "num_stages"),
         ("env", "distance_reward_scale"),
     ]
 

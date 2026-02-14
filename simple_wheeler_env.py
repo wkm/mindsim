@@ -62,6 +62,9 @@ class SimpleWheelerEnv:
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"distractor_{i}")
             for i in range(4)
         ]
+        self.distractor_mocap_ids = [
+            self.model.body_mocapid[bid] for bid in self.distractor_body_ids
+        ]
 
         # Viewer for debugging (optional)
         self.viewer = None
