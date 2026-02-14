@@ -3,10 +3,6 @@ Quick simulation for visual debugging of the training environment.
 
 Drives the robot in a circle at max curriculum (stage 3, all distractors,
 moving target, full angle randomization) and saves a Rerun recording.
-
-Usage:
-    uv run python quick_sim.py
-    rerun quick_sim.rrd
 """
 
 import rerun as rr
@@ -15,14 +11,18 @@ import rerun_logger
 from training_env import TrainingEnv
 
 OUTPUT_FILE = "quick_sim.rrd"
-NUM_STEPS = 200
 
 # Circle: left wheel slightly faster than right
 LEFT_MOTOR = 0.5
 RIGHT_MOTOR = 0.3
 
 
-def main():
+def run_quick_sim(num_steps=200):
+    """Run a quick simulation and save a Rerun recording.
+
+    Args:
+        num_steps: Number of simulation steps to run.
+    """
     env = TrainingEnv()
 
     # Max curriculum: stage 3, full progress
@@ -39,7 +39,7 @@ def main():
 
     trajectory_points = []
 
-    for step in range(NUM_STEPS):
+    for step in range(num_steps):
         rr.set_time("step", sequence=step)
 
         obs, reward, done, truncated, info = env.step([LEFT_MOTOR, RIGHT_MOTOR])
@@ -69,7 +69,3 @@ def main():
     env.close()
     print(f"Saved {OUTPUT_FILE} ({step + 1} steps)")
     print(f"  rerun {OUTPUT_FILE}")
-
-
-if __name__ == "__main__":
-    main()

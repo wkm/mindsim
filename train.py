@@ -5,7 +5,6 @@ Starts with a trivially small neural network to validate the training loop.
 Can be extended with more sophisticated networks and RL algorithms.
 """
 
-import argparse
 import math
 import subprocess
 import sys
@@ -1138,32 +1137,6 @@ def log_episode_value_trace(
         rr.log(f"{namespace}/value/gae_return", rr.Scalars([returns_np[t]]))
 
 
-def parse_args():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Train MuJoCo robot")
-    parser.add_argument(
-        "--smoketest",
-        action="store_true",
-        help="Run a fast end-to-end smoketest (tiny config, no wandb, no rerun)",
-    )
-    parser.add_argument(
-        "--biped",
-        action="store_true",
-        help="Use biped robot configuration (6-joint humanoid)",
-    )
-    parser.add_argument(
-        "--num-workers",
-        type=int,
-        default=None,
-        help="Number of parallel workers for episode collection (0=auto, 1=serial, default: from config)",
-    )
-    parser.add_argument(
-        "--resume",
-        type=str,
-        default=None,
-        help="Resume from checkpoint: local .pt path or wandb artifact ref (e.g. checkpoint-lstmpolicy:stage1-mastered)",
-    )
-    return parser.parse_args()
 
 
 def _get_git_branch() -> str:
@@ -1969,17 +1942,26 @@ def run_training(
     )
 
 
-def main():
-    """CLI entry point (headless, no TUI)."""
-    args = parse_args()
+def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=None):
+    """CLI entry point (headless, no TUI).
 
-    if args.smoketest:
+    Args:
+        smoketest: Run fast end-to-end validation.
+        bot: Bot name (e.g. "simplebiped"). Overrides scene_path.
+        resume: Resume from checkpoint (local path or wandb artifact ref).
+        num_workers: Number of parallel workers for episode collection.
+        scene_path: Override bot scene XML path directly.
+    """
+    if smoketest:
         cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    elif args.biped:
+    elif bot and "biped" in bot:
         cfg = Config.for_biped()
     else:
         cfg = Config()
+
+    if scene_path:
+        cfg.env.scene_path = scene_path
 
     dashboard = AnsiDashboard(
         total_batches=cfg.training.max_batches,
@@ -1989,11 +1971,7 @@ def main():
     _train_loop(
         cfg=cfg,
         dashboard=dashboard,
-        smoketest=args.smoketest,
-        resume=args.resume,
-        num_workers_override=args.num_workers,
+        smoketest=smoketest,
+        resume=resume,
+        num_workers_override=num_workers,
     )
-
-
-if __name__ == "__main__":
-    main()

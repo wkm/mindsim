@@ -6,7 +6,7 @@ tui:
 .DEFAULT_GOAL := tui
 
 quick-sim:
-	uv run python quick_sim.py
+	uv run mjpython tui.py quicksim
 	rerun quick_sim.rrd
 
 train:
@@ -19,16 +19,16 @@ train:
 	@echo "Git status: clean"
 	@echo "Last commit: $$(git log -1 --oneline)"
 	@echo ""
-	uv run python train.py
+	uv run mjpython tui.py train
 
 test:
 	uv run pytest tests/ -v
 
 smoketest:
-	uv run python train.py --smoketest
+	uv run mjpython tui.py smoketest
 
 view:
-	uv run mjpython view.py bots/simple2wheeler/scene.xml
+	uv run mjpython tui.py view
 
 play:
-	uv run mjpython play.py
+	uv run mjpython tui.py play

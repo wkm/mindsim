@@ -1,9 +1,5 @@
 """Launch interactive MuJoCo viewer for any bot.
 
-Usage:
-    uv run mjpython view.py              # wheeler (default)
-    uv run mjpython view.py --biped      # biped
-
 Controls:
     Arrow keys: move the target cube (10cm per tap)
     Ctrl+Right-click drag: move the target cube (freeform)
@@ -11,16 +7,10 @@ Controls:
     Space: pause/unpause
 """
 
-import argparse
 import time
 
 import mujoco
 import mujoco.viewer
-
-SCENES = {
-    "wheeler": "bots/simple2wheeler/scene.xml",
-    "biped": "bots/simplebiped/scene.xml",
-}
 
 # GLFW key codes (passed through unchanged by MuJoCo)
 KEY_RIGHT = 262
@@ -31,17 +21,15 @@ KEY_UP = 265
 ARROW_STEP = 0.1  # meters per keypress
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Launch MuJoCo viewer")
-    parser.add_argument(
-        "--biped", action="store_true", help="View biped instead of wheeler"
-    )
-    args = parser.parse_args()
+def run_view(scene_path: str):
+    """Open the MuJoCo viewer for the given scene.
 
-    scene = SCENES["biped"] if args.biped else SCENES["wheeler"]
-    print(f"Loading {scene}...")
+    Args:
+        scene_path: Path to the MuJoCo scene XML file.
+    """
+    print(f"Loading {scene_path}...")
 
-    m = mujoco.MjModel.from_xml_path(scene)
+    m = mujoco.MjModel.from_xml_path(scene_path)
     d = mujoco.MjData(m)
 
     # Find target mocap body
@@ -75,7 +63,3 @@ def main():
             remaining = m.opt.timestep - elapsed
             if remaining > 0:
                 time.sleep(remaining)
-
-
-if __name__ == "__main__":
-    main()

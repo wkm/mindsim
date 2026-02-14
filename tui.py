@@ -1,15 +1,26 @@
 """
 Textual TUI for MindSim training.
 
-Single entry point for train, visualize, and smoketest modes.
-Launches a fullscreen dashboard with interactive controls.
+Single entry point for all MindSim modes: interactive TUI, view, play, train,
+smoketest, quicksim, and visualize.
 
 Usage:
-    uv run python tui.py
+    uv run mjpython tui.py                    # Interactive TUI (default)
+    uv run mjpython tui.py view [--bot NAME]  # MuJoCo viewer
+    uv run mjpython tui.py play [CHECKPOINT] [--bot NAME]  # Play trained policy
+    uv run mjpython tui.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
+    uv run mjpython tui.py smoketest          # Alias for train --smoketest
+    uv run mjpython tui.py quicksim           # Rerun debug vis
+    uv run mjpython tui.py visualize [--bot NAME] [--steps N]
+
+Requires mjpython (not plain python) for MuJoCo viewer/play features.
 """
 
 from __future__ import annotations
 
+import argparse
+import os
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -42,6 +53,37 @@ def _discover_bots() -> list[dict]:
             name = scene.parent.name
             results.append({"name": name, "scene_path": str(scene)})
     return results
+
+
+def _resolve_scene_path(bot_name: str | None) -> str:
+    """Resolve a bot name to its scene.xml path.
+
+    Args:
+        bot_name: Bot directory name (e.g. "simplebiped", "simple2wheeler"),
+                  or None for the default bot.
+
+    Returns:
+        Path to the bot's scene.xml file.
+
+    Raises:
+        SystemExit: If the bot name is not found.
+    """
+    bots = _discover_bots()
+    if not bots:
+        print("Error: No bots found in bots/*/scene.xml", file=sys.stderr)
+        sys.exit(1)
+
+    if bot_name is None:
+        # Default to first bot (simple2wheeler comes before simplebiped alphabetically)
+        return bots[0]["scene_path"]
+
+    for bot in bots:
+        if bot["name"] == bot_name:
+            return bot["scene_path"]
+
+    available = ", ".join(b["name"] for b in bots)
+    print(f"Error: Unknown bot '{bot_name}'. Available: {available}", file=sys.stderr)
+    sys.exit(1)
 
 
 def _fmt_elapsed(seconds: float) -> str:
@@ -633,29 +675,128 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
-def main():
+def _is_mjpython() -> bool:
+    """Check if we're running under mjpython."""
+    return "MJPYTHON_BIN" in os.environ
+
+
+def _check_mjpython():
+    """Warn if not launched via mjpython (needed for MuJoCo viewer on macOS)."""
+    if shutil.which("mjpython") is None:
+        return  # mjpython not installed, nothing to check
+    if not _is_mjpython():
+        print(
+            "Warning: tui.py should be launched with mjpython for viewer/play support.\n"
+            "  Use: uv run mjpython tui.py   (or: make)\n"
+        )
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser with subcommands."""
+    parser = argparse.ArgumentParser(
+        prog="tui.py",
+        description="MindSim - single entry point for all modes",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # view
+    p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
+    p_view.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+
+    # play
+    p_play = sub.add_parser("play", help="Play trained policy in viewer")
+    p_play.add_argument("checkpoint", nargs="?", default="latest", help="Checkpoint ref (default: latest)")
+    p_play.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+
+    # train
+    p_train = sub.add_parser("train", help="Train (headless CLI, no TUI)")
+    p_train.add_argument("--smoketest", action="store_true", help="Fast end-to-end smoketest")
+    p_train.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_train.add_argument("--resume", type=str, default=None, help="Resume from checkpoint")
+    p_train.add_argument("--num-workers", type=int, default=None, help="Number of parallel workers")
+
+    # smoketest (alias for train --smoketest)
+    sub.add_parser("smoketest", help="Alias for train --smoketest")
+
+    # quicksim
+    sub.add_parser("quicksim", help="Quick simulation with Rerun debug vis")
+
+    # visualize
+    p_viz = sub.add_parser("visualize", help="One-shot Rerun visualization")
+    p_viz.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
+
+    return parser
+
+
+def _run_tui():
+    """Launch the interactive Textual TUI."""
     app = MindSimApp()
     app.run()
 
-    # Dispatch to selected mode after TUI exits
+    # Dispatch to selected mode after TUI exits.
+    # Use os.execvp to replace the process entirely, giving GLFW a clean
+    # AppKit state (Textual's event loop corrupts it on macOS).
+    # Must go through "uv run mjpython" — sys.executable is the venv python,
+    # not mjpython, because mjpython exec's the real interpreter after setup.
     if app.next_action == "view":
-        import mujoco
-        import mujoco.viewer
-
-        model = mujoco.MjModel.from_xml_path(app.next_scene)
-        data = mujoco.MjData(model)
-        mujoco.mj_forward(model, data)
-        mujoco.viewer.launch(model, data)
+        cmd = ["uv", "run", "mjpython", "tui.py", "view"]
+        if app.next_scene:
+            bot_name = Path(app.next_scene).parent.name
+            cmd.extend(["--bot", bot_name])
+        os.execvp("uv", cmd)
 
     elif app.next_action == "play":
-        from play import main as play_main
-
-        # Override sys.argv so play.py sees the right args
-        argv = ["play.py", "latest"]
+        cmd = ["uv", "run", "mjpython", "tui.py", "play"]
         if app.next_scene:
-            argv.append(app.next_scene)
-        sys.argv = argv
-        play_main()
+            bot_name = Path(app.next_scene).parent.name
+            cmd.extend(["--bot", bot_name])
+        os.execvp("uv", cmd)
+
+
+def main():
+    _check_mjpython()
+
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    if args.command is None:
+        # No subcommand → interactive TUI
+        _run_tui()
+
+    elif args.command == "view":
+        scene_path = _resolve_scene_path(args.bot)
+        from view import run_view
+        run_view(scene_path)
+
+    elif args.command == "play":
+        scene_path = _resolve_scene_path(args.bot)
+        from play import run_play
+        run_play(checkpoint_ref=args.checkpoint, scene_path=scene_path)
+
+    elif args.command == "train":
+        scene_path = _resolve_scene_path(args.bot)
+        from train import main as train_main
+        train_main(
+            smoketest=args.smoketest,
+            bot=args.bot,
+            resume=args.resume,
+            num_workers=args.num_workers,
+            scene_path=scene_path,
+        )
+
+    elif args.command == "smoketest":
+        from train import main as train_main
+        train_main(smoketest=True)
+
+    elif args.command == "quicksim":
+        from quick_sim import run_quick_sim
+        run_quick_sim()
+
+    elif args.command == "visualize":
+        scene_path = _resolve_scene_path(args.bot)
+        from visualize import run_visualization
+        run_visualization(scene_path=scene_path, num_steps=args.steps)
 
 
 if __name__ == "__main__":

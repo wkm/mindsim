@@ -1,12 +1,7 @@
 """
 Quick one-shot Rerun visualization for any bot.
-
-Usage:
-    uv run python visualize.py              # wheeler (default)
-    uv run python visualize.py --biped      # biped
 """
 
-import argparse
 import time
 
 import numpy as np
@@ -15,23 +10,28 @@ import rerun as rr
 import rerun_logger
 from simple_wheeler_env import SimpleWheelerEnv
 
-SCENES = {
-    "wheeler": "bots/simple2wheeler/scene.xml",
-    "biped": "bots/simplebiped/scene.xml",
-}
-
 CAMERA_WIDTH = 128
 CAMERA_HEIGHT = 128
 LOGGING_FREQUENCY_HZ = 30.0
 PROGRESS_PRINT_INTERVAL = 100
 
 
-def run_visualization(scene_key="wheeler", output_dir="recordings", num_steps=1000):
+def run_visualization(scene_path="bots/simple2wheeler/scene.xml", output_dir="recordings", num_steps=1000):
+    """Run a visualization recording for the given scene.
+
+    Args:
+        scene_path: Path to the MuJoCo scene XML file.
+        output_dir: Directory to save the .rrd recording.
+        num_steps: Number of simulation steps to run.
+    """
     import os
+    from pathlib import Path
 
     os.makedirs(output_dir, exist_ok=True)
 
-    scene_path = SCENES[scene_key]
+    # Derive a label from the scene path for naming
+    scene_label = Path(scene_path).parent.name
+
     print(f"Loading {scene_path} ({CAMERA_WIDTH}x{CAMERA_HEIGHT})...")
     env = SimpleWheelerEnv(
         scene_path=scene_path,
@@ -39,8 +39,8 @@ def run_visualization(scene_key="wheeler", output_dir="recordings", num_steps=10
         render_height=CAMERA_HEIGHT,
     )
 
-    rr.init(f"mindsim/{scene_key}")
-    output_file = f"{output_dir}/{scene_key}_viz.rrd"
+    rr.init(f"mindsim/{scene_label}")
+    output_file = f"{output_dir}/{scene_label}_viz.rrd"
     rr.save(output_file)
 
     env.reset()
@@ -100,17 +100,3 @@ def run_visualization(scene_key="wheeler", output_dir="recordings", num_steps=10
     print(f"View: rerun {output_file}")
 
     env.close()
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Quick Rerun visualization")
-    parser.add_argument(
-        "--biped", action="store_true", help="Visualize biped instead of wheeler"
-    )
-    parser.add_argument(
-        "--steps", type=int, default=1000, help="Number of sim steps (default 1000)"
-    )
-    args = parser.parse_args()
-
-    scene_key = "biped" if args.biped else "wheeler"
-    run_visualization(scene_key=scene_key, num_steps=args.steps)
