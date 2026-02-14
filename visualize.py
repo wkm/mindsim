@@ -9,7 +9,6 @@ Usage:
 import argparse
 import time
 
-import mujoco
 import numpy as np
 import rerun as rr
 

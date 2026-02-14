@@ -53,8 +53,6 @@ def _collect_one(args):
         _worker_env,
         _worker_policy,
         device="cpu",
-        show_progress=False,
-        log_rerun=False,
         deterministic=deterministic,
     )
 
@@ -85,7 +83,6 @@ class ParallelCollector:
             "image_width": policy_config.image_width,
             "num_actions": policy_config.fc_output_size,
             "init_std": policy_config.init_std,
-            "min_log_std": policy_config.min_log_std,
             "max_log_std": policy_config.max_log_std,
         }
         if policy_config.use_lstm:
@@ -103,8 +100,13 @@ class ParallelCollector:
         )
 
     def collect_batch(
-        self, policy, batch_size, curriculum_stage, stage_progress,
-        num_stages=3, deterministic=False,
+        self,
+        policy,
+        batch_size,
+        curriculum_stage,
+        stage_progress,
+        num_stages=3,
+        deterministic=False,
     ):
         """Collect batch_size episodes in parallel.
 

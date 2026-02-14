@@ -135,6 +135,7 @@ def apply_tweaks(cfg, optimizer, env, tweaks):
             env.patience_window = new_value
             if new_value > 0:
                 from collections import deque
+
                 env._distance_deltas = deque(maxlen=new_value)
             else:
                 env._distance_deltas = None

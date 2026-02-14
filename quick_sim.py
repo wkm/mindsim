@@ -45,7 +45,7 @@ def main():
         obs, reward, done, truncated, info = env.step([LEFT_MOTOR, RIGHT_MOTOR])
 
         # Log camera image
-        rr.log(camera_path, rr.Image(obs))
+        rr.log(camera_path, rr.Image(obs).compress(jpeg_quality=85))
 
         # Log body transforms
         rerun_logger.log_body_transforms(env, namespace="world")
