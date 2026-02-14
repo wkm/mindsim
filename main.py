@@ -5,13 +5,13 @@ Single entry point for all MindSim modes: interactive TUI, view, play, train,
 smoketest, quicksim, and visualize.
 
 Usage:
-    uv run mjpython tui.py                    # Interactive TUI (default)
-    uv run mjpython tui.py view [--bot NAME]  # MuJoCo viewer
-    uv run mjpython tui.py play [CHECKPOINT] [--bot NAME]  # Play trained policy
-    uv run mjpython tui.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
-    uv run mjpython tui.py smoketest          # Alias for train --smoketest
-    uv run mjpython tui.py quicksim           # Rerun debug vis
-    uv run mjpython tui.py visualize [--bot NAME] [--steps N]
+    uv run mjpython main.py                    # Interactive TUI (default)
+    uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
+    uv run mjpython main.py play [CHECKPOINT] [--bot NAME]  # Play trained policy
+    uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
+    uv run mjpython main.py smoketest          # Alias for train --smoketest
+    uv run mjpython main.py quicksim           # Rerun debug vis
+    uv run mjpython main.py visualize [--bot NAME] [--steps N]
 
 Requires mjpython (not plain python) for MuJoCo viewer/play features.
 """
@@ -686,15 +686,15 @@ def _check_mjpython():
         return  # mjpython not installed, nothing to check
     if not _is_mjpython():
         print(
-            "Warning: tui.py should be launched with mjpython for viewer/play support.\n"
-            "  Use: uv run mjpython tui.py   (or: make)\n"
+            "Warning: main.py should be launched with mjpython for viewer/play support.\n"
+            "  Use: uv run mjpython main.py   (or: make)\n"
         )
 
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
-        prog="tui.py",
+        prog="main.py",
         description="MindSim - single entry point for all modes",
     )
     sub = parser.add_subparsers(dest="command")
@@ -740,14 +740,14 @@ def _run_tui():
     # Must go through "uv run mjpython" — sys.executable is the venv python,
     # not mjpython, because mjpython exec's the real interpreter after setup.
     if app.next_action == "view":
-        cmd = ["uv", "run", "mjpython", "tui.py", "view"]
+        cmd = ["uv", "run", "mjpython", "main.py", "view"]
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
         os.execvp("uv", cmd)
 
     elif app.next_action == "play":
-        cmd = ["uv", "run", "mjpython", "tui.py", "play"]
+        cmd = ["uv", "run", "mjpython", "main.py", "play"]
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
