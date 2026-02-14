@@ -10,7 +10,6 @@ Usage:
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import time
 from datetime import datetime
@@ -30,6 +29,8 @@ from textual.widgets import (
     RichLog,
     Static,
 )
+
+from dashboard import _fmt_int, _fmt_pct
 
 
 def _discover_bots() -> list[dict]:
@@ -61,30 +62,10 @@ def _fmt(value, precision=3, width=8):
     return f"{value:+.{precision}f}".rjust(width)
 
 
-def _fmt_pct(value, width=8):
-    if value is None:
-        return " " * width
-    return f"{value:.0%}".rjust(width)
-
-
-def _fmt_int(value, width=8):
-    if value is None:
-        return " " * width
-    return f"{int(value):,}".rjust(width)
-
-
-def _fmt_time(seconds, width=8):
-    if seconds is None:
-        return " " * width
-    if seconds < 100:
-        return f"{seconds:.1f}s".rjust(width)
-    m, s = divmod(int(seconds), 60)
-    return f"{m}m{s:02d}s".rjust(width)
-
-
 # ---------------------------------------------------------------------------
 # Launcher Screen
 # ---------------------------------------------------------------------------
+
 
 class LauncherScreen(Screen):
     """Mode selection screen shown on startup."""
@@ -157,7 +138,9 @@ class LauncherScreen(Screen):
             yield Button("[s] Smoketest", id="btn-smoketest", classes="launcher-btn")
             yield Button("[t] Train", id="btn-train", classes="launcher-btn")
             yield Button("[p] Play", id="btn-play", classes="launcher-btn")
-            yield Button("[q] Quit", id="btn-quit", classes="launcher-btn", variant="error")
+            yield Button(
+                "[q] Quit", id="btn-quit", classes="launcher-btn", variant="error"
+            )
         yield Footer()
 
     def _get_selected_scene(self) -> str | None:
@@ -198,6 +181,7 @@ class LauncherScreen(Screen):
 # ---------------------------------------------------------------------------
 # Training Dashboard Screen
 # ---------------------------------------------------------------------------
+
 
 class TrainingDashboard(Screen):
     """Fullscreen training dashboard with metrics and controls."""
@@ -282,29 +266,89 @@ class TrainingDashboard(Screen):
         with Horizontal(id="metrics-grid"):
             with Vertical(classes="metrics-col"):
                 yield Static("EPISODE PERFORMANCE", classes="section-title")
-                yield Static("  avg reward          ---", id="m-avg-reward", classes="metric-line")
-                yield Static("  best reward         ---", id="m-best-reward", classes="metric-line")
-                yield Static("  worst reward        ---", id="m-worst-reward", classes="metric-line")
-                yield Static("  avg distance        ---", id="m-avg-distance", classes="metric-line")
-                yield Static("  avg steps           ---", id="m-avg-steps", classes="metric-line")
+                yield Static(
+                    "  avg reward          ---",
+                    id="m-avg-reward",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  best reward         ---",
+                    id="m-best-reward",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  worst reward        ---",
+                    id="m-worst-reward",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  avg distance        ---",
+                    id="m-avg-distance",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  avg steps           ---", id="m-avg-steps", classes="metric-line"
+                )
                 yield Static("SUCCESS RATES", classes="section-title")
-                yield Static("  eval (rolling)      ---", id="m-eval-rolling", classes="metric-line")
-                yield Static("  eval (batch)        ---", id="m-eval-batch", classes="metric-line")
-                yield Static("  train (batch)       ---", id="m-train-batch", classes="metric-line")
-                yield Static("  policy std          ---", id="m-policy-std", classes="metric-line")
+                yield Static(
+                    "  eval (rolling)      ---",
+                    id="m-eval-rolling",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  eval (batch)        ---",
+                    id="m-eval-batch",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  train (batch)       ---",
+                    id="m-train-batch",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  policy std          ---",
+                    id="m-policy-std",
+                    classes="metric-line",
+                )
             with Vertical(classes="metrics-col"):
                 yield Static("OPTIMIZATION", classes="section-title")
-                yield Static("  policy loss         ---", id="m-policy-loss", classes="metric-line")
-                yield Static("  value loss          ---", id="m-value-loss", classes="metric-line")
-                yield Static("  grad norm           ---", id="m-grad-norm", classes="metric-line")
-                yield Static("  entropy             ---", id="m-entropy", classes="metric-line")
-                yield Static("  clip fraction       ---", id="m-clip-fraction", classes="metric-line")
-                yield Static("  approx KL           ---", id="m-approx-kl", classes="metric-line")
+                yield Static(
+                    "  policy loss         ---",
+                    id="m-policy-loss",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  value loss          ---",
+                    id="m-value-loss",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  grad norm           ---", id="m-grad-norm", classes="metric-line"
+                )
+                yield Static(
+                    "  entropy             ---", id="m-entropy", classes="metric-line"
+                )
+                yield Static(
+                    "  clip fraction       ---",
+                    id="m-clip-fraction",
+                    classes="metric-line",
+                )
+                yield Static(
+                    "  approx KL           ---", id="m-approx-kl", classes="metric-line"
+                )
                 yield Static("CURRICULUM", classes="section-title")
-                yield Static("  stage               ---", id="m-stage", classes="metric-line")
-                yield Static("  progress            ---", id="m-progress", classes="metric-line")
-                yield Static("  mastery             ---", id="m-mastery", classes="metric-line")
-                yield Static("  max steps           ---", id="m-max-steps", classes="metric-line")
+                yield Static(
+                    "  stage               ---", id="m-stage", classes="metric-line"
+                )
+                yield Static(
+                    "  progress            ---", id="m-progress", classes="metric-line"
+                )
+                yield Static(
+                    "  mastery             ---", id="m-mastery", classes="metric-line"
+                )
+                yield Static(
+                    "  max steps           ---", id="m-max-steps", classes="metric-line"
+                )
                 yield Static("TIMING", classes="section-title")
                 yield Static("  ---", id="m-timing", classes="metric-line")
         yield RichLog(id="log-area", wrap=True, max_lines=100, markup=True)
@@ -350,7 +394,9 @@ class TrainingDashboard(Screen):
         header = " | ".join(self._header_parts) + f"  [{elapsed}]{pause_tag}"
         self.query_one("#header-bar", Static).update(header)
 
-    def set_header(self, run_name: str, branch: str, algorithm: str, wandb_url: str | None):
+    def set_header(
+        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+    ):
         self._algorithm = algorithm
         self._start_time = time.monotonic()
         parts = [f"MindSim | {run_name}", branch, algorithm]
@@ -379,18 +425,32 @@ class TrainingDashboard(Screen):
             self.query_one("#progress-label", Static).update(f"  batch {batch:,}")
 
         # Episode performance
-        self.query_one("#m-avg-reward").update(f"  avg reward       {_fmt(m.get('avg_reward'), precision=2)}")
-        self.query_one("#m-best-reward").update(f"  best reward      {_fmt(m.get('best_reward'), precision=2)}")
-        self.query_one("#m-worst-reward").update(f"  worst reward     {_fmt(m.get('worst_reward'), precision=2)}")
-        dist = m.get('avg_distance')
+        self.query_one("#m-avg-reward").update(
+            f"  avg reward       {_fmt(m.get('avg_reward'), precision=2)}"
+        )
+        self.query_one("#m-best-reward").update(
+            f"  best reward      {_fmt(m.get('best_reward'), precision=2)}"
+        )
+        self.query_one("#m-worst-reward").update(
+            f"  worst reward     {_fmt(m.get('worst_reward'), precision=2)}"
+        )
+        dist = m.get("avg_distance")
         dist_str = f"{_fmt(dist, precision=2)} m" if dist is not None else "---"
         self.query_one("#m-avg-distance").update(f"  avg distance     {dist_str}")
-        self.query_one("#m-avg-steps").update(f"  avg steps        {_fmt_int(m.get('avg_steps'))}")
+        self.query_one("#m-avg-steps").update(
+            f"  avg steps        {_fmt_int(m.get('avg_steps'))}"
+        )
 
         # Success rates
-        self.query_one("#m-eval-rolling").update(f"  eval (rolling)   {_fmt_pct(m.get('rolling_eval_success_rate'))}")
-        self.query_one("#m-eval-batch").update(f"  eval (batch)     {_fmt_pct(m.get('eval_success_rate'))}")
-        self.query_one("#m-train-batch").update(f"  train (batch)    {_fmt_pct(m.get('batch_success_rate'))}")
+        self.query_one("#m-eval-rolling").update(
+            f"  eval (rolling)   {_fmt_pct(m.get('rolling_eval_success_rate'))}"
+        )
+        self.query_one("#m-eval-batch").update(
+            f"  eval (batch)     {_fmt_pct(m.get('eval_success_rate'))}"
+        )
+        self.query_one("#m-train-batch").update(
+            f"  train (batch)    {_fmt_pct(m.get('batch_success_rate'))}"
+        )
 
         ps = m.get("policy_std")
         if ps is not None:
@@ -404,28 +464,48 @@ class TrainingDashboard(Screen):
 
         # Optimization
         if is_ppo:
-            self.query_one("#m-policy-loss").update(f"  policy loss      {_fmt(m.get('policy_loss'), precision=4)}")
-            self.query_one("#m-value-loss").update(f"  value loss       {_fmt(m.get('value_loss'), precision=4)}")
-            self.query_one("#m-clip-fraction").update(f"  clip fraction    {_fmt(m.get('clip_fraction'), precision=2)}")
-            self.query_one("#m-approx-kl").update(f"  approx KL        {_fmt(m.get('approx_kl'), precision=4)}")
+            self.query_one("#m-policy-loss").update(
+                f"  policy loss      {_fmt(m.get('policy_loss'), precision=4)}"
+            )
+            self.query_one("#m-value-loss").update(
+                f"  value loss       {_fmt(m.get('value_loss'), precision=4)}"
+            )
+            self.query_one("#m-clip-fraction").update(
+                f"  clip fraction    {_fmt(m.get('clip_fraction'), precision=2)}"
+            )
+            self.query_one("#m-approx-kl").update(
+                f"  approx KL        {_fmt(m.get('approx_kl'), precision=4)}"
+            )
         else:
-            self.query_one("#m-policy-loss").update(f"  loss             {_fmt(m.get('loss'), precision=4)}")
-            self.query_one("#m-value-loss").update(f"  value loss       ---")
-            self.query_one("#m-clip-fraction").update(f"  clip fraction    ---")
-            self.query_one("#m-approx-kl").update(f"  approx KL        ---")
-        self.query_one("#m-grad-norm").update(f"  grad norm        {_fmt(m.get('grad_norm'), precision=3)}")
-        self.query_one("#m-entropy").update(f"  entropy          {_fmt(m.get('entropy'), precision=3)}")
+            self.query_one("#m-policy-loss").update(
+                f"  loss             {_fmt(m.get('loss'), precision=4)}"
+            )
+            self.query_one("#m-value-loss").update("  value loss       ---")
+            self.query_one("#m-clip-fraction").update("  clip fraction    ---")
+            self.query_one("#m-approx-kl").update("  approx KL        ---")
+        self.query_one("#m-grad-norm").update(
+            f"  grad norm        {_fmt(m.get('grad_norm'), precision=3)}"
+        )
+        self.query_one("#m-entropy").update(
+            f"  entropy          {_fmt(m.get('entropy'), precision=3)}"
+        )
 
         # Curriculum
         stage = m.get("curriculum_stage")
         num_stages = m.get("num_stages", 3)
         stage_str = f"{int(stage)} / {int(num_stages)}" if stage is not None else "---"
         self.query_one("#m-stage").update(f"  stage            {stage_str.rjust(8)}")
-        self.query_one("#m-progress").update(f"  progress         {_fmt(m.get('stage_progress'), precision=2)}")
+        self.query_one("#m-progress").update(
+            f"  progress         {_fmt(m.get('stage_progress'), precision=2)}"
+        )
         mc = m.get("mastery_count", 0)
         mb = m.get("mastery_batches", 20)
-        self.query_one("#m-mastery").update(f"  mastery          {f'{int(mc):>3d} / {int(mb)}'.rjust(8)}")
-        self.query_one("#m-max-steps").update(f"  max steps        {_fmt_int(m.get('max_episode_steps'))}")
+        self.query_one("#m-mastery").update(
+            f"  mastery          {f'{int(mc):>3d} / {int(mb)}'.rjust(8)}"
+        )
+        self.query_one("#m-max-steps").update(
+            f"  max steps        {_fmt_int(m.get('max_episode_steps'))}"
+        )
 
         # Timing
         bt = m.get("batch_time")
@@ -438,13 +518,13 @@ class TrainingDashboard(Screen):
             throughput = f" | {bs / bt:.1f} ep/s"
         timing_parts = []
         if bt is not None:
-            timing_parts.append(f"batch {bt*1000:.0f}ms")
+            timing_parts.append(f"batch {bt * 1000:.0f}ms")
         if ct is not None:
-            timing_parts.append(f"collect {ct*1000:.0f}ms")
+            timing_parts.append(f"collect {ct * 1000:.0f}ms")
         if tt is not None:
-            timing_parts.append(f"train {tt*1000:.0f}ms")
+            timing_parts.append(f"train {tt * 1000:.0f}ms")
         if et is not None:
-            timing_parts.append(f"eval {et*1000:.0f}ms")
+            timing_parts.append(f"eval {et * 1000:.0f}ms")
         self.query_one("#m-timing").update(f"  {' | '.join(timing_parts)}{throughput}")
 
     def log_message(self, text: str):
@@ -459,6 +539,7 @@ class TrainingDashboard(Screen):
 # ---------------------------------------------------------------------------
 # Main TUI App
 # ---------------------------------------------------------------------------
+
 
 class MindSimApp(App):
     """MindSim Textual TUI application."""
@@ -510,10 +591,12 @@ class MindSimApp(App):
     @work(thread=True, exclusive=True)
     def _run_training(self) -> None:
         from train import run_training
+
         # Force serial collection in smoketest to avoid multiprocessing issues
         num_workers = 1 if self._smoketest else None
         run_training(
-            self, self.command_queue,
+            self,
+            self.command_queue,
             smoketest=self._smoketest,
             num_workers=num_workers,
             scene_path=self._scene_path,
@@ -537,7 +620,9 @@ class MindSimApp(App):
         if self._dashboard:
             self._dashboard.mark_finished()
 
-    def set_header(self, run_name: str, branch: str, algorithm: str, wandb_url: str | None):
+    def set_header(
+        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+    ):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
             self._dashboard.set_header(run_name, branch, algorithm, wandb_url)
@@ -556,6 +641,7 @@ def main():
     if app.next_action == "view":
         import mujoco
         import mujoco.viewer
+
         model = mujoco.MjModel.from_xml_path(app.next_scene)
         data = mujoco.MjData(model)
         mujoco.mj_forward(model, data)
@@ -563,6 +649,7 @@ def main():
 
     elif app.next_action == "play":
         from play import main as play_main
+
         # Override sys.argv so play.py sees the right args
         argv = ["play.py", "latest"]
         if app.next_scene:

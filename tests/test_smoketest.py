@@ -341,7 +341,9 @@ class TestPPO:
         values = torch.tensor([0.5, 0.5, 0.5])
         gamma = 0.99
         # lambda=1 makes GAE equivalent to full discounted returns - V
-        advantages, returns = compute_gae(rewards, values, gamma, gae_lambda=1.0, next_value=0.0)
+        advantages, returns = compute_gae(
+            rewards, values, gamma, gae_lambda=1.0, next_value=0.0
+        )
         assert advantages.shape == (3,)
         assert returns.shape == (3,)
         # Check last step: delta = 1.0 + 0.99*0 - 0.5 = 0.5
@@ -431,7 +433,18 @@ class TestPPO:
                 for _ in range(cfg.training.batch_size)
             ]
 
-            policy_loss, value_loss, entropy, grad_norm, policy_std, clip_frac, approx_kl, ev, mv, mr = train_step_ppo(
+            (
+                policy_loss,
+                value_loss,
+                entropy,
+                grad_norm,
+                policy_std,
+                clip_frac,
+                approx_kl,
+                ev,
+                mv,
+                mr,
+            ) = train_step_ppo(
                 policy, optimizer, batch, ppo_epochs=cfg.training.ppo_epochs
             )
             assert not np.isnan(policy_loss)
@@ -497,7 +510,9 @@ class TestCheckpoint:
             image_width=cfg.policy.image_width,
             hidden_size=cfg.policy.hidden_size,
         )
-        optimizer2 = torch.optim.Adam(policy2.parameters(), lr=cfg.training.learning_rate)
+        optimizer2 = torch.optim.Adam(
+            policy2.parameters(), lr=cfg.training.learning_rate
+        )
 
         loaded = load_checkpoint(str(ckpt_path), cfg)
         policy2.load_state_dict(loaded["policy_state_dict"])
@@ -522,13 +537,23 @@ class TestCheckpoint:
     def test_architecture_mismatch_raises(self):
         """Loading checkpoint with different hidden_size should raise ValueError."""
         ckpt_config = {
-            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 256, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "LSTMPolicy",
+                "hidden_size": 256,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {},
             "curriculum": {},
             "env": {},
         }
         current_config = {
-            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "LSTMPolicy",
+                "hidden_size": 32,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {},
             "curriculum": {},
             "env": {},
@@ -539,13 +564,23 @@ class TestCheckpoint:
     def test_policy_type_mismatch_raises(self):
         """Loading checkpoint with different policy_type should raise ValueError."""
         ckpt_config = {
-            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "LSTMPolicy",
+                "hidden_size": 32,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {},
             "curriculum": {},
             "env": {},
         }
         current_config = {
-            "policy": {"policy_type": "TinyPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "TinyPolicy",
+                "hidden_size": 32,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {},
             "curriculum": {},
             "env": {},
@@ -556,13 +591,23 @@ class TestCheckpoint:
     def test_training_param_change_warns(self):
         """Changing training params should warn but not error."""
         ckpt_config = {
-            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "LSTMPolicy",
+                "hidden_size": 32,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {"learning_rate": 0.001},
             "curriculum": {},
             "env": {},
         }
         current_config = {
-            "policy": {"policy_type": "LSTMPolicy", "hidden_size": 32, "image_height": 64, "image_width": 64},
+            "policy": {
+                "policy_type": "LSTMPolicy",
+                "hidden_size": 32,
+                "image_height": 64,
+                "image_width": 64,
+            },
             "training": {"learning_rate": 0.0001},
             "curriculum": {},
             "env": {},
@@ -589,9 +634,14 @@ class TestCheckpoint:
         monkeypatch.chdir(tmp_path)
 
         path = save_checkpoint(
-            policy, optimizer, cfg,
-            curriculum_stage=1, stage_progress=0.5, mastery_count=3,
-            batch_idx=10, episode_count=100,
+            policy,
+            optimizer,
+            cfg,
+            curriculum_stage=1,
+            stage_progress=0.5,
+            mastery_count=3,
+            batch_idx=10,
+            episode_count=100,
             trigger="periodic",
         )
         assert os.path.isfile(path)
