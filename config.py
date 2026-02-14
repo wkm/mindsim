@@ -40,6 +40,9 @@ class EnvConfig:
     distractor_min_distance: float = 0.5  # Min spawn distance from origin
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
+    # Stage 4: moving distractors
+    distractor_max_speed: float = 0.2  # Max distractor speed (m/s) at stage 4 progress=1
+
     # Distance-patience early truncation
     patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
@@ -61,7 +64,7 @@ class EnvConfig:
 class CurriculumConfig:
     """Curriculum learning configuration."""
 
-    num_stages: int = 3  # Total curriculum stages
+    num_stages: int = 4  # Total curriculum stages
     window_size: int = 10  # Batches to average for success rate
     advance_threshold: float = 0.6  # Advance when success rate > 60%
     advance_rate: float = 0.02  # Per-batch advancement
@@ -187,7 +190,7 @@ class Config:
                 advance_threshold=0.0,  # Always advance
                 advance_rate=1.0,  # Jump to full progress immediately
                 eval_episodes_per_batch=1,
-                num_stages=3,
+                num_stages=4,
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
@@ -231,7 +234,7 @@ class Config:
                 time_penalty=0.0,  # Disabled: alive_bonus replaces time_penalty
             ),
             curriculum=CurriculumConfig(
-                num_stages=3,
+                num_stages=4,
                 window_size=10,
                 advance_threshold=0.4,  # Lower threshold — walking is harder
                 advance_rate=0.01,
@@ -274,7 +277,7 @@ class Config:
                 advance_threshold=0.0,
                 advance_rate=1.0,
                 eval_episodes_per_batch=1,
-                num_stages=3,
+                num_stages=4,
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",

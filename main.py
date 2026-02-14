@@ -148,6 +148,10 @@ class LauncherScreen(Screen):
         height: auto;
     }
 
+    #stage-selector {
+        height: auto;
+    }
+
     #mode-list {
         height: auto;
     }
@@ -167,6 +171,11 @@ class LauncherScreen(Screen):
                         yield RadioButton(bot["name"], value=(i == 0))
             else:
                 yield Static("  No bots found in bots/*/scene.xml")
+            yield Static("Stage:", classes="launcher-section")
+            with RadioSet(id="stage-selector"):
+                yield RadioButton("None", value=True)
+                for s in range(1, 5):
+                    yield RadioButton(str(s))
             yield Static("Mode:", classes="launcher-section")
             yield OptionList(*self._MODE_ITEMS, id="mode-list")
         yield Footer()
@@ -184,6 +193,17 @@ class LauncherScreen(Screen):
             pass
         return self._bots[0]["scene_path"] if self._bots else None
 
+    def _get_selected_stage(self) -> int | None:
+        """Get the selected curriculum stage, or None for 'None'."""
+        try:
+            radio_set = self.query_one("#stage-selector", RadioSet)
+            idx = radio_set.pressed_index
+            if idx <= 0:
+                return None
+            return idx  # 1-4
+        except Exception:
+            return None
+
     def action_launch(self, key: str) -> None:
         """Handle keyboard shortcut by selecting the corresponding mode."""
         idx = self._MODE_KEYS.get(key)
@@ -194,13 +214,14 @@ class LauncherScreen(Screen):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         scene_path = self._get_selected_scene()
+        stage = self._get_selected_stage()
         label = str(event.option.prompt)
         if label == "Train":
             self.app.start_training(smoketest=False, scene_path=scene_path)
         elif label == "Smoketest":
             self.app.start_training(smoketest=True, scene_path=scene_path)
         elif label == "View":
-            self.app.start_viewing(scene_path=scene_path)
+            self.app.start_viewing(scene_path=scene_path, stage=stage)
         elif label == "Play":
             self.app.start_playing(scene_path=scene_path)
         elif label == "Quit":
@@ -590,16 +611,18 @@ class MindSimApp(App):
         # Set by launcher to dispatch after app.run() returns
         self.next_action: str | None = None
         self.next_scene: str | None = None
+        self.next_stage: int | None = None
 
     def on_mount(self) -> None:
         self.push_screen(LauncherScreen())
 
-    def start_viewing(self, scene_path: str | None = None):
+    def start_viewing(self, scene_path: str | None = None, stage: int | None = None):
         """Exit TUI, then main() will launch the MuJoCo viewer."""
         if not scene_path:
             return
         self.next_action = "view"
         self.next_scene = scene_path
+        self.next_stage = stage
         self.exit()
 
     def start_playing(self, scene_path: str | None = None):
@@ -689,6 +712,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
     p_view.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_view.add_argument("--stage", type=int, default=None, help="Curriculum stage 1-4 (default: none)")
 
     # play
     p_play = sub.add_parser("play", help="Play trained policy in viewer")
@@ -731,6 +755,8 @@ def _run_tui():
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
+        if app.next_stage:
+            cmd.extend(["--stage", str(app.next_stage)])
         os.execvp("uv", cmd)
 
     elif app.next_action == "play":
@@ -754,7 +780,7 @@ def main():
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)
         from view import run_view
-        run_view(scene_path)
+        run_view(scene_path, stage=args.stage)
 
     elif args.command == "play":
         scene_path = _resolve_scene_path(args.bot)

@@ -56,6 +56,7 @@ class TrainingEnv:
             max_distractors=config.max_distractors,
             distractor_min_distance=config.distractor_min_distance,
             distractor_max_distance=config.distractor_max_distance,
+            distractor_max_speed=config.distractor_max_speed,
             # Biped-specific rewards (all default to 0 = disabled)
             upright_reward_scale=config.upright_reward_scale,
             alive_bonus=config.alive_bonus,
@@ -90,6 +91,8 @@ class TrainingEnv:
         max_distractors=4,
         distractor_min_distance=0.5,
         distractor_max_distance=3.0,
+        # Stage 4: moving distractors
+        distractor_max_speed=0.2,
         # Biped-specific reward params (all 0.0 = disabled for wheeler)
         upright_reward_scale=0.0,
         alive_bonus=0.0,
@@ -117,13 +120,14 @@ class TrainingEnv:
         self.movement_bonus = movement_bonus
         self.time_penalty = time_penalty
 
-        # Stage 2/3 params
+        # Stage 2/3/4 params
         self.target_max_speed = target_max_speed
         self.arena_boundary = arena_boundary
         self.max_target_distance_stage2 = max_target_distance_stage2
         self.max_distractors = max_distractors
         self.distractor_min_distance = distractor_min_distance
         self.distractor_max_distance = distractor_max_distance
+        self.distractor_max_speed = distractor_max_speed
 
         # Biped-specific rewards
         self.upright_reward_scale = upright_reward_scale
@@ -148,11 +152,15 @@ class TrainingEnv:
         # Stage 1: angle variance (0→full 360°)
         # Stage 2: moving target + increased distance
         # Stage 3: visual distractors
+        # Stage 4: moving distractors
         self.curriculum_stage = 1
         self.curriculum_stage_progress = 1.0  # Default: fully progressed
 
         # Target movement state (stage 2+)
         self.target_velocity = np.array([0.0, 0.0])  # XY velocity
+
+        # Distractor movement state (stage 4+)
+        self.distractor_velocities = [np.array([0.0, 0.0]) for _ in range(max_distractors)]
 
         # Time step for target movement (action dt = mujoco_steps * sim_dt)
         self.action_dt = mujoco_steps_per_action * self.env.model.opt.timestep
@@ -177,10 +185,11 @@ class TrainingEnv:
         Set multi-stage curriculum state.
 
         Args:
-            stage: Int 1-3
+            stage: Int 1-4
                 1 = angle variance only
                 2 = moving target + increased distance
                 3 = visual distractors
+                4 = moving distractors
             progress: Float in [0, 1] for current stage
                 Previous stages stay at max when advancing.
             num_stages: Total number of curriculum stages (for episode length scheduling)
@@ -202,6 +211,7 @@ class TrainingEnv:
         Stage 1: Target at curriculum-controlled angle, fixed distance range.
         Stage 2: + moving target, increased max distance.
         Stage 3: + visual distractor cubes.
+        Stage 4: + moving distractor cubes.
 
         Returns:
             observation: Camera image normalized to [0, 1]
@@ -273,6 +283,26 @@ class TrainingEnv:
         else:
             self._hide_distractors()
 
+        # --- Stage 4: Moving distractors ---
+        if self.curriculum_stage >= 4:
+            stage4_progress = (
+                self.curriculum_stage_progress if self.curriculum_stage == 4 else 1.0
+            )
+            n_moving = max(1, int(round(stage4_progress * self.max_distractors)))
+            for i in range(self.max_distractors):
+                if i < n_moving:
+                    speed = stage4_progress * self.distractor_max_speed * np.random.uniform(0.5, 1.0)
+                    vel_angle = np.random.uniform(0, 2 * np.pi)
+                    self.distractor_velocities[i] = np.array([
+                        speed * np.cos(vel_angle),
+                        speed * np.sin(vel_angle),
+                    ])
+                else:
+                    self.distractor_velocities[i] = np.array([0.0, 0.0])
+        else:
+            for i in range(self.max_distractors):
+                self.distractor_velocities[i] = np.array([0.0, 0.0])
+
         # Re-run forward kinematics to update positions
         mujoco.mj_forward(self.env.model, self.env.data)
 
@@ -281,9 +311,10 @@ class TrainingEnv:
             "target_pos": [target_x, target_y, target_z],
             "target_velocity": self.target_velocity.copy().tolist(),
             "distractor_positions": [
-                self.env.model.body_pos[bid].copy().tolist()
-                for bid in self.env.distractor_body_ids
+                self.env.data.mocap_pos[mid].copy().tolist()
+                for mid in self.env.distractor_mocap_ids
             ],
+            "distractor_velocities": [v.copy().tolist() for v in self.distractor_velocities],
             "curriculum_stage": self.curriculum_stage,
             "curriculum_stage_progress": self.curriculum_stage_progress,
         }
@@ -315,16 +346,24 @@ class TrainingEnv:
 
         # Restore target position
         target_pos = config["target_pos"]
-        self.env.model.body_pos[self.env.target_body_id] = target_pos
+        mocap_id = self.env.target_mocap_id
+        self.env.data.mocap_pos[mocap_id] = target_pos
 
         # Restore target velocity
         self.target_velocity = np.array(config["target_velocity"])
 
         # Restore distractor positions
-        for bid, pos in zip(
-            self.env.distractor_body_ids, config["distractor_positions"]
+        for mid, pos in zip(
+            self.env.distractor_mocap_ids, config["distractor_positions"]
         ):
-            self.env.model.body_pos[bid] = pos
+            self.env.data.mocap_pos[mid] = pos
+
+        # Restore distractor velocities (backward-compatible: default to zeros)
+        saved_vels = config.get("distractor_velocities")
+        if saved_vels:
+            self.distractor_velocities = [np.array(v) for v in saved_vels]
+        else:
+            self.distractor_velocities = [np.array([0.0, 0.0]) for _ in range(self.max_distractors)]
 
         # Restore curriculum state
         self.curriculum_stage = config["curriculum_stage"]
@@ -342,7 +381,7 @@ class TrainingEnv:
 
     def _place_distractors(self, n, target_x, target_y):
         """Place n distractor cubes at random positions, hide the rest."""
-        for i, body_id in enumerate(self.env.distractor_body_ids):
+        for i, mocap_id in enumerate(self.env.distractor_mocap_ids):
             if i < n:
                 # Place at random angle/distance from origin
                 for _ in range(20):  # Rejection sampling
@@ -355,14 +394,14 @@ class TrainingEnv:
                     # Reject if too close to target
                     if np.hypot(dx - target_x, dy - target_y) > 0.2:
                         break
-                self.env.model.body_pos[body_id] = [dx, dy, 0.08]
+                self.env.data.mocap_pos[mocap_id] = [dx, dy, 0.08]
             else:
-                self.env.model.body_pos[body_id] = [0.0, 100.0, 0.08]
+                self.env.data.mocap_pos[mocap_id] = [0.0, 100.0, 0.08]
 
     def _hide_distractors(self):
         """Move all distractors off-screen."""
-        for body_id in self.env.distractor_body_ids:
-            self.env.model.body_pos[body_id] = [0.0, 100.0, 0.08]
+        for mocap_id in self.env.distractor_mocap_ids:
+            self.env.data.mocap_pos[mocap_id] = [0.0, 100.0, 0.08]
 
     def _update_target_position(self):
         """Move target by velocity, bounce off arena boundaries."""
@@ -384,6 +423,25 @@ class TrainingEnv:
                 self.target_velocity[axis] *= -1
 
         self.env.data.mocap_pos[mocap_id] = pos
+
+    def _update_distractor_positions(self):
+        """Move distractors by velocity, bounce off arena boundaries."""
+        boundary = self.arena_boundary
+        for i, mocap_id in enumerate(self.env.distractor_mocap_ids):
+            vel = self.distractor_velocities[i]
+            if vel[0] == 0.0 and vel[1] == 0.0:
+                continue
+            pos = self.env.data.mocap_pos[mocap_id].copy()
+            pos[0] += vel[0] * self.action_dt
+            pos[1] += vel[1] * self.action_dt
+            for axis in range(2):
+                if pos[axis] > boundary:
+                    pos[axis] = boundary
+                    self.distractor_velocities[i][axis] *= -1
+                elif pos[axis] < -boundary:
+                    pos[axis] = -boundary
+                    self.distractor_velocities[i][axis] *= -1
+            self.env.data.mocap_pos[mocap_id] = pos
 
     def step(self, action):
         """
@@ -453,6 +511,10 @@ class TrainingEnv:
         # Next step's observation and reward will see the new position.
         if np.any(self.target_velocity != 0):
             self._update_target_position()
+
+        # Move distractors (stage 4+)
+        if self.curriculum_stage >= 4:
+            self._update_distractor_positions()
 
         # Update state for next step (use post-move distance so next step's
         # reward delta captures both robot movement and target movement)
