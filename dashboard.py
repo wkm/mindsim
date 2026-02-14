@@ -17,7 +17,11 @@ def _fmt_float(value, width=8, precision=3):
     """Format a float right-aligned to width."""
     if value is None:
         return " " * width
-    s = f"{value:+.{precision}f}" if value < 0 or precision > 2 else f"{value:.{precision}f}"
+    s = (
+        f"{value:+.{precision}f}"
+        if value < 0 or precision > 2
+        else f"{value:.{precision}f}"
+    )
     return s.rjust(width)
 
 
@@ -130,37 +134,67 @@ class AnsiDashboard:
             pad_mid = max(2, 36 - len(left))
             return f"{left}{' ' * pad_mid}{right}"
 
-        lines.append(row(
-            "avg reward", _fmt_float(m.get("avg_reward"), precision=2),
-            "policy loss", _fmt_float(m.get("policy_loss"), precision=4) if is_ppo else _fmt_float(m.get("loss"), precision=4),
-        ))
-        lines.append(row(
-            "best reward", _fmt_float(m.get("best_reward"), precision=2),
-            "value loss", _fmt_float(m.get("value_loss"), precision=4) if is_ppo else "",
-        ))
-        lines.append(row(
-            "worst reward", _fmt_float(m.get("worst_reward"), precision=2),
-            "grad norm", _fmt_float(m.get("grad_norm"), precision=3),
-        ))
-        lines.append(row(
-            "avg distance", f"{_fmt_float(m.get('avg_distance'), precision=2)} m",
-            "entropy", _fmt_float(m.get("entropy"), precision=3),
-        ))
+        lines.append(
+            row(
+                "avg reward",
+                _fmt_float(m.get("avg_reward"), precision=2),
+                "policy loss",
+                _fmt_float(m.get("policy_loss"), precision=4)
+                if is_ppo
+                else _fmt_float(m.get("loss"), precision=4),
+            )
+        )
+        lines.append(
+            row(
+                "best reward",
+                _fmt_float(m.get("best_reward"), precision=2),
+                "value loss",
+                _fmt_float(m.get("value_loss"), precision=4) if is_ppo else "",
+            )
+        )
+        lines.append(
+            row(
+                "worst reward",
+                _fmt_float(m.get("worst_reward"), precision=2),
+                "grad norm",
+                _fmt_float(m.get("grad_norm"), precision=3),
+            )
+        )
+        lines.append(
+            row(
+                "avg distance",
+                f"{_fmt_float(m.get('avg_distance'), precision=2)} m",
+                "entropy",
+                _fmt_float(m.get("entropy"), precision=3),
+            )
+        )
 
         if is_ppo:
-            lines.append(row(
-                "avg steps", _fmt_int(m.get("avg_steps")),
-                "clip fraction", _fmt_float(m.get("clip_fraction"), precision=2),
-            ))
-            lines.append(row(
-                "", "",
-                "approx KL", _fmt_float(m.get("approx_kl"), precision=4),
-            ))
+            lines.append(
+                row(
+                    "avg steps",
+                    _fmt_int(m.get("avg_steps")),
+                    "clip fraction",
+                    _fmt_float(m.get("clip_fraction"), precision=2),
+                )
+            )
+            lines.append(
+                row(
+                    "",
+                    "",
+                    "approx KL",
+                    _fmt_float(m.get("approx_kl"), precision=4),
+                )
+            )
         else:
-            lines.append(row(
-                "avg steps", _fmt_int(m.get("avg_steps")),
-                "", "",
-            ))
+            lines.append(
+                row(
+                    "avg steps",
+                    _fmt_int(m.get("avg_steps")),
+                    "",
+                    "",
+                )
+            )
 
         lines.append("")
 
@@ -178,26 +212,41 @@ class AnsiDashboard:
         else:
             std_str = ""
 
-        lines.append(row(
-            "eval (rolling)", _fmt_pct(m.get("rolling_eval_success_rate")),
-            "expl. variance" if is_ppo else "policy std",
-            _fmt_float(m.get("explained_variance"), precision=2) if is_ppo else std_str.rjust(8),
-        ))
-        lines.append(row(
-            "eval (batch)", _fmt_pct(m.get("eval_success_rate")),
-            "policy std" if is_ppo else "",
-            std_str.rjust(8) if is_ppo else "",
-        ))
-        lines.append(row(
-            "train (batch)", _fmt_pct(m.get("batch_success_rate")),
-            "mean value" if is_ppo else "",
-            _fmt_float(m.get("mean_value"), precision=2) if is_ppo else "",
-        ))
+        lines.append(
+            row(
+                "eval (rolling)",
+                _fmt_pct(m.get("rolling_eval_success_rate")),
+                "expl. variance" if is_ppo else "policy std",
+                _fmt_float(m.get("explained_variance"), precision=2)
+                if is_ppo
+                else std_str.rjust(8),
+            )
+        )
+        lines.append(
+            row(
+                "eval (batch)",
+                _fmt_pct(m.get("eval_success_rate")),
+                "policy std" if is_ppo else "",
+                std_str.rjust(8) if is_ppo else "",
+            )
+        )
+        lines.append(
+            row(
+                "train (batch)",
+                _fmt_pct(m.get("batch_success_rate")),
+                "mean value" if is_ppo else "",
+                _fmt_float(m.get("mean_value"), precision=2) if is_ppo else "",
+            )
+        )
         if is_ppo:
-            lines.append(row(
-                "", "",
-                "mean return", _fmt_float(m.get("mean_return"), precision=2),
-            ))
+            lines.append(
+                row(
+                    "",
+                    "",
+                    "mean return",
+                    _fmt_float(m.get("mean_return"), precision=2),
+                )
+            )
 
         lines.append("")
 
@@ -215,9 +264,27 @@ class AnsiDashboard:
         train_time = m.get("train_time")
         eval_time = m.get("eval_time")
 
-        lines.append(row("stage", stage_str.rjust(8), "last batch", _fmt_time(batch_time)))
-        lines.append(row("progress", _fmt_float(m.get("stage_progress"), precision=2), "\u251c collection", _fmt_time(collect_time)))
-        lines.append(row("mastery", f"{int(m.get('mastery_count', 0)):>3d} / {int(m.get('mastery_batches', 20))}".rjust(8), "\u251c train", _fmt_time(train_time)))
+        lines.append(
+            row("stage", stage_str.rjust(8), "last batch", _fmt_time(batch_time))
+        )
+        lines.append(
+            row(
+                "progress",
+                _fmt_float(m.get("stage_progress"), precision=2),
+                "\u251c collection",
+                _fmt_time(collect_time),
+            )
+        )
+        lines.append(
+            row(
+                "mastery",
+                f"{int(m.get('mastery_count', 0)):>3d} / {int(m.get('mastery_batches', 20))}".rjust(
+                    8
+                ),
+                "\u251c train",
+                _fmt_time(train_time),
+            )
+        )
 
         throughput = None
         if batch_time and batch_time > 0:
@@ -225,8 +292,22 @@ class AnsiDashboard:
             if bs:
                 throughput = bs / batch_time
 
-        lines.append(row("max steps", _fmt_int(m.get("max_episode_steps")), "\u251c eval", _fmt_time(eval_time)))
-        lines.append(row("", "", "\u2514 throughput", f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8)))
+        lines.append(
+            row(
+                "max steps",
+                _fmt_int(m.get("max_episode_steps")),
+                "\u251c eval",
+                _fmt_time(eval_time),
+            )
+        )
+        lines.append(
+            row(
+                "",
+                "",
+                "\u2514 throughput",
+                f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8),
+            )
+        )
         lines.append("\u2500" * width)
 
         if self._lines_printed > 0:

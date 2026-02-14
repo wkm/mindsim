@@ -9,10 +9,11 @@ run produced each checkpoint and which run consumed it.
 import os
 import subprocess
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
+
 import wandb
 
 
@@ -100,7 +101,7 @@ def save_checkpoint(
         "config": cfg.to_wandb_config(),
         "run_id": run_id,
         "run_name": run_name,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "git_sha": _get_git_sha(),
     }
 
@@ -137,11 +138,13 @@ def save_checkpoint(
 
     # Log checkpoint event to wandb timeline
     if run and not run.disabled:
-        run.log({
-            "checkpoint/saved": 1,
-            "checkpoint/stage": curriculum_stage,
-            "checkpoint/batch_idx": batch_idx,
-        })
+        run.log(
+            {
+                "checkpoint/saved": 1,
+                "checkpoint/stage": curriculum_stage,
+                "checkpoint/batch_idx": batch_idx,
+            }
+        )
 
     return str(local_path)
 
@@ -195,9 +198,7 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
             )
 
 
-def load_checkpoint(
-    resume_ref: str, current_cfg, device: str = "cpu"
-) -> dict:
+def load_checkpoint(resume_ref: str, current_cfg, device: str = "cpu") -> dict:
     """
     Load a checkpoint from a local path or wandb artifact reference.
 

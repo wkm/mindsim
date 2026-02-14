@@ -20,15 +20,14 @@ import torch
 from checkpoint import resolve_resume_ref
 from simple_wheeler_env import SimpleWheelerEnv
 
-
 # GLFW key constants (avoid importing glfw directly)
 KEY_UP = 265
 KEY_DOWN = 264
 KEY_LEFT = 263
 KEY_RIGHT = 262
-KEY_SLASH = 47   # '/'
-KEY_MINUS = 45   # '-'
-KEY_EQUAL = 61   # '='
+KEY_SLASH = 47  # '/'
+KEY_MINUS = 45  # '-'
+KEY_EQUAL = 61  # '='
 
 SPEED_OPTIONS = [1, 2, 4, 8]
 
@@ -74,8 +73,10 @@ def main():
     policy = build_policy(ckpt["config"])
     policy.load_state_dict(ckpt["policy_state_dict"])
     policy.eval()
-    print(f"Policy: {ckpt['config']['policy']['policy_type']} "
-          f"(hidden={ckpt['config']['policy'].get('hidden_size', 'n/a')})")
+    print(
+        f"Policy: {ckpt['config']['policy']['policy_type']} "
+        f"(hidden={ckpt['config']['policy'].get('hidden_size', 'n/a')})"
+    )
 
     # Image dimensions from checkpoint config
     img_h = ckpt["config"]["policy"]["image_height"]
@@ -106,13 +107,13 @@ def main():
 
     def key_callback(keycode):
         if keycode == KEY_UP:
-            pending_intents.append(("move", 1, target_step))    # +Y (forward)
+            pending_intents.append(("move", 1, target_step))  # +Y (forward)
         elif keycode == KEY_DOWN:
-            pending_intents.append(("move", 1, -target_step))   # -Y (backward)
+            pending_intents.append(("move", 1, -target_step))  # -Y (backward)
         elif keycode == KEY_RIGHT:
-            pending_intents.append(("move", 0, target_step))    # +X (right)
+            pending_intents.append(("move", 0, target_step))  # +X (right)
         elif keycode == KEY_LEFT:
-            pending_intents.append(("move", 0, -target_step))   # -X (left)
+            pending_intents.append(("move", 0, -target_step))  # -X (left)
         elif keycode == KEY_SLASH:
             pending_intents.append(("randomize",))
         elif keycode == KEY_EQUAL:
@@ -121,9 +122,7 @@ def main():
             pending_intents.append(("speed_down",))
 
     # Launch passive viewer
-    viewer = mujoco.viewer.launch_passive(
-        model, data, key_callback=key_callback
-    )
+    viewer = mujoco.viewer.launch_passive(model, data, key_callback=key_callback)
 
     # Start in tracking camera mode following the robot
     viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
@@ -136,7 +135,9 @@ def main():
         policy.reset_hidden(batch_size=1, device="cpu")
 
     print("Play mode active.")
-    print("  Arrows: move target   /: randomize   -/=: speed   [ ]: cameras   Esc: quit")
+    print(
+        "  Arrows: move target   /: randomize   -/=: speed   [ ]: cameras   Esc: quit"
+    )
     print("  Tip: In viewer UI, set Font: 150% and Color: Orange for best experience")
 
     try:
@@ -153,7 +154,9 @@ def main():
                     if intent[0] == "move":
                         axis, delta = intent[1], intent[2]
                         pos = model.body_pos[env.target_body_id].copy()
-                        pos[axis] = np.clip(pos[axis] + delta, -arena_bound, arena_bound)
+                        pos[axis] = np.clip(
+                            pos[axis] + delta, -arena_bound, arena_bound
+                        )
                         model.body_pos[env.target_body_id] = pos
                         reset_hidden = True
                     elif intent[0] == "randomize":
@@ -196,13 +199,22 @@ def main():
             distance = env.get_distance_to_target()
             speed = SPEED_OPTIONS[speed_idx]
 
-            viewer.set_texts([
-                (mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                 f"Distance: {distance:.2f}m",
-                 f"Motors: L={action[0]:+.2f}  R={action[1]:+.2f}"),
-                (mujoco.mjtFontScale.mjFONTSCALE_100, mujoco.mjtGridPos.mjGRID_BOTTOMLEFT,
-                 f"Speed: {speed}x (-/=)  Arrows: move  /: randomize  [ ]: cameras", ""),
-            ])
+            viewer.set_texts(
+                [
+                    (
+                        mujoco.mjtFontScale.mjFONTSCALE_150,
+                        mujoco.mjtGridPos.mjGRID_TOPLEFT,
+                        f"Distance: {distance:.2f}m",
+                        f"Motors: L={action[0]:+.2f}  R={action[1]:+.2f}",
+                    ),
+                    (
+                        mujoco.mjtFontScale.mjFONTSCALE_100,
+                        mujoco.mjtGridPos.mjGRID_BOTTOMLEFT,
+                        f"Speed: {speed}x (-/=)  Arrows: move  /: randomize  [ ]: cameras",
+                        "",
+                    ),
+                ]
+            )
 
             # --- Sync viewer ---
             viewer.sync()

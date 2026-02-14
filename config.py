@@ -30,8 +30,6 @@ class EnvConfig:
     # Target spawn range
     min_target_distance: float = 0.8
     max_target_distance: float = 2.5
-    randomize_target: bool = True
-
     # Stage 2: moving target + distance
     target_max_speed: float = 0.3  # Max target speed (m/s) at stage 2 progress=1
     arena_boundary: float = 4.0  # Target bounces off ±boundary
@@ -48,7 +46,6 @@ class EnvConfig:
 
     # Reward shaping
     distance_reward_scale: float = 20.0
-    distance_reward_type: str = "linear"  # potential-based shaping
     movement_bonus: float = 0.0  # Disabled: was rewarding spinning
     time_penalty: float = 0.005
 
@@ -77,21 +74,8 @@ class PolicyConfig:
     image_height: int = 64
     image_width: int = 64
 
-    # CNN architecture
-    conv1_out_channels: int = 32
-    conv1_kernel: int = 8
-    conv1_stride: int = 4
-    conv2_out_channels: int = 64
-    conv2_kernel: int = 4
-    conv2_stride: int = 2
-
     # FC / LSTM layers
     hidden_size: int = 256  # FC1 for TinyPolicy, LSTM hidden for LSTMPolicy
-    fc_output_size: int = 2  # Motor commands
-
-    # Activation
-    activation: str = "relu"
-    output_activation: str = "tanh"
 
     # Stochastic policy
     init_std: float = 0.5
@@ -106,8 +90,6 @@ class PolicyConfig:
 class TrainingConfig:
     """Training loop configuration."""
 
-    # Optimizer
-    optimizer: str = "Adam"
     learning_rate: float = 1e-3
 
     # Algorithm
@@ -125,7 +107,6 @@ class TrainingConfig:
     batch_size: int = 64  # Episodes per gradient update
 
     # Mastery criteria
-    training_mode: str = "run_until_mastery"
     mastery_threshold: float = 0.7  # Success rate required at curriculum=1.0
     mastery_batches: int = 20  # Must maintain mastery for N batches
 
@@ -136,7 +117,9 @@ class TrainingConfig:
     num_workers: int = 0  # 0 = auto, 1 = serial (no multiprocessing)
 
     # Checkpointing
-    checkpoint_every: int | None = 50  # Periodic checkpoint every N batches (None = disabled)
+    checkpoint_every: int | None = (
+        50  # Periodic checkpoint every N batches (None = disabled)
+    )
 
     # Limits
     max_batches: int | None = None  # None = run until mastery
@@ -213,9 +196,3 @@ class Config:
                 ppo_epochs=2,
             ),
         )
-
-
-# Default configuration
-def get_default_config() -> Config:
-    """Get the default training configuration."""
-    return Config()

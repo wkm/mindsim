@@ -6,13 +6,12 @@ Can be extended with more sophisticated networks and RL algorithms.
 """
 
 import argparse
+import math
 import subprocess
 import sys
 import time
 from collections import deque
 from datetime import datetime
-
-import math
 
 import numpy as np
 import rerun as rr
@@ -20,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+
 import rerun_logger
 import wandb
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
@@ -174,7 +174,14 @@ class LSTMPolicy(nn.Module):
     This allows the policy to remember past observations and actions.
     """
 
-    def __init__(self, image_height=128, image_width=128, hidden_size=64, init_std=0.5, max_log_std=0.7):
+    def __init__(
+        self,
+        image_height=128,
+        image_width=128,
+        hidden_size=64,
+        init_std=0.5,
+        max_log_std=0.7,
+    ):
         super().__init__()
 
         self.hidden_size = hidden_size
@@ -397,7 +404,9 @@ class TinyPolicy(nn.Module):
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
-    def __init__(self, image_height=128, image_width=128, init_std=0.5, max_log_std=0.7):
+    def __init__(
+        self, image_height=128, image_width=128, init_std=0.5, max_log_std=0.7
+    ):
         super().__init__()
 
         # CNN: 2 conv layers
@@ -545,9 +554,7 @@ class TinyPolicy(nn.Module):
         return _tanh_log_prob(gaussian_log_prob, z)
 
 
-def collect_episode(
-    env, policy, device="cpu", show_progress=False, log_rerun=False, deterministic=False
-):
+def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False):
     """
     Run one episode and collect data.
 
@@ -555,7 +562,6 @@ def collect_episode(
         env: TrainingEnv instance
         policy: Neural network policy
         device: torch device
-        show_progress: Show progress bar for episode steps
         log_rerun: Log episode to Rerun for visualization
         deterministic: If True, use mean actions (no sampling) for evaluation.
                        If False, sample from policy distribution for training.
@@ -583,8 +589,6 @@ def collect_episode(
     total_reward = 0
     steps = 0
     info = {}
-
-    pbar = None  # Progress bar removed (dashboard handles display)
 
     # Track trajectory for Rerun
     trajectory_points = []
@@ -647,16 +651,6 @@ def collect_episode(
                 )
 
         steps += 1
-
-        # Update progress bar
-        if pbar:
-            pbar.update(1)
-            pbar.set_postfix(
-                {"reward": f"{total_reward:.3f}", "dist": f"{info['distance']:.3f}m"}
-            )
-
-    if pbar:
-        pbar.close()
 
     # Flush video encoder and log episode summary
     if log_rerun:
@@ -964,7 +958,9 @@ def train_step_ppo(
             # Bootstrap value for truncated episodes
             next_value = 0.0
             if ep.get("truncated") and not ep.get("done") and "final_observation" in ep:
-                final_obs = torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)  # (1, H, W, 3)
+                final_obs = (
+                    torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)
+                )  # (1, H, W, 3)
                 dummy_act = torch.zeros(1, 2, device=device)  # (1, 2)
                 _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act)
                 next_value = final_val[0].item()
@@ -973,13 +969,15 @@ def train_step_ppo(
                 rewards, values, gamma, gae_lambda, next_value
             )
 
-            episode_data_tensors.append({
-                "observations": obs,
-                "actions": acts,
-                "old_log_probs": old_log_probs,
-                "advantages": advantages,
-                "returns": returns,
-            })
+            episode_data_tensors.append(
+                {
+                    "observations": obs,
+                    "actions": acts,
+                    "old_log_probs": old_log_probs,
+                    "advantages": advantages,
+                    "returns": returns,
+                }
+            )
 
             all_advantages.append(advantages)
             all_returns.append(returns)
@@ -1004,7 +1002,9 @@ def train_step_ppo(
     adv_std = all_adv_cat.std()
     if adv_std > 1e-8:
         for ep_tensors in episode_data_tensors:
-            ep_tensors["advantages"] = (ep_tensors["advantages"] - adv_mean) / (adv_std + 1e-8)
+            ep_tensors["advantages"] = (ep_tensors["advantages"] - adv_mean) / (
+                adv_std + 1e-8
+            )
 
     # Phase 2: PPO epochs
     total_policy_loss = 0.0
@@ -1061,7 +1061,9 @@ def train_step_ppo(
                 epoch_total_steps += T
                 epoch_kl_sum += (old_lp - new_log_probs).mean().item() * T
 
-        grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=max_grad_norm)
+        grad_norm = nn.utils.clip_grad_norm_(
+            policy.parameters(), max_norm=max_grad_norm
+        )
         optimizer.step()
 
         total_policy_loss += epoch_policy_loss / epoch_total_steps
@@ -1083,7 +1085,11 @@ def train_step_ppo(
     clamped = policy.log_std.clamp(max=policy.max_log_std)
     policy_std = torch.exp(clamped).detach().cpu().numpy()
 
-    ev = explained_variance.item() if torch.is_tensor(explained_variance) else explained_variance
+    ev = (
+        explained_variance.item()
+        if torch.is_tensor(explained_variance)
+        else explained_variance
+    )
 
     return (
         avg_policy_loss,
@@ -1099,7 +1105,9 @@ def train_step_ppo(
     )
 
 
-def log_episode_value_trace(policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"):
+def log_episode_value_trace(
+    policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"
+):
     """
     Run a forward pass on a completed episode to log V(s_t) and A(s_t) to Rerun.
 
@@ -1113,7 +1121,9 @@ def log_episode_value_trace(policy, episode_data, gamma, gae_lambda, device="cpu
         # Use evaluate_actions even for deterministic episodes — we just need values
         # Need dummy actions for the log_prob computation but we only use the values
         _, values, _ = policy.evaluate_actions(obs, acts)
-        advantages, returns = compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0)
+        advantages, returns = compute_gae(
+            rewards, values, gamma, gae_lambda, next_value=0.0
+        )
 
     values_np = values.cpu().numpy()
     advantages_np = advantages.cpu().numpy()
@@ -1124,7 +1134,9 @@ def log_episode_value_trace(policy, episode_data, gamma, gae_lambda, device="cpu
         rr.set_time("step", sequence=t)
         rr.log(f"{namespace}/value/V_s", rr.Scalars([values_np[t]]))
         rr.log(f"{namespace}/value/advantage", rr.Scalars([advantages_np[t]]))
-        rr.log(f"{namespace}/value/cumulative_reward", rr.Scalars([cumulative_reward[t]]))
+        rr.log(
+            f"{namespace}/value/cumulative_reward", rr.Scalars([cumulative_reward[t]])
+        )
         rr.log(f"{namespace}/value/gae_return", rr.Scalars([returns_np[t]]))
 
 
@@ -1153,15 +1165,12 @@ def parse_args():
 
 def _get_git_branch() -> str:
     try:
-        return (
-            subprocess.run(
-                ["git", "branch", "--show-current"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            .stdout.strip()
-        )
+        return subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
     except Exception:
         return "unknown"
 
@@ -1198,7 +1207,9 @@ def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
         elif cmd == "regress_curriculum":
             old = stage_progress
             stage_progress = max(0.0, stage_progress - 0.1)
-            dashboard.message(f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}")
+            dashboard.message(
+                f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
+            )
         elif cmd == "stop":
             should_stop = True
             dashboard.message("Stopping after this batch...")
@@ -1396,8 +1407,12 @@ def _train_loop(
         resumed_curriculum_stage = ckpt["curriculum_stage"]
         resumed_stage_progress = ckpt["stage_progress"]
         resumed_mastery_count = ckpt["mastery_count"]
-        log_fn(f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}")
-        _verbose(f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}")
+        log_fn(
+            f"  Resumed from batch {resumed_batch_idx}, episode {resumed_episode_count}"
+        )
+        _verbose(
+            f"  Curriculum: stage {resumed_curriculum_stage}, progress {resumed_stage_progress:.2f}"
+        )
         wandb.config.update({"resumed_from": resume_ref}, allow_val_change=True)
         # Add resume info to wandb notes
         resume_note = f"\n**Resumed from:** `{resume_ref}`"
@@ -1416,7 +1431,9 @@ def _train_loop(
 
     # Set up parallel episode collection
     num_workers = (
-        num_workers_override if num_workers_override is not None else cfg.training.num_workers
+        num_workers_override
+        if num_workers_override is not None
+        else cfg.training.num_workers
     )
     num_workers = resolve_num_workers(num_workers)
     collector = None
@@ -1439,15 +1456,21 @@ def _train_loop(
 
     # Rolling window for success rate tracking
     success_history = deque(maxlen=curr.window_size)
-    curriculum_stage = resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
-    stage_progress = resumed_stage_progress if resumed_stage_progress is not None else 0.0
+    curriculum_stage = (
+        resumed_curriculum_stage if resumed_curriculum_stage is not None else 1
+    )
+    stage_progress = (
+        resumed_stage_progress if resumed_stage_progress is not None else 0.0
+    )
     mastery_count = resumed_mastery_count if resumed_mastery_count is not None else 0
 
     _verbose(
         f"Training {curr.num_stages}-stage curriculum until mastery (success>={cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches)..."
     )
     if is_tui:
-        log_fn(f"Training started: {curr.num_stages}-stage curriculum, batch_size={batch_size}")
+        log_fn(
+            f"Training started: {curr.num_stages}-stage curriculum, batch_size={batch_size}"
+        )
 
     # Timing accumulators
     timing = {
@@ -1467,7 +1490,11 @@ def _train_loop(
     max_batches = cfg.training.max_batches
     batches_this_session = 0
     stop_requested = False
-    while not mastered and not stop_requested and (max_batches is None or batch_idx < max_batches):
+    while (
+        not mastered
+        and not stop_requested
+        and (max_batches is None or batch_idx < max_batches)
+    ):
         # Block while paused (checks for unpause/step/stop)
         if _wait_if_paused(command_queue):
             stop_requested = True
@@ -1491,8 +1518,10 @@ def _train_loop(
         # Drain TUI command queue
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
-        stage_progress, pending_save, stop_requested, force_rerun = _drain_command_queue(
-            command_queue, dashboard, stage_progress, curr, pending_save
+        stage_progress, pending_save, stop_requested, force_rerun = (
+            _drain_command_queue(
+                command_queue, dashboard, stage_progress, curr, pending_save
+            )
         )
 
         # Overall progress: (stage-1 + progress) / num_stages
@@ -1505,15 +1534,18 @@ def _train_loop(
 
         # Determine if we should log to Rerun this batch (from eval, not training)
         log_every_n_batches = max(1, log_rerun_every // batch_size)
-        should_log_rerun_this_batch = (
-            rr_wandb is not None and (batch_idx % log_every_n_batches == 0 or force_rerun)
+        should_log_rerun_this_batch = rr_wandb is not None and (
+            batch_idx % log_every_n_batches == 0 or force_rerun
         )
 
         # Collect a batch of episodes
         t_collect_start = time.perf_counter()
         if collector is not None:
             episode_batch = collector.collect_batch(
-                policy, batch_size, curriculum_stage, stage_progress,
+                policy,
+                batch_size,
+                curriculum_stage,
+                stage_progress,
                 num_stages=curr.num_stages,
             )
         else:
@@ -1523,8 +1555,6 @@ def _train_loop(
                     env,
                     policy,
                     device,
-                    show_progress=False,
-                    log_rerun=False,
                 )
                 episode_batch.append(episode_data)
         timing["collect_batch"] = time.perf_counter() - t_collect_start
@@ -1607,7 +1637,8 @@ def _train_loop(
                     # Log per-step value function traces for PPO
                     if cfg.training.algorithm == "PPO":
                         log_episode_value_trace(
-                            policy, eval_data,
+                            policy,
+                            eval_data,
                             gamma=cfg.training.gamma,
                             gae_lambda=cfg.training.gae_lambda,
                             device=device,
@@ -1735,25 +1766,29 @@ def _train_loop(
         # Episode termination breakdown
         batch_truncated = [ep.get("truncated", False) for ep in episode_batch]
         batch_done = [ep.get("done", False) for ep in episode_batch]
-        log_dict.update({
-            "batch/truncated_fraction": np.mean(batch_truncated),
-            "batch/done_fraction": np.mean(batch_done),
-            "batch/patience_truncated_fraction": np.mean([
-                ep.get("patience_truncated", False) for ep in episode_batch
-            ]),
-        })
+        log_dict.update(
+            {
+                "batch/truncated_fraction": np.mean(batch_truncated),
+                "batch/done_fraction": np.mean(batch_done),
+                "batch/patience_truncated_fraction": np.mean(
+                    [ep.get("patience_truncated", False) for ep in episode_batch]
+                ),
+            }
+        )
 
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
-            log_dict.update({
-                "training/policy_loss": policy_loss,
-                "training/value_loss": value_loss,
-                "training/clip_fraction": clip_fraction,
-                "training/approx_kl": approx_kl,
-                "training/explained_variance": explained_variance,
-                "training/mean_value": mean_value,
-                "training/mean_return": mean_return,
-            })
+            log_dict.update(
+                {
+                    "training/policy_loss": policy_loss,
+                    "training/value_loss": value_loss,
+                    "training/clip_fraction": clip_fraction,
+                    "training/approx_kl": approx_kl,
+                    "training/explained_variance": explained_variance,
+                    "training/mean_value": mean_value,
+                    "training/mean_return": mean_return,
+                }
+            )
 
         t_log_start = time.perf_counter()
         wandb.log(log_dict)
@@ -1793,15 +1828,17 @@ def _train_loop(
             "batch_size": batch_size,
         }
         if cfg.training.algorithm == "PPO":
-            dash_metrics.update({
-                "policy_loss": policy_loss,
-                "value_loss": value_loss,
-                "clip_fraction": clip_fraction,
-                "approx_kl": approx_kl,
-                "explained_variance": explained_variance,
-                "mean_value": mean_value,
-                "mean_return": mean_return,
-            })
+            dash_metrics.update(
+                {
+                    "policy_loss": policy_loss,
+                    "value_loss": value_loss,
+                    "clip_fraction": clip_fraction,
+                    "approx_kl": approx_kl,
+                    "explained_variance": explained_variance,
+                    "mean_value": mean_value,
+                    "mean_return": mean_return,
+                }
+            )
         else:
             dash_metrics["loss"] = loss
 
@@ -1813,9 +1850,14 @@ def _train_loop(
         if pending_save:
             trigger, aliases = pending_save
             save_checkpoint(
-                policy, optimizer, cfg,
-                curriculum_stage, stage_progress, mastery_count,
-                batch_idx, episode_count,
+                policy,
+                optimizer,
+                cfg,
+                curriculum_stage,
+                stage_progress,
+                mastery_count,
+                batch_idx,
+                episode_count,
                 trigger=trigger,
                 aliases=aliases,
             )
@@ -1824,16 +1866,27 @@ def _train_loop(
             and batch_idx % cfg.training.checkpoint_every == 0
         ):
             save_checkpoint(
-                policy, optimizer, cfg,
-                curriculum_stage, stage_progress, mastery_count,
-                batch_idx, episode_count,
+                policy,
+                optimizer,
+                cfg,
+                curriculum_stage,
+                stage_progress,
+                mastery_count,
+                batch_idx,
+                episode_count,
                 trigger="periodic",
             )
 
     dashboard.finish()
 
     # Print timing summary (verbose in CLI, compact in TUI)
-    total_time = timing["collect"] + timing["eval"] + timing["train"] + timing["log"] + timing["rerun"]
+    total_time = (
+        timing["collect"]
+        + timing["eval"]
+        + timing["train"]
+        + timing["log"]
+        + timing["rerun"]
+    )
     if total_time > 0 and batches_this_session > 0:
         _verbose("=" * 60)
         _verbose("Timing Summary")
@@ -1857,8 +1910,12 @@ def _train_loop(
         _verbose(
             f"  Per-batch average ({batch_size} episodes/batch, {batches_this_session} batches):"
         )
-        _verbose(f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms")
-        _verbose(f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms")
+        _verbose(
+            f"    Collection: {1000 * timing['collect'] / batches_this_session:.1f}ms"
+        )
+        _verbose(
+            f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms"
+        )
 
     # Clean up
     if collector is not None:
@@ -1875,7 +1932,9 @@ def _train_loop(
         log_fn("Training complete!")
 
 
-def run_training(app, command_queue, smoketest=False, resume=None, num_workers=None, scene_path=None):
+def run_training(
+    app, command_queue, smoketest=False, resume=None, num_workers=None, scene_path=None
+):
     """
     Entry point for TUI-driven training (called from worker thread).
 

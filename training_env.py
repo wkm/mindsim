@@ -117,7 +117,9 @@ class TrainingEnv:
         # Distance-patience early truncation
         self.patience_window = patience_window
         self.patience_min_delta = patience_min_delta
-        self._distance_deltas = deque(maxlen=patience_window) if patience_window > 0 else None
+        self._distance_deltas = (
+            deque(maxlen=patience_window) if patience_window > 0 else None
+        )
 
         # Episode tracking
         self.episode_step = 0
@@ -449,10 +451,7 @@ class TrainingEnv:
 
         # Distance-patience truncation: no net progress over rolling window
         patience_truncated = False
-        if (
-            not done
-            and self._distance_deltas is not None
-        ):
+        if not done and self._distance_deltas is not None:
             self._distance_deltas.append(distance_delta)
             if (
                 len(self._distance_deltas) == self._distance_deltas.maxlen
