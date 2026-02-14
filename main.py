@@ -33,8 +33,8 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import (
-    Button,
     Footer,
+    OptionList,
     RadioButton,
     RadioSet,
     RichLog,
@@ -112,12 +112,15 @@ def _fmt(value, precision=3, width=8):
 class LauncherScreen(Screen):
     """Mode selection screen shown on startup."""
 
+    _MODE_ITEMS = ["View", "Smoketest", "Train", "Play", "Quit"]
+    _MODE_KEYS = {"v": 0, "s": 1, "t": 2, "p": 3, "q": 4}
+
     BINDINGS = [
-        Binding("v", "launch('btn-view')", "View", priority=True),
-        Binding("s", "launch('btn-smoketest')", "Smoketest", priority=True),
-        Binding("t", "launch('btn-train')", "Train", priority=True),
-        Binding("p", "launch('btn-play')", "Play", priority=True),
-        Binding("q", "launch('btn-quit')", "Quit", priority=True),
+        Binding("v", "launch('v')", "View", priority=True),
+        Binding("s", "launch('s')", "Smoketest", priority=True),
+        Binding("t", "launch('t')", "Train", priority=True),
+        Binding("p", "launch('p')", "Play", priority=True),
+        Binding("q", "launch('q')", "Quit", priority=True),
     ]
 
     CSS = """
@@ -126,38 +129,27 @@ class LauncherScreen(Screen):
     }
 
     #launcher-box {
-        width: 60;
+        width: 40;
         height: auto;
-        border: round $accent;
-        padding: 1 2;
+        border: ascii $accent;
+        padding: 0 1;
     }
 
     #launcher-title {
-        text-align: center;
         text-style: bold;
-        margin-bottom: 1;
-    }
-
-    #launcher-subtitle {
-        text-align: center;
-        color: $text-muted;
-        margin-bottom: 1;
     }
 
     .launcher-section {
         text-style: bold;
         color: $accent;
-        margin-top: 1;
     }
 
     #bot-selector {
-        margin: 0 2;
         height: auto;
     }
 
-    .launcher-btn {
-        width: 100%;
-        margin: 1 0 0 0;
+    #mode-list {
+        height: auto;
     }
     """
 
@@ -176,13 +168,7 @@ class LauncherScreen(Screen):
             else:
                 yield Static("  No bots found in bots/*/scene.xml")
             yield Static("Mode:", classes="launcher-section")
-            yield Button("[v] View", id="btn-view", classes="launcher-btn")
-            yield Button("[s] Smoketest", id="btn-smoketest", classes="launcher-btn")
-            yield Button("[t] Train", id="btn-train", classes="launcher-btn")
-            yield Button("[p] Play", id="btn-play", classes="launcher-btn")
-            yield Button(
-                "[q] Quit", id="btn-quit", classes="launcher-btn", variant="error"
-            )
+            yield OptionList(*self._MODE_ITEMS, id="mode-list")
         yield Footer()
 
     def _get_selected_scene(self) -> str | None:
@@ -198,25 +184,26 @@ class LauncherScreen(Screen):
             pass
         return self._bots[0]["scene_path"] if self._bots else None
 
-    def action_launch(self, button_id: str) -> None:
-        """Handle keyboard shortcut by simulating button press."""
-        try:
-            btn = self.query_one(f"#{button_id}", Button)
-            btn.press()
-        except Exception:
-            pass
+    def action_launch(self, key: str) -> None:
+        """Handle keyboard shortcut by selecting the corresponding mode."""
+        idx = self._MODE_KEYS.get(key)
+        if idx is not None:
+            mode_list = self.query_one("#mode-list", OptionList)
+            mode_list.highlighted = idx
+            mode_list.action_select()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         scene_path = self._get_selected_scene()
-        if event.button.id == "btn-train":
+        label = str(event.option.prompt)
+        if label == "Train":
             self.app.start_training(smoketest=False, scene_path=scene_path)
-        elif event.button.id == "btn-smoketest":
+        elif label == "Smoketest":
             self.app.start_training(smoketest=True, scene_path=scene_path)
-        elif event.button.id == "btn-view":
+        elif label == "View":
             self.app.start_viewing(scene_path=scene_path)
-        elif event.button.id == "btn-play":
+        elif label == "Play":
             self.app.start_playing(scene_path=scene_path)
-        elif event.button.id == "btn-quit":
+        elif label == "Quit":
             self.app.exit()
 
 
