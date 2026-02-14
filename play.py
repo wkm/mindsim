@@ -3,13 +3,8 @@ Interactive play mode: watch a trained policy drive the robot in real-time.
 
 Loads a checkpoint, opens a MuJoCo viewer, and runs inference at 10 Hz.
 Use arrow keys to move the target cube; the robot will chase it.
-
-Requires mjpython on macOS:
-    uv run mjpython play.py                     # latest checkpoint
-    uv run mjpython play.py checkpoints/foo.pt  # specific checkpoint
 """
 
-import sys
 import time
 
 import mujoco
@@ -59,11 +54,13 @@ def build_policy(ckpt_config):
         raise ValueError(f"Unknown policy type: {policy_type}")
 
 
-def main():
-    # Parse CLI args
-    checkpoint_ref = sys.argv[1] if len(sys.argv) > 1 else "latest"
-    scene_path = sys.argv[2] if len(sys.argv) > 2 else "bots/simple2wheeler/scene.xml"
+def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"):
+    """Run interactive play mode with a trained policy.
 
+    Args:
+        checkpoint_ref: Checkpoint reference (path or "latest").
+        scene_path: Path to the MuJoCo scene XML file.
+    """
     # Resolve and load checkpoint
     ckpt_path = resolve_resume_ref(checkpoint_ref)
     print(f"Loading checkpoint: {ckpt_path}")
@@ -231,7 +228,3 @@ def main():
     viewer.close()
     env.close()
     print("Play mode ended.")
-
-
-if __name__ == "__main__":
-    main()

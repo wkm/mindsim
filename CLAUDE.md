@@ -4,22 +4,36 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 
 ## Quick Start
 
-**Always run with `uv`:**
+**Single entry point — always use `tui.py` via `mjpython`:**
 
 ```bash
-uv run python <script.py>
+uv run mjpython tui.py                    # Interactive TUI (default)
+uv run mjpython tui.py view [--bot NAME]  # MuJoCo viewer
+uv run mjpython tui.py play [CHECKPOINT] [--bot NAME]  # Play trained policy
+uv run mjpython tui.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
+uv run mjpython tui.py smoketest          # Alias for train --smoketest
+uv run mjpython tui.py quicksim           # Rerun debug vis
+uv run mjpython tui.py visualize [--bot NAME] [--steps N]
 ```
+
+`--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.
+
+Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smoketest`.
 
 ## Project Structure
 
 ```txt
 mindsim/
+├── tui.py                   # Single entry point for all modes
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
 │   ├── scene.xml            # World: floor, lighting, target
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
 ├── simple_wheeler_env.py    # Environment API
-└── visualize.py             # Rerun visualization → robot_sim.rrd
+├── train.py                 # Training loop & policy networks
+├── view.py                  # MuJoCo viewer
+├── play.py                  # Interactive play mode
+└── visualize.py             # Rerun visualization
 ```
 
 ## Environment API
@@ -47,8 +61,8 @@ env.close()
 ## Visualization
 
 ```bash
-uv run python visualize.py
-rerun robot_sim.rrd
+uv run mjpython tui.py visualize
+rerun recordings/simple2wheeler_viz.rrd
 ```
 
 Creates a Rerun recording with:
@@ -86,10 +100,14 @@ Creates a Rerun recording with:
 
 ## Key Files
 
+- **tui.py** - Single entry point for all modes (TUI, view, play, train, etc.)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
 - **scene.xml** - World setup (target, floor, lighting)
 - **simple_wheeler_env.py** - Env logic (step, reset, reward)
-- **visualize.py** - Rerun logging (model-driven, no hardcoding)
+- **view.py** - MuJoCo viewer (called via `tui.py view`)
+- **play.py** - Interactive play mode (called via `tui.py play`)
+- **train.py** - Training loop and policy networks (called via `tui.py train`)
+- **visualize.py** - Rerun visualization (called via `tui.py visualize`)
 
 ## Training
 
