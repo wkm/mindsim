@@ -6,11 +6,13 @@ Can be extended with more sophisticated networks and RL algorithms.
 """
 
 import math
+import os
 import subprocess
 import sys
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import rerun as rr
@@ -32,6 +34,8 @@ from tweaks import apply_tweaks, load_tweaks
 
 def set_terminal_title(title):
     """Set terminal tab/window title using ANSI escape sequence."""
+    if not sys.stdout.isatty():
+        return
     sys.stdout.write(f"\033]0;{title}\007")
     sys.stdout.flush()
 
@@ -46,6 +50,8 @@ def set_terminal_progress(percent):
     Args:
         percent: 0-100 for progress, or -1 to clear
     """
+    if not sys.stdout.isatty():
+        return
     if percent < 0:
         # Clear progress indicator
         sys.stdout.write("\033]9;4;0\007")
@@ -57,6 +63,10 @@ def set_terminal_progress(percent):
 
 def notify_completion(run_name, message=None):
     """Show macOS notification and play sound when training completes."""
+    import platform
+
+    if platform.system() != "Darwin":
+        return
     if message is None:
         message = f"Training run '{run_name}' has finished."
 
@@ -1291,8 +1301,11 @@ def _train_loop(
             _verbose(run_notes)
 
     # Initialize wandb early so the run URL and summary are available
-    run_name = (
-        f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
+    # RUN_NAME env var allows remote_train.sh to pre-assign a name that
+    # matches the GCP instance label for easy cross-referencing.
+    bot_name = Path(cfg.env.scene_path).parent.name
+    run_name = os.environ.get("RUN_NAME") or (
+        f"{bot_name}-{datetime.now().strftime('%m%d-%H%M')}"
     )
     wandb_mode = "disabled" if smoketest else "online"
     wandb_project = "mindsim-biped" if "biped" in cfg.env.scene_path else "mindsim-2wheeler"
@@ -1406,7 +1419,7 @@ def _train_loop(
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
     if not smoketest:
-        rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+        rr_wandb = RerunWandbLogger(recordings_dir="recordings", live=sys.stdout.isatty())
         _verbose(f"  Rerun recordings: {rr_wandb.run_dir}/")
 
     # Set up parallel episode collection
