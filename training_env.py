@@ -65,6 +65,7 @@ class TrainingEnv:
             fall_tilt_threshold=config.fall_tilt_threshold,
             patience_window=config.patience_window,
             patience_min_delta=config.patience_min_delta,
+            has_walking_stage=config.has_walking_stage,
         )
 
     def __init__(
@@ -102,6 +103,8 @@ class TrainingEnv:
         # Distance-patience early truncation
         patience_window=30,
         patience_min_delta=0.0,
+        # Walking stage (biped only)
+        has_walking_stage=False,
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
@@ -143,16 +146,17 @@ class TrainingEnv:
             deque(maxlen=patience_window) if patience_window > 0 else None
         )
 
+        # Walking stage (biped only)
+        self.has_walking_stage = has_walking_stage
+
         # Episode tracking
         self.episode_step = 0
         self.prev_distance = None
         self.prev_position = None
 
         # Multi-stage curriculum
-        # Stage 1: angle variance (0→full 360°)
-        # Stage 2: moving target + increased distance
-        # Stage 3: visual distractors
-        # Stage 4: moving distractors
+        # When has_walking_stage: Stage 1 = walking, then stages shift up by 1
+        # Effective stages: angle variance, moving target, distractors, moving distractors
         self.curriculum_stage = 1
         self.curriculum_stage_progress = 1.0  # Default: fully progressed
 
@@ -169,6 +173,11 @@ class TrainingEnv:
         self.num_actuators = self.env.num_actuators
         self.actuator_names = self.env.actuator_names
 
+        # Sensor data
+        self.sensor_dim = self.env.sensor_dim
+        self.sensor_info = self.env.sensor_info
+        self.current_sensors = np.zeros(self.sensor_dim, dtype=np.float32)
+
         # Observation and action spaces (for reference)
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (self.num_actuators,)
@@ -180,16 +189,21 @@ class TrainingEnv:
         if final is not None:
             self.max_episode_steps_final = final
 
+    @property
+    def in_walking_stage(self):
+        """True when the biped is in the walking curriculum stage (stage 1)."""
+        return self.has_walking_stage and self.curriculum_stage == 1
+
     def set_curriculum_stage(self, stage, progress, num_stages=3):
         """
         Set multi-stage curriculum state.
 
+        When has_walking_stage is True, stage 1 is the walking stage and
+        the standard stages (angle variance, moving target, etc.) are
+        shifted up by 1.
+
         Args:
-            stage: Int 1-4
-                1 = angle variance only
-                2 = moving target + increased distance
-                3 = visual distractors
-                4 = moving distractors
+            stage: Int 1-N (1 = walking if has_walking_stage, else angle variance)
             progress: Float in [0, 1] for current stage
                 Previous stages stay at max when advancing.
             num_stages: Total number of curriculum stages (for episode length scheduling)
@@ -221,87 +235,108 @@ class TrainingEnv:
         if self._distance_deltas is not None:
             self._distance_deltas.clear()
 
-        # --- Stage 1: Angle variance (always active) ---
-        # At stage 1, progress controls angle. At stage 2+, angle is full 360°.
-        angle_progress = (
-            1.0 if self.curriculum_stage >= 2 else self.curriculum_stage_progress
-        )
+        # Effective stage: offset by 1 when has_walking_stage so that
+        # angle variance = effective 1, moving target = effective 2, etc.
+        stage_offset = 1 if self.has_walking_stage else 0
+        effective_stage = self.curriculum_stage - stage_offset
 
-        # Coordinate system (looking down from above):
-        #   +X = right, +Y = backward, -Y = forward (camera looks this way)
-        # At progress=0: target directly in front (angle=-π/2)
-        # At progress=1: target at any angle (full circle)
-        front_angle = -np.pi / 2
-        max_deviation = angle_progress * np.pi
-        angle = np.random.uniform(
-            front_angle - max_deviation, front_angle + max_deviation
-        )
-
-        # --- Stage 2: Increased distance + moving target ---
-        if self.curriculum_stage >= 2:
-            stage2_progress = (
-                self.curriculum_stage_progress if self.curriculum_stage == 2 else 1.0
-            )
-            # Lerp max distance from base to stage2 max
-            max_dist = self.max_target_distance + stage2_progress * (
-                self.max_target_distance_stage2 - self.max_target_distance
-            )
-            # Set random target velocity
-            speed = (
-                stage2_progress * self.target_max_speed * np.random.uniform(0.5, 1.0)
-            )
-            vel_angle = np.random.uniform(0, 2 * np.pi)
-            self.target_velocity = np.array(
-                [
-                    speed * np.cos(vel_angle),
-                    speed * np.sin(vel_angle),
-                ]
-            )
-        else:
-            max_dist = self.max_target_distance
+        # --- Walking stage: target 10m ahead, no distractors ---
+        if self.in_walking_stage:
+            # Place target far ahead (-Y = forward) — unreachable, just for
+            # distance reward to incentivize forward movement
+            target_x = 0.0
+            target_y = -10.0
+            target_z = 0.08
             self.target_velocity = np.array([0.0, 0.0])
 
-        # Random distance within bounds
-        distance = np.random.uniform(self.min_target_distance, max_dist)
-
-        # Calculate new target position (robot starts at origin)
-        target_x = distance * np.cos(angle)
-        target_y = distance * np.sin(angle)
-        target_z = 0.08
-
-        # Update target mocap position
-        mocap_id = self.env.target_mocap_id
-        self.env.data.mocap_pos[mocap_id] = [target_x, target_y, target_z]
-
-        # --- Stage 3: Visual distractors ---
-        if self.curriculum_stage >= 3:
-            stage3_progress = (
-                self.curriculum_stage_progress if self.curriculum_stage == 3 else 1.0
-            )
-            n_distractors = max(1, int(round(stage3_progress * self.max_distractors)))
-            self._place_distractors(n_distractors, target_x, target_y)
-        else:
+            mocap_id = self.env.target_mocap_id
+            self.env.data.mocap_pos[mocap_id] = [target_x, target_y, target_z]
             self._hide_distractors()
-
-        # --- Stage 4: Moving distractors ---
-        if self.curriculum_stage >= 4:
-            stage4_progress = (
-                self.curriculum_stage_progress if self.curriculum_stage == 4 else 1.0
-            )
-            n_moving = max(1, int(round(stage4_progress * self.max_distractors)))
-            for i in range(self.max_distractors):
-                if i < n_moving:
-                    speed = stage4_progress * self.distractor_max_speed * np.random.uniform(0.5, 1.0)
-                    vel_angle = np.random.uniform(0, 2 * np.pi)
-                    self.distractor_velocities[i] = np.array([
-                        speed * np.cos(vel_angle),
-                        speed * np.sin(vel_angle),
-                    ])
-                else:
-                    self.distractor_velocities[i] = np.array([0.0, 0.0])
-        else:
             for i in range(self.max_distractors):
                 self.distractor_velocities[i] = np.array([0.0, 0.0])
+
+        else:
+            # --- Angle variance (effective stage 1) ---
+            # At effective stage 1, progress controls angle. At 2+, full 360°.
+            angle_progress = (
+                1.0 if effective_stage >= 2 else self.curriculum_stage_progress
+            )
+
+            # Coordinate system (looking down from above):
+            #   +X = right, +Y = backward, -Y = forward (camera looks this way)
+            # At progress=0: target directly in front (angle=-π/2)
+            # At progress=1: target at any angle (full circle)
+            front_angle = -np.pi / 2
+            max_deviation = angle_progress * np.pi
+            angle = np.random.uniform(
+                front_angle - max_deviation, front_angle + max_deviation
+            )
+
+            # --- Moving target + increased distance (effective stage 2) ---
+            if effective_stage >= 2:
+                stage2_progress = (
+                    self.curriculum_stage_progress if effective_stage == 2 else 1.0
+                )
+                # Lerp max distance from base to stage2 max
+                max_dist = self.max_target_distance + stage2_progress * (
+                    self.max_target_distance_stage2 - self.max_target_distance
+                )
+                # Set random target velocity
+                speed = (
+                    stage2_progress * self.target_max_speed * np.random.uniform(0.5, 1.0)
+                )
+                vel_angle = np.random.uniform(0, 2 * np.pi)
+                self.target_velocity = np.array(
+                    [
+                        speed * np.cos(vel_angle),
+                        speed * np.sin(vel_angle),
+                    ]
+                )
+            else:
+                max_dist = self.max_target_distance
+                self.target_velocity = np.array([0.0, 0.0])
+
+            # Random distance within bounds
+            distance = np.random.uniform(self.min_target_distance, max_dist)
+
+            # Calculate new target position (robot starts at origin)
+            target_x = distance * np.cos(angle)
+            target_y = distance * np.sin(angle)
+            target_z = 0.08
+
+            # Update target mocap position
+            mocap_id = self.env.target_mocap_id
+            self.env.data.mocap_pos[mocap_id] = [target_x, target_y, target_z]
+
+            # --- Visual distractors (effective stage 3) ---
+            if effective_stage >= 3:
+                stage3_progress = (
+                    self.curriculum_stage_progress if effective_stage == 3 else 1.0
+                )
+                n_distractors = max(1, int(round(stage3_progress * self.max_distractors)))
+                self._place_distractors(n_distractors, target_x, target_y)
+            else:
+                self._hide_distractors()
+
+            # --- Moving distractors (effective stage 4) ---
+            if effective_stage >= 4:
+                stage4_progress = (
+                    self.curriculum_stage_progress if effective_stage == 4 else 1.0
+                )
+                n_moving = max(1, int(round(stage4_progress * self.max_distractors)))
+                for i in range(self.max_distractors):
+                    if i < n_moving:
+                        speed = stage4_progress * self.distractor_max_speed * np.random.uniform(0.5, 1.0)
+                        vel_angle = np.random.uniform(0, 2 * np.pi)
+                        self.distractor_velocities[i] = np.array([
+                            speed * np.cos(vel_angle),
+                            speed * np.sin(vel_angle),
+                        ])
+                    else:
+                        self.distractor_velocities[i] = np.array([0.0, 0.0])
+            else:
+                for i in range(self.max_distractors):
+                    self.distractor_velocities[i] = np.array([0.0, 0.0])
 
         # Re-run forward kinematics to update positions
         mujoco.mj_forward(self.env.model, self.env.data)
@@ -324,6 +359,7 @@ class TrainingEnv:
 
         self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = self.env.get_bot_position()
+        self.current_sensors = self.env.get_sensor_data()
 
         # Normalize to [0, 1]
         obs = camera_img.astype(np.float32) / 255.0
@@ -469,6 +505,7 @@ class TrainingEnv:
 
         # Get observation
         obs = camera_img.astype(np.float32) / 255.0
+        self.current_sensors = self.env.get_sensor_data()
 
         # Get current state (before moving target, so reward reflects robot's action)
         current_distance = self.env.get_distance_to_target()
@@ -550,19 +587,20 @@ class TrainingEnv:
             done = True
             reward -= 5.0  # Penalty for falling
 
-        # Success: reached target
-        elif current_distance < self.success_distance:
+        # Success: reached target (not applicable in walking stage)
+        elif not self.in_walking_stage and current_distance < self.success_distance:
             done = True
             reward += 10.0  # Bonus for reaching target
 
-        # Failure: too far away
-        elif current_distance > self.failure_distance:
+        # Failure: too far away (disabled in walking stage — target is intentionally far)
+        elif not self.in_walking_stage and current_distance > self.failure_distance:
             done = True
             reward -= 5.0  # Penalty for going too far
 
         # Distance-patience truncation: no net progress over rolling window
+        # Disabled during walking stage (bot is learning to stand, not navigate)
         patience_truncated = False
-        if not done and self._distance_deltas is not None:
+        if not done and self._distance_deltas is not None and not self.in_walking_stage:
             self._distance_deltas.append(distance_delta)
             if (
                 len(self._distance_deltas) == self._distance_deltas.maxlen
@@ -596,6 +634,8 @@ class TrainingEnv:
             "torso_height": bot_z,
             # Patience truncation
             "patience_truncated": patience_truncated,
+            # Walking stage flag
+            "in_walking_stage": self.in_walking_stage,
         }
 
         return obs, reward, done, truncated, info

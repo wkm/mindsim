@@ -84,6 +84,7 @@ class ParallelCollector:
             "num_actions": policy_config.fc_output_size,
             "init_std": policy_config.init_std,
             "max_log_std": policy_config.max_log_std,
+            "sensor_input_size": policy_config.sensor_input_size,
         }
         if policy_config.use_lstm:
             policy_kwargs["hidden_size"] = policy_config.hidden_size
