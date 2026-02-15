@@ -18,9 +18,13 @@ _worker_env = None
 _worker_policy = None
 
 
-def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
+def _init_worker(env_config_dict, policy_class_name, policy_kwargs, env_vars=None):
     """Initialize a persistent environment and policy in the worker process."""
     global _worker_env, _worker_policy
+
+    # Propagate environment variables to spawned workers (e.g. MUJOCO_GL=egl)
+    if env_vars:
+        os.environ.update(env_vars)
 
     from config import EnvConfig
     from train import LSTMPolicy, TinyPolicy
@@ -63,7 +67,7 @@ def resolve_num_workers(requested):
     0 = auto (cpu_count - 1, minimum 2), 1 = serial (no multiprocessing).
     """
     if requested == 0:
-        return max(2, (os.cpu_count() or 2) - 1)
+        return os.cpu_count() or 1
     return requested
 
 
@@ -88,6 +92,13 @@ class ParallelCollector:
         if policy_config.use_lstm:
             policy_kwargs["hidden_size"] = policy_config.hidden_size
 
+        # Capture env vars to propagate to spawned workers
+        # (spawn doesn't inherit parent environment on all platforms)
+        propagate_vars = {}
+        for key in ("MUJOCO_GL", "DISPLAY", "WAYLAND_DISPLAY"):
+            if key in os.environ:
+                propagate_vars[key] = os.environ[key]
+
         ctx = mp.get_context("spawn")
         self.pool = ctx.Pool(
             processes=num_workers,
@@ -96,6 +107,7 @@ class ParallelCollector:
                 asdict(env_config),
                 policy_config.policy_type,
                 policy_kwargs,
+                propagate_vars,
             ),
         )
 

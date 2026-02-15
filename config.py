@@ -142,6 +142,25 @@ class Config:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
 
+    def to_dict(self) -> dict:
+        """Convert to nested dict for serialization (e.g. across Modal boundary)."""
+        return {
+            "env": asdict(self.env),
+            "curriculum": asdict(self.curriculum),
+            "policy": asdict(self.policy),
+            "training": asdict(self.training),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Config:
+        """Reconstruct Config from a nested dict (inverse of to_dict)."""
+        return cls(
+            env=EnvConfig(**d["env"]),
+            curriculum=CurriculumConfig(**d["curriculum"]),
+            policy=PolicyConfig(**d["policy"]),
+            training=TrainingConfig(**d["training"]),
+        )
+
     def to_flat_dict(self) -> dict:
         """
         Convert to flat dict for W&B logging.
