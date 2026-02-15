@@ -76,7 +76,10 @@ class RerunWandbLogger:
         # Set up sinks: always save to disk, optionally stream live
         sinks = [rr.FileSink(self.rrd_path)]
         if self.live:
-            sinks.append(rr.GrpcSink())
+            try:
+                sinks.append(rr.GrpcSink())
+            except Exception:
+                pass  # Viewer may have been closed; file sink still works
         rr.set_sinks(*sinks)
 
         # Set recording name to just the episode number

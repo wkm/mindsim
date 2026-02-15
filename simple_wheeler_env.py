@@ -66,6 +66,17 @@ class SimpleWheelerEnv:
             self.model.body_mocapid[bid] for bid in self.distractor_body_ids
         ]
 
+        # Sensor data dimension (0 if no sensors defined)
+        self.sensor_dim = self.model.nsensordata
+
+        # Discover sensor names and their spans in sensordata array
+        self.sensor_info = []
+        for i in range(self.model.nsensor):
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_SENSOR, i)
+            adr = self.model.sensor_adr[i]
+            dim = self.model.sensor_dim[i]
+            self.sensor_info.append({"name": name, "adr": adr, "dim": dim})
+
         # Viewer for debugging (optional)
         self.viewer = None
 
@@ -142,6 +153,10 @@ class SimpleWheelerEnv:
         bot_pos = self.get_bot_position()
         target_pos = self.get_target_position()
         return np.linalg.norm(target_pos - bot_pos)
+
+    def get_sensor_data(self):
+        """Get all sensor readings as a flat array."""
+        return self.data.sensordata[:self.sensor_dim].copy().astype(np.float32)
 
     def get_torso_up_vector(self):
         """

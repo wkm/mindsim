@@ -35,21 +35,22 @@ def build_policy(ckpt_config):
     policy_cfg = ckpt_config["policy"]
     policy_type = policy_cfg["policy_type"]
 
+    common_kwargs = dict(
+        image_height=policy_cfg["image_height"],
+        image_width=policy_cfg["image_width"],
+        num_actions=policy_cfg.get("fc_output_size", 2),
+        init_std=policy_cfg.get("init_std", 0.5),
+        max_log_std=policy_cfg.get("max_log_std", 0.7),
+        sensor_input_size=policy_cfg.get("sensor_input_size", 0),
+    )
+
     if policy_type == "LSTMPolicy":
         return LSTMPolicy(
-            image_height=policy_cfg["image_height"],
-            image_width=policy_cfg["image_width"],
             hidden_size=policy_cfg["hidden_size"],
-            init_std=policy_cfg.get("init_std", 0.5),
-            max_log_std=policy_cfg.get("max_log_std", 0.7),
+            **common_kwargs,
         )
     elif policy_type == "TinyPolicy":
-        return TinyPolicy(
-            image_height=policy_cfg["image_height"],
-            image_width=policy_cfg["image_width"],
-            init_std=policy_cfg.get("init_std", 0.5),
-            max_log_std=policy_cfg.get("max_log_std", 0.7),
-        )
+        return TinyPolicy(**common_kwargs)
     else:
         raise ValueError(f"Unknown policy type: {policy_type}")
 
@@ -183,12 +184,15 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                 obs_normalized = obs.astype(np.float32) / 255.0
                 obs_tensor = torch.from_numpy(obs_normalized).unsqueeze(0)
 
+                sensor_tensor = None
+                if env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0:
+                    sensor_tensor = torch.from_numpy(env.get_sensor_data()).unsqueeze(0)
+
                 with torch.no_grad():
-                    action = policy.get_deterministic_action(obs_tensor)
+                    action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
                     action = action.cpu().numpy()[0]
 
-                data.ctrl[env.left_motor_id] = float(action[0])
-                data.ctrl[env.right_motor_id] = float(action[1])
+                data.ctrl[:env.num_actuators] = action
                 for _ in range(mujoco_steps_per_action):
                     mujoco.mj_step(model, data)
 

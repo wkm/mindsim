@@ -445,11 +445,13 @@ class TrainingDashboard(Screen):
         self.query_one("#header-bar", Static).update(header)
 
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
+        bot_name: str | None = None,
     ):
         self._algorithm = algorithm
         self._start_time = time.monotonic()
-        parts = [f"MindSim | {run_name}", branch, algorithm]
+        title = f"MindSim {bot_name}" if bot_name else "MindSim"
+        parts = [f"{title} | {run_name}", branch, algorithm]
         if wandb_url:
             parts.append(wandb_url)
         self._header_parts = parts
@@ -462,6 +464,8 @@ class TrainingDashboard(Screen):
         total = self._total_batches
 
         # Progress bar (text-based)
+        ep_count = m.get("episode_count")
+        ep_str = f" | {ep_count:,} episodes" if ep_count else ""
         if total and total > 0:
             frac = min(batch / total, 1.0)
             pct = 100 * frac
@@ -469,10 +473,12 @@ class TrainingDashboard(Screen):
             filled = int(bar_w * frac)
             bar = "\u2588" * filled + "\u2591" * (bar_w - filled)
             self.query_one("#progress-label", Static).update(
-                f"  {bar}  {pct:5.1f}%   batch {batch:,} / {total:,}"
+                f"  {bar}  {pct:5.1f}%   batch {batch:,} / {total:,}{ep_str}"
             )
         else:
-            self.query_one("#progress-label", Static).update(f"  batch {batch:,}")
+            self.query_one("#progress-label", Static).update(
+                f"  batch {batch:,}{ep_str}"
+            )
 
         # Episode performance
         self.query_one("#m-avg-reward").update(
@@ -644,8 +650,10 @@ class MindSimApp(App):
     def _run_training(self) -> None:
         from train import run_training
 
-        # Force serial collection in smoketest to avoid multiprocessing issues
-        num_workers = 1 if self._smoketest else None
+        # Force serial collection in TUI to avoid multiprocessing FD issues
+        # (Textual's event loop holds file descriptors that become invalid
+        # when multiprocessing.spawn tries to inherit them)
+        num_workers = 1
         run_training(
             self,
             self.command_queue,
@@ -673,11 +681,12 @@ class MindSimApp(App):
             self._dashboard.mark_finished()
 
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
+        bot_name: str | None = None,
     ):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
-            self._dashboard.set_header(run_name, branch, algorithm, wandb_url)
+            self._dashboard.set_header(run_name, branch, algorithm, wandb_url, bot_name)
 
     def set_total_batches(self, total: int | None):
         """Called from training thread via call_from_thread."""

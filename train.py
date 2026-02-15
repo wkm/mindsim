@@ -181,11 +181,13 @@ class LSTMPolicy(nn.Module):
         num_actions=2,
         init_std=0.5,
         max_log_std=0.7,
+        sensor_input_size=0,
     ):
         super().__init__()
 
         self.hidden_size = hidden_size
         self.num_actions = num_actions
+        self.sensor_input_size = sensor_input_size
 
         # CNN feature extractor (same as TinyPolicy)
         self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
@@ -197,8 +199,8 @@ class LSTMPolicy(nn.Module):
             dummy = self.conv2(self.conv1(dummy))
             conv_out_size = dummy.numel()
 
-        # Compress CNN spatial features to compact vector before LSTM
-        self.fc_embed = nn.Linear(conv_out_size, hidden_size)
+        # Compress CNN features (+ optional sensor data) to compact vector before LSTM
+        self.fc_embed = nn.Linear(conv_out_size + sensor_input_size, hidden_size)
 
         # LSTM for temporal memory (operates on compact feature vector)
         self.lstm = nn.LSTM(
@@ -223,13 +225,14 @@ class LSTMPolicy(nn.Module):
             torch.zeros(1, batch_size, self.hidden_size, device=device),
         )
 
-    def _backbone(self, x, hidden=None):
+    def _backbone(self, x, hidden=None, sensors=None):
         """
         Shared CNN+LSTM backbone.
 
         Args:
             x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
             hidden: Optional LSTM hidden state tuple (h, c)
+            sensors: Optional sensor data (B, sensor_dim) or (B, T, sensor_dim)
 
         Returns:
             features: (B, 2) or (B, T, hidden_size) LSTM output features
@@ -248,6 +251,13 @@ class LSTMPolicy(nn.Module):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
         x = x.reshape(x.size(0), -1)
+
+        # Concatenate sensor data with CNN features before embedding
+        if sensors is not None and self.sensor_input_size > 0:
+            if sensors.dim() == 3:
+                sensors = sensors.reshape(B * T, -1)
+            x = torch.cat([x, sensors], dim=-1)
+
         x = torch.relu(self.fc_embed(x))
         x = x.reshape(B, T, -1)
 
@@ -264,25 +274,26 @@ class LSTMPolicy(nn.Module):
 
         return features, hidden, is_sequence
 
-    def forward(self, x, hidden=None):
+    def forward(self, x, hidden=None, sensors=None):
         """
         Forward pass - returns action distribution parameters.
 
         Args:
             x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
             hidden: Optional LSTM hidden state tuple (h, c)
+            sensors: Optional sensor data
 
         Returns:
             mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
-        features, hidden, is_sequence = self._backbone(x, hidden)
+        features, hidden, is_sequence = self._backbone(x, hidden, sensors=sensors)
         mean = self.fc(features)
         clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
 
-    def evaluate_actions(self, observations, actions):
+    def evaluate_actions(self, observations, actions, sensors=None):
         """
         Single forward pass returning everything PPO needs.
 
@@ -291,6 +302,7 @@ class LSTMPolicy(nn.Module):
         Args:
             observations: (T, H, W, 3) episode observations
             actions: (T, 2) tanh-squashed actions
+            sensors: Optional (T, sensor_dim) sensor data
 
         Returns:
             log_probs: (T,) log probability of actions
@@ -302,7 +314,8 @@ class LSTMPolicy(nn.Module):
 
         # Process entire sequence: (1, T, H, W, 3)
         x = observations.unsqueeze(0)
-        features, _, _ = self._backbone(x)  # (1, T, hidden_size)
+        s = sensors.unsqueeze(0) if sensors is not None else None
+        features, _, _ = self._backbone(x, sensors=s)  # (1, T, hidden_size)
         features = features.squeeze(0)  # (T, hidden_size)
 
         # Action head
@@ -324,21 +337,19 @@ class LSTMPolicy(nn.Module):
 
         return log_probs, values, entropy
 
-    def sample_action(self, x):
+    def sample_action(self, x, sensors=None):
         """
         Sample an action using tanh-squashed Gaussian.
 
-        Samples z ~ Normal(mean, std), then action = tanh(z).
-        Log-prob includes the Jacobian correction for the tanh transform.
-
         Args:
             x: Input image (B, H, W, 3)
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             action: (B, 2) sampled actions in (-1, 1)
             log_prob: (B,) log probability of the sampled actions
         """
-        mean, std = self.forward(x)
+        mean, std = self.forward(x, sensors=sensors)
         dist = torch.distributions.Normal(mean, std)
         z = dist.sample()
         gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
@@ -346,32 +357,28 @@ class LSTMPolicy(nn.Module):
         log_prob = _tanh_log_prob(gaussian_log_prob, z)
         return action, log_prob
 
-    def get_deterministic_action(self, x):
+    def get_deterministic_action(self, x, sensors=None):
         """
         Get deterministic action (tanh of mean).
 
-        Used for evaluation to measure true policy capability without
-        exploration noise.
-
         Args:
             x: Input image (B, H, W, 3)
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             action: (B, 2) mean actions in (-1, 1)
         """
-        mean, _ = self.forward(x)
+        mean, _ = self.forward(x, sensors=sensors)
         return torch.tanh(mean)
 
-    def log_prob(self, x, action):
+    def log_prob(self, x, action, sensors=None):
         """
         Compute log probability of given tanh-squashed actions for a sequence.
-
-        Recovers pre-tanh values via atanh, then computes Gaussian log-prob
-        with Jacobian correction.
 
         Args:
             x: Input images (T, H, W, 3) - full episode
             action: (T, 2) tanh-squashed actions to evaluate
+            sensors: Optional (T, sensor_dim) sensor data
 
         Returns:
             log_prob: (T,) log probability of actions
@@ -383,7 +390,8 @@ class LSTMPolicy(nn.Module):
 
         # Process entire sequence at once
         x = x.unsqueeze(0)  # (1, T, H, W, 3)
-        mean, std = self.forward(x)  # mean: (1, T, 2)
+        s = sensors.unsqueeze(0) if sensors is not None else None
+        mean, std = self.forward(x, sensors=s)  # mean: (1, T, 2)
         mean = mean.squeeze(0)  # (T, 2)
 
         # Recover pre-tanh values
@@ -406,11 +414,13 @@ class TinyPolicy(nn.Module):
     """
 
     def __init__(
-        self, image_height=128, image_width=128, num_actions=2, init_std=0.5, max_log_std=0.7
+        self, image_height=128, image_width=128, num_actions=2, init_std=0.5, max_log_std=0.7,
+        sensor_input_size=0,
     ):
         super().__init__()
 
         self.num_actions = num_actions
+        self.sensor_input_size = sensor_input_size
 
         # CNN: 2 conv layers
         self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
@@ -422,8 +432,8 @@ class TinyPolicy(nn.Module):
             dummy = self.conv2(self.conv1(dummy))
             conv_out_size = dummy.numel()
 
-        # FC layers
-        self.fc1 = nn.Linear(conv_out_size, 128)
+        # FC layers (CNN features + optional sensor data)
+        self.fc1 = nn.Linear(conv_out_size + sensor_input_size, 128)
         self.fc2 = nn.Linear(128, num_actions)
         self.value_fc = nn.Linear(128, 1)  # Value head for PPO
 
@@ -431,12 +441,13 @@ class TinyPolicy(nn.Module):
         self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
         self.max_log_std = max_log_std
 
-    def _backbone(self, x):
+    def _backbone(self, x, sensors=None):
         """
         Shared CNN+FC backbone.
 
         Args:
             x: Input image (B, H, W, 3) in range [0, 1]
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             features: (B, 128) features after fc1+relu
@@ -445,39 +456,43 @@ class TinyPolicy(nn.Module):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
         x = x.reshape(x.size(0), -1)
+        if sensors is not None and self.sensor_input_size > 0:
+            x = torch.cat([x, sensors], dim=-1)
         return torch.relu(self.fc1(x))
 
-    def forward(self, x):
+    def forward(self, x, sensors=None):
         """
         Forward pass - returns action distribution parameters.
 
         Args:
             x: Input image (B, H, W, 3) in range [0, 1]
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             mean: (B, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
-        features = self._backbone(x)
+        features = self._backbone(x, sensors=sensors)
         mean = self.fc2(features)
         clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)
         return mean, std
 
-    def evaluate_actions(self, observations, actions):
+    def evaluate_actions(self, observations, actions, sensors=None):
         """
         Single forward pass returning everything PPO needs.
 
         Args:
             observations: (B, H, W, 3) observations
             actions: (B, 2) tanh-squashed actions
+            sensors: Optional (B, sensor_dim) sensor data
 
         Returns:
             log_probs: (B,) log probability of actions
             values: (B,) state value estimates
             entropy: scalar mean entropy
         """
-        features = self._backbone(observations)
+        features = self._backbone(observations, sensors=sensors)
 
         # Action head
         mean = self.fc2(features)
@@ -498,21 +513,19 @@ class TinyPolicy(nn.Module):
 
         return log_probs, values, entropy
 
-    def sample_action(self, x):
+    def sample_action(self, x, sensors=None):
         """
         Sample an action using tanh-squashed Gaussian.
 
-        Samples z ~ Normal(mean, std), then action = tanh(z).
-        Log-prob includes the Jacobian correction for the tanh transform.
-
         Args:
             x: Input image (B, H, W, 3)
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             action: (B, 2) sampled actions in (-1, 1)
             log_prob: (B,) log probability of the sampled actions
         """
-        mean, std = self.forward(x)
+        mean, std = self.forward(x, sensors=sensors)
         dist = torch.distributions.Normal(mean, std)
         z = dist.sample()
         gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
@@ -520,37 +533,33 @@ class TinyPolicy(nn.Module):
         log_prob = _tanh_log_prob(gaussian_log_prob, z)
         return action, log_prob
 
-    def get_deterministic_action(self, x):
+    def get_deterministic_action(self, x, sensors=None):
         """
         Get deterministic action (tanh of mean).
 
-        Used for evaluation to measure true policy capability without
-        exploration noise.
-
         Args:
             x: Input image (B, H, W, 3)
+            sensors: Optional sensor data (B, sensor_dim)
 
         Returns:
             action: (B, 2) mean actions in (-1, 1)
         """
-        mean, _ = self.forward(x)
+        mean, _ = self.forward(x, sensors=sensors)
         return torch.tanh(mean)
 
-    def log_prob(self, x, action):
+    def log_prob(self, x, action, sensors=None):
         """
         Compute log probability of given tanh-squashed actions.
-
-        Recovers pre-tanh values via atanh, then computes Gaussian log-prob
-        with Jacobian correction.
 
         Args:
             x: Input image (B, H, W, 3)
             action: (B, 2) tanh-squashed actions to evaluate
+            sensors: Optional (B, sensor_dim) sensor data
 
         Returns:
             log_prob: (B,) log probability of actions
         """
-        mean, std = self.forward(x)
+        mean, std = self.forward(x, sensors=sensors)
         z = torch.atanh(action.clamp(-1 + 1e-6, 1 - 1e-6))
         dist = torch.distributions.Normal(mean, std)
         gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
@@ -576,6 +585,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     ns = "eval" if deterministic else "training"
 
     observations = []
+    sensor_data = []
     actions = []
     log_probs = []  # Only populated when not deterministic
     rewards = []
@@ -583,6 +593,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     obs = env.reset()
     env_config = env.last_reset_config
+    has_sensors = env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0
 
     # Reset LSTM hidden state if policy has one
     if hasattr(policy, "reset_hidden"):
@@ -608,20 +619,25 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     while not (done or truncated):
         # Convert observation to torch tensor
         obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)
+        sensor_tensor = None
+        if has_sensors:
+            sensor_tensor = torch.from_numpy(env.current_sensors).unsqueeze(0).to(device)
 
         # Get action (deterministic or stochastic)
         with torch.no_grad():
             if deterministic:
-                action = policy.get_deterministic_action(obs_tensor)
+                action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
                 action = action.cpu().numpy()[0]
                 log_prob = None
             else:
-                action, log_prob = policy.sample_action(obs_tensor)
+                action, log_prob = policy.sample_action(obs_tensor, sensors=sensor_tensor)
                 action = action.cpu().numpy()[0]
                 log_prob = log_prob.cpu().numpy()[0]
 
         # Store data
         observations.append(obs)
+        if has_sensors:
+            sensor_data.append(env.current_sensors.copy())
         actions.append(action)
         if not deterministic:
             log_probs.append(log_prob)
@@ -636,6 +652,19 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         if log_rerun:
             rr.set_time("step", sequence=steps)
             video_encoder.log_frame(observations[-1])
+            # Sensor inputs
+            if has_sensors:
+                sensor_vals = env.current_sensors
+                for si in env.sensor_info:
+                    adr, dim = si["adr"], si["dim"]
+                    if dim == 1:
+                        rr.log(f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]]))
+                    else:
+                        for d in range(dim):
+                            rr.log(
+                                f"{ns}/sensors/{si['name']}/{d}",
+                                rr.Scalars([sensor_vals[adr + d]]),
+                            )
             for i, name in enumerate(env.actuator_names):
                 rr.log(f"{ns}/action/{name}", rr.Scalars([action[i]]))
             rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
@@ -665,8 +694,13 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     # Compute action statistics (per-actuator by name)
     actions_array = np.array(actions)
 
-    # Determine if episode was a success (reached target)
-    success = bool(done and info["distance"] < env.success_distance)
+    # Determine if episode was a success
+    if info.get("in_walking_stage"):
+        # Walking stage: success = survived the full episode without falling
+        success = bool(truncated and not done)
+    else:
+        # Standard stages: success = reached target
+        success = bool(done and info["distance"] < env.success_distance)
 
     result = {
         "observations": observations,
@@ -682,6 +716,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
     }
+    if has_sensors:
+        result["sensor_data"] = sensor_data
     # Per-actuator stats keyed by actuator name
     for i, name in enumerate(env.actuator_names):
         motor_actions = actions_array[:, i]
@@ -691,6 +727,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     # Store final observation for GAE bootstrapping on truncated episodes
     if truncated and not done:
         result["final_observation"] = obs
+        if has_sensors:
+            result["final_sensors"] = env.current_sensors.copy()
 
     # Only include log_probs for training episodes
     if not deterministic:
@@ -730,8 +768,21 @@ def replay_episode(env, episode_data):
 
         rr.set_time("step", sequence=step_idx)
         video_encoder.log_frame(episode_data["observations"][step_idx])
-        rr.log(f"{ns}/action/left_motor", rr.Scalars([action[0]]))
-        rr.log(f"{ns}/action/right_motor", rr.Scalars([action[1]]))
+        # Sensor inputs
+        if env.sensor_dim > 0:
+            sensor_vals = env.current_sensors
+            for si in env.sensor_info:
+                adr, dim = si["adr"], si["dim"]
+                if dim == 1:
+                    rr.log(f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]]))
+                else:
+                    for d in range(dim):
+                        rr.log(
+                            f"{ns}/sensors/{si['name']}/{d}",
+                            rr.Scalars([sensor_vals[adr + d]]),
+                        )
+        for i, name in enumerate(env.actuator_names):
+            rr.log(f"{ns}/action/{name}", rr.Scalars([action[i]]))
         rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
         rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
         rr.log(f"{ns}/distance_to_target", rr.Scalars([info["distance"]]))
@@ -853,8 +904,11 @@ def train_step_batched(
     for episode_data, advantage in zip(episode_batch, all_rtg):
         observations = torch.from_numpy(np.array(episode_data["observations"]))
         actions = torch.from_numpy(np.array(episode_data["actions"]))
+        sensors = None
+        if "sensor_data" in episode_data:
+            sensors = torch.from_numpy(np.array(episode_data["sensor_data"]))
 
-        log_probs = policy.log_prob(observations, actions)
+        log_probs = policy.log_prob(observations, actions, sensors=sensors)
         # Sum (not mean) within episode, then divide by total batch timesteps
         loss = -torch.sum(advantage * log_probs) / total_steps
 
@@ -949,8 +1003,11 @@ def train_step_ppo(
             old_log_probs = torch.tensor(
                 ep["log_probs"], dtype=torch.float32, device=device
             )
+            sensors = None
+            if "sensor_data" in ep:
+                sensors = torch.from_numpy(np.array(ep["sensor_data"])).to(device)
 
-            _, values, _ = policy.evaluate_actions(obs, acts)
+            _, values, _ = policy.evaluate_actions(obs, acts, sensors=sensors)
 
             # Bootstrap value for truncated episodes
             next_value = 0.0
@@ -959,22 +1016,26 @@ def train_step_ppo(
                     torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)
                 )  # (1, H, W, 3)
                 dummy_act = torch.zeros(1, 2, device=device)  # (1, 2)
-                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act)
+                final_sensors = None
+                if "final_sensors" in ep:
+                    final_sensors = torch.from_numpy(ep["final_sensors"]).unsqueeze(0).to(device)
+                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act, sensors=final_sensors)
                 next_value = final_val[0].item()
 
             advantages, returns = compute_gae(
                 rewards, values, gamma, gae_lambda, next_value
             )
 
-            episode_data_tensors.append(
-                {
-                    "observations": obs,
-                    "actions": acts,
-                    "old_log_probs": old_log_probs,
-                    "advantages": advantages,
-                    "returns": returns,
-                }
-            )
+            ep_tensors = {
+                "observations": obs,
+                "actions": acts,
+                "old_log_probs": old_log_probs,
+                "advantages": advantages,
+                "returns": returns,
+            }
+            if sensors is not None:
+                ep_tensors["sensors"] = sensors
+            episode_data_tensors.append(ep_tensors)
 
             all_advantages.append(advantages)
             all_returns.append(returns)
@@ -1030,9 +1091,10 @@ def train_step_ppo(
             old_lp = ep_tensors["old_log_probs"]
             adv = ep_tensors["advantages"]
             ret = ep_tensors["returns"]
+            sensors = ep_tensors.get("sensors")
             T = len(obs)
 
-            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts)
+            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts, sensors=sensors)
 
             # PPO clipped surrogate
             ratio = torch.exp(new_log_probs - old_lp)
@@ -1113,11 +1175,14 @@ def log_episode_value_trace(
     obs = torch.from_numpy(np.array(episode_data["observations"])).to(device)
     acts = torch.from_numpy(np.array(episode_data["actions"])).to(device)
     rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32, device=device)
+    sensors = None
+    if "sensor_data" in episode_data and len(episode_data["sensor_data"]) > 0:
+        sensors = torch.from_numpy(np.array(episode_data["sensor_data"])).to(device)
 
     with torch.no_grad():
         # Use evaluate_actions even for deterministic episodes — we just need values
         # Need dummy actions for the log_prob computation but we only use the values
-        _, values, _ = policy.evaluate_actions(obs, acts)
+        _, values, _ = policy.evaluate_actions(obs, acts, sensors=sensors)
         advantages, returns = compute_gae(
             rewards, values, gamma, gae_lambda, next_value=0.0
         )
@@ -1316,7 +1381,8 @@ def _train_loop(
     if app is not None:
         branch = _get_git_branch()
         app.call_from_thread(
-            app.set_header, run_name, branch, cfg.training.algorithm, wandb_url
+            app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
+            robot_name
         )
 
     # Create environment from config
@@ -1347,6 +1413,7 @@ def _train_loop(
             num_actions=cfg.policy.fc_output_size,
             init_std=cfg.policy.init_std,
             max_log_std=cfg.policy.max_log_std,
+            sensor_input_size=cfg.policy.sensor_input_size,
         ).to(device)
     else:
         policy = TinyPolicy(
@@ -1355,6 +1422,7 @@ def _train_loop(
             num_actions=cfg.policy.fc_output_size,
             init_std=cfg.policy.init_std,
             max_log_std=cfg.policy.max_log_std,
+            sensor_input_size=cfg.policy.sensor_input_size,
         ).to(device)
     optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
 
@@ -1625,6 +1693,7 @@ def _train_loop(
 
                 if log_this_eval:
                     t_rerun_start = time.perf_counter()
+                    dashboard.message("Recording eval episode to Rerun...")
                     rr_wandb.start_episode(episode_count, env, namespace="eval")
                     timing["rerun"] += time.perf_counter() - t_rerun_start
 
@@ -1663,10 +1732,13 @@ def _train_loop(
             t_rerun_start = time.perf_counter()
             worst_idx = int(np.argmin(batch_rewards))
             worst_ep = episode_batch[worst_idx]
+            dashboard.message("Replaying worst episode to Rerun...")
             rr_wandb.start_episode(episode_count, env, namespace="worst")
             replay_episode(env, worst_ep)
             rr_wandb.finish_episode(worst_ep, upload_artifact=True)
-            timing["rerun"] += time.perf_counter() - t_rerun_start
+            rr_elapsed = time.perf_counter() - t_rerun_start
+            timing["rerun"] += rr_elapsed
+            dashboard.message(f"Rerun recording complete ({rr_elapsed:.1f}s)")
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
@@ -1817,6 +1889,7 @@ def _train_loop(
             "train_time": timing["train_batch"],
             "eval_time": timing["eval_batch"],
             "batch_size": batch_size,
+            "episode_count": episode_count,
         }
         if cfg.training.algorithm == "PPO":
             dash_metrics.update(
@@ -1937,8 +2010,11 @@ def run_training(
         num_workers: Worker count override
         scene_path: Override bot scene XML path
     """
+    is_biped = scene_path and "biped" in scene_path
     if smoketest:
-        cfg = Config.for_smoketest()
+        cfg = Config.for_biped_smoketest() if is_biped else Config.for_smoketest()
+    elif is_biped:
+        cfg = Config.for_biped()
     else:
         cfg = Config()
 
@@ -1984,9 +2060,11 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     if scene_path:
         cfg.env.scene_path = scene_path
 
+    robot_name_cli = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
     dashboard = AnsiDashboard(
         total_batches=cfg.training.max_batches,
         algorithm=cfg.training.algorithm,
+        bot_name=robot_name_cli,
     )
 
     _train_loop(

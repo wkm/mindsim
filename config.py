@@ -47,6 +47,9 @@ class EnvConfig:
     patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
+    # Walking stage (biped only): learn to stand/walk before target navigation
+    has_walking_stage: bool = False
+
     # Reward shaping
     distance_reward_scale: float = 20.0
     movement_bonus: float = 0.0  # Disabled: was rewarding spinning
@@ -87,6 +90,9 @@ class PolicyConfig:
     # FC / LSTM layers
     hidden_size: int = 256  # FC1 for TinyPolicy, LSTM hidden for LSTMPolicy
     fc_output_size: int = 2  # Motor commands
+
+    # Proprioceptive sensor input (0 = image-only, >0 = concat with CNN features)
+    sensor_input_size: int = 0
 
     # Stochastic policy
     init_std: float = 0.5
@@ -232,9 +238,10 @@ class Config:
                 # Distance reward lower scale — upright is priority early
                 distance_reward_scale=10.0,
                 time_penalty=0.0,  # Disabled: alive_bonus replaces time_penalty
+                has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(
-                num_stages=4,
+                num_stages=5,  # Walking + 4 standard stages
                 window_size=10,
                 advance_threshold=0.4,  # Lower threshold — walking is harder
                 advance_rate=0.01,
@@ -245,6 +252,7 @@ class Config:
                 image_width=64,
                 hidden_size=256,
                 fc_output_size=6,  # 6 joint motors
+                sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
                 init_std=0.3,  # Lower initial exploration
             ),
             training=TrainingConfig(
@@ -271,13 +279,14 @@ class Config:
                 fall_tilt_threshold=0.5,
                 distance_reward_scale=10.0,
                 time_penalty=0.0,
+                has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(
                 window_size=1,
                 advance_threshold=0.0,
                 advance_rate=1.0,
                 eval_episodes_per_batch=1,
-                num_stages=4,
+                num_stages=5,  # Walking + 4 standard stages
             ),
             policy=PolicyConfig(
                 policy_type="LSTMPolicy",
@@ -285,6 +294,7 @@ class Config:
                 image_width=64,
                 hidden_size=32,
                 fc_output_size=6,
+                sensor_input_size=18,
             ),
             training=TrainingConfig(
                 batch_size=2,

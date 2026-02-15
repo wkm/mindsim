@@ -81,9 +81,10 @@ class AnsiDashboard:
     Headless fallback when no TUI is active (e.g. `python train.py --smoketest`).
     """
 
-    def __init__(self, total_batches=None, algorithm="PPO"):
+    def __init__(self, total_batches=None, algorithm="PPO", bot_name=None):
         self.total_batches = total_batches
         self.algorithm = algorithm
+        self.bot_name = bot_name
         self._lines_printed = 0
         self._last_render = 0.0
         self._min_interval = 0.1
@@ -117,10 +118,13 @@ class AnsiDashboard:
         is_ppo = self.algorithm == "PPO"
 
         lines = []
-        header = " MindSim Training "
+        bot_tag = f" {self.bot_name}" if self.bot_name else ""
+        header = f" MindSim{bot_tag} Training "
         rule = "\u2500" * ((width - len(header)) // 2)
         lines.append(f"\u2500\u2500{header}{rule}")
-        lines.append(self._progress_bar(batch, self.total_batches, width))
+        ep_count = m.get("episode_count")
+        ep_str = f" | {ep_count:,} episodes" if ep_count else ""
+        lines.append(self._progress_bar(batch, self.total_batches, width) + ep_str)
         lines.append("")
 
         col1_label = "  EPISODE PERFORMANCE"
