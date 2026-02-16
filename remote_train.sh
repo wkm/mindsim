@@ -11,7 +11,7 @@
 # Environment:
 #   WANDB_API_KEY       Required. Your Weights & Biases API key.
 #   ANTHROPIC_API_KEY   Optional. For auto-generating run notes via Claude.
-#   MACHINE_TYPE        Optional. GCP machine type (default: e2-standard-8).
+#   MACHINE_TYPE        Optional. GCP machine type (default: c3d-standard-16).
 #   ZONE                Optional. GCP zone (default: us-central1-a).
 #   SKIP_BUILD          Optional. Set to 1 to skip Docker build & push.
 #
@@ -29,7 +29,6 @@ MACHINE_TYPE="${MACHINE_TYPE:-c3d-standard-16}"  # c3d: AMD Genoa, best spot pri
 ZONE="${ZONE:-us-central1-a}"
 REGION="${ZONE%-*}"  # e.g. us-central1 from us-central1-a
 MAX_HOURS="${MAX_HOURS:-24}"
-INSTANCE="mindsim-$(date +%m%d-%H%M%S)"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GCP_PROJECT="$(gcloud config get-value project 2>/dev/null)"
 REPO_NAME="mindsim"
@@ -92,7 +91,7 @@ if [[ "${SKIP_BUILD:-}" == "1" ]]; then
     echo "==> Skipping Docker build (SKIP_BUILD=1)"
 else
     echo "==> Building Docker image..."
-    docker build -t "${IMAGE}:latest" "$PROJECT_DIR"
+    docker build --platform linux/amd64 -t "${IMAGE}:latest" "$PROJECT_DIR"
 
     echo "==> Pushing Docker image..."
     docker push "${IMAGE}:latest"
@@ -101,9 +100,7 @@ fi
 # ---------------------------------------------------------------------------
 # Phase 3: Create spot VM with container
 # ---------------------------------------------------------------------------
-echo "==> Creating spot VM: $INSTANCE ($MACHINE_TYPE in $ZONE)"
-
-# Generate run name (same format as train.py) so instance ↔ W&B run map 1:1
+# Instance name = W&B run name (one name everywhere)
 # Extract --bot name from args, default to simple2wheeler
 BOT_NAME="simple2wheeler"
 for i in "${!TRAIN_ARGS[@]}"; do
@@ -112,24 +109,9 @@ for i in "${!TRAIN_ARGS[@]}"; do
         break
     fi
 done
-RUN_NAME="${BOT_NAME}-$(date +%m%d-%H%M)"
+INSTANCE="${BOT_NAME}-$(date +%m%d-%H%M)"
 
-# Build container env vars
-CONTAINER_ENV="MUJOCO_GL=egl,PYTHONUNBUFFERED=1,RUN_NAME=${RUN_NAME}"
-if [[ -n "${WANDB_API_KEY:-}" ]]; then
-    CONTAINER_ENV+=",WANDB_API_KEY=${WANDB_API_KEY}"
-else
-    CONTAINER_ENV+=",WANDB_MODE=disabled"
-fi
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    CONTAINER_ENV+=",ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
-fi
-
-# Build container args array
-CONTAINER_ARGS=()
-for arg in "${TRAIN_ARGS[@]}"; do
-    CONTAINER_ARGS+=(--container-arg="$arg")
-done
+echo "==> Creating spot VM: $INSTANCE ($MACHINE_TYPE in $ZONE)"
 
 # Build labels for tracking what's running on each instance
 GIT_BRANCH="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
@@ -137,68 +119,85 @@ GIT_BRANCH="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || e
 sanitize_label() { echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g' | cut -c1-63; }
 LABEL_BRANCH="$(sanitize_label "$GIT_BRANCH")"
 LABEL_ARGS="$(sanitize_label "${TRAIN_ARGS[*]}")"
-LABEL_RUN="$(sanitize_label "$RUN_NAME")"
-LABELS="mindsim=true,mindsim-run=${LABEL_RUN},mindsim-branch=${LABEL_BRANCH},mindsim-args=${LABEL_ARGS}"
+LABELS="mindsim=true,mindsim-branch=${LABEL_BRANCH},mindsim-args=${LABEL_ARGS}"
 
-gcloud compute instances create-with-container "$INSTANCE" \
+# Build the docker run env flags
+DOCKER_ENV_FLAGS="-e MUJOCO_GL=egl -e PYTHONUNBUFFERED=1 -e RUN_NAME=${INSTANCE}"
+if [[ -n "${WANDB_API_KEY:-}" ]]; then
+    DOCKER_ENV_FLAGS+=" -e WANDB_API_KEY=${WANDB_API_KEY}"
+else
+    DOCKER_ENV_FLAGS+=" -e WANDB_MODE=disabled"
+fi
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    DOCKER_ENV_FLAGS+=" -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+fi
+
+# Build quoted train args for the startup script
+QUOTED_TRAIN_ARGS=""
+for arg in "${TRAIN_ARGS[@]}"; do
+    QUOTED_TRAIN_ARGS+=" $(printf '%q' "$arg")"
+done
+
+# Generate startup script that pulls and runs the container on COS
+# COS has Docker pre-installed; we just need to configure registry auth
+STARTUP_SCRIPT_FILE="$(mktemp)"
+trap "rm -f $STARTUP_SCRIPT_FILE" EXIT
+cat > "$STARTUP_SCRIPT_FILE" <<STARTUP_EOF
+#!/bin/bash
+set -euo pipefail
+logger 'mindsim: startup script starting'
+
+# Safety: auto-shutdown after ${MAX_HOURS}h no matter what
+shutdown -h +$((MAX_HOURS * 60))
+
+# COS has a read-only root filesystem; point HOME to a writable dir
+export HOME=/var/tmp
+
+# Configure Docker to pull from Artifact Registry
+docker-credential-gcr configure-docker --registries=${REGION}-docker.pkg.dev
+
+# Pull and run the training container
+logger 'mindsim: pulling image ${IMAGE}:latest'
+docker pull ${IMAGE}:latest
+
+logger 'mindsim: starting training container'
+docker run --rm ${DOCKER_ENV_FLAGS} ${IMAGE}:latest${QUOTED_TRAIN_ARGS} 2>&1 | logger -t mindsim-train
+
+# Shut down when training completes
+logger 'mindsim: training finished, shutting down'
+shutdown -h now
+STARTUP_EOF
+
+gcloud compute instances create "$INSTANCE" \
     --machine-type="$MACHINE_TYPE" \
     --provisioning-model=SPOT \
     --instance-termination-action=STOP \
     --zone="$ZONE" \
     --boot-disk-size=30GB \
+    --image-family=cos-stable \
+    --image-project=cos-cloud \
     --scopes=default,logging-write \
     --labels="$LABELS" \
-    --container-image="${IMAGE}:latest" \
-    --container-env="$CONTAINER_ENV" \
-    "${CONTAINER_ARGS[@]}" \
-    --container-restart-policy=never \
-    --metadata=shutdown-script='#!/bin/bash
-# Auto-shutdown is handled by the container exiting + restart-policy=never
-# This is a fallback safety net
-logger "VM shutting down via metadata shutdown script"' \
+    --metadata-from-file=startup-script="$STARTUP_SCRIPT_FILE" \
     --quiet
-
-# Safety: schedule auto-shutdown after MAX_HOURS
-echo "==> Setting ${MAX_HOURS}h auto-shutdown watchdog..."
-# Wait for SSH to be ready before scheduling shutdown
-for i in $(seq 1 30); do
-    if gcloud compute ssh "$INSTANCE" --zone="$ZONE" --command="true" 2>/dev/null; then
-        break
-    fi
-    sleep 2
-done
-gcloud compute ssh "$INSTANCE" --zone="$ZONE" -- \
-    "sudo shutdown -h +$((MAX_HOURS * 60))" 2>/dev/null || true
-
-# Schedule VM self-shutdown when container exits
-# COS runs the container via konlet; we watch for it to exit
-gcloud compute ssh "$INSTANCE" --zone="$ZONE" -- bash -s <<'WATCH_SCRIPT'
-nohup bash -c '
-    # Wait for the training container to start
-    sleep 30
-    # Poll until no container is running
-    while docker ps --format "{{.Names}}" 2>/dev/null | grep -q .; do
-        sleep 60
-    done
-    echo "Container exited. Shutting down VM."
-    sudo shutdown -h now
-' &>/dev/null &
-WATCH_SCRIPT
 
 echo ""
 echo "=========================================="
 echo "  Training started on $INSTANCE"
 echo "=========================================="
 echo ""
-echo "  Run:   ${RUN_NAME}"
+echo "  Run:   ${INSTANCE}"
 echo "  Image: ${IMAGE}:latest"
 echo "  Args:  ${TRAIN_ARGS[*]}"
 echo ""
-echo "  Stream container logs:"
+echo "  SSH into VM:"
+echo "    gcloud compute ssh $INSTANCE --zone=$ZONE"
+echo ""
+echo "  Stream container logs (via SSH):"
 echo "    gcloud compute ssh $INSTANCE --zone=$ZONE -- docker logs -f \$(docker ps -q)"
 echo ""
 echo "  Stream logs (Cloud Logging):"
-echo "    gcloud logging read 'resource.type=\"gce_instance\" labels.\"container-name\"=\"mindsim-train\" resource.labels.instance_id=\"'\"$INSTANCE\"'\"' --freshness=1h --order=asc --format='value(textPayload)'"
+echo "    gcloud logging read 'resource.type=\"gce_instance\" resource.labels.instance_id=\"'\"$INSTANCE\"'\" jsonPayload.message=~\"mindsim\"' --freshness=1h --order=asc --format='value(jsonPayload.message)'"
 echo ""
 echo "  VM self-stops when training finishes."
 echo "  Delete when done:"

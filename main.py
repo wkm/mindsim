@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
@@ -117,6 +118,7 @@ class GCPInstancesScreen(Screen):
 
     BINDINGS = [
         Binding("r", "refresh", "Refresh", priority=True),
+        Binding("w", "open_wandb", "W&B", priority=True),
         Binding("t", "terminate", "Terminate", priority=True),
         Binding("d", "delete", "Delete", priority=True),
         Binding("escape", "go_back", "Back", priority=True),
@@ -159,7 +161,7 @@ class GCPInstancesScreen(Screen):
         yield Static("Loading...", id="gcp-status")
         table = DataTable(id="gcp-table")
         table.cursor_type = "row"
-        table.add_columns("Name", "Zone", "Status", "Machine Type", "Run", "Branch", "Args", "Created")
+        table.add_columns("Name", "Status", "Run", "Branch", "Args", "Created", "Zone", "Machine Type")
         yield table
         yield Footer()
 
@@ -180,6 +182,21 @@ class GCPInstancesScreen(Screen):
     def action_terminate(self) -> None:
         self._confirm_or_execute("terminate", "t")
 
+    def action_open_wandb(self) -> None:
+        """Open the W&B run page for the selected instance."""
+        table = self.query_one("#gcp-table", DataTable)
+        if table.row_count == 0:
+            return
+        row = table.get_row_at(table.cursor_row)
+        name = row[0]  # Instance name = W&B run name
+        args = row[4]  # "Args" column
+        if not name:
+            return
+        project = "mindsim-biped" if "biped" in args else "mindsim-2wheeler"
+        url = f"https://wandb.ai/search?q={name}&project={project}"
+        webbrowser.open(url)
+        self.query_one("#gcp-status", Static).update(f"Opened W&B for {name}")
+
     def _confirm_or_execute(self, action: str, key: str) -> None:
         table = self.query_one("#gcp-table", DataTable)
         if table.row_count == 0:
@@ -187,7 +204,7 @@ class GCPInstancesScreen(Screen):
 
         row_key = table.cursor_row
         row = table.get_row_at(row_key)
-        name, zone = row[0], row[1]
+        name, zone = row[0], row[6]
 
         now = time.monotonic()
         if (
@@ -281,7 +298,7 @@ class GCPInstancesScreen(Screen):
             else:
                 status_display = status
 
-            table.add_row(name, zone, status_display, machine, run, branch, args, created)
+            table.add_row(name, status_display, run, branch, args, created, zone, machine)
 
         count = len(instances)
         self.query_one("#gcp-status", Static).update(
