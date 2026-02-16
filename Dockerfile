@@ -8,7 +8,7 @@ RUN apt-get update -qq && \
     rm -rf /var/lib/apt/lists/*
 
 # Install uv from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.10.2 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
