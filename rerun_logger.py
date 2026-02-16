@@ -6,9 +6,12 @@ Shared logging code for both visualization and training scripts.
 
 from __future__ import annotations
 
+import logging
 import mujoco
 import numpy as np
 import rerun as rr
+
+logger = logging.getLogger(__name__)
 
 
 class VideoEncoder:
@@ -268,6 +271,111 @@ def log_mujoco_scene(env, namespace="world"):
                         static=True,
                     )
                     geom_count += 1
+
+                # Handle ellipsoid geometries (e.g. duck torso)
+                elif geom_type == mujoco.mjtGeom.mjGEOM_ELLIPSOID:
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    size = model.geom_size[geom_id]  # half-sizes (rx, ry, rz)
+                    rgba = model.geom_rgba[geom_id]
+                    geom_pos = model.geom_pos[geom_id]
+                    geom_quat = model.geom_quat[geom_id]
+
+                    entity_path = f"{namespace}/{body_name}/{geom_name or 'geom'}"
+
+                    rr.log(
+                        entity_path,
+                        rr.Transform3D(
+                            translation=geom_pos,
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
+                        ),
+                        static=True,
+                    )
+
+                    rr.log(
+                        f"{entity_path}/ellipsoid",
+                        rr.Ellipsoids3D(
+                            half_sizes=[size],
+                            colors=[
+                                [
+                                    int(rgba[0] * 255),
+                                    int(rgba[1] * 255),
+                                    int(rgba[2] * 255),
+                                    int(rgba[3] * 255),
+                                ]
+                            ],
+                            fill_mode=rr.components.FillMode.Solid,
+                        ),
+                        static=True,
+                    )
+                    geom_count += 1
+
+                # Handle sphere geometries
+                elif geom_type == mujoco.mjtGeom.mjGEOM_SPHERE:
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    radius = model.geom_size[geom_id][0]
+                    rgba = model.geom_rgba[geom_id]
+                    geom_pos = model.geom_pos[geom_id]
+                    geom_quat = model.geom_quat[geom_id]
+
+                    entity_path = f"{namespace}/{body_name}/{geom_name or 'geom'}"
+
+                    rr.log(
+                        entity_path,
+                        rr.Transform3D(
+                            translation=geom_pos,
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
+                        ),
+                        static=True,
+                    )
+
+                    rr.log(
+                        f"{entity_path}/sphere",
+                        rr.Ellipsoids3D(
+                            half_sizes=[[radius, radius, radius]],
+                            colors=[
+                                [
+                                    int(rgba[0] * 255),
+                                    int(rgba[1] * 255),
+                                    int(rgba[2] * 255),
+                                    int(rgba[3] * 255),
+                                ]
+                            ],
+                            fill_mode=rr.components.FillMode.Solid,
+                        ),
+                        static=True,
+                    )
+                    geom_count += 1
+
+                # Warn on unhandled geom types
+                elif geom_type not in (mujoco.mjtGeom.mjGEOM_PLANE,):
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    type_name = mujoco.mjtGeom(geom_type).name
+                    logger.warning(
+                        "Skipping unsupported geom type %s for geom '%s' on body '%s'",
+                        type_name,
+                        geom_name or geom_id,
+                        body_name,
+                    )
 
     # Log cameras
     for cam_id in range(model.ncam):
