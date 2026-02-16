@@ -370,14 +370,16 @@ class TrainingEnv:
             "curriculum_stage_progress": self.curriculum_stage_progress,
         }
 
-        # Get updated camera image after target move
-        camera_img = self.env.get_camera_image()
-
         self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = self.env.get_bot_position()
         self.current_sensors = self.env.get_sensor_data()
 
-        # Normalize to [0, 1]
+        # Blank image in walking stage (camera not useful, skip render cost)
+        if self.in_walking_stage:
+            return np.zeros(self.observation_shape, dtype=np.float32)
+
+        # Get updated camera image after target move
+        camera_img = self.env.get_camera_image()
         obs = camera_img.astype(np.float32) / 255.0
         return obs
 
@@ -517,13 +519,17 @@ class TrainingEnv:
         action = np.asarray(action, dtype=np.float64)
 
         # Run multiple MuJoCo steps with same action (10 Hz control)
-        # Only render on the last step to avoid wasted work
+        # Skip rendering entirely in walking stage (camera not useful yet)
+        need_render = not self.in_walking_stage
         for i in range(self.mujoco_steps_per_action):
             is_last_step = i == self.mujoco_steps_per_action - 1
-            camera_img = self.env.step(action, render=is_last_step)
+            camera_img = self.env.step(action, render=need_render and is_last_step)
 
-        # Get observation
-        obs = camera_img.astype(np.float32) / 255.0
+        # Get observation — blank image in walking stage
+        if need_render:
+            obs = camera_img.astype(np.float32) / 255.0
+        else:
+            obs = np.zeros(self.observation_shape, dtype=np.float32)
         self.current_sensors = self.env.get_sensor_data()
 
         # Get current state (before moving target, so reward reflects robot's action)
