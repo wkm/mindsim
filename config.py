@@ -240,7 +240,7 @@ class Config:
                 time_penalty=0.005,  # Small per-step cost for efficiency
                 upright_reward_scale=0.5,  # Reward staying upright
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
-                forward_velocity_reward_scale=2.0,  # Reward forward movement in walking stage
+                forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
                 joint_stagnation_window=30,  # 3 sec at 10Hz — abort frozen episodes
                 has_walking_stage=True,
             ),
@@ -257,12 +257,13 @@ class Config:
                 hidden_size=256,
                 fc_output_size=6,  # 6 joint motors
                 sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
-                init_std=0.5,  # Moderate exploration for 6-joint discovery
+                init_std=1.0,  # Wide exploration — std=0.5 with tanh keeps ~80% in [-0.46,0.46]
             ),
             training=TrainingConfig(
-                learning_rate=3e-4,
+                learning_rate=1e-4,
                 batch_size=64,
                 algorithm="PPO",
+                entropy_coeff=0.1,  # Stronger anti-collapse for biped exploration
             ),
         )
 
