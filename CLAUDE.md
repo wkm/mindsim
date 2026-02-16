@@ -20,6 +20,15 @@ uv run mjpython main.py visualize [--bot NAME] [--steps N]
 
 Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smoketest`.
 
+**Worktree management:**
+
+```bash
+make wt-new DESC='implement PPO'        # Claude suggests a branch name
+make wt-new NAME=my-experiment          # Use explicit name
+make wt-ls                              # List all worktrees
+make wt-rm NAME=my-experiment           # Remove worktree (keeps branch)
+```
+
 ## Project Structure
 
 ```txt
@@ -141,16 +150,42 @@ Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy
 - Changes that are clearly improvements, not experiments.
 - Working tree must be clean before starting (rule above).
 
-**Larger experimental changes** → Create an `exp/` branch BEFORE writing any code
+**Larger experimental changes** → Create a worktree BEFORE writing any code
 
 - This includes: new algorithms, significant architecture changes, new reward structures, new training approaches, or anything where the outcome is uncertain.
 - Workflow:
   1. Ensure working tree is clean (committed to main).
-  2. Create and switch to the experiment branch: `git checkout -b exp/<descriptive-name>`
-  3. Add an entry to `EXPERIMENTS.md` on the branch (see tracking below).
-  4. Now begin writing code.
+  2. Create a worktree: `make wt-new NAME=<descriptive-name>`
+     - This creates `../mindsim-<name>/` on branch `exp/<name>`
+  3. `cd ../mindsim-<name>/ && claude` to start a Claude Code session in the worktree.
+  4. Add an entry to `EXPERIMENTS.md` on the branch (see tracking below).
+  5. Now begin writing code.
 - Branch naming examples: `exp/curriculum-target-distance`, `exp/ppo-baseline`, `exp/reward-shaping-v2`
-- If the experiment succeeds, merge to main. If it fails, the branch stays as a record and main is untouched.
+- If the experiment succeeds, merge to main from the main repo: `git merge exp/<name>`
+- Clean up: `make wt-rm NAME=<name>` (then `git branch -d exp/<name>` if merged)
+- If it fails, remove the worktree — the branch stays as a record and main is untouched.
+
+### Parallel experiments with worktrees
+
+Worktrees let you run multiple experiments simultaneously, each with its own Claude Code session:
+
+```bash
+# From the main repo (on master), spin up parallel experiments
+make wt-new NAME=ppo-baseline
+make wt-new NAME=reward-shaping-v2
+
+# Each gets its own isolated directory + Claude session
+cd ../mindsim-ppo-baseline && claude
+cd ../mindsim-reward-shaping-v2 && claude    # (in another terminal)
+
+# Main repo stays clean on master — you can train/view/etc. uninterrupted
+# List active worktrees anytime
+make wt-ls
+```
+
+- Each worktree is a full working copy with its own branch — no file conflicts between sessions.
+- `CLAUDE.md` and all project files are available in each worktree (checked into git).
+- Worktrees share the same `.git` database, so branches/history are shared.
 
 ### Tracking experiments
 
