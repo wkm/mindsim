@@ -741,75 +741,6 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     return result
 
 
-def replay_episode(env, episode_data):
-    """
-    Replay a recorded episode with Rerun logging.
-
-    Resets the environment to the saved configuration and replays the
-    exact actions from the episode, logging each step to Rerun under
-    the "worst" namespace.
-
-    Args:
-        env: TrainingEnv instance
-        episode_data: Dict from collect_episode (must include env_config and actions)
-    """
-    ns = "worst"
-
-    env.reset_to_config(episode_data["env_config"])
-
-    video_encoder = rerun_logger.VideoEncoder(
-        f"{ns}/camera",
-        width=env.observation_shape[1],
-        height=env.observation_shape[0],
-    )
-
-    trajectory_points = []
-    total_reward = 0
-
-    for step_idx, action in enumerate(episode_data["actions"]):
-        obs, reward, done, truncated, info = env.step(action)
-        total_reward += reward
-
-        rr.set_time("step", sequence=step_idx)
-        video_encoder.log_frame(episode_data["observations"][step_idx])
-        # Sensor inputs
-        if env.sensor_dim > 0:
-            sensor_vals = env.current_sensors
-            for si in env.sensor_info:
-                adr, dim = si["adr"], si["dim"]
-                if dim == 1:
-                    rr.log(f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]]))
-                else:
-                    for d in range(dim):
-                        rr.log(
-                            f"{ns}/sensors/{si['name']}/{d}",
-                            rr.Scalars([sensor_vals[adr + d]]),
-                        )
-        for i, name in enumerate(env.actuator_names):
-            rr.log(f"{ns}/action/{name}", rr.Scalars([action[i]]))
-        rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
-        rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
-        rr.log(f"{ns}/distance_to_target", rr.Scalars([info["distance"]]))
-
-        rerun_logger.log_body_transforms(env, namespace=ns)
-
-        trajectory_points.append(info["position"])
-        if len(trajectory_points) > 1:
-            rr.log(
-                f"{ns}/trajectory",
-                rr.LineStrips3D([trajectory_points], colors=[[255, 100, 100]]),
-            )
-
-        if done or truncated:
-            break
-
-    video_encoder.flush()
-
-    # Log episode summary
-    rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
-    rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
-    rr.log(f"{ns}/episode/steps", rr.Scalars([step_idx + 1]))
-
 
 def compute_reward_to_go(rewards, gamma=0.99):
     """
@@ -1740,19 +1671,6 @@ def _train_loop(
         timing["eval_batch"] = time.perf_counter() - t_eval_start
         timing["eval"] += timing["eval_batch"]
 
-        # Replay worst training episode with Rerun logging
-        if should_log_rerun_this_batch and rr_wandb is not None:
-            t_rerun_start = time.perf_counter()
-            worst_idx = int(np.argmin(batch_rewards))
-            worst_ep = episode_batch[worst_idx]
-            dashboard.message("Replaying worst episode to Rerun...")
-            rr_wandb.start_episode(episode_count, env, namespace="worst")
-            replay_episode(env, worst_ep)
-            rr_wandb.finish_episode(worst_ep, upload_artifact=True)
-            rr_elapsed = time.perf_counter() - t_rerun_start
-            timing["rerun"] += rr_elapsed
-            last_rerun_time = time.perf_counter()
-            dashboard.message(f"Rerun recording complete ({rr_elapsed:.1f}s)")
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
