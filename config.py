@@ -64,6 +64,7 @@ class EnvConfig:
     alive_bonus: float = 0.0
     energy_penalty_scale: float = 0.0
     ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
+    forward_velocity_reward_scale: float = 0.0  # Reward forward movement (walking stage)
 
 
 @dataclass
@@ -239,6 +240,7 @@ class Config:
                 time_penalty=0.005,  # Small per-step cost for efficiency
                 upright_reward_scale=0.5,  # Reward staying upright
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
+                forward_velocity_reward_scale=2.0,  # Reward forward movement in walking stage
                 joint_stagnation_window=30,  # 3 sec at 10Hz — abort frozen episodes
                 has_walking_stage=True,
             ),

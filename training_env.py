@@ -62,6 +62,7 @@ class TrainingEnv:
             alive_bonus=config.alive_bonus,
             energy_penalty_scale=config.energy_penalty_scale,
             ground_contact_penalty=config.ground_contact_penalty,
+            forward_velocity_reward_scale=config.forward_velocity_reward_scale,
             patience_window=config.patience_window,
             patience_min_delta=config.patience_min_delta,
             joint_stagnation_window=config.joint_stagnation_window,
@@ -100,6 +101,7 @@ class TrainingEnv:
         alive_bonus=0.0,
         energy_penalty_scale=0.0,
         ground_contact_penalty=0.0,
+        forward_velocity_reward_scale=0.0,
         # Distance-patience early truncation
         patience_window=30,
         patience_min_delta=0.0,
@@ -140,6 +142,7 @@ class TrainingEnv:
         self.alive_bonus = alive_bonus
         self.energy_penalty_scale = energy_penalty_scale
         self.ground_contact_penalty = ground_contact_penalty
+        self.forward_velocity_reward_scale = forward_velocity_reward_scale
 
         # Distance-patience early truncation
         self.patience_window = patience_window
@@ -561,9 +564,17 @@ class TrainingEnv:
             if bad_contacts > 0:
                 contact_penalty = -self.ground_contact_penalty
 
+        # 8. Forward velocity reward (walking stage only)
+        #    Biped faces -Y, so forward velocity = -vy. Reward moving forward.
+        forward_velocity_reward = 0.0
+        if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
+            vel = self.env.get_bot_velocity()
+            forward_vel = -vel[1]  # -Y is forward for the biped
+            forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel)
+
         reward = (distance_reward + exploration_reward + time_cost
                   + upright_reward + alive_reward + energy_cost
-                  + contact_penalty)
+                  + contact_penalty + forward_velocity_reward)
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -654,6 +665,7 @@ class TrainingEnv:
             "reward_alive": alive_reward,
             "reward_energy": energy_cost,
             "reward_contact": contact_penalty,
+            "reward_forward_velocity": forward_velocity_reward,
             "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
