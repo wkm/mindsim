@@ -1,0 +1,139 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  Walker2d model adapted from Gymnasium's canonical Walker2d-v4.
+  Used as a PPO diagnostic baseline: known-good 2D walker to verify
+  that training infrastructure works before debugging the 3D biped.
+
+  Changes from Gymnasium original:
+    - Converted from global to local coordinates (global no longer supported)
+    - Angles converted to radians (was degrees)
+    - Body "torso" renamed to "base" (framework convention)
+    - Foot geoms renamed to "left_foot"/"right_foot" (contact detection)
+    - Added IMU site, camera, sensors (18-dim: same as biped)
+    - Added contact exclusions for adjacent bodies
+-->
+<mujoco model="Walker2d">
+  <compiler angle="radian" inertiafromgeom="true" />
+
+  <default>
+    <joint armature="0.01" damping="0.1" limited="true" />
+    <geom conaffinity="0" condim="3" contype="1" density="1000"
+          friction="0.7 0.1 0.1" rgba="0.8 0.6 0.4 1" />
+  </default>
+
+  <option integrator="RK4" />
+
+  <worldbody>
+    <body name="base" pos="0 0 1.25">
+      <!-- IMU site for gyro/accelerometer sensors (at body origin) -->
+      <site name="imu" pos="0 0 0" />
+
+      <!-- Body-mounted camera (pointing +X = forward for Walker2d) -->
+      <camera name="camera_1_cam" fovy="90.0"
+              pos="0 0 0.20" xyaxes="0 -1 0 0 0 1" />
+
+      <!-- Root joints: free 2D movement (slide X, slide Z, rotate Y) -->
+      <joint armature="0" axis="1 0 0" damping="0" limited="false"
+             name="rootx" pos="0 0 0" stiffness="0" type="slide" />
+      <joint armature="0" axis="0 0 1" damping="0" limited="false"
+             name="rootz" pos="0 0 0" ref="1.25" stiffness="0" type="slide" />
+      <joint armature="0" axis="0 1 0" damping="0" limited="false"
+             name="rooty" pos="0 0 0" stiffness="0" type="hinge" />
+
+      <geom friction="0.9" fromto="0 0 0.20 0 0 -0.20"
+            name="torso_geom" size="0.05" type="capsule" />
+
+      <!-- Right leg -->
+      <body name="thigh" pos="0 0 -0.20">
+        <joint axis="0 -1 0" name="thigh_joint" pos="0 0 0"
+               range="-2.618 0" type="hinge" />
+        <geom friction="0.9" fromto="0 0 0 0 0 -0.45"
+              name="thigh_geom" size="0.05" type="capsule" />
+
+        <body name="leg" pos="0 0 -0.70">
+          <joint axis="0 -1 0" name="leg_joint" pos="0 0 0.25"
+                 range="-2.618 0" type="hinge" />
+          <geom friction="0.9" fromto="0 0 0.25 0 0 -0.25"
+                name="leg_geom" size="0.04" type="capsule" />
+
+          <body name="foot" pos="0.2 0 -0.25">
+            <joint axis="0 -1 0" name="foot_joint" pos="-0.2 0 0"
+                   range="-0.785 0.785" type="hinge" />
+            <geom friction="0.9" fromto="-0.2 0 0 0 0 0"
+                  name="right_foot" size="0.06" type="capsule" />
+          </body>
+        </body>
+      </body>
+
+      <!-- Left leg -->
+      <body name="thigh_left" pos="0 0 -0.20">
+        <joint axis="0 -1 0" name="thigh_left_joint" pos="0 0 0"
+               range="-2.618 0" type="hinge" />
+        <geom friction="0.9" fromto="0 0 0 0 0 -0.45"
+              name="thigh_left_geom" size="0.05" type="capsule" />
+
+        <body name="leg_left" pos="0 0 -0.70">
+          <joint axis="0 -1 0" name="leg_left_joint" pos="0 0 0.25"
+                 range="-2.618 0" type="hinge" />
+          <geom friction="0.9" fromto="0 0 0.25 0 0 -0.25"
+                name="leg_left_geom" size="0.04" type="capsule" />
+
+          <body name="foot_left" pos="0.2 0 -0.25">
+            <joint axis="0 -1 0" name="foot_left_joint" pos="-0.2 0 0"
+                   range="-0.785 0.785" type="hinge" />
+            <geom friction="0.9" fromto="-0.2 0 0 0 0 0"
+                  name="left_foot" size="0.06" type="capsule" />
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <!-- Exclude adjacent body pairs from collision -->
+    <exclude body1="base" body2="thigh" />
+    <exclude body1="base" body2="thigh_left" />
+    <exclude body1="thigh" body2="leg" />
+    <exclude body1="leg" body2="foot" />
+    <exclude body1="thigh_left" body2="leg_left" />
+    <exclude body1="leg_left" body2="foot_left" />
+    <!-- Exclude overlapping left/right thighs -->
+    <exclude body1="thigh" body2="thigh_left" />
+  </contact>
+
+  <actuator>
+    <!-- Torque motors (canonical Walker2d control) -->
+    <motor name="thigh_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="thigh_joint" />
+    <motor name="leg_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="leg_joint" />
+    <motor name="foot_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="foot_joint" />
+    <motor name="thigh_left_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="thigh_left_joint" />
+    <motor name="leg_left_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="leg_left_joint" />
+    <motor name="foot_left_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="foot_left_joint" />
+  </actuator>
+
+  <sensor>
+    <!-- Joint position sensors (6) -->
+    <jointpos name="thigh_pos" joint="thigh_joint" />
+    <jointpos name="leg_pos" joint="leg_joint" />
+    <jointpos name="foot_pos" joint="foot_joint" />
+    <jointpos name="thigh_left_pos" joint="thigh_left_joint" />
+    <jointpos name="leg_left_pos" joint="leg_left_joint" />
+    <jointpos name="foot_left_pos" joint="foot_left_joint" />
+    <!-- Joint velocity sensors (6) -->
+    <jointvel name="thigh_vel" joint="thigh_joint" />
+    <jointvel name="leg_vel" joint="leg_joint" />
+    <jointvel name="foot_vel" joint="foot_joint" />
+    <jointvel name="thigh_left_vel" joint="thigh_left_joint" />
+    <jointvel name="leg_left_vel" joint="leg_left_joint" />
+    <jointvel name="foot_left_vel" joint="foot_left_joint" />
+    <!-- IMU sensors (3 + 3 = 6) -->
+    <gyro name="torso_gyro" site="imu" />
+    <accelerometer name="torso_accel" site="imu" />
+  </sensor>
+</mujoco>

@@ -1953,10 +1953,18 @@ def run_training(
         scene_path: Override bot scene XML path
     """
     is_biped = scene_path and "biped" in scene_path
+    is_walker2d = scene_path and "walker2d" in scene_path
     if smoketest:
-        cfg = Config.for_biped_smoketest() if is_biped else Config.for_smoketest()
+        if is_biped:
+            cfg = Config.for_biped_smoketest()
+        elif is_walker2d:
+            cfg = Config.for_walker2d_smoketest()
+        else:
+            cfg = Config.for_smoketest()
     elif is_biped:
         cfg = Config.for_biped()
+    elif is_walker2d:
+        cfg = Config.for_walker2d()
     else:
         cfg = Config()
 
@@ -1992,18 +2000,31 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         scene_path: Override bot scene XML path directly.
     """
     is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
+    is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
     if smoketest:
-        cfg = Config.for_biped_smoketest() if is_biped else Config.for_smoketest()
+        if is_biped:
+            cfg = Config.for_biped_smoketest()
+        elif is_walker2d:
+            cfg = Config.for_walker2d_smoketest()
+        else:
+            cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
     elif is_biped:
         cfg = Config.for_biped()
+    elif is_walker2d:
+        cfg = Config.for_walker2d()
     else:
         cfg = Config()
 
     if scene_path:
         cfg.env.scene_path = scene_path
 
-    robot_name_cli = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
+    if "walker2d" in cfg.env.scene_path:
+        robot_name_cli = "Walker2d"
+    elif "biped" in cfg.env.scene_path:
+        robot_name_cli = "Biped"
+    else:
+        robot_name_cli = "2-Wheeler"
     dashboard = AnsiDashboard(
         total_batches=cfg.training.max_batches,
         algorithm=cfg.training.algorithm,

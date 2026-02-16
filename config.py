@@ -51,8 +51,10 @@ class EnvConfig:
     joint_stagnation_window: int = 0  # Steps to look back
     joint_stagnation_threshold: float = 1.0  # Min total joint movement over window (sum of |delta| across all joints and steps)
 
-    # Walking stage (biped only): learn to stand/walk before target navigation
+    # Walking stage: learn to stand/walk before target navigation
     has_walking_stage: bool = False
+    walking_target_pos: tuple[float, float, float] = (0.0, -10.0, 0.08)  # Where to place target in walking stage
+    forward_velocity_axis: tuple[float, float, float] = (0.0, -1.0, 0.0)  # "Forward" for velocity reward
 
     # Reward shaping
     distance_reward_scale: float = 20.0
@@ -264,6 +266,103 @@ class Config:
                 batch_size=64,
                 algorithm="PPO",
                 entropy_coeff=0.1,  # Stronger anti-collapse for biped exploration
+            ),
+        )
+
+    @classmethod
+    def for_walker2d(cls) -> Config:
+        """Config for Walker2d PPO diagnostic baseline."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/walker2d/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=1000,  # 8s at 125Hz (canonical Walker2d)
+                max_episode_steps_final=1000,
+                mujoco_steps_per_action=4,  # 0.002s * 4 = 125Hz control (Gymnasium frame_skip)
+                success_distance=0.3,
+                failure_distance=15.0,  # Walker2d can travel far
+                min_target_distance=0.8,
+                max_target_distance=1.5,
+                # Walking stage: target in +X (Walker2d forward direction)
+                walking_target_pos=(10.0, 0.0, 0.08),
+                forward_velocity_axis=(1.0, 0.0, 0.0),
+                has_walking_stage=True,
+                # Same reward structure as biped
+                alive_bonus=0.1,
+                energy_penalty_scale=0.001,
+                distance_reward_scale=10.0,
+                time_penalty=0.005,
+                upright_reward_scale=0.5,
+                ground_contact_penalty=0.5,
+                forward_velocity_reward_scale=8.0,
+                joint_stagnation_window=30,
+            ),
+            curriculum=CurriculumConfig(
+                num_stages=5,  # Walking + 4 standard stages
+                window_size=10,
+                advance_threshold=0.4,
+                advance_rate=0.01,
+            ),
+            policy=PolicyConfig(
+                policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=256,
+                fc_output_size=6,  # 6 torque motors
+                sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
+                init_std=1.0,
+            ),
+            training=TrainingConfig(
+                learning_rate=1e-4,
+                batch_size=64,
+                algorithm="PPO",
+                entropy_coeff=0.1,
+            ),
+        )
+
+    @classmethod
+    def for_walker2d_smoketest(cls) -> Config:
+        """Config for fast Walker2d end-to-end validation."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/walker2d/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=10,
+                mujoco_steps_per_action=4,
+                walking_target_pos=(10.0, 0.0, 0.08),
+                forward_velocity_axis=(1.0, 0.0, 0.0),
+                has_walking_stage=True,
+                alive_bonus=0.1,
+                energy_penalty_scale=0.001,
+                distance_reward_scale=10.0,
+                time_penalty=0.005,
+                upright_reward_scale=0.5,
+                ground_contact_penalty=0.5,
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,
+                advance_rate=1.0,
+                eval_episodes_per_batch=1,
+                num_stages=5,
+            ),
+            policy=PolicyConfig(
+                policy_type="LSTMPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=32,
+                fc_output_size=6,
+                sensor_input_size=18,
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,
+                max_batches=3,
+                log_rerun_every=9999,
+                ppo_epochs=2,
             ),
         )
 

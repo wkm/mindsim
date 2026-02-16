@@ -68,6 +68,8 @@ class TrainingEnv:
             joint_stagnation_window=config.joint_stagnation_window,
             joint_stagnation_threshold=config.joint_stagnation_threshold,
             has_walking_stage=config.has_walking_stage,
+            walking_target_pos=config.walking_target_pos,
+            forward_velocity_axis=config.forward_velocity_axis,
         )
 
     def __init__(
@@ -108,8 +110,10 @@ class TrainingEnv:
         # Joint-stagnation early truncation
         joint_stagnation_window=0,
         joint_stagnation_threshold=0.05,
-        # Walking stage (biped only)
+        # Walking stage
         has_walking_stage=False,
+        walking_target_pos=(0.0, -10.0, 0.08),
+        forward_velocity_axis=(0.0, -1.0, 0.0),
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
@@ -159,8 +163,10 @@ class TrainingEnv:
         )
         self._prev_joint_pos = None
 
-        # Walking stage (biped only)
+        # Walking stage
         self.has_walking_stage = has_walking_stage
+        self.walking_target_pos = walking_target_pos
+        self.forward_velocity_axis = np.array(forward_velocity_axis, dtype=np.float64)
 
         # Episode tracking
         self.episode_step = 0
@@ -256,13 +262,11 @@ class TrainingEnv:
         stage_offset = 1 if self.has_walking_stage else 0
         effective_stage = self.curriculum_stage - stage_offset
 
-        # --- Walking stage: target 10m ahead, no distractors ---
+        # --- Walking stage: target far ahead, no distractors ---
         if self.in_walking_stage:
-            # Place target far ahead (-Y = forward) — unreachable, just for
-            # distance reward to incentivize forward movement
-            target_x = 0.0
-            target_y = -10.0
-            target_z = 0.08
+            # Place target far ahead (unreachable) — distance reward
+            # incentivizes forward movement. Direction is bot-specific.
+            target_x, target_y, target_z = self.walking_target_pos
             self.target_velocity = np.array([0.0, 0.0])
 
             mocap_id = self.env.target_mocap_id
@@ -574,12 +578,12 @@ class TrainingEnv:
                 contact_penalty = -self.ground_contact_penalty
 
         # 8. Forward velocity reward (walking stage only)
-        #    Biped faces -Y, so forward velocity = -vy. Reward moving forward.
+        #    Forward direction is bot-specific (configured via forward_velocity_axis).
         #    Gated on uprightness (up_z): falling forward gives ~0 reward.
         forward_velocity_reward = 0.0
         if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
             vel = self.env.get_bot_velocity()
-            forward_vel = -vel[1]  # -Y is forward for the biped
+            forward_vel = np.dot(vel, self.forward_velocity_axis)
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
         reward = (distance_reward + exploration_reward + time_cost
