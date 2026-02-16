@@ -43,7 +43,7 @@ from textual.widgets import (
     Static,
 )
 
-from dashboard import _fmt_int, _fmt_pct
+from dashboard import _fmt_int, _fmt_pct, _fmt_time
 
 
 def _discover_bots() -> list[dict]:
@@ -402,7 +402,11 @@ class TrainingDashboard(Screen):
                     "  max steps           ---", id="m-max-steps", classes="metric-line"
                 )
                 yield Static("TIMING", classes="section-title")
-                yield Static("  ---", id="m-timing", classes="metric-line")
+                yield Static("  batch               ---", id="m-timing-batch", classes="metric-line")
+                yield Static("  \u251c collect           ---", id="m-timing-collect", classes="metric-line")
+                yield Static("  \u251c train             ---", id="m-timing-train", classes="metric-line")
+                yield Static("  \u251c eval              ---", id="m-timing-eval", classes="metric-line")
+                yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
         yield RichLog(id="log-area", wrap=True, max_lines=100, markup=True)
         yield Footer()
 
@@ -571,19 +575,24 @@ class TrainingDashboard(Screen):
         tt = m.get("train_time")
         et = m.get("eval_time")
         bs = m.get("batch_size")
-        throughput = ""
+        self.query_one("#m-timing-batch").update(
+            f"  batch            {_fmt_time(bt)}" if bt is not None else "  batch               ---"
+        )
+        self.query_one("#m-timing-collect").update(
+            f"  \u251c collect        {_fmt_time(ct)}" if ct is not None else "  \u251c collect           ---"
+        )
+        self.query_one("#m-timing-train").update(
+            f"  \u251c train          {_fmt_time(tt)}" if tt is not None else "  \u251c train             ---"
+        )
+        self.query_one("#m-timing-eval").update(
+            f"  \u251c eval           {_fmt_time(et)}" if et is not None else "  \u251c eval              ---"
+        )
+        throughput_str = "---"
         if bt and bt > 0 and bs:
-            throughput = f" | {bs / bt:.1f} ep/s"
-        timing_parts = []
-        if bt is not None:
-            timing_parts.append(f"batch {bt * 1000:.0f}ms")
-        if ct is not None:
-            timing_parts.append(f"collect {ct * 1000:.0f}ms")
-        if tt is not None:
-            timing_parts.append(f"train {tt * 1000:.0f}ms")
-        if et is not None:
-            timing_parts.append(f"eval {et * 1000:.0f}ms")
-        self.query_one("#m-timing").update(f"  {' | '.join(timing_parts)}{throughput}")
+            throughput_str = f"{bs / bt:.1f} ep/s"
+        self.query_one("#m-timing-throughput").update(
+            f"  \u2514 throughput      {throughput_str.rjust(8)}"
+        )
 
     def log_message(self, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
