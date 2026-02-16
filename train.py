@@ -1508,6 +1508,7 @@ def _train_loop(
     # Training loop - use config values
     batch_size = cfg.training.batch_size
     log_rerun_every = cfg.training.log_rerun_every
+    last_rerun_time = 0.0  # Wall-clock time of last Rerun recording
 
     # Curriculum config (shorthand for readability)
     curr = cfg.curriculum
@@ -1607,10 +1608,13 @@ def _train_loop(
         )
         set_terminal_progress(progress_pct)
 
-        # Determine if we should log to Rerun this batch (from eval, not training)
+        # Log to Rerun every N batches, or if >60s since last recording
         log_every_n_batches = max(1, log_rerun_every // batch_size)
+        time_since_rerun = time.perf_counter() - last_rerun_time
         should_log_rerun_this_batch = rr_wandb is not None and (
-            batch_idx % log_every_n_batches == 0 or force_rerun
+            batch_idx % log_every_n_batches == 0
+            or time_since_rerun >= 60.0
+            or force_rerun
         )
 
         # Collect a batch of episodes
@@ -1744,6 +1748,7 @@ def _train_loop(
             rr_wandb.finish_episode(worst_ep, upload_artifact=True)
             rr_elapsed = time.perf_counter() - t_rerun_start
             timing["rerun"] += rr_elapsed
+            last_rerun_time = time.perf_counter()
             dashboard.message(f"Rerun recording complete ({rr_elapsed:.1f}s)")
 
         # Update curriculum based on EVAL success rate (deterministic)
