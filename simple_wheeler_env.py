@@ -66,6 +66,19 @@ class SimpleWheelerEnv:
             self.model.body_mocapid[bid] for bid in self.distractor_body_ids
         ]
 
+        # Geom IDs for ground contact detection (biped fall penalty)
+        # These use mj_name2id which returns -1 if not found — safe for wheeler
+        self.floor_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor"
+        )
+        self.foot_geom_ids = set()
+        for foot_name in ("left_foot", "right_foot"):
+            gid = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name
+            )
+            if gid >= 0:
+                self.foot_geom_ids.add(gid)
+
         # Sensor data dimension (0 if no sensors defined)
         self.sensor_dim = self.model.nsensordata
 
@@ -158,6 +171,15 @@ class SimpleWheelerEnv:
         """Get all sensor readings as a flat array."""
         return self.data.sensordata[:self.sensor_dim].copy().astype(np.float32)
 
+    def get_actuated_joint_positions(self):
+        """Get current positions of all actuated joints."""
+        positions = np.zeros(self.num_actuators, dtype=np.float32)
+        for i in range(self.num_actuators):
+            joint_id = self.model.actuator_trnid[i, 0]
+            qpos_adr = self.model.jnt_qposadr[joint_id]
+            positions[i] = self.data.qpos[qpos_adr]
+        return positions
+
     def get_torso_up_vector(self):
         """
         Get the torso's local Z-axis in world frame (uprightness indicator).
@@ -170,6 +192,31 @@ class SimpleWheelerEnv:
         up_y = 2 * (y * z - w * x)
         up_z = 1 - 2 * (x * x + y * y)
         return np.array([up_x, up_y, up_z])
+
+    def get_non_foot_ground_contacts(self):
+        """
+        Count contacts between the floor and non-foot robot geoms.
+
+        Returns 0 when only feet touch the ground (good), >0 when the
+        torso/legs are on the floor (bad — robot has fallen).
+        """
+        if self.floor_geom_id < 0:
+            return 0
+        bad_contacts = 0
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            g1, g2 = contact.geom1, contact.geom2
+            # One geom must be the floor
+            if g1 == self.floor_geom_id:
+                other = g2
+            elif g2 == self.floor_geom_id:
+                other = g1
+            else:
+                continue
+            # The other geom touching floor must NOT be a foot
+            if other not in self.foot_geom_ids:
+                bad_contacts += 1
+        return bad_contacts
 
     def launch_viewer(self):
         """Launch interactive 3D viewer for debugging."""

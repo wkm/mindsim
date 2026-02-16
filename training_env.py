@@ -61,10 +61,11 @@ class TrainingEnv:
             upright_reward_scale=config.upright_reward_scale,
             alive_bonus=config.alive_bonus,
             energy_penalty_scale=config.energy_penalty_scale,
-            fall_height_threshold=config.fall_height_threshold,
-            fall_tilt_threshold=config.fall_tilt_threshold,
+            ground_contact_penalty=config.ground_contact_penalty,
             patience_window=config.patience_window,
             patience_min_delta=config.patience_min_delta,
+            joint_stagnation_window=config.joint_stagnation_window,
+            joint_stagnation_threshold=config.joint_stagnation_threshold,
             has_walking_stage=config.has_walking_stage,
         )
 
@@ -98,11 +99,13 @@ class TrainingEnv:
         upright_reward_scale=0.0,
         alive_bonus=0.0,
         energy_penalty_scale=0.0,
-        fall_height_threshold=0.0,  # 0 = disabled; 0.3 for biped
-        fall_tilt_threshold=0.7,    # cos(tilt) below this = fallen
+        ground_contact_penalty=0.0,
         # Distance-patience early truncation
         patience_window=30,
         patience_min_delta=0.0,
+        # Joint-stagnation early truncation
+        joint_stagnation_window=0,
+        joint_stagnation_threshold=0.05,
         # Walking stage (biped only)
         has_walking_stage=False,
     ):
@@ -136,8 +139,7 @@ class TrainingEnv:
         self.upright_reward_scale = upright_reward_scale
         self.alive_bonus = alive_bonus
         self.energy_penalty_scale = energy_penalty_scale
-        self.fall_height_threshold = fall_height_threshold
-        self.fall_tilt_threshold = fall_tilt_threshold
+        self.ground_contact_penalty = ground_contact_penalty
 
         # Distance-patience early truncation
         self.patience_window = patience_window
@@ -145,6 +147,14 @@ class TrainingEnv:
         self._distance_deltas = (
             deque(maxlen=patience_window) if patience_window > 0 else None
         )
+
+        # Joint-stagnation early truncation
+        self.joint_stagnation_window = joint_stagnation_window
+        self.joint_stagnation_threshold = joint_stagnation_threshold
+        self._joint_deltas = (
+            deque(maxlen=joint_stagnation_window) if joint_stagnation_window > 0 else None
+        )
+        self._prev_joint_pos = None
 
         # Walking stage (biped only)
         self.has_walking_stage = has_walking_stage
@@ -234,6 +244,9 @@ class TrainingEnv:
         self.episode_step = 0
         if self._distance_deltas is not None:
             self._distance_deltas.clear()
+        if self._joint_deltas is not None:
+            self._joint_deltas.clear()
+            self._prev_joint_pos = None
 
         # Effective stage: offset by 1 when has_walking_stage so that
         # angle variance = effective 1, moving target = effective 2, etc.
@@ -379,6 +392,9 @@ class TrainingEnv:
         self.episode_step = 0
         if self._distance_deltas is not None:
             self._distance_deltas.clear()
+        if self._joint_deltas is not None:
+            self._joint_deltas.clear()
+            self._prev_joint_pos = None
 
         # Restore target position
         target_pos = config["target_pos"]
@@ -538,8 +554,16 @@ class TrainingEnv:
         if self.energy_penalty_scale > 0:
             energy_cost = -self.energy_penalty_scale * np.sum(action ** 2)
 
+        # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
+        contact_penalty = 0.0
+        if self.ground_contact_penalty > 0:
+            bad_contacts = self.env.get_non_foot_ground_contacts()
+            if bad_contacts > 0:
+                contact_penalty = -self.ground_contact_penalty
+
         reward = (distance_reward + exploration_reward + time_cost
-                  + upright_reward + alive_reward + energy_cost)
+                  + upright_reward + alive_reward + energy_cost
+                  + contact_penalty)
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -568,24 +592,11 @@ class TrainingEnv:
         bot_z = current_position[2]
         out_of_bounds = bot_z < -0.5 or bot_z > 2.0  # Fell through floor or launched
 
-        # Fall detection (biped only, disabled when fall_height_threshold == 0)
-        has_fallen = False
-        if self.fall_height_threshold > 0:
-            if bot_z < self.fall_height_threshold:
-                has_fallen = True
-            up_vec = self.env.get_torso_up_vector()
-            if up_vec[2] < self.fall_tilt_threshold:
-                has_fallen = True
-
         if has_warnings or has_nan or out_of_bounds:
             done = True
             reward -= 2.0  # Small penalty for unstable behavior
             # Reset warning counters for next episode
             self.env.data.warning.number[:] = 0
-
-        elif has_fallen:
-            done = True
-            reward -= 5.0  # Penalty for falling
 
         # Success: reached target (not applicable in walking stage)
         elif not self.in_walking_stage and current_distance < self.success_distance:
@@ -609,6 +620,21 @@ class TrainingEnv:
                 truncated = True
                 patience_truncated = True
 
+        # Joint-stagnation truncation: abort if joints aren't moving
+        joint_stagnation_truncated = False
+        if not done and not truncated and self._joint_deltas is not None:
+            joint_pos = self.env.get_actuated_joint_positions()
+            if self._prev_joint_pos is not None:
+                delta = float(np.sum(np.abs(joint_pos - self._prev_joint_pos)))
+                self._joint_deltas.append(delta)
+                if (
+                    len(self._joint_deltas) == self._joint_deltas.maxlen
+                    and sum(self._joint_deltas) < self.joint_stagnation_threshold
+                ):
+                    truncated = True
+                    joint_stagnation_truncated = True
+            self._prev_joint_pos = joint_pos
+
         # Timeout: max steps reached
         self.episode_step += 1
         if self.episode_step >= self.max_episode_steps:
@@ -627,13 +653,15 @@ class TrainingEnv:
             "reward_upright": upright_reward,
             "reward_alive": alive_reward,
             "reward_energy": energy_cost,
+            "reward_contact": contact_penalty,
             "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
-            "has_fallen": has_fallen,
             "torso_height": bot_z,
             # Patience truncation
             "patience_truncated": patience_truncated,
+            # Joint stagnation truncation
+            "joint_stagnation_truncated": joint_stagnation_truncated,
             # Walking stage flag
             "in_walking_stage": self.in_walking_stage,
         }

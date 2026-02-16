@@ -5,12 +5,15 @@ Starts with a trivially small neural network to validate the training loop.
 Can be extended with more sophisticated networks and RL algorithms.
 """
 
+import logging
 import math
 import subprocess
 import sys
 import time
 from collections import deque
 from datetime import datetime
+
+log = logging.getLogger(__name__)
 
 import numpy as np
 import rerun as rr
@@ -715,6 +718,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "done": done,
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
+        "joint_stagnation_truncated": info.get("joint_stagnation_truncated", False),
     }
     if has_sensors:
         result["sensor_data"] = sensor_data
@@ -1015,7 +1019,7 @@ def train_step_ppo(
                 final_obs = (
                     torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)
                 )  # (1, H, W, 3)
-                dummy_act = torch.zeros(1, 2, device=device)  # (1, 2)
+                dummy_act = torch.zeros(1, policy.num_actions, device=device)
                 final_sensors = None
                 if "final_sensors" in ep:
                     final_sensors = torch.from_numpy(ep["final_sensors"]).unsqueeze(0).to(device)
@@ -1342,6 +1346,8 @@ def _train_loop(
     _verbose = (lambda msg: None) if is_tui else log_fn
 
     robot_name = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
+    log.info("Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest)
+    log.info("Config: %s", cfg.to_wandb_config())
     _verbose("=" * 60)
     _verbose(f"Training {robot_name} ({cfg.training.algorithm})")
     _verbose("=" * 60)
@@ -1836,6 +1842,9 @@ def _train_loop(
                 "batch/patience_truncated_fraction": np.mean(
                     [ep.get("patience_truncated", False) for ep in episode_batch]
                 ),
+                "batch/joint_stagnation_fraction": np.mean(
+                    [ep.get("joint_stagnation_truncated", False) for ep in episode_batch]
+                ),
             }
         )
 
@@ -1992,8 +2001,10 @@ def _train_loop(
     env.close()
     if smoketest:
         log_fn(f"Smoketest passed! ({batch_idx} batches, {episode_count} episodes)")
+        log.info("Smoketest passed (%d batches, %d episodes)", batch_idx, episode_count)
     else:
         log_fn("Training complete!")
+        log.info("Training complete (%d batches, %d episodes)", batch_idx, episode_count)
 
 
 def run_training(
@@ -2049,10 +2060,11 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         num_workers: Number of parallel workers for episode collection.
         scene_path: Override bot scene XML path directly.
     """
+    is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
     if smoketest:
-        cfg = Config.for_smoketest()
+        cfg = Config.for_biped_smoketest() if is_biped else Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    elif bot and "biped" in bot:
+    elif is_biped:
         cfg = Config.for_biped()
     else:
         cfg = Config()
