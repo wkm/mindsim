@@ -50,8 +50,7 @@ ifdef NAME
 	@echo "  dir:    $(WT_DIR)"
 	@echo "  branch: exp/$(NAME)"
 	@echo ""
-	@echo "Next steps:"
-	@echo "  cd $(WT_DIR) && claude"
+	cd "$(WT_DIR)" && exec claude
 else ifdef DESC
 	@scripts/wt-new $(DESC)
 else
