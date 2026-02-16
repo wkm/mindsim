@@ -49,7 +49,7 @@ class EnvConfig:
 
     # Joint-stagnation early truncation (0=disabled)
     joint_stagnation_window: int = 0  # Steps to look back
-    joint_stagnation_threshold: float = 0.05  # Min total joint movement over window
+    joint_stagnation_threshold: float = 1.0  # Min total joint movement over window (sum of |delta| across all joints and steps)
 
     # Walking stage (biped only): learn to stand/walk before target navigation
     has_walking_stage: bool = False

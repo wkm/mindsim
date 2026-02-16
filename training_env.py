@@ -544,10 +544,13 @@ class TrainingEnv:
         time_cost = -self.time_penalty
 
         # 4. Upright reward (biped only, 0 when disabled)
+        #    Also compute up_vec for forward velocity gating below.
         upright_reward = 0.0
-        if self.upright_reward_scale > 0:
+        up_z = 1.0  # default for wheeler (no torso orientation)
+        if self.upright_reward_scale > 0 or self.forward_velocity_reward_scale > 0:
             up_vec = self.env.get_torso_up_vector()
-            upright_reward = self.upright_reward_scale * up_vec[2]
+            up_z = up_vec[2]
+            upright_reward = self.upright_reward_scale * up_z
 
         # 5. Alive bonus (biped only, 0 when disabled)
         alive_reward = self.alive_bonus
@@ -566,11 +569,12 @@ class TrainingEnv:
 
         # 8. Forward velocity reward (walking stage only)
         #    Biped faces -Y, so forward velocity = -vy. Reward moving forward.
+        #    Gated on uprightness (up_z): falling forward gives ~0 reward.
         forward_velocity_reward = 0.0
         if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
             vel = self.env.get_bot_velocity()
             forward_vel = -vel[1]  # -Y is forward for the biped
-            forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel)
+            forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
         reward = (distance_reward + exploration_reward + time_cost
                   + upright_reward + alive_reward + energy_cost
