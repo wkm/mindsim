@@ -19,6 +19,8 @@ Requires mjpython (not plain python) for MuJoCo viewer/play features.
 from __future__ import annotations
 
 import argparse
+import logging
+import logging.handlers
 import os
 import shutil
 import sys
@@ -694,6 +696,45 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
+def _setup_logging() -> Path:
+    """Configure file logging for all MindSim operations.
+
+    Returns the log file path. Logs are written to logs/mindsim.log with
+    rotation (5 x 5MB). Also installs an excepthook so unhandled exceptions
+    are captured in the log.
+    """
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "mindsim.log"
+
+    handler = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=5 * 1024 * 1024, backupCount=5,
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+
+    # Capture unhandled exceptions to the log
+    _original_excepthook = sys.excepthook
+
+    def _logging_excepthook(exc_type, exc_value, exc_tb):
+        if not issubclass(exc_type, KeyboardInterrupt):
+            logging.critical(
+                "Unhandled exception", exc_info=(exc_type, exc_value, exc_tb)
+            )
+        _original_excepthook(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _logging_excepthook
+
+    logging.info("MindSim started: %s", " ".join(sys.argv))
+    return log_file
+
+
 def _is_mjpython() -> bool:
     """Check if we're running under mjpython."""
     return "MJPYTHON_BIN" in os.environ
@@ -777,6 +818,7 @@ def _run_tui():
 
 
 def main():
+    log_file = _setup_logging()
     _check_mjpython()
 
     parser = _build_parser()
@@ -809,7 +851,17 @@ def main():
 
     elif args.command == "smoketest":
         from train import main as train_main
-        train_main(smoketest=True)
+        bots = _discover_bots()
+        if not bots:
+            print("Error: No bots found in bots/*/scene.xml", file=sys.stderr)
+            sys.exit(1)
+        for i, bot_info in enumerate(bots):
+            name = bot_info["name"]
+            print(f"\n{'=' * 60}")
+            print(f"Smoketest [{i + 1}/{len(bots)}]: {name}")
+            print(f"{'=' * 60}")
+            train_main(smoketest=True, bot=name, scene_path=bot_info["scene_path"])
+        print(f"\nAll {len(bots)} bots passed smoketest.")
 
     elif args.command == "quicksim":
         from quick_sim import run_quick_sim

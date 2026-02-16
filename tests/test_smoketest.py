@@ -348,21 +348,6 @@ class TestBipedEnvironment:
         assert "torso_height" in info
         env.close()
 
-    def test_fall_detection(self):
-        """Extreme actions should eventually trigger fall detection."""
-        cfg = _biped_smoketest_config()
-        env = _make_env(cfg)
-        env.reset()
-        fell = False
-        for _ in range(cfg.env.max_episode_steps):
-            _, _, done, truncated, info = env.step([1.0, -1.0, 1.0, -1.0, 1.0, -1.0])
-            if info.get("has_fallen", False):
-                fell = True
-                break
-        # Either it fell or the episode ended — both are valid
-        assert fell or done or truncated
-        env.close()
-
     def test_biped_rewards_present(self):
         """Biped config should produce upright/alive/energy rewards."""
         cfg = _biped_smoketest_config()

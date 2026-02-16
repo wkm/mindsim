@@ -47,6 +47,10 @@ class EnvConfig:
     patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
     patience_min_delta: float = 0.0  # Min cumulative distance reduction to stay alive
 
+    # Joint-stagnation early truncation (0=disabled)
+    joint_stagnation_window: int = 0  # Steps to look back
+    joint_stagnation_threshold: float = 0.05  # Min total joint movement over window
+
     # Walking stage (biped only): learn to stand/walk before target navigation
     has_walking_stage: bool = False
 
@@ -59,8 +63,7 @@ class EnvConfig:
     upright_reward_scale: float = 0.0
     alive_bonus: float = 0.0
     energy_penalty_scale: float = 0.0
-    fall_height_threshold: float = 0.0  # 0 = disabled; 0.3 for biped
-    fall_tilt_threshold: float = 0.7    # cos(tilt) below this = fallen
+    ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
 
 
 @dataclass
@@ -230,14 +233,13 @@ class Config:
                 min_target_distance=0.8,
                 max_target_distance=1.5,  # Closer targets initially
                 # Biped rewards
-                upright_reward_scale=1.0,
                 alive_bonus=0.1,
                 energy_penalty_scale=0.001,
-                fall_height_threshold=0.3,
-                fall_tilt_threshold=0.5,
-                # Distance reward lower scale — upright is priority early
                 distance_reward_scale=10.0,
-                time_penalty=0.0,  # Disabled: alive_bonus replaces time_penalty
+                time_penalty=0.005,  # Small per-step cost for efficiency
+                upright_reward_scale=0.5,  # Reward staying upright
+                ground_contact_penalty=0.5,  # Penalize non-foot ground contact
+                joint_stagnation_window=30,  # 3 sec at 10Hz — abort frozen episodes
                 has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(
@@ -253,7 +255,7 @@ class Config:
                 hidden_size=256,
                 fc_output_size=6,  # 6 joint motors
                 sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
-                init_std=0.3,  # Lower initial exploration
+                init_std=0.5,  # Moderate exploration for 6-joint discovery
             ),
             training=TrainingConfig(
                 learning_rate=3e-4,
@@ -272,13 +274,12 @@ class Config:
                 render_height=64,
                 max_episode_steps=10,
                 mujoco_steps_per_action=20,
-                upright_reward_scale=1.0,
                 alive_bonus=0.1,
                 energy_penalty_scale=0.001,
-                fall_height_threshold=0.3,
-                fall_tilt_threshold=0.5,
                 distance_reward_scale=10.0,
-                time_penalty=0.0,
+                time_penalty=0.005,
+                upright_reward_scale=0.5,
+                ground_contact_penalty=0.5,
                 has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(
