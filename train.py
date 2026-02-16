@@ -1385,10 +1385,13 @@ def _train_loop(
 
     # Push run metadata to TUI header
     if app is not None:
+        from main import _get_experiment_info
+
         branch = _get_git_branch()
+        hypothesis = _get_experiment_info(branch)
         app.call_from_thread(
             app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
-            robot_name
+            robot_name, hypothesis,
         )
 
     # Create environment from config
@@ -1916,6 +1919,11 @@ def _train_loop(
             dash_metrics["loss"] = loss
 
         dashboard.update(batch_idx, dash_metrics)
+        log.info(
+            "batch %d  reward=%+.2f  dist=%.2fm  eval=%.0f%%  S%d",
+            batch_idx, avg_reward, avg_distance,
+            100 * rolling_eval_success_rate, curriculum_stage,
+        )
         batch_idx += 1
         batches_this_session += 1
 
