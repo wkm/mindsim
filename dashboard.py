@@ -8,9 +8,13 @@ Two implementations:
 Factory function `Dashboard()` picks the right one based on context.
 """
 
+import logging
+import re
 import shutil
 import sys
 import time
+
+log = logging.getLogger(__name__)
 
 
 def _fmt_float(value, width=8, precision=3):
@@ -68,7 +72,11 @@ class TuiDashboard:
         self.app.call_from_thread(self.app.update_metrics, batch, metrics)
 
     def message(self, text):
-        self.app.call_from_thread(self.app.log_message, text)
+        # Single path: Python logging is the source of truth.
+        # TuiLogHandler routes the record to the RichLog panel;
+        # the file handler writes it to logs/mindsim.log.
+        plain = re.sub(r"\[/?[^\]]*\]", "", text)
+        log.info(plain)
 
     def finish(self):
         self.app.call_from_thread(self.app.mark_finished)
