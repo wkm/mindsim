@@ -22,7 +22,9 @@ import argparse
 import logging
 import logging.handlers
 import os
+import re
 import shutil
+import threading
 import sys
 import time
 from datetime import datetime
@@ -44,6 +46,46 @@ from textual.widgets import (
 )
 
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
+
+log = logging.getLogger(__name__)
+
+
+class TuiLogHandler(logging.Handler):
+    """Routes Python log records into the TUI log panel.
+
+    This is the *only* path for messages to reach the log panel from
+    worker threads.  ``dashboard.message()`` just calls ``log.info()``
+    and this handler forwards the record to the RichLog widget.
+
+    UI actions on the event-loop thread write to the log panel directly
+    (calling ``call_from_thread`` from the event loop would deadlock),
+    so we skip records originating on that thread.
+
+    Installed when training starts, removed when training finishes
+    to avoid stale references to a dead app.
+    """
+
+    def __init__(self, app: "MindSimApp"):
+        super().__init__(level=logging.INFO)
+        self._app = app
+        self._event_loop_thread = threading.current_thread()
+        fmt = logging.Formatter("%(message)s")
+        self.setFormatter(fmt)
+
+    def emit(self, record: logging.LogRecord):
+        # UI actions on the event-loop thread write to the panel directly;
+        # routing them through call_from_thread would deadlock.
+        if threading.current_thread() is self._event_loop_thread:
+            return
+        try:
+            msg = self.format(record)
+            if record.levelno >= logging.ERROR:
+                msg = f"[bold red]{msg}[/bold red]"
+            elif record.levelno >= logging.WARNING:
+                msg = f"[bold yellow]{msg}[/bold yellow]"
+            self._app.call_from_thread(self._app.log_message, msg)
+        except Exception:
+            pass  # Don't let logging errors crash the app
 
 
 def _discover_bots() -> list[dict]:
@@ -104,6 +146,28 @@ def _fmt(value, precision=3, width=8):
     if value is None:
         return " " * width
     return f"{value:+.{precision}f}".rjust(width)
+
+
+def _get_experiment_info(branch: str) -> str | None:
+    """Look up the hypothesis for a branch from EXPERIMENTS.md.
+
+    Parses the markdown table and returns the hypothesis text for the
+    matching branch, or None if not found.
+    """
+    experiments_path = Path("EXPERIMENTS.md")
+    if not experiments_path.exists():
+        return None
+    try:
+        text = experiments_path.read_text()
+    except OSError:
+        return None
+
+    for line in text.splitlines():
+        # Match table rows: | `branch` | hypothesis | ... |
+        m = re.match(r"\|\s*`([^`]+)`\s*\|([^|]+)\|", line)
+        if m and m.group(1).strip() == branch:
+            return m.group(2).strip()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +326,13 @@ class TrainingDashboard(Screen):
         padding: 0 1;
     }
 
+    #experiment-bar {
+        height: auto;
+        max-height: 2;
+        padding: 0 1;
+        color: $text-muted;
+    }
+
     #progress-row {
         height: 1;
         padding: 0 1;
@@ -271,6 +342,10 @@ class TrainingDashboard(Screen):
     #progress-label {
         width: 100%;
         height: 1;
+    }
+
+    #body-content {
+        height: 1fr;
     }
 
     #metrics-grid {
@@ -294,12 +369,21 @@ class TrainingDashboard(Screen):
         height: 1;
     }
 
+    #log-panel {
+        width: 1fr;
+        height: 100%;
+        border-left: solid $surface;
+        padding: 0 1;
+    }
+
+    #log-panel-title {
+        text-style: bold;
+        color: $accent;
+        height: 1;
+    }
+
     #log-area {
         height: 1fr;
-        min-height: 6;
-        border-top: solid $surface;
-        padding: 0 1;
-        margin-top: 1;
     }
     """
 
@@ -313,9 +397,11 @@ class TrainingDashboard(Screen):
 
     def compose(self) -> ComposeResult:
         yield Static("MindSim", id="header-bar")
+        yield Static("", id="experiment-bar")
         with Horizontal(id="progress-row"):
             yield Static("  batch 0", id="progress-label")
-        with Horizontal(id="metrics-grid"):
+        with Horizontal(id="body-content"):
+          with Horizontal(id="metrics-grid"):
             with Vertical(classes="metrics-col"):
                 yield Static("EPISODE PERFORMANCE", classes="section-title")
                 yield Static(
@@ -407,7 +493,9 @@ class TrainingDashboard(Screen):
                 yield Static("  \u251c train             ---", id="m-timing-train", classes="metric-line")
                 yield Static("  \u251c eval              ---", id="m-timing-eval", classes="metric-line")
                 yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
-        yield RichLog(id="log-area", wrap=True, max_lines=100, markup=True)
+          with Vertical(id="log-panel"):
+              yield Static("LOG", id="log-panel-title")
+              yield RichLog(id="log-area", wrap=True, max_lines=200, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -419,13 +507,16 @@ class TrainingDashboard(Screen):
         if self._paused:
             self.app.send_command("pause")
             self.log_message("[bold yellow]Paused[/bold yellow]")
+            log.info("Paused")
         else:
             self.app.send_command("unpause")
             self.log_message("[bold green]Resumed[/bold green]")
+            log.info("Resumed")
 
     def action_step_batch(self) -> None:
         self.app.send_command("step")
         self.log_message("Stepping one batch...")
+        log.info("Stepping one batch")
 
     def action_checkpoint(self) -> None:
         self.app.send_command("checkpoint")
@@ -452,7 +543,7 @@ class TrainingDashboard(Screen):
 
     def set_header(
         self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
-        bot_name: str | None = None,
+        bot_name: str | None = None, experiment_hypothesis: str | None = None,
     ):
         self._algorithm = algorithm
         self._start_time = time.monotonic()
@@ -463,6 +554,12 @@ class TrainingDashboard(Screen):
         self._header_parts = parts
         # Render immediately (timer will keep updating)
         self._tick_elapsed()
+        # Show experiment hypothesis if available
+        bar = self.query_one("#experiment-bar", Static)
+        if experiment_hypothesis:
+            bar.update(f"Experiment: {experiment_hypothesis}")
+        else:
+            bar.update("")
 
     def update_metrics(self, batch: int, metrics: dict):
         m = metrics
@@ -654,6 +751,9 @@ class MindSimApp(App):
         self._dashboard = dashboard
         self._smoketest = smoketest
         self._scene_path = scene_path
+        # Route Python log records into the TUI log panel
+        self._tui_log_handler = TuiLogHandler(self)
+        logging.getLogger().addHandler(self._tui_log_handler)
         self.push_screen(dashboard)
         self._run_training()
 
@@ -665,13 +765,18 @@ class MindSimApp(App):
         # (Textual's event loop holds file descriptors that become invalid
         # when multiprocessing.spawn tries to inherit them)
         num_workers = 1
-        run_training(
-            self,
-            self.command_queue,
-            smoketest=self._smoketest,
-            num_workers=num_workers,
-            scene_path=self._scene_path,
-        )
+        try:
+            run_training(
+                self,
+                self.command_queue,
+                smoketest=self._smoketest,
+                num_workers=num_workers,
+                scene_path=self._scene_path,
+            )
+        finally:
+            # Remove TUI log handler to avoid stale references
+            if hasattr(self, "_tui_log_handler"):
+                logging.getLogger().removeHandler(self._tui_log_handler)
 
     def send_command(self, cmd: str):
         self.command_queue.put(cmd)
@@ -693,11 +798,13 @@ class MindSimApp(App):
 
     def set_header(
         self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
-        bot_name: str | None = None,
+        bot_name: str | None = None, experiment_hypothesis: str | None = None,
     ):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
-            self._dashboard.set_header(run_name, branch, algorithm, wandb_url, bot_name)
+            self._dashboard.set_header(
+                run_name, branch, algorithm, wandb_url, bot_name, experiment_hypothesis,
+            )
 
     def set_total_batches(self, total: int | None):
         """Called from training thread via call_from_thread."""
