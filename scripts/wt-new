@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+# --- Usage ---
+if [ $# -eq 0 ]; then
+    echo "Usage: scripts/wt-new <description of experiment>"
+    echo ""
+    echo "Examples:"
+    echo "  scripts/wt-new implement PPO with learned value baseline"
+    echo "  scripts/wt-new add wall obstacles to the environment"
+    exit 1
+fi
+
+DESC="$*"
+
+# --- Clean tree check ---
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Error: Uncommitted changes. Commit before creating a worktree."
+    git status --short
+    exit 1
+fi
+
+# --- Ask Claude for a branch name ---
+echo "Asking Claude for a branch name..."
+SUGGESTED=$(claude -p "Suggest a short kebab-case git branch name for this experiment. Rules: 2-4 words, no 'exp/' prefix, lowercase, hyphens only. Reply with ONLY the name, nothing else.
+
+Experiment: $DESC")
+
+# Strip any whitespace/quotes claude might add
+SUGGESTED=$(echo "$SUGGESTED" | tr -d '[:space:]"'\''`')
+
+echo ""
+echo "  Suggested: exp/$SUGGESTED"
+echo ""
+read -r -p "Use this name? [Y/n/custom]: " REPLY
+
+case "${REPLY:-y}" in
+    n|N)
+        echo "Aborted."
+        exit 0
+        ;;
+    y|Y)
+        NAME="$SUGGESTED"
+        ;;
+    *)
+        NAME="$REPLY"
+        ;;
+esac
+
+# --- Create worktree ---
+WT_DIR="$(cd .. && pwd)/mindsim-$NAME"
+
+git worktree add "$WT_DIR" -b "exp/$NAME"
+
+echo ""
+echo "Worktree created:"
+echo "  dir:    $WT_DIR"
+echo "  branch: exp/$NAME"
+echo ""
+echo "Next steps:"
+echo "  cd $WT_DIR && claude"
