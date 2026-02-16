@@ -180,6 +180,10 @@ class SimpleWheelerEnv:
             positions[i] = self.data.qpos[qpos_adr]
         return positions
 
+    def get_bot_velocity(self):
+        """Get the bot's linear velocity in world frame."""
+        return self.data.cvel[self.bot_body_id][3:].copy()  # linear part of 6D spatial vel
+
     def get_torso_up_vector(self):
         """
         Get the torso's local Z-axis in world frame (uprightness indicator).
