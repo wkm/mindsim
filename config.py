@@ -233,8 +233,10 @@ class Config:
                 scene_path="bots/simplebiped/scene.xml",
                 render_width=64,
                 render_height=64,
-                max_episode_steps=200,
-                mujoco_steps_per_action=20,  # 0.005s timestep * 20 = 10 Hz control
+                max_episode_steps=1000,  # 8s at 125Hz (matching Walker2d)
+                max_episode_steps_final=1000,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,  # 0.002s * 4 = 125Hz control (matching Walker2d)
                 success_distance=0.3,
                 failure_distance=10.0,
                 min_target_distance=0.8,
@@ -247,7 +249,7 @@ class Config:
                 upright_reward_scale=0.5,  # Reward staying upright
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
                 forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
-                joint_stagnation_window=30,  # 3 sec at 10Hz — abort frozen episodes
+                joint_stagnation_window=375,  # 3 sec at 125Hz — abort frozen episodes
                 has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(
@@ -383,7 +385,8 @@ class Config:
                 render_width=64,
                 render_height=64,
                 max_episode_steps=10,
-                mujoco_steps_per_action=20,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,
                 alive_bonus=0.1,
                 energy_penalty_scale=0.001,
                 distance_reward_scale=10.0,
