@@ -732,10 +732,14 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     # Set up video encoder for Rerun (H.264 instead of per-frame JPEG)
     video_encoder = None
     if log_rerun:
+        # Compute actual control frequency from physics config
+        action_dt = env.env.model.opt.timestep * env.mujoco_steps_per_action
+        control_fps = max(1, int(round(1.0 / action_dt)))
         video_encoder = rerun_logger.VideoEncoder(
             f"{ns}/camera",
             width=env.observation_shape[1],
             height=env.observation_shape[0],
+            fps=control_fps,
         )
 
     while not (done or truncated):

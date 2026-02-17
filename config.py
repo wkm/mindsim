@@ -283,6 +283,7 @@ class Config:
                 render_height=64,
                 max_episode_steps=1000,  # 8s at 125Hz (canonical Walker2d)
                 max_episode_steps_final=1000,
+                control_frequency_hz=125,
                 mujoco_steps_per_action=4,  # 0.002s * 4 = 125Hz control (Gymnasium frame_skip)
                 success_distance=0.3,
                 failure_distance=15.0,  # Walker2d can travel far
@@ -335,6 +336,7 @@ class Config:
                 render_width=64,
                 render_height=64,
                 max_episode_steps=10,
+                control_frequency_hz=125,
                 mujoco_steps_per_action=4,
                 walking_target_pos=(10.0, 0.0, 0.08),
                 forward_velocity_axis=(1.0, 0.0, 0.0),
