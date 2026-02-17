@@ -87,7 +87,7 @@ class CurriculumConfig:
 class PolicyConfig:
     """Neural network policy configuration."""
 
-    policy_type: Literal["TinyPolicy", "LSTMPolicy"] = "LSTMPolicy"
+    policy_type: Literal["TinyPolicy", "LSTMPolicy", "MLPPolicy"] = "LSTMPolicy"
 
     # Image input
     image_height: int = 64
@@ -107,6 +107,10 @@ class PolicyConfig:
     @property
     def use_lstm(self) -> bool:
         return self.policy_type == "LSTMPolicy"
+
+    @property
+    def use_mlp(self) -> bool:
+        return self.policy_type == "MLPPolicy"
 
 
 @dataclass
@@ -271,7 +275,7 @@ class Config:
 
     @classmethod
     def for_walker2d(cls) -> Config:
-        """Config for Walker2d PPO diagnostic baseline."""
+        """Config for Walker2d PPO diagnostic baseline with MLPPolicy."""
         return cls(
             env=EnvConfig(
                 scene_path="bots/walker2d/scene.xml",
@@ -305,7 +309,7 @@ class Config:
                 advance_rate=0.01,
             ),
             policy=PolicyConfig(
-                policy_type="LSTMPolicy",
+                policy_type="MLPPolicy",
                 image_height=64,
                 image_width=64,
                 hidden_size=256,
@@ -314,10 +318,11 @@ class Config:
                 init_std=1.0,
             ),
             training=TrainingConfig(
-                learning_rate=1e-4,
+                learning_rate=3e-4,  # SB3 default
                 batch_size=64,
                 algorithm="PPO",
-                entropy_coeff=0.1,
+                entropy_coeff=0.0,  # SB3 default for Walker2d
+                ppo_epochs=10,  # SB3 default
             ),
         )
 
@@ -349,7 +354,7 @@ class Config:
                 num_stages=5,
             ),
             policy=PolicyConfig(
-                policy_type="LSTMPolicy",
+                policy_type="MLPPolicy",
                 image_height=64,
                 image_width=64,
                 hidden_size=32,

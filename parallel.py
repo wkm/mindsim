@@ -23,7 +23,7 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
     global _worker_env, _worker_policy
 
     from config import EnvConfig
-    from train import LSTMPolicy, TinyPolicy
+    from train import LSTMPolicy, MLPPolicy, TinyPolicy
     from training_env import TrainingEnv
 
     env_config = EnvConfig(**env_config_dict)
@@ -31,6 +31,8 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
 
     if policy_class_name == "LSTMPolicy":
         _worker_policy = LSTMPolicy(**policy_kwargs)
+    elif policy_class_name == "MLPPolicy":
+        _worker_policy = MLPPolicy(**policy_kwargs)
     else:
         _worker_policy = TinyPolicy(**policy_kwargs)
     _worker_policy.eval()
@@ -86,7 +88,7 @@ class ParallelCollector:
             "max_log_std": policy_config.max_log_std,
             "sensor_input_size": policy_config.sensor_input_size,
         }
-        if policy_config.use_lstm:
+        if policy_config.use_lstm or policy_config.use_mlp:
             policy_kwargs["hidden_size"] = policy_config.hidden_size
 
         ctx = mp.get_context("spawn")
