@@ -569,6 +569,125 @@ class TinyPolicy(nn.Module):
         return _tanh_log_prob(gaussian_log_prob, z)
 
 
+class MLPPolicy(nn.Module):
+    """
+    MLP policy for sensor-only continuous control (no CNN, no LSTM).
+
+    Separate actor/critic networks with tanh activations.
+    Includes running observation normalization as registered buffers.
+    """
+
+    def __init__(
+        self,
+        num_actions=6,
+        hidden_size=256,
+        init_std=1.0,
+        max_log_std=0.7,
+        sensor_input_size=18,
+        # Unused — kept for interface compatibility with CNN policies
+        image_height=64,
+        image_width=64,
+    ):
+        super().__init__()
+
+        self.num_actions = num_actions
+        self.sensor_input_size = sensor_input_size
+
+        # Actor network
+        self.actor_fc1 = nn.Linear(sensor_input_size, hidden_size)
+        self.actor_fc2 = nn.Linear(hidden_size, hidden_size)
+        self.actor_out = nn.Linear(hidden_size, num_actions)
+
+        # Critic network (separate weights)
+        self.critic_fc1 = nn.Linear(sensor_input_size, hidden_size)
+        self.critic_fc2 = nn.Linear(hidden_size, hidden_size)
+        self.critic_out = nn.Linear(hidden_size, 1)
+
+        # Learnable log_std (state-independent)
+        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
+        self.max_log_std = max_log_std
+
+        # Running observation normalizer (Welford's online algorithm)
+        self.register_buffer("obs_mean", torch.zeros(sensor_input_size))
+        self.register_buffer("obs_var", torch.ones(sensor_input_size))
+        self.register_buffer("obs_count", torch.tensor(1e-4))
+
+    def update_normalizer(self, sensor_batch):
+        """Update running mean/var from a batch of sensor observations.
+
+        Args:
+            sensor_batch: (N, sensor_dim) tensor of sensor observations
+        """
+        batch_mean = sensor_batch.mean(dim=0)
+        batch_var = sensor_batch.var(dim=0)
+        batch_count = sensor_batch.shape[0]
+
+        delta = batch_mean - self.obs_mean
+        total_count = self.obs_count + batch_count
+        new_mean = self.obs_mean + delta * batch_count / total_count
+        m_a = self.obs_var * self.obs_count
+        m_b = batch_var * batch_count
+        m2 = m_a + m_b + delta.pow(2) * self.obs_count * batch_count / total_count
+        new_var = m2 / total_count
+
+        self.obs_mean.copy_(new_mean)
+        self.obs_var.copy_(new_var)
+        self.obs_count.copy_(total_count)
+
+    def _normalize(self, sensors):
+        """Normalize sensor observations using running stats."""
+        return ((sensors - self.obs_mean) / torch.sqrt(self.obs_var + 1e-8)).clamp(-10, 10)
+
+    def _actor(self, sensors):
+        x = self._normalize(sensors)
+        x = torch.tanh(self.actor_fc1(x))
+        x = torch.tanh(self.actor_fc2(x))
+        return self.actor_out(x)
+
+    def _critic(self, sensors):
+        x = self._normalize(sensors)
+        x = torch.tanh(self.critic_fc1(x))
+        x = torch.tanh(self.critic_fc2(x))
+        return self.critic_out(x).squeeze(-1)
+
+    def forward(self, x, sensors=None):
+        """Forward pass — returns action mean and std. Image x is ignored."""
+        mean = self._actor(sensors)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
+        std = torch.exp(clamped_log_std)
+        return mean, std
+
+    def evaluate_actions(self, observations, actions, sensors=None):
+        """Single forward pass returning log_probs, values, entropy."""
+        mean = self._actor(sensors)
+        values = self._critic(sensors)
+        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
+        std = torch.exp(clamped_log_std)
+
+        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
+        dist = torch.distributions.Normal(mean, std)
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        log_probs = _tanh_log_prob(gaussian_log_prob, z)
+        entropy = dist.entropy().sum(dim=-1).mean()
+
+        return log_probs, values, entropy
+
+    def sample_action(self, x, sensors=None):
+        """Sample tanh-squashed Gaussian action. Image x is ignored."""
+        mean, std = self.forward(x, sensors=sensors)
+        dist = torch.distributions.Normal(mean, std)
+        z = dist.sample()
+        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
+        action = torch.tanh(z)
+        log_prob = _tanh_log_prob(gaussian_log_prob, z)
+        return action, log_prob
+
+    def get_deterministic_action(self, x, sensors=None):
+        """Get deterministic action (tanh of mean). Image x is ignored."""
+        mean, _ = self.forward(x, sensors=sensors)
+        return torch.tanh(mean)
+
+
 def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False):
     """
     Run one episode and collect data.
@@ -1276,7 +1395,12 @@ def _train_loop(
     is_tui = app is not None
     _verbose = (lambda msg: None) if is_tui else log_fn
 
-    robot_name = "Biped" if "biped" in cfg.env.scene_path else "2-Wheeler"
+    if "walker2d" in cfg.env.scene_path:
+        robot_name = "Walker2d"
+    elif "biped" in cfg.env.scene_path:
+        robot_name = "Biped"
+    else:
+        robot_name = "2-Wheeler"
     log.info("Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest)
     log.info("Config: %s", cfg.to_wandb_config())
     _verbose("=" * 60)
@@ -1297,7 +1421,12 @@ def _train_loop(
         f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
     )
     wandb_mode = "disabled" if smoketest else "online"
-    wandb_project = "mindsim-biped" if "biped" in cfg.env.scene_path else "mindsim-2wheeler"
+    if "walker2d" in cfg.env.scene_path:
+        wandb_project = "mindsim-walker2d"
+    elif "biped" in cfg.env.scene_path:
+        wandb_project = "mindsim-biped"
+    else:
+        wandb_project = "mindsim-2wheeler"
     wandb.init(
         project=wandb_project,
         name=run_name,
@@ -1345,7 +1474,15 @@ def _train_loop(
 
     # Create policy from config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if cfg.policy.use_lstm:
+    if cfg.policy.use_mlp:
+        policy = MLPPolicy(
+            num_actions=cfg.policy.fc_output_size,
+            hidden_size=cfg.policy.hidden_size,
+            init_std=cfg.policy.init_std,
+            max_log_std=cfg.policy.max_log_std,
+            sensor_input_size=cfg.policy.sensor_input_size,
+        ).to(device)
+    elif cfg.policy.use_lstm:
         policy = LSTMPolicy(
             image_height=cfg.policy.image_height,
             image_width=cfg.policy.image_width,
@@ -1572,6 +1709,15 @@ def _train_loop(
                 episode_batch.append(episode_data)
         timing["collect_batch"] = time.perf_counter() - t_collect_start
         timing["collect"] += timing["collect_batch"]
+
+        # Update observation normalizer for MLPPolicy
+        if cfg.policy.use_mlp:
+            all_sensors = []
+            for ep in episode_batch:
+                if "sensor_data" in ep:
+                    all_sensors.append(torch.from_numpy(np.array(ep["sensor_data"])))
+            if all_sensors:
+                policy.update_normalizer(torch.cat(all_sensors, dim=0).to(device))
 
         batch_rewards = [ep["total_reward"] for ep in episode_batch]
         batch_distances = [ep["final_distance"] for ep in episode_batch]
