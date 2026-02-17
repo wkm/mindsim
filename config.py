@@ -227,7 +227,7 @@ class Config:
 
     @classmethod
     def for_biped(cls) -> Config:
-        """Config for the 6-joint biped walking experiment."""
+        """Config for the 6-joint biped walking experiment with MLPPolicy."""
         return cls(
             env=EnvConfig(
                 scene_path="bots/simplebiped/scene.xml",
@@ -257,19 +257,20 @@ class Config:
                 advance_rate=0.01,
             ),
             policy=PolicyConfig(
-                policy_type="LSTMPolicy",
+                policy_type="MLPPolicy",
                 image_height=64,
                 image_width=64,
                 hidden_size=256,
                 fc_output_size=6,  # 6 joint motors
                 sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
-                init_std=1.0,  # Wide exploration — std=0.5 with tanh keeps ~80% in [-0.46,0.46]
+                init_std=1.0,  # Wide exploration
             ),
             training=TrainingConfig(
-                learning_rate=1e-4,
+                learning_rate=3e-4,  # SB3 default
                 batch_size=64,
                 algorithm="PPO",
-                entropy_coeff=0.1,  # Stronger anti-collapse for biped exploration
+                entropy_coeff=0.0,  # SB3 default
+                ppo_epochs=10,  # SB3 default
             ),
         )
 
@@ -399,7 +400,7 @@ class Config:
                 num_stages=5,  # Walking + 4 standard stages
             ),
             policy=PolicyConfig(
-                policy_type="LSTMPolicy",
+                policy_type="MLPPolicy",
                 image_height=64,
                 image_width=64,
                 hidden_size=32,
