@@ -1,7 +1,7 @@
 """
 Interactive play mode: watch a trained policy drive the robot in real-time.
 
-Loads a checkpoint, opens a MuJoCo viewer, and runs inference at 10 Hz.
+Loads a checkpoint, opens a MuJoCo viewer, and runs inference at the trained control frequency.
 Use arrow keys to move the target cube; the robot will chase it.
 """
 
@@ -30,7 +30,7 @@ SPEED_OPTIONS = [1, 2, 4, 8]
 def build_policy(ckpt_config):
     """Reconstruct the policy network from a checkpoint's embedded config."""
     # Import policy classes (defined in train.py)
-    from train import LSTMPolicy, TinyPolicy
+    from train import LSTMPolicy, MLPPolicy, TinyPolicy
 
     policy_cfg = ckpt_config["policy"]
     policy_type = policy_cfg["policy_type"]
@@ -46,6 +46,11 @@ def build_policy(ckpt_config):
 
     if policy_type == "LSTMPolicy":
         return LSTMPolicy(
+            hidden_size=policy_cfg["hidden_size"],
+            **common_kwargs,
+        )
+    elif policy_type == "MLPPolicy":
+        return MLPPolicy(
             hidden_size=policy_cfg["hidden_size"],
             **common_kwargs,
         )
@@ -90,8 +95,9 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     model = env.model
     data = env.data
 
-    # Physics sub-steps per action (matching training: 10 Hz control = 5 sub-steps at 0.02s timestep)
-    mujoco_steps_per_action = 5
+    # Physics sub-steps per action (read from checkpoint config, fallback to 5 for legacy checkpoints)
+    env_cfg = ckpt["config"].get("env", {})
+    mujoco_steps_per_action = env_cfg.get("mujoco_steps_per_action", 5)
 
     # Target move step size and arena bounds
     target_step = 0.3  # meters per key press
