@@ -243,7 +243,7 @@ class GCPInstancesScreen(Screen):
             result = subprocess.run(
                 [
                     "gcloud", "compute", "instances", "list",
-                    "--filter=name~^mindsim-",
+                    "--filter=labels.mindsim=true",
                     "--format=json(name,zone.basename(),status,machineType.basename(),labels,creationTimestamp)",
                 ],
                 capture_output=True,
