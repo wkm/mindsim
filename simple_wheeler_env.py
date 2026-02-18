@@ -65,6 +65,24 @@ class SimpleWheelerEnv:
             self.model.body_mocapid[bid] for bid in self.distractor_body_ids
         ]
 
+        # Arm-specific IDs (optional, -1 if not present)
+        self.gripper_site_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_SITE, "gripper_site"
+        )
+        self.cup_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "cup"
+        )
+        self.cup_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_geom"
+        )
+        self.finger_left_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "finger_left_geom"
+        )
+        self.finger_right_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "finger_right_geom"
+        )
+        self.is_arm = self.gripper_site_id >= 0 and self.cup_body_id >= 0
+
         # Geom IDs for ground contact detection (biped fall penalty)
         # These use mj_name2id which returns -1 if not found — safe for wheeler
         self.floor_geom_id = mujoco.mj_name2id(
@@ -220,6 +238,49 @@ class SimpleWheelerEnv:
             if other not in self.foot_geom_ids:
                 bad_contacts += 1
         return bad_contacts
+
+    # --- Arm-specific methods ---
+
+    def get_gripper_position(self):
+        """Get gripper center position in world coordinates (arm only)."""
+        if self.gripper_site_id >= 0:
+            return self.data.site_xpos[self.gripper_site_id].copy()
+        return None
+
+    def get_cup_position(self):
+        """Get cup body position in world coordinates (arm only)."""
+        if self.cup_body_id >= 0:
+            return self.data.xpos[self.cup_body_id].copy()
+        return None
+
+    def get_gripper_to_cup_distance(self):
+        """Get distance from gripper center to cup (arm only)."""
+        gripper = self.get_gripper_position()
+        cup = self.get_cup_position()
+        if gripper is None or cup is None:
+            return None
+        return float(np.linalg.norm(gripper - cup))
+
+    def get_cup_contacts(self):
+        """Check if finger geoms are in contact with the cup.
+
+        Returns:
+            (left_contact, right_contact): Booleans for each finger.
+        """
+        left_contact = False
+        right_contact = False
+        if self.cup_geom_id < 0:
+            return left_contact, right_contact
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            g1, g2 = c.geom1, c.geom2
+            if g1 == self.cup_geom_id or g2 == self.cup_geom_id:
+                other = g2 if g1 == self.cup_geom_id else g1
+                if other == self.finger_left_geom_id:
+                    left_contact = True
+                elif other == self.finger_right_geom_id:
+                    right_contact = True
+        return left_contact, right_contact
 
     def launch_viewer(self):
         """Launch interactive 3D viewer for debugging."""

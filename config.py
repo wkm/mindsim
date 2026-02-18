@@ -69,6 +69,12 @@ class EnvConfig:
     ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
     forward_velocity_reward_scale: float = 0.0  # Reward forward movement (walking stage)
 
+    # Arm-specific reward shaping (all 0.0 = disabled for non-arm bots)
+    is_arm_task: bool = False
+    grasp_reward: float = 0.0  # Per-step reward when both fingers contact the cup
+    lift_reward_scale: float = 0.0  # Reward for lifting cup above table
+    cup_table_height: float = 0.44  # Z position of cup resting on table (reward baseline)
+
 
 @dataclass
 class CurriculumConfig:
@@ -422,6 +428,106 @@ class Config:
                 hidden_size=32,
                 fc_output_size=6,
                 sensor_input_size=18,
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,
+                max_batches=3,
+                log_rerun_every=9999,
+                ppo_epochs=2,
+            ),
+        )
+
+    @classmethod
+    def for_arm(cls) -> Config:
+        """Config for the 5-DOF arm cup pickup experiment with MLPPolicy."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplearm/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=500,  # 4s at 250Hz
+                max_episode_steps_final=500,
+                control_frequency_hz=250,
+                mujoco_steps_per_action=2,  # 0.002s * 2 = 250Hz control
+                success_distance=0.03,  # Gripper within 3cm of cup = reaching success
+                failure_distance=1.0,
+                min_target_distance=0.1,
+                max_target_distance=0.3,
+                # Reward shaping
+                distance_reward_scale=10.0,  # Gripper-to-cup approach reward
+                time_penalty=0.002,
+                energy_penalty_scale=0.001,
+                # Arm-specific rewards
+                is_arm_task=True,
+                grasp_reward=1.0,  # Per-step reward for successful grasp
+                lift_reward_scale=20.0,  # Reward cup height above table
+                cup_table_height=0.44,  # Z of cup resting on table
+                # No walking stage, no distractors
+                patience_window=200,
+                patience_min_delta=0.0,
+            ),
+            curriculum=CurriculumConfig(
+                num_stages=3,  # Reach, Grasp, Lift
+                window_size=10,
+                advance_threshold=0.5,
+                advance_rate=0.02,
+                eval_episodes_per_batch=8,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=256,
+                fc_output_size=6,  # 5 arm joints + 1 gripper
+                sensor_input_size=14,  # 6 pos + 6 vel + 2 touch
+                init_std=0.5,
+            ),
+            training=TrainingConfig(
+                learning_rate=3e-4,
+                batch_size=64,
+                algorithm="PPO",
+                entropy_coeff=0.01,
+                ppo_epochs=10,
+            ),
+        )
+
+    @classmethod
+    def for_arm_smoketest(cls) -> Config:
+        """Config for fast arm end-to-end validation."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplearm/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=10,
+                control_frequency_hz=250,
+                mujoco_steps_per_action=2,
+                success_distance=0.03,
+                failure_distance=1.0,
+                distance_reward_scale=10.0,
+                time_penalty=0.002,
+                energy_penalty_scale=0.001,
+                is_arm_task=True,
+                grasp_reward=1.0,
+                lift_reward_scale=20.0,
+                cup_table_height=0.44,
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,
+                advance_rate=1.0,
+                eval_episodes_per_batch=1,
+                num_stages=3,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=32,
+                fc_output_size=6,
+                sensor_input_size=14,
             ),
             training=TrainingConfig(
                 batch_size=2,

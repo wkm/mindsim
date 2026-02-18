@@ -1163,17 +1163,22 @@ def run_training(
     """
     is_biped = scene_path and "biped" in scene_path
     is_walker2d = scene_path and "walker2d" in scene_path
+    is_arm = scene_path and "simplearm" in scene_path
     if smoketest:
         if is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
             cfg = Config.for_walker2d_smoketest()
+        elif is_arm:
+            cfg = Config.for_arm_smoketest()
         else:
             cfg = Config.for_smoketest()
     elif is_biped:
         cfg = Config.for_biped()
     elif is_walker2d:
         cfg = Config.for_walker2d()
+    elif is_arm:
+        cfg = Config.for_arm()
     else:
         cfg = Config()
 
@@ -1210,11 +1215,14 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     """
     is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
     is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
+    is_arm = (bot and "simplearm" in bot) or (scene_path and "simplearm" in scene_path)
     if smoketest:
         if is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
             cfg = Config.for_walker2d_smoketest()
+        elif is_arm:
+            cfg = Config.for_arm_smoketest()
         else:
             cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
@@ -1222,6 +1230,8 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         cfg = Config.for_biped()
     elif is_walker2d:
         cfg = Config.for_walker2d()
+    elif is_arm:
+        cfg = Config.for_arm()
     else:
         cfg = Config()
 

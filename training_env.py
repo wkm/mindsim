@@ -71,6 +71,11 @@ class TrainingEnv:
             walking_target_pos=config.walking_target_pos,
             forward_velocity_axis=config.forward_velocity_axis,
             walking_success_min_forward=config.walking_success_min_forward,
+            # Arm-specific rewards (all default to disabled)
+            is_arm_task=config.is_arm_task,
+            grasp_reward_value=config.grasp_reward,
+            lift_reward_scale=config.lift_reward_scale,
+            cup_table_height=config.cup_table_height,
         )
 
     def __init__(
@@ -116,6 +121,11 @@ class TrainingEnv:
         walking_target_pos=(0.0, -10.0, 0.08),
         forward_velocity_axis=(0.0, -1.0, 0.0),
         walking_success_min_forward=0.5,
+        # Arm-specific
+        is_arm_task=False,
+        grasp_reward_value=0.0,
+        lift_reward_scale=0.0,
+        cup_table_height=0.44,
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
@@ -170,6 +180,17 @@ class TrainingEnv:
         self.walking_target_pos = walking_target_pos
         self.forward_velocity_axis = np.array(forward_velocity_axis, dtype=np.float64)
         self.walking_success_min_forward = walking_success_min_forward
+
+        # Arm-specific
+        self.is_arm_task = is_arm_task and self.env.is_arm
+        self.grasp_reward_value = grasp_reward_value
+        self.lift_reward_scale = lift_reward_scale
+        self.cup_table_height = cup_table_height
+        if self.is_arm_task:
+            cup_joint_id = mujoco.mj_name2id(
+                self.env.model, mujoco.mjtObj.mjOBJ_JOINT, "cup_joint"
+            )
+            self.cup_qpos_addr = self.env.model.jnt_qposadr[cup_joint_id]
 
         # Episode tracking
         self.episode_step = 0
@@ -260,6 +281,10 @@ class TrainingEnv:
         if self._joint_deltas is not None:
             self._joint_deltas.clear()
             self._prev_joint_pos = None
+
+        # --- Arm task: randomize cup position on table ---
+        if self.is_arm_task:
+            return self._arm_reset()
 
         # Effective stage: offset by 1 when has_walking_stage so that
         # angle variance = effective 1, moving target = effective 2, etc.
@@ -446,6 +471,67 @@ class TrainingEnv:
         obs = camera_img.astype(np.float32) / 255.0
         return obs
 
+    def _arm_reset(self):
+        """Reset for arm task: randomize cup position on table."""
+        progress = self.curriculum_stage_progress
+
+        # Randomize cup position on table surface
+        # Stage 1: small range near center, Stage 2+: wider range
+        x_range = 0.05 + progress * 0.10  # ±5cm to ±15cm
+        y_center = 0.25
+        y_range = 0.05 + progress * 0.10
+        cup_x = np.random.uniform(-x_range, x_range)
+        cup_y = np.random.uniform(y_center - y_range, y_center + y_range)
+        cup_z = self.cup_table_height
+
+        # Set cup freejoint qpos: [x, y, z, qw, qx, qy, qz]
+        self.env.data.qpos[self.cup_qpos_addr:self.cup_qpos_addr + 3] = [
+            cup_x, cup_y, cup_z
+        ]
+        self.env.data.qpos[self.cup_qpos_addr + 3:self.cup_qpos_addr + 7] = [
+            1, 0, 0, 0
+        ]
+        # Zero out cup velocity
+        cup_qvel_addr = self.env.model.jnt_dofadr[
+            mujoco.mj_name2id(
+                self.env.model, mujoco.mjtObj.mjOBJ_JOINT, "cup_joint"
+            )
+        ]
+        self.env.data.qvel[cup_qvel_addr:cup_qvel_addr + 6] = 0
+
+        # Hide distractors
+        self._hide_distractors()
+        self.target_velocity = np.array([0.0, 0.0])
+        for i in range(self.max_distractors):
+            self.distractor_velocities[i] = np.array([0.0, 0.0])
+
+        # Forward kinematics
+        mujoco.mj_forward(self.env.model, self.env.data)
+
+        # Use gripper→cup distance for arm tracking
+        self.prev_distance = self.env.get_gripper_to_cup_distance()
+        self.prev_position = self.env.get_bot_position()
+        self.start_position = self.prev_position.copy()
+        self.current_sensors = self.env.get_sensor_data()
+
+        # Save reset config for replay
+        target_pos = self.env.get_target_position().tolist()
+        self.last_reset_config = {
+            "target_pos": target_pos,
+            "target_velocity": [0.0, 0.0],
+            "distractor_positions": [
+                self.env.data.mocap_pos[mid].copy().tolist()
+                for mid in self.env.distractor_mocap_ids
+            ],
+            "distractor_velocities": [[0.0, 0.0]] * self.max_distractors,
+            "curriculum_stage": self.curriculum_stage,
+            "curriculum_stage_progress": self.curriculum_stage_progress,
+            "cup_pos": [cup_x, cup_y, cup_z],
+        }
+
+        camera_img = self.env.get_camera_image()
+        return camera_img.astype(np.float32) / 255.0
+
     def _place_distractors(self, n, target_x, target_y):
         """Place n distractor cubes at random positions, hide the rest."""
         for i, mocap_id in enumerate(self.env.distractor_mocap_ids):
@@ -543,7 +629,10 @@ class TrainingEnv:
         self.current_sensors = self.env.get_sensor_data()
 
         # Get current state (before moving target, so reward reflects robot's action)
-        current_distance = self.env.get_distance_to_target()
+        if self.is_arm_task:
+            current_distance = self.env.get_gripper_to_cup_distance()
+        else:
+            current_distance = self.env.get_distance_to_target()
         current_position = self.env.get_bot_position()
 
         # Calculate reward components:
@@ -594,9 +683,21 @@ class TrainingEnv:
             forward_vel = np.dot(vel, self.forward_velocity_axis)
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
+        # 9. Arm-specific: grasp and lift rewards
+        arm_grasp_reward = 0.0
+        arm_lift_reward = 0.0
+        if self.is_arm_task:
+            left_contact, right_contact = self.env.get_cup_contacts()
+            if left_contact and right_contact:
+                arm_grasp_reward = self.grasp_reward_value
+                cup_pos = self.env.get_cup_position()
+                cup_lift = max(0.0, cup_pos[2] - self.cup_table_height)
+                arm_lift_reward = self.lift_reward_scale * cup_lift
+
         reward = (distance_reward + exploration_reward + time_cost
                   + upright_reward + alive_reward + energy_cost
-                  + contact_penalty + forward_velocity_reward)
+                  + contact_penalty + forward_velocity_reward
+                  + arm_grasp_reward + arm_lift_reward)
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -612,7 +713,10 @@ class TrainingEnv:
 
         # Update state for next step (use post-move distance so next step's
         # reward delta captures both robot movement and target movement)
-        self.prev_distance = self.env.get_distance_to_target()
+        if self.is_arm_task:
+            self.prev_distance = self.env.get_gripper_to_cup_distance()
+        else:
+            self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = current_position
 
         # Check termination conditions
@@ -631,7 +735,14 @@ class TrainingEnv:
             # Reset warning counters for next episode
             self.env.data.warning.number[:] = 0
 
-        # Success: reached target (not applicable in walking stage)
+        # Success: arm lifts cup to target / wheeler reaches target
+        elif self.is_arm_task:
+            cup_pos = self.env.get_cup_position()
+            target_pos = self.env.get_target_position()
+            cup_to_target = float(np.linalg.norm(cup_pos - target_pos))
+            if cup_to_target < self.success_distance:
+                done = True
+                reward += 10.0  # Bonus for lifting cup to target
         elif not self.in_walking_stage and current_distance < self.success_distance:
             done = True
             reward += 10.0  # Bonus for reaching target
@@ -688,6 +799,8 @@ class TrainingEnv:
             "reward_energy": energy_cost,
             "reward_contact": contact_penalty,
             "reward_forward_velocity": forward_velocity_reward,
+            "reward_arm_grasp": arm_grasp_reward,
+            "reward_arm_lift": arm_lift_reward,
             "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
