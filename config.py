@@ -55,6 +55,7 @@ class EnvConfig:
     has_walking_stage: bool = False
     walking_target_pos: tuple[float, float, float] = (0.0, -10.0, 0.08)  # Where to place target in walking stage
     forward_velocity_axis: tuple[float, float, float] = (0.0, -1.0, 0.0)  # "Forward" for velocity reward
+    walking_success_min_forward: float = 0.5  # Min forward distance (meters) for walking stage success
 
     # Reward shaping
     distance_reward_scale: float = 20.0
@@ -249,6 +250,7 @@ class Config:
                 upright_reward_scale=0.5,  # Reward staying upright
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
                 forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
+                walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.5m tall)
                 joint_stagnation_window=375,  # 3 sec at 125Hz — abort frozen episodes
                 has_walking_stage=True,
             ),
@@ -295,6 +297,7 @@ class Config:
                 # Walking stage: target in +X (Walker2d forward direction)
                 walking_target_pos=(10.0, 0.0, 0.08),
                 forward_velocity_axis=(1.0, 0.0, 0.0),
+                walking_success_min_forward=1.4,  # ~1 body length (Walker2d is ~1.4m tall)
                 has_walking_stage=True,
                 # Same reward structure as biped
                 alive_bonus=0.1,
@@ -343,6 +346,7 @@ class Config:
                 mujoco_steps_per_action=4,
                 walking_target_pos=(10.0, 0.0, 0.08),
                 forward_velocity_axis=(1.0, 0.0, 0.0),
+                walking_success_min_forward=0.0,  # Smoketest: no forward requirement
                 has_walking_stage=True,
                 alive_bonus=0.1,
                 energy_penalty_scale=0.001,
@@ -350,6 +354,7 @@ class Config:
                 time_penalty=0.005,
                 upright_reward_scale=0.5,
                 ground_contact_penalty=0.5,
+                forward_velocity_reward_scale=8.0,
             ),
             curriculum=CurriculumConfig(
                 window_size=1,
@@ -393,6 +398,8 @@ class Config:
                 time_penalty=0.005,
                 upright_reward_scale=0.5,
                 ground_contact_penalty=0.5,
+                forward_velocity_reward_scale=8.0,
+                walking_success_min_forward=0.0,  # Smoketest: no forward requirement
                 has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(

@@ -33,6 +33,151 @@ from training_env import TrainingEnv
 from tweaks import apply_tweaks, load_tweaks
 
 
+def _quat_rotate(quat, vec):
+    """Rotate a 3D vector by a quaternion [w, x, y, z]."""
+    w, x, y, z = quat
+    vx, vy, vz = vec
+    # q * v * q_conj (Hamilton product)
+    t = np.array([
+        2.0 * (y * vz - z * vy),
+        2.0 * (z * vx - x * vz),
+        2.0 * (x * vy - y * vx),
+    ])
+    return np.array([
+        vx + w * t[0] + (y * t[2] - z * t[1]),
+        vy + w * t[1] + (z * t[0] - x * t[2]),
+        vz + w * t[2] + (x * t[1] - y * t[0]),
+    ])
+
+
+def verify_forward_direction(env, log_fn=print):
+    """
+    Verify that the forward axis is correctly configured by running a physics check.
+
+    Three checks:
+    1. Geometry: forward_velocity_axis points toward walking_target_pos
+    2. Physics: applying a world-frame force in the forward direction produces
+       positive forward displacement and decreasing distance to target
+    3. Velocity: get_bot_velocity() correctly reports the direction of movement
+
+    Raises AssertionError if the forward direction is wrong.
+    """
+    import mujoco
+
+    if not env.has_walking_stage:
+        return  # Only relevant for bots with a walking stage
+
+    fwd_axis = env.forward_velocity_axis
+    target = np.array(env.walking_target_pos)
+
+    # Check 1: Forward axis should point toward the walking target from origin
+    target_dir = target[:3] / (np.linalg.norm(target[:3]) + 1e-8)
+    axis_dot_target = float(np.dot(fwd_axis, target_dir))
+    log_fn(f"  Geometry check: dot(forward_axis, target_dir) = {axis_dot_target:.3f}")
+    assert axis_dot_target > 0.5, (
+        f"Forward axis {fwd_axis.tolist()} does not point toward walking target "
+        f"{target.tolist()} (dot={axis_dot_target:.3f}, expected > 0.5)"
+    )
+
+    # Check 2: Teleport the bot 1m forward by editing qpos, verify position & distance
+    env.reset()
+    model = env.env.model
+    data = env.env.data
+    base_body_id = env.env.bot_body_id
+    start_pos = env.env.get_bot_position().copy()
+    start_dist = env.env.get_distance_to_target()
+
+    # Move the root body 1m forward by adjusting the root joint positions
+    nudge = 1.0  # meters
+    for j in range(model.njnt):
+        if model.jnt_bodyid[j] != base_body_id:
+            continue
+        jnt_type = model.jnt_type[j]
+        qpos_adr = model.jnt_qposadr[j]
+
+        if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
+            # Freejoint qpos: [x, y, z, qw, qx, qy, qz]
+            data.qpos[qpos_adr + 0] += nudge * fwd_axis[0]
+            data.qpos[qpos_adr + 1] += nudge * fwd_axis[1]
+            data.qpos[qpos_adr + 2] += nudge * fwd_axis[2]
+            break
+        elif jnt_type == mujoco.mjtJoint.mjJNT_SLIDE:
+            jnt_axis = model.jnt_axis[j]
+            proj = float(np.dot(fwd_axis, jnt_axis))
+            if abs(proj) > 0.1:
+                data.qpos[qpos_adr] += nudge * proj
+
+    mujoco.mj_forward(model, data)
+
+    end_pos = env.env.get_bot_position()
+    end_dist = env.env.get_distance_to_target()
+    displacement = end_pos - start_pos
+    forward_displacement = float(np.dot(displacement, fwd_axis))
+
+    log_fn(f"  Teleport check: displacement={forward_displacement:.4f}m, "
+           f"dist_delta={start_dist - end_dist:.4f}m")
+
+    assert forward_displacement > 0.5, (
+        f"Forward displacement after teleport is too small ({forward_displacement:.4f})! "
+        f"Expected ~1.0m. Root joint axes may not align with forward_velocity_axis."
+    )
+    assert end_dist < start_dist, (
+        f"Distance to walking target increased after teleporting forward "
+        f"({start_dist:.3f} -> {end_dist:.3f})! "
+        f"Forward axis may be pointing away from the walking target."
+    )
+
+    # Check 3: Verify get_bot_velocity() reports correct direction
+    # Use mj_step1 to compute cvel from qvel without integrating.
+    # (mj_forward does NOT update cvel; only mj_step/mj_step1 do.)
+    env.reset()
+
+    # Set root body velocity in the forward direction via qvel
+    vel_nudge = 2.0  # m/s
+    for j in range(model.njnt):
+        if model.jnt_bodyid[j] != base_body_id:
+            continue
+        jnt_type = model.jnt_type[j]
+        qvel_adr = model.jnt_dofadr[j]
+
+        if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
+            # Freejoint qvel: [vx, vy, vz, wx, wy, wz] (linear first!)
+            # Linear velocity is in the LOCAL body frame.
+            qpos_adr = model.jnt_qposadr[j]
+            quat = data.qpos[qpos_adr + 3:qpos_adr + 7].copy()
+            quat_conj = np.array([quat[0], -quat[1], -quat[2], -quat[3]])
+            local_fwd = _quat_rotate(quat_conj, fwd_axis)
+            data.qvel[qvel_adr + 0] = vel_nudge * local_fwd[0]
+            data.qvel[qvel_adr + 1] = vel_nudge * local_fwd[1]
+            data.qvel[qvel_adr + 2] = vel_nudge * local_fwd[2]
+            break
+        elif jnt_type == mujoco.mjtJoint.mjJNT_SLIDE:
+            jnt_axis = model.jnt_axis[j]
+            proj = float(np.dot(fwd_axis, jnt_axis))
+            if abs(proj) > 0.1:
+                data.qvel[qvel_adr] = vel_nudge * proj
+
+    # mj_step1 computes velocity-dependent quantities (cvel) without integration
+    mujoco.mj_step1(model, data)
+
+    vel = env.env.get_bot_velocity()
+    forward_vel = float(np.dot(vel, fwd_axis))
+
+    log_fn(f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
+           f"(vel={[f'{v:.3f}' for v in vel]})")
+
+    assert forward_vel > 0.5, (
+        f"get_bot_velocity() dot forward_axis is too small ({forward_vel:.3f})! "
+        f"Expected ~{vel_nudge:.1f}. vel={vel.tolist()}, axis={fwd_axis.tolist()}. "
+        f"Either cvel convention is wrong or the forward axis doesn't match the joints."
+    )
+
+    log_fn("  Forward direction: OK")
+
+    # Reset env to clean state for training
+    env.reset()
+
+
 def set_terminal_title(title):
     """Set terminal tab/window title using ANSI escape sequence."""
     sys.stdout.write(f"\033]0;{title}\007")
@@ -822,8 +967,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     # Determine if episode was a success
     if info.get("in_walking_stage"):
-        # Walking stage: success = survived the full episode without falling
-        success = bool(truncated and not done)
+        # Walking stage: success = survived AND moved forward enough
+        forward_dist = info.get("forward_distance", 0.0)
+        success = bool(truncated and not done and forward_dist >= env.walking_success_min_forward)
     else:
         # Standard stages: success = reached target
         success = bool(done and info["distance"] < env.success_distance)
@@ -842,6 +988,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
         "joint_stagnation_truncated": info.get("joint_stagnation_truncated", False),
+        "forward_distance": info.get("forward_distance", 0.0),
     }
     if has_sensors:
         result["sensor_data"] = sensor_data
@@ -1464,6 +1611,11 @@ def _train_loop(
     _verbose(f"  Observation shape: {env.observation_shape}")
     _verbose(f"  Action shape: {env.action_shape}")
     _verbose(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
+
+    # Verify forward direction is correct (smoketest: assert, training: warn)
+    if env.has_walking_stage:
+        _verbose("Verifying forward direction...")
+        verify_forward_direction(env, log_fn=_verbose)
 
     # Log bot model info
     mj_model = env.env.model
