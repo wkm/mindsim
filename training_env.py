@@ -584,11 +584,13 @@ class TrainingEnv:
                 contact_penalty = -self.ground_contact_penalty
 
         # 8. Forward velocity reward (walking stage only)
-        #    Forward direction is bot-specific (configured via forward_velocity_axis).
-        #    Gated on uprightness (up_z): falling forward gives ~0 reward.
+        #    Uses position-based velocity (like Gymnasium Walker2d) instead of
+        #    MuJoCo cvel, which reports subtree COM velocity and can be misleading
+        #    when legs swing.  Gated on uprightness so falling doesn't count.
         forward_velocity_reward = 0.0
         if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
-            vel = self.env.get_bot_velocity()
+            dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
+            vel = (current_position - self.prev_position) / dt
             forward_vel = np.dot(vel, self.forward_velocity_axis)
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
