@@ -70,6 +70,7 @@ class TrainingEnv:
             has_walking_stage=config.has_walking_stage,
             walking_target_pos=config.walking_target_pos,
             forward_velocity_axis=config.forward_velocity_axis,
+            walking_success_min_forward=config.walking_success_min_forward,
         )
 
     def __init__(
@@ -114,6 +115,7 @@ class TrainingEnv:
         has_walking_stage=False,
         walking_target_pos=(0.0, -10.0, 0.08),
         forward_velocity_axis=(0.0, -1.0, 0.0),
+        walking_success_min_forward=0.5,
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
@@ -167,11 +169,13 @@ class TrainingEnv:
         self.has_walking_stage = has_walking_stage
         self.walking_target_pos = walking_target_pos
         self.forward_velocity_axis = np.array(forward_velocity_axis, dtype=np.float64)
+        self.walking_success_min_forward = walking_success_min_forward
 
         # Episode tracking
         self.episode_step = 0
         self.prev_distance = None
         self.prev_position = None
+        self.start_position = None  # Set in reset(), used for forward distance
 
         # Multi-stage curriculum
         # When has_walking_stage: Stage 1 = walking, then stages shift up by 1
@@ -376,6 +380,7 @@ class TrainingEnv:
 
         self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = self.env.get_bot_position()
+        self.start_position = self.prev_position.copy()
         self.current_sensors = self.env.get_sensor_data()
 
         # Blank image in walking stage (camera not useful, skip render cost)
@@ -436,6 +441,7 @@ class TrainingEnv:
         camera_img = self.env.get_camera_image()
         self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = self.env.get_bot_position()
+        self.start_position = self.prev_position.copy()
 
         obs = camera_img.astype(np.float32) / 255.0
         return obs
@@ -690,6 +696,11 @@ class TrainingEnv:
             "joint_stagnation_truncated": joint_stagnation_truncated,
             # Walking stage flag
             "in_walking_stage": self.in_walking_stage,
+            # Forward distance from start (projected onto forward axis)
+            "forward_distance": float(np.dot(
+                current_position - self.start_position,
+                self.forward_velocity_axis,
+            )) if self.start_position is not None else 0.0,
         }
 
         return obs, reward, done, truncated, info
