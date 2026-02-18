@@ -9,7 +9,7 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 ```bash
 uv run mjpython main.py                    # Interactive TUI (default)
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
-uv run mjpython main.py play [CHECKPOINT] [--bot NAME]  # Play trained policy
+uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]  # Play trained policy
 uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
 uv run mjpython main.py smoketest          # Alias for train --smoketest
 uv run mjpython main.py quicksim           # Rerun debug vis
@@ -17,6 +17,8 @@ uv run mjpython main.py visualize [--bot NAME] [--steps N]
 ```
 
 `--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.
+
+`--run RUN_NAME` resolves the latest checkpoint from a specific run directory (e.g., `--run s2w-lstm-0218-1045`).
 
 Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smoketest`.
 
@@ -34,15 +36,22 @@ make wt-rm NAME=my-experiment           # Remove worktree (keeps branch)
 ```txt
 mindsim/
 ├── main.py                   # Single entry point for all modes
+├── run_manager.py            # Run directory lifecycle & W&B init
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
 │   ├── scene.xml            # World: floor, lighting, target
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
 ├── simple_wheeler_env.py    # Environment API
 ├── train.py                 # Training loop & policy networks
+├── checkpoint.py            # Checkpoint save/load/resolve
 ├── view.py                  # MuJoCo viewer
 ├── play.py                  # Interactive play mode
-└── visualize.py             # Rerun visualization
+├── visualize.py             # Rerun visualization
+└── runs/                    # Per-run directories (gitignored)
+    └── s2w-lstm-0218-1045/
+        ├── run_info.json    # Run metadata
+        ├── checkpoints/     # Model checkpoints
+        └── recordings/      # Rerun .rrd files
 ```
 
 ## Environment API
@@ -110,22 +119,47 @@ Creates a Rerun recording with:
 ## Key Files
 
 - **main.py** - Single entry point for all modes (TUI, view, play, train, etc.)
+- **run_manager.py** - Run directory lifecycle, run naming, W&B init, run discovery
+- **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
+- **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
 - **scene.xml** - World setup (target, floor, lighting)
 - **simple_wheeler_env.py** - Env logic (step, reset, reward)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
 - **play.py** - Interactive play mode (called via `main.py play`)
 - **train.py** - Training loop and policy networks (called via `main.py train`)
+- **rerun_wandb.py** - Rerun-W&B integration for eval episode recordings
 - **visualize.py** - Rerun visualization (called via `main.py visualize`)
+
+## Run Management
+
+Each training run gets its own directory under `runs/<run_name>/`:
+
+- **Run naming**: `<bot_abbrev>-<policy>-<MMDD>-<HHMM>` (e.g., `s2w-lstm-0218-1045`). Collision avoidance appends `-2`, `-3`, etc.
+- **Bot abbreviations**: `simple2wheeler` -> `s2w`, `simplebiped` -> `biped`, `walker2d` -> `w2d`
+- **Metadata**: `run_info.json` tracks status (running/completed/failed), bot, algorithm, W&B link, batch count, etc.
+- **W&B**: All runs go to a single `mindsim` project, with tags for bot/algorithm/policy filtering.
+- **Backward compat**: `resolve_resume_ref("latest")` searches `runs/*/checkpoints/` first, then legacy `checkpoints/`. Old checkpoints keep working.
+
+## TUI
+
+The interactive TUI (`uv run mjpython main.py`) has a screen-based flow:
+
+```
+MainMenuScreen
+  ├── [s] Smoketest     -> runs smoketest
+  ├── [n] New run       -> BotSelectorScreen -> TrainingDashboard
+  ├── [b] Browse runs   -> RunBrowserScreen -> RunActionScreen
+  └── [q] Quit
+```
+
+**RunActionScreen** actions for a selected run: **[p]** play, **[r]** resume, **[v]** view, **[w]** open W&B.
+
+**Navigation**: `Esc` and `Backspace` consistently go back / leave a screen.
 
 ## Training
 
-Current algorithm: **REINFORCE** (vanilla policy gradient with stochastic policy)
-
-### Future experiments to try
-
-- **Reward-Weighted Regression (RWR)** - Simpler, treat RL as weighted supervised learning
-- **PPO** - More stable, better sample efficiency, requires critic network
+Current algorithm: **PPO** (Proximal Policy Optimization with GAE)
 
 ## Experiment Organization
 

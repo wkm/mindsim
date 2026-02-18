@@ -162,6 +162,12 @@ class Config:
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
 
+    @property
+    def bot_name(self) -> str:
+        """Extract bot directory name from env.scene_path (e.g. 'simple2wheeler')."""
+        from pathlib import Path
+        return Path(self.env.scene_path).parent.name
+
     def to_flat_dict(self) -> dict:
         """
         Convert to flat dict for W&B logging.
