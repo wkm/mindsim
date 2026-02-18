@@ -101,7 +101,7 @@ class AnsiDashboard:
     def _get_width(self):
         try:
             w = shutil.get_terminal_size().columns
-        except Exception:
+        except (ValueError, OSError):
             w = 80
         return max(60, min(w, 120))
 

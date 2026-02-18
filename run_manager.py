@@ -122,7 +122,7 @@ def load_run_info(run_dir: Path) -> RunInfo | None:
         data = json.loads(path.read_text())
         # Handle missing fields gracefully
         return RunInfo(**{k: v for k, v in data.items() if k in RunInfo.__dataclass_fields__})
-    except Exception:
+    except (json.JSONDecodeError, KeyError, TypeError):
         return None
 
 
