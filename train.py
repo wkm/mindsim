@@ -27,6 +27,7 @@ import wandb
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from config import Config
 from dashboard import AnsiDashboard, TuiDashboard
+from git_utils import get_git_branch, get_git_sha
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
 from run_manager import (
@@ -37,7 +38,6 @@ from run_manager import (
     generate_run_name,
     init_wandb_for_run,
     save_run_info,
-    _get_git_sha as _get_git_sha_rm,
 )
 from training_env import TrainingEnv
 from tweaks import apply_tweaks, load_tweaks
@@ -1418,18 +1418,6 @@ def log_episode_value_trace(
 
 
 
-def _get_git_branch() -> str:
-    try:
-        return subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except Exception:
-        return "unknown"
-
-
 def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
     """
     Drain commands from the TUI command queue.
@@ -1598,8 +1586,8 @@ def _train_loop(
         status="running",
         wandb_id=wandb.run.id if wandb.run else None,
         wandb_url=wandb_url,
-        git_branch=_get_git_branch(),
-        git_sha=_get_git_sha_rm(),
+        git_branch=get_git_branch(),
+        git_sha=get_git_sha(),
         created_at=datetime.now().isoformat(),
         tags=[bot_name, cfg.training.algorithm, cfg.policy.policy_type],
     )
@@ -1610,7 +1598,7 @@ def _train_loop(
     if app is not None:
         from main import _get_experiment_info
 
-        branch = _get_git_branch()
+        branch = get_git_branch()
         hypothesis = _get_experiment_info(branch)
         app.call_from_thread(
             app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,

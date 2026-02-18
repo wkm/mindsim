@@ -11,12 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 import wandb
+from git_utils import get_git_branch, get_git_sha
 
 log = logging.getLogger(__name__)
 
@@ -35,27 +35,6 @@ BOT_DISPLAY_NAMES: dict[str, str] = {
     "simplebiped": "Biped",
     "walker2d": "Walker2d",
 }
-
-
-def _get_git_sha() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=True,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return "unknown"
-
-
-def _get_git_branch() -> str:
-    try:
-        return subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except Exception:
-        return "unknown"
 
 
 def bot_name_from_scene_path(scene_path: str) -> str:
