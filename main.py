@@ -325,6 +325,7 @@ class RunBrowserScreen(Screen):
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
         Binding("enter", "select_run", "Select", priority=True),
+        Binding("w", "open_wandb", "W&B", priority=True),
     ]
 
     CSS = """
@@ -393,6 +394,18 @@ class RunBrowserScreen(Screen):
                     self.app.push_screen(
                         RunActionScreen(run_dir=item["dir"], run_info=item["info"])
                     )
+        except (IndexError, ValueError):
+            pass
+
+    def action_open_wandb(self) -> None:
+        try:
+            run_list = self.query_one("#run-list", OptionList)
+            idx = run_list.highlighted
+            if idx is not None and 0 <= idx < len(self._items):
+                url = self._items[idx]["info"].wandb_url
+                if url:
+                    import webbrowser
+                    webbrowser.open(url)
         except (IndexError, ValueError):
             pass
 
@@ -521,6 +534,7 @@ class TrainingDashboard(Screen):
         Binding("n", "step_batch", "Step 1 Batch"),
         Binding("c", "checkpoint", "Checkpoint"),
         Binding("r", "send_rerun", "Send to Rerun"),
+        Binding("w", "open_wandb", "W&B"),
         Binding("up", "advance_curriculum", "Advance"),
         Binding("down", "regress_curriculum", "Regress"),
         Binding("q", "quit_app", "Quit"),
@@ -609,6 +623,7 @@ class TrainingDashboard(Screen):
         self._start_time = time.monotonic()
         self._header_parts: list[str] = ["MindSim"]
         self._paused = False
+        self._wandb_url: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("MindSim", id="header-bar")
@@ -745,6 +760,11 @@ class TrainingDashboard(Screen):
     def action_regress_curriculum(self) -> None:
         self.app.send_command("regress_curriculum")
 
+    def action_open_wandb(self) -> None:
+        if self._wandb_url:
+            import webbrowser
+            webbrowser.open(self._wandb_url)
+
     def action_quit_app(self) -> None:
         self.app.send_command("stop")
         self.app.exit()
@@ -761,6 +781,7 @@ class TrainingDashboard(Screen):
         bot_name: str | None = None, experiment_hypothesis: str | None = None,
     ):
         self._algorithm = algorithm
+        self._wandb_url = wandb_url
         self._start_time = time.monotonic()
         title = f"MindSim {bot_name}" if bot_name else "MindSim"
         parts = [f"{title} | {run_name}", branch, algorithm]
