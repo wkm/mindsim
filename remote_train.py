@@ -141,11 +141,18 @@ set -eo pipefail
 
 if [ $EXIT_CODE -eq 0 ]; then
     logger 'mindsim: === TRAINING COMPLETED SUCCESSFULLY ==='
+    # Self-delete: instance served its purpose
+    INST_NAME=$(curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name)
+    ZONE_PATH=$(curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone)
+    TOKEN=$(curl -sf -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    logger "mindsim: self-deleting instance $INST_NAME"
+    curl -sf -X DELETE -H "Authorization: Bearer $TOKEN" \
+        "https://compute.googleapis.com/compute/v1/$ZONE_PATH/instances/$INST_NAME" || shutdown -h now
 else
     logger "mindsim: === TRAINING FAILED (exit code $EXIT_CODE) ==="
+    # Keep instance around for debugging (SSH in to inspect)
+    logger "mindsim: instance kept alive for debugging, will auto-shutdown in {max_hours}h"
 fi
-
-shutdown -h now
 """
 
 
@@ -167,7 +174,7 @@ def try_create_instance(
             "--boot-disk-size=30GB",
             "--image-family=cos-stable",
             "--image-project=cos-cloud",
-            "--scopes=default,logging-write",
+            "--scopes=default,logging-write,compute-rw",
             f"--labels={labels}",
             f"--metadata-from-file=startup-script={startup_file}",
             "--quiet",
