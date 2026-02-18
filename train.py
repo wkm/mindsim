@@ -921,7 +921,6 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         # Log to Rerun in real-time
         if log_rerun:
             rr.set_time("step", sequence=steps)
-            rr.set_time("sim_time", timestamp=steps * action_dt)
             video_encoder.log_frame(observations[-1])
             # Sensor inputs
             if has_sensors:
@@ -1370,7 +1369,7 @@ def train_step_ppo(
 
 
 def log_episode_value_trace(
-    policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval", action_dt=0.1
+    policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"
 ):
     """
     Run a forward pass on a completed episode to log V(s_t) and A(s_t) to Rerun.
@@ -1399,7 +1398,6 @@ def log_episode_value_trace(
 
     for t in range(len(values_np)):
         rr.set_time("step", sequence=t)
-        rr.set_time("sim_time", timestamp=t * action_dt)
         rr.log(f"{namespace}/value/V_s", rr.Scalars([values_np[t]]))
         rr.log(f"{namespace}/value/advantage", rr.Scalars([advantages_np[t]]))
         rr.log(
@@ -1960,7 +1958,6 @@ def _train_loop(
                             gae_lambda=cfg.training.gae_lambda,
                             device=device,
                             namespace="eval",
-                            action_dt=env.action_dt,
                         )
                     rr_wandb.finish_episode(eval_data, upload_artifact=True)
                     timing["rerun"] += time.perf_counter() - t_rerun_start
