@@ -3,7 +3,7 @@ Training-ready Gymnasium wrapper for MuJoCo robot environments.
 
 Wraps SimpleWheelerEnv with:
 - 10 Hz control frequency (1 action per 0.1 seconds)
-- Reward function (distance-based + optional biped rewards)
+- Reward function (distance-based + optional biped rewards including action smoothness)
 - Episode termination logic (+ optional fall detection)
 - Standard Gymnasium API (reset, step returning obs/reward/done/truncated/info)
 """
@@ -60,7 +60,7 @@ class TrainingEnv:
             # Biped-specific rewards (all default to 0 = disabled)
             upright_reward_scale=config.upright_reward_scale,
             alive_bonus=config.alive_bonus,
-            energy_penalty_scale=config.energy_penalty_scale,
+            action_smoothness_scale=config.action_smoothness_scale,
             ground_contact_penalty=config.ground_contact_penalty,
             forward_velocity_reward_scale=config.forward_velocity_reward_scale,
             patience_window=config.patience_window,
@@ -102,7 +102,7 @@ class TrainingEnv:
         # Biped-specific reward params (all 0.0 = disabled for wheeler)
         upright_reward_scale=0.0,
         alive_bonus=0.0,
-        energy_penalty_scale=0.0,
+        action_smoothness_scale=0.0,
         ground_contact_penalty=0.0,
         forward_velocity_reward_scale=0.0,
         # Distance-patience early truncation
@@ -146,7 +146,8 @@ class TrainingEnv:
         # Biped-specific rewards
         self.upright_reward_scale = upright_reward_scale
         self.alive_bonus = alive_bonus
-        self.energy_penalty_scale = energy_penalty_scale
+        self.action_smoothness_scale = action_smoothness_scale
+        self._prev_action = None  # For smoothness penalty
         self.ground_contact_penalty = ground_contact_penalty
         self.forward_velocity_reward_scale = forward_velocity_reward_scale
 
@@ -382,6 +383,7 @@ class TrainingEnv:
         self.prev_position = self.env.get_bot_position()
         self.start_position = self.prev_position.copy()
         self.current_sensors = self.env.get_sensor_data()
+        self._prev_action = None
 
         # Blank image in walking stage (camera not useful, skip render cost)
         if self.in_walking_stage:
@@ -571,10 +573,13 @@ class TrainingEnv:
         # 5. Alive bonus (biped only, 0 when disabled)
         alive_reward = self.alive_bonus
 
-        # 6. Energy penalty (biped only, 0 when disabled)
-        energy_cost = 0.0
-        if self.energy_penalty_scale > 0:
-            energy_cost = -self.energy_penalty_scale * np.sum(action ** 2)
+        # 6. Action smoothness penalty (biped only, 0 when disabled)
+        #    Penalizes change in action between timesteps: -scale * sum((a_t - a_{t-1})^2)
+        #    First step of episode has no penalty (no previous action).
+        smoothness_cost = 0.0
+        if self.action_smoothness_scale > 0 and self._prev_action is not None:
+            smoothness_cost = -self.action_smoothness_scale * np.sum((action - self._prev_action) ** 2)
+        self._prev_action = action.copy()
 
         # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
         contact_penalty = 0.0
@@ -593,7 +598,7 @@ class TrainingEnv:
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
         reward = (distance_reward + exploration_reward + time_cost
-                  + upright_reward + alive_reward + energy_cost
+                  + upright_reward + alive_reward + smoothness_cost
                   + contact_penalty + forward_velocity_reward)
 
         # Track distance delta for patience (before prev_distance is updated)
@@ -683,7 +688,7 @@ class TrainingEnv:
             "reward_time": time_cost,
             "reward_upright": upright_reward,
             "reward_alive": alive_reward,
-            "reward_energy": energy_cost,
+            "reward_smoothness": smoothness_cost,
             "reward_contact": contact_penalty,
             "reward_forward_velocity": forward_velocity_reward,
             "reward_total": reward,

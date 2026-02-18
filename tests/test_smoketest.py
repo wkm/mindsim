@@ -349,14 +349,14 @@ class TestBipedEnvironment:
         env.close()
 
     def test_biped_rewards_present(self):
-        """Biped config should produce upright/alive/energy rewards."""
+        """Biped config should produce upright/alive/smoothness rewards."""
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         env.reset()
         _, _, _, _, info = env.step([0.0] * 6)
         assert "reward_upright" in info
         assert "reward_alive" in info
-        assert "reward_energy" in info
+        assert "reward_smoothness" in info
         env.close()
 
 

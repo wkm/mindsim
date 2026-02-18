@@ -65,7 +65,7 @@ class EnvConfig:
     # Biped-specific reward shaping (all 0.0 = disabled for wheeler)
     upright_reward_scale: float = 0.0
     alive_bonus: float = 0.0
-    energy_penalty_scale: float = 0.0
+    action_smoothness_scale: float = 0.0
     ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
     forward_velocity_reward_scale: float = 0.0  # Reward forward movement (walking stage)
 
@@ -244,7 +244,7 @@ class Config:
                 max_target_distance=1.5,  # Closer targets initially
                 # Biped rewards
                 alive_bonus=0.1,
-                energy_penalty_scale=0.001,
+                action_smoothness_scale=0.1,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,  # Small per-step cost for efficiency
                 upright_reward_scale=0.5,  # Reward staying upright
@@ -301,7 +301,7 @@ class Config:
                 has_walking_stage=True,
                 # Same reward structure as biped
                 alive_bonus=0.1,
-                energy_penalty_scale=0.001,
+                action_smoothness_scale=0.1,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,
                 upright_reward_scale=0.5,
@@ -349,7 +349,7 @@ class Config:
                 walking_success_min_forward=0.0,  # Smoketest: no forward requirement
                 has_walking_stage=True,
                 alive_bonus=0.1,
-                energy_penalty_scale=0.001,
+                action_smoothness_scale=0.1,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,
                 upright_reward_scale=0.5,
@@ -393,7 +393,7 @@ class Config:
                 control_frequency_hz=125,
                 mujoco_steps_per_action=4,
                 alive_bonus=0.1,
-                energy_penalty_scale=0.001,
+                action_smoothness_scale=0.1,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,
                 upright_reward_scale=0.5,
