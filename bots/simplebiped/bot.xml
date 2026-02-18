@@ -1,80 +1,94 @@
 <?xml version='1.0' encoding='utf-8'?>
-<mujoco model="SimpleBiped">
-  <compiler angle="radian" />
+<!-- Duck Biped v3: position-controlled joints for passive standing stability
+     Design: low CoM, wide stance, short stocky legs, ellipsoid feet
+     Philosophy: position actuators provide "stiff tendons" that hold the robot
+     upright passively. The RL policy outputs target joint angles, not raw torques.
+     This dramatically simplifies the learning problem (don't need to learn balance
+     before learning to walk). -->
+<mujoco model="DuckBiped">
+  <compiler angle="radian" inertiafromgeom="true" />
 
   <default>
-    <joint limited="true" damping="2.0" armature="0.01" />
-    <geom contype="1" conaffinity="1" condim="3" />
+    <joint limited="true" damping="1.0" armature="0.01" />
+    <geom contype="1" conaffinity="1" condim="3" density="1000"
+          friction="0.8 0.1 0.1" />
     <position ctrlrange="-1 1" kp="100" />
   </default>
 
   <worldbody>
-    <body name="base" pos="0 0 0.40">
+    <!--
+      Leg geometry: feet rest ON floor at z=0.
+      Base z=0.22 → hip z=0.17 → knee z=0.09 → ankle z=0.03
+      Foot box at pos=(0,-0.01,-0.015), size=(0.05,0.06,0.015)
+      Foot bottom at z = 0.03 - 0.015 - 0.015 = 0.00 (on floor)
+      Foot contact area: 10cm wide (X) x 12cm long (Y) per foot
+      Support polygon: ~38cm wide (hips at ±14cm + foot half-width 5cm)
+    -->
+    <body name="base" pos="0 0 0.22">
       <freejoint name="root" />
-      <inertial pos="0 0 0" mass="12.0"
-                fullinertia="0.06 0.06 0.04 0 0 0" />
-      <geom name="torso" type="ellipsoid" size="0.14 0.12 0.10"
-            rgba="0.9 0.7 0.3 1.0" />
+      <!-- Wide, flat, heavy egg body (duck proportions) -->
+      <geom name="torso" type="ellipsoid" size="0.16 0.14 0.08"
+            rgba="0.9 0.7 0.3 1.0" mass="10.0" />
 
       <!-- IMU site for sensors -->
       <site name="imu" pos="0 0 0" />
 
-      <!-- Forward-facing camera (looks in -Y = forward, matches wheeler convention) -->
+      <!-- Forward-facing camera (looks in -Y = forward) -->
       <camera name="camera_1_cam" fovy="90.0"
-              pos="0 -0.13 0.06" euler="-1.5707963 0 3.14159265" />
+              pos="0 -0.15 0.04" euler="-1.5707963 0 3.14159265" />
 
-      <!-- Left leg (robot's left = -X when facing -Y) -->
-      <body name="left_upper_leg" pos="-0.12 0 -0.08">
-        <inertial pos="0 0 -0.06" mass="1.5"
-                  fullinertia="0.01 0.01 0.002 0 0 0" />
+      <!-- === LEFT LEG === -->
+      <body name="left_upper_leg" pos="-0.14 0 -0.05">
+        <joint name="left_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.4 0.4" damping="0.5" />
         <joint name="left_hip" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.5708 0.7854" damping="5.0" />
-        <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.12"
-              size="0.045" rgba="0.85 0.65 0.25 1.0" />
+               pos="0 0 0" range="-1.0 0.5" damping="1.5" />
+        <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.08"
+              size="0.04" rgba="0.85 0.65 0.25 1.0" />
 
-        <body name="left_lower_leg" pos="0 0 -0.12">
-          <inertial pos="0 0 -0.05" mass="1.0"
-                    fullinertia="0.008 0.008 0.001 0 0 0" />
+        <body name="left_lower_leg" pos="0 0 -0.08">
           <joint name="left_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 1.5708" damping="2.2" />
-          <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.10"
-                size="0.04" rgba="0.85 0.65 0.25 1.0" />
+                 pos="0 0 0" range="0 1.2" damping="0.8" />
+          <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.06"
+                size="0.035" rgba="0.85 0.65 0.25 1.0" />
 
-          <body name="left_foot" pos="0 0 -0.10">
-            <inertial pos="0 -0.03 -0.015" mass="0.4"
-                      fullinertia="0.001 0.001 0.001 0 0 0" />
+          <body name="left_foot" pos="0 0 -0.06">
             <joint name="left_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.7854 0.7854" damping="0.35" />
-            <geom name="left_foot" type="box" size="0.06 0.10 0.02"
-                  pos="0 -0.02 -0.015" rgba="1.0 0.6 0.1 1.0" friction="1.0 0.5 0.1" />
+                   pos="0 0 0" range="-0.4 0.4" damping="0.3" />
+            <!-- Box foot: flat bottom for area contact, provides lateral stability -->
+            <geom name="left_foot" type="box"
+                  size="0.05 0.06 0.015"
+                  pos="0 -0.01 -0.015"
+                  rgba="1.0 0.6 0.1 1.0"
+                  friction="1.2 0.3 0.1" mass="0.4" />
           </body>
         </body>
       </body>
 
-      <!-- Right leg (robot's right = +X when facing -Y) -->
-      <body name="right_upper_leg" pos="0.12 0 -0.08">
-        <inertial pos="0 0 -0.06" mass="1.5"
-                  fullinertia="0.01 0.01 0.002 0 0 0" />
+      <!-- === RIGHT LEG === -->
+      <body name="right_upper_leg" pos="0.14 0 -0.05">
+        <joint name="right_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.4 0.4" damping="0.5" />
         <joint name="right_hip" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.5708 0.7854" damping="5.0" />
-        <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.12"
-              size="0.045" rgba="0.85 0.65 0.25 1.0" />
+               pos="0 0 0" range="-1.0 0.5" damping="1.5" />
+        <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.08"
+              size="0.04" rgba="0.85 0.65 0.25 1.0" />
 
-        <body name="right_lower_leg" pos="0 0 -0.12">
-          <inertial pos="0 0 -0.05" mass="1.0"
-                    fullinertia="0.008 0.008 0.001 0 0 0" />
+        <body name="right_lower_leg" pos="0 0 -0.08">
           <joint name="right_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 1.5708" damping="2.2" />
-          <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.10"
-                size="0.04" rgba="0.85 0.65 0.25 1.0" />
+                 pos="0 0 0" range="0 1.2" damping="0.8" />
+          <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.06"
+                size="0.035" rgba="0.85 0.65 0.25 1.0" />
 
-          <body name="right_foot" pos="0 0 -0.10">
-            <inertial pos="0 -0.03 -0.015" mass="0.4"
-                      fullinertia="0.001 0.001 0.001 0 0 0" />
+          <body name="right_foot" pos="0 0 -0.06">
             <joint name="right_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.7854 0.7854" damping="0.35" />
-            <geom name="right_foot" type="box" size="0.06 0.10 0.02"
-                  pos="0 -0.02 -0.015" rgba="1.0 0.6 0.1 1.0" friction="1.0 0.5 0.1" />
+                   pos="0 0 0" range="-0.4 0.4" damping="0.3" />
+            <!-- Box foot: flat bottom for area contact, provides lateral stability -->
+            <geom name="right_foot" type="box"
+                  size="0.05 0.06 0.015"
+                  pos="0 -0.01 -0.015"
+                  rgba="1.0 0.6 0.1 1.0"
+                  friction="1.2 0.3 0.1" mass="0.4" />
           </body>
         </body>
       </body>
@@ -82,42 +96,44 @@
   </worldbody>
 
   <contact>
-    <!-- Exclude adjacent body pairs -->
     <exclude body1="base" body2="left_upper_leg" />
     <exclude body1="base" body2="right_upper_leg" />
     <exclude body1="left_upper_leg" body2="left_lower_leg" />
     <exclude body1="left_lower_leg" body2="left_foot" />
     <exclude body1="right_upper_leg" body2="right_lower_leg" />
     <exclude body1="right_lower_leg" body2="right_foot" />
-    <!-- Exclude left/right upper legs from colliding -->
     <exclude body1="left_upper_leg" body2="right_upper_leg" />
   </contact>
 
   <actuator>
+    <!-- Position actuators: ctrl=0 holds joints at default angle (standing) -->
+    <position name="left_hip_abd_motor" joint="left_hip_abd" kp="60" />
     <position name="left_hip_motor" joint="left_hip" />
     <position name="left_knee_motor" joint="left_knee" />
-    <position name="left_ankle_motor" joint="left_ankle" kp="50" />
+    <position name="left_ankle_motor" joint="left_ankle" kp="80" />
+    <position name="right_hip_abd_motor" joint="right_hip_abd" kp="60" />
     <position name="right_hip_motor" joint="right_hip" />
     <position name="right_knee_motor" joint="right_knee" />
-    <position name="right_ankle_motor" joint="right_ankle" kp="50" />
+    <position name="right_ankle_motor" joint="right_ankle" kp="80" />
   </actuator>
 
   <sensor>
-    <!-- Joint position sensors -->
+    <jointpos name="left_hip_abd_pos" joint="left_hip_abd" />
     <jointpos name="left_hip_pos" joint="left_hip" />
     <jointpos name="left_knee_pos" joint="left_knee" />
     <jointpos name="left_ankle_pos" joint="left_ankle" />
+    <jointpos name="right_hip_abd_pos" joint="right_hip_abd" />
     <jointpos name="right_hip_pos" joint="right_hip" />
     <jointpos name="right_knee_pos" joint="right_knee" />
     <jointpos name="right_ankle_pos" joint="right_ankle" />
-    <!-- Joint velocity sensors -->
+    <jointvel name="left_hip_abd_vel" joint="left_hip_abd" />
     <jointvel name="left_hip_vel" joint="left_hip" />
     <jointvel name="left_knee_vel" joint="left_knee" />
     <jointvel name="left_ankle_vel" joint="left_ankle" />
+    <jointvel name="right_hip_abd_vel" joint="right_hip_abd" />
     <jointvel name="right_hip_vel" joint="right_hip" />
     <jointvel name="right_knee_vel" joint="right_knee" />
     <jointvel name="right_ankle_vel" joint="right_ankle" />
-    <!-- IMU sensors -->
     <gyro name="torso_gyro" site="imu" />
     <accelerometer name="torso_accel" site="imu" />
   </sensor>

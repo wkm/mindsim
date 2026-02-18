@@ -12,6 +12,7 @@ Tracking experimental branches and their outcomes.
 | `exp/biped-walker-parity` | Aligning biped physics with the Walker2d paradigm will improve walking behavior | In progress | - |
 | `exp/modal-remote` | GCP spot VMs with Docker can provide cost-effective remote training infrastructure | In progress | - |
 | `exp/reinforce-v2` | Entropy coefficient annealing + episode length annealing will prevent early std collapse and reduce gradient variance in REINFORCE | In progress | - |
+| `exp/duck-biped-stability` | Duck-proportioned biped (low CoM, wide stance, short legs, box feet, position actuators) with quantitative stability measurement framework. Hypothesis: a passively stable body design will be dramatically easier to train for walking. | In progress — standing=1.0, impulse=1.0, mobility=0.1, overall=0.73 | - |
 | `exp/duck-waddle-body` | Alternative body morphology for biped locomotion | Abandoned (no unique changes) | - |
 | `exp/increase-variance-diversity` | Increasing exploration variance/diversity improves sample efficiency | Abandoned (no unique changes) | - |
 | `exp/ppo-architecture-baseline` | PPO architecture comparison baseline | Abandoned (no unique changes) | - |
