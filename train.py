@@ -58,7 +58,7 @@ def verify_forward_direction(env, log_fn=print):
     1. Geometry: forward_velocity_axis points toward walking_target_pos
     2. Physics: applying a world-frame force in the forward direction produces
        positive forward displacement and decreasing distance to target
-    3. Velocity: get_bot_velocity() correctly reports the direction of movement
+    3. Velocity: position-based velocity correctly reports the direction of movement
 
     Raises AssertionError if the forward direction is wrong.
     """
@@ -127,12 +127,10 @@ def verify_forward_direction(env, log_fn=print):
         f"Forward axis may be pointing away from the walking target."
     )
 
-    # Check 3: Verify get_bot_velocity() reports correct direction
-    # Use mj_step1 to compute cvel from qvel without integrating.
-    # (mj_forward does NOT update cvel; only mj_step/mj_step1 do.)
+    # Check 3: Verify position-based velocity reports correct direction
+    # Set qvel to move forward, step the physics, and check xpos displacement.
     env.reset()
 
-    # Set root body velocity in the forward direction via qvel
     vel_nudge = 2.0  # m/s
     for j in range(model.njnt):
         if model.jnt_bodyid[j] != base_body_id:
@@ -141,8 +139,6 @@ def verify_forward_direction(env, log_fn=print):
         qvel_adr = model.jnt_dofadr[j]
 
         if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-            # Freejoint qvel: [vx, vy, vz, wx, wy, wz] (linear first!)
-            # Linear velocity is in the LOCAL body frame.
             qpos_adr = model.jnt_qposadr[j]
             quat = data.qpos[qpos_adr + 3:qpos_adr + 7].copy()
             quat_conj = np.array([quat[0], -quat[1], -quat[2], -quat[3]])
@@ -157,19 +153,22 @@ def verify_forward_direction(env, log_fn=print):
             if abs(proj) > 0.1:
                 data.qvel[qvel_adr] = vel_nudge * proj
 
-    # mj_step1 computes velocity-dependent quantities (cvel) without integration
-    mujoco.mj_step1(model, data)
-
-    vel = env.env.get_bot_velocity()
+    pos_before = env.env.get_bot_position().copy()
+    n_steps = 10
+    for _ in range(n_steps):
+        mujoco.mj_step(model, data)
+    pos_after = env.env.get_bot_position()
+    dt = n_steps * model.opt.timestep
+    vel = (pos_after - pos_before) / dt
     forward_vel = float(np.dot(vel, fwd_axis))
 
     log_fn(f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
            f"(vel={[f'{v:.3f}' for v in vel]})")
 
     assert forward_vel > 0.5, (
-        f"get_bot_velocity() dot forward_axis is too small ({forward_vel:.3f})! "
+        f"Position-based forward velocity is too small ({forward_vel:.3f})! "
         f"Expected ~{vel_nudge:.1f}. vel={vel.tolist()}, axis={fwd_axis.tolist()}. "
-        f"Either cvel convention is wrong or the forward axis doesn't match the joints."
+        f"Forward axis may not match the root joint axes."
     )
 
     log_fn("  Forward direction: OK")
