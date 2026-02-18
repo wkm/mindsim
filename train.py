@@ -29,6 +29,16 @@ from config import Config
 from dashboard import AnsiDashboard, TuiDashboard
 from parallel import ParallelCollector, resolve_num_workers
 from rerun_wandb import RerunWandbLogger
+from run_manager import (
+    RunInfo,
+    bot_display_name,
+    bot_name_from_scene_path,
+    create_run_dir,
+    generate_run_name,
+    init_wandb_for_run,
+    save_run_info,
+    _get_git_sha as _get_git_sha_rm,
+)
 from training_env import TrainingEnv
 from tweaks import apply_tweaks, load_tweaks
 
@@ -1545,53 +1555,56 @@ def _train_loop(
     is_tui = app is not None
     _verbose = (lambda msg: None) if is_tui else log_fn
 
-    if "walker2d" in cfg.env.scene_path:
-        robot_name = "Walker2d"
-    elif "biped" in cfg.env.scene_path:
-        robot_name = "Biped"
-    else:
-        robot_name = "2-Wheeler"
+    bot_name = bot_name_from_scene_path(cfg.env.scene_path)
+    robot_name = bot_display_name(bot_name)
     log.info("Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest)
     log.info("Config: %s", cfg.to_wandb_config())
     _verbose("=" * 60)
     _verbose(f"Training {robot_name} ({cfg.training.algorithm})")
     _verbose("=" * 60)
+    log_fn(f"Setting up {robot_name} ({cfg.training.algorithm})...")
+
+    # Generate run name and create run directory
+    run_name = generate_run_name(bot_name, cfg.policy.policy_type)
+    run_dir = create_run_dir(run_name)
+    log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
     if smoketest:
         run_notes = None
     else:
-        _verbose("Generating run notes...")
+        log_fn("Generating run notes...")
         run_notes = generate_run_notes()
         if run_notes:
             _verbose(run_notes)
 
-    # Initialize wandb early so the run URL and summary are available
-    run_name = (
-        f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
-    )
-    wandb_mode = "disabled" if smoketest else "online"
-    if "walker2d" in cfg.env.scene_path:
-        wandb_project = "mindsim-walker2d"
-    elif "biped" in cfg.env.scene_path:
-        wandb_project = "mindsim-biped"
-    else:
-        wandb_project = "mindsim-2wheeler"
-    wandb.init(
-        project=wandb_project,
-        name=run_name,
-        notes=run_notes,
-        mode=wandb_mode,
-        config=cfg.to_wandb_config(),
-    )
-    # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
-    wandb.define_metric("batch")
-    wandb.define_metric("*", step_metric="batch")
+    # Initialize W&B (single project 'mindsim', tags for filtering)
+    log_fn("Connecting to W&B...")
+    init_wandb_for_run(run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes)
 
     wandb_url = None
     if not smoketest and wandb.run:
         wandb_url = wandb.run.url
+        log_fn(f"W&B: {wandb_url}")
         _verbose(f"  W&B run: {wandb_url}")
+
+    # Write initial run_info.json
+    run_info = RunInfo(
+        name=run_name,
+        bot_name=bot_name,
+        policy_type=cfg.policy.policy_type,
+        algorithm=cfg.training.algorithm,
+        scene_path=cfg.env.scene_path,
+        status="running",
+        wandb_id=wandb.run.id if wandb.run else None,
+        wandb_url=wandb_url,
+        git_branch=_get_git_branch(),
+        git_sha=_get_git_sha_rm(),
+        created_at=datetime.now().isoformat(),
+        tags=[bot_name, cfg.training.algorithm, cfg.policy.policy_type],
+    )
+    save_run_info(run_dir, run_info)
+    _verbose(f"  Run directory: {run_dir}/")
 
     # Push run metadata to TUI header
     if app is not None:
@@ -1605,7 +1618,7 @@ def _train_loop(
         )
 
     # Create environment from config
-    _verbose("Creating environment...")
+    log_fn("Creating environment...")
     env = TrainingEnv.from_config(cfg.env)
     _verbose(f"  Observation shape: {env.observation_shape}")
     _verbose(f"  Action shape: {env.action_shape}")
@@ -1710,7 +1723,7 @@ def _train_loop(
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
     if not smoketest:
-        rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+        rr_wandb = RerunWandbLogger(run_dir=str(run_dir))
         _verbose(f"  Rerun recordings: {rr_wandb.run_dir}/")
 
     # Set up parallel episode collection
@@ -2166,6 +2179,7 @@ def _train_loop(
                 episode_count,
                 trigger=trigger,
                 aliases=aliases,
+                run_dir=run_dir,
             )
         elif (
             cfg.training.checkpoint_every
@@ -2181,6 +2195,7 @@ def _train_loop(
                 batch_idx,
                 episode_count,
                 trigger="periodic",
+                run_dir=run_dir,
             )
 
     dashboard.finish()
@@ -2222,6 +2237,14 @@ def _train_loop(
         _verbose(
             f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms"
         )
+
+    # Update run_info with final state
+    run_info.status = "completed"
+    run_info.finished_at = datetime.now().isoformat()
+    run_info.batch_idx = batch_idx
+    run_info.episode_count = episode_count
+    run_info.curriculum_stage = curriculum_stage
+    save_run_info(run_dir, run_info)
 
     # Clean up
     if collector is not None:
@@ -2321,12 +2344,7 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     if scene_path:
         cfg.env.scene_path = scene_path
 
-    if "walker2d" in cfg.env.scene_path:
-        robot_name_cli = "Walker2d"
-    elif "biped" in cfg.env.scene_path:
-        robot_name_cli = "Biped"
-    else:
-        robot_name_cli = "2-Wheeler"
+    robot_name_cli = bot_display_name(bot_name_from_scene_path(cfg.env.scene_path))
     dashboard = AnsiDashboard(
         total_batches=cfg.training.max_batches,
         algorithm=cfg.training.algorithm,
