@@ -142,14 +142,6 @@ def discover_local_runs() -> list[tuple[Path, RunInfo]]:
     return results
 
 
-def discover_legacy_checkpoints() -> list[Path]:
-    """Scan old checkpoints/*.pt for backward compatibility."""
-    ckpt_dir = Path("checkpoints")
-    if not ckpt_dir.is_dir():
-        return []
-    return sorted(ckpt_dir.glob("*.pt"), key=os.path.getmtime, reverse=True)
-
-
 def discover_wandb_runs(limit: int = 50) -> list[dict]:
     """Query W&B API for recent runs. Best-effort, returns empty on failure."""
     try:

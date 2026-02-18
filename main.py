@@ -48,7 +48,6 @@ from textual.widgets import (
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
 from run_manager import (
     bot_display_name,
-    discover_legacy_checkpoints,
     discover_local_runs,
 )
 
@@ -320,7 +319,7 @@ class BotSelectorScreen(Screen):
 
 
 class RunBrowserScreen(Screen):
-    """Browse local runs and legacy checkpoints."""
+    """Browse local runs."""
 
     BINDINGS = [
         Binding("escape", "go_back", "Back", priority=True),
@@ -359,14 +358,12 @@ class RunBrowserScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._runs = discover_local_runs()
-        self._legacy = discover_legacy_checkpoints()
-        self._items: list[dict] = []  # maps list index -> run/legacy info
+        self._items: list[dict] = []  # maps list index -> run info
 
     def compose(self) -> ComposeResult:
         with Vertical(id="browser-box"):
             yield Static("Browse Runs", id="browser-title")
             items = []
-            # Local runs
             for run_dir, info in self._runs:
                 date_str = info.created_at[:10] if info.created_at else "?"
                 display_name = bot_display_name(info.bot_name)
@@ -377,11 +374,6 @@ class RunBrowserScreen(Screen):
                 label = f"[{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
                 items.append(label)
                 self._items.append({"type": "run", "dir": run_dir, "info": info})
-            # Legacy checkpoints
-            for ckpt_path in self._legacy[:10]:  # Limit to 10
-                label = f"    [legacy] {ckpt_path.name}"
-                items.append(label)
-                self._items.append({"type": "legacy", "path": ckpt_path})
             if items:
                 yield OptionList(*items, id="run-list")
             else:
@@ -401,9 +393,6 @@ class RunBrowserScreen(Screen):
                     self.app.push_screen(
                         RunActionScreen(run_dir=item["dir"], run_info=item["info"])
                     )
-                elif item["type"] == "legacy":
-                    # For legacy checkpoints, go straight to play
-                    self.app.start_playing_run(checkpoint_path=str(item["path"]))
         except (IndexError, ValueError):
             pass
 

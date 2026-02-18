@@ -139,7 +139,6 @@ Each training run gets its own directory under `runs/<run_name>/`:
 - **Bot abbreviations**: `simple2wheeler` -> `s2w`, `simplebiped` -> `biped`, `walker2d` -> `w2d`
 - **Metadata**: `run_info.json` tracks status (running/completed/failed), bot, algorithm, W&B link, batch count, etc.
 - **W&B**: All runs go to a single `mindsim` project, with tags for bot/algorithm/policy filtering.
-- **Backward compat**: `resolve_resume_ref("latest")` searches `runs/*/checkpoints/` first, then legacy `checkpoints/`. Old checkpoints keep working.
 
 ## TUI
 
