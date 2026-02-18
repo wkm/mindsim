@@ -265,8 +265,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=256,
-                fc_output_size=6,  # 6 joint motors
-                sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
+                fc_output_size=8,  # 8 joint motors (hip_abd + hip + knee + ankle × 2)
+                sensor_input_size=22,  # 8 pos + 8 vel + 3 gyro + 3 accel
                 init_std=1.0,  # Wide exploration
             ),
             training=TrainingConfig(
@@ -414,8 +414,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=32,
-                fc_output_size=6,
-                sensor_input_size=18,
+                fc_output_size=8,  # 8 joint motors
+                sensor_input_size=22,  # 8 pos + 8 vel + 3 gyro + 3 accel
             ),
             training=TrainingConfig(
                 batch_size=2,

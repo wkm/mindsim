@@ -331,16 +331,16 @@ class TestBipedEnvironment:
     def test_actuator_count(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
-        assert env.num_actuators == 6
-        assert len(env.actuator_names) == 6
-        assert env.action_shape == (6,)
+        assert env.num_actuators == 8
+        assert len(env.actuator_names) == 8
+        assert env.action_shape == (8,)
         env.close()
 
-    def test_step_with_six_actions(self):
+    def test_step_with_eight_actions(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         env.reset()
-        action = [0.0] * 6
+        action = [0.0] * 8
         obs, reward, done, truncated, info = env.step(action)
         assert obs.shape == (64, 64, 3)
         assert isinstance(reward, float)
@@ -353,7 +353,7 @@ class TestBipedEnvironment:
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         env.reset()
-        _, _, _, _, info = env.step([0.0] * 6)
+        _, _, _, _, info = env.step([0.0] * 8)
         assert "reward_upright" in info
         assert "reward_alive" in info
         assert "reward_smoothness" in info
@@ -409,14 +409,14 @@ class TestBipedEpisodeCollection:
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
 
         data = collect_episode(env, policy, deterministic=False)
         assert len(data["observations"]) > 0
         assert len(data["actions"]) == len(data["observations"])
-        # Each action should be 6-dimensional
-        assert data["actions"][0].shape == (6,)
+        # Each action should be 8-dimensional
+        assert data["actions"][0].shape == (8,)
         assert isinstance(data["total_reward"], float)
         env.close()
 
@@ -424,11 +424,11 @@ class TestBipedEpisodeCollection:
 class TestBipedTrainingStep:
     """Test training step with biped episodes."""
 
-    def test_train_step_six_actions(self):
+    def test_train_step_eight_actions(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
 
@@ -439,7 +439,7 @@ class TestBipedTrainingStep:
         assert isinstance(loss, float)
         assert not np.isnan(loss)
         assert grad_norm >= 0
-        assert len(policy_std) == 6
+        assert len(policy_std) == 8
         assert entropy > 0
         env.close()
 

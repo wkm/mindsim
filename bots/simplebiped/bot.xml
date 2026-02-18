@@ -23,6 +23,8 @@
 
       <!-- Left leg (robot's left = -X when facing -Y) -->
       <body name="left_upper_leg" pos="-0.12 0 -0.08">
+        <joint name="left_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.5 0.5" />
         <joint name="left_hip" type="hinge" axis="1 0 0"
                pos="0 0 0" range="-1.5708 0.7854" />
         <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.12"
@@ -45,6 +47,8 @@
 
       <!-- Right leg (robot's right = +X when facing -Y) -->
       <body name="right_upper_leg" pos="0.12 0 -0.08">
+        <joint name="right_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.5 0.5" />
         <joint name="right_hip" type="hinge" axis="1 0 0"
                pos="0 0 0" range="-1.5708 0.7854" />
         <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.12"
@@ -81,12 +85,16 @@
 
   <actuator>
     <!-- Torque motors (matching Walker2d control paradigm) -->
+    <motor name="left_hip_abd_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="left_hip_abd" />
     <motor name="left_hip_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
            gear="100" joint="left_hip" />
     <motor name="left_knee_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
            gear="100" joint="left_knee" />
     <motor name="left_ankle_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
            gear="100" joint="left_ankle" />
+    <motor name="right_hip_abd_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
+           gear="100" joint="right_hip_abd" />
     <motor name="right_hip_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
            gear="100" joint="right_hip" />
     <motor name="right_knee_motor" ctrllimited="true" ctrlrange="-1.0 1.0"
@@ -97,16 +105,20 @@
 
   <sensor>
     <!-- Joint position sensors -->
+    <jointpos name="left_hip_abd_pos" joint="left_hip_abd" />
     <jointpos name="left_hip_pos" joint="left_hip" />
     <jointpos name="left_knee_pos" joint="left_knee" />
     <jointpos name="left_ankle_pos" joint="left_ankle" />
+    <jointpos name="right_hip_abd_pos" joint="right_hip_abd" />
     <jointpos name="right_hip_pos" joint="right_hip" />
     <jointpos name="right_knee_pos" joint="right_knee" />
     <jointpos name="right_ankle_pos" joint="right_ankle" />
     <!-- Joint velocity sensors -->
+    <jointvel name="left_hip_abd_vel" joint="left_hip_abd" />
     <jointvel name="left_hip_vel" joint="left_hip" />
     <jointvel name="left_knee_vel" joint="left_knee" />
     <jointvel name="left_ankle_vel" joint="left_ankle" />
+    <jointvel name="right_hip_abd_vel" joint="right_hip_abd" />
     <jointvel name="right_hip_vel" joint="right_hip" />
     <jointvel name="right_knee_vel" joint="right_knee" />
     <jointvel name="right_ankle_vel" joint="right_ankle" />
