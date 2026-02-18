@@ -752,7 +752,7 @@ class TestCheckpoint:
             assert len(w) == 1
             assert "learning_rate" in str(w[0].message)
 
-    def test_save_checkpoint_creates_file(self, tmp_path, monkeypatch):
+    def test_save_checkpoint_creates_file(self, tmp_path):
         """save_checkpoint should create a local .pt file."""
         cfg = _smoketest_config()
         policy = LSTMPolicy(
@@ -764,9 +764,6 @@ class TestCheckpoint:
 
         wandb.init(mode="disabled")
 
-        # Use tmp_path as working directory so checkpoints/ goes there
-        monkeypatch.chdir(tmp_path)
-
         path = save_checkpoint(
             policy,
             optimizer,
@@ -777,6 +774,7 @@ class TestCheckpoint:
             batch_idx=10,
             episode_count=100,
             trigger="periodic",
+            run_dir=tmp_path,
         )
         assert os.path.isfile(path)
 

@@ -20,9 +20,7 @@ def resolve_resume_ref(ref: str) -> str:
     """
     Resolve a resume reference to an actual path or artifact ref.
 
-    Search order for "latest":
-      1. runs/*/checkpoints/*.pt (newest by mtime)
-      2. checkpoints/*.pt (legacy, newest by mtime)
+    For "latest": searches runs/*/checkpoints/*.pt (newest by mtime).
 
     Also accepts a run name (e.g. "s2w-lstm-0218-1045") and looks in that
     run's checkpoints dir for the latest .pt file.
@@ -36,18 +34,13 @@ def resolve_resume_ref(ref: str) -> str:
     runs_dir = Path("runs")
 
     if ref == "latest":
-        # Search runs/*/checkpoints/*.pt first
         all_pts: list[Path] = []
         if runs_dir.is_dir():
             all_pts.extend(runs_dir.glob("*/checkpoints/*.pt"))
-        # Then legacy checkpoints/
-        legacy_dir = Path("checkpoints")
-        if legacy_dir.is_dir():
-            all_pts.extend(legacy_dir.glob("*.pt"))
 
         if not all_pts:
             raise FileNotFoundError(
-                "No checkpoint files found in runs/*/checkpoints/ or checkpoints/"
+                "No checkpoint files found in runs/*/checkpoints/"
             )
         # Return newest by modification time
         return str(max(all_pts, key=os.path.getmtime))
@@ -91,11 +84,14 @@ def save_checkpoint(
         episode_count: Total episodes collected so far
         trigger: What triggered the save ("milestone", "periodic", "final")
         aliases: Extra wandb artifact aliases (e.g. ["stage1-mastered"])
-        run_dir: Run directory (saves to run_dir/checkpoints/). Falls back to checkpoints/.
+        run_dir: Run directory (saves to run_dir/checkpoints/). Required.
 
     Returns:
         Local path to the saved checkpoint file
     """
+    if run_dir is None:
+        raise ValueError("run_dir is required for save_checkpoint")
+
     run = wandb.run
     run_name = run.name if run else "offline"
     run_id = run.id if run else "offline"
@@ -116,11 +112,7 @@ def save_checkpoint(
         "git_sha": get_git_sha(),
     }
 
-    # Save locally — prefer run_dir/checkpoints/, fall back to checkpoints/
-    if run_dir is not None:
-        ckpt_dir = run_dir / "checkpoints"
-    else:
-        ckpt_dir = Path("checkpoints")
+    ckpt_dir = run_dir / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{run_name}_stage{curriculum_stage}_batch{batch_idx}.pt"
     local_path = ckpt_dir / filename
