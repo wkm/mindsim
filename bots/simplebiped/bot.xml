@@ -9,10 +9,10 @@
   <compiler angle="radian" inertiafromgeom="true" />
 
   <default>
-    <joint limited="true" damping="1.0" armature="0.01" />
+    <joint limited="true" damping="2.0" armature="0.01" />
     <geom contype="1" conaffinity="1" condim="3" density="1000"
           friction="0.8 0.1 0.1" />
-    <position ctrlrange="-1 1" kp="100" />
+    <position ctrlrange="-1 1" kp="40" />
   </default>
 
   <worldbody>
@@ -40,21 +40,21 @@
       <!-- === LEFT LEG === -->
       <body name="left_upper_leg" pos="-0.14 0 -0.05">
         <joint name="left_hip_abd" type="hinge" axis="0 1 0"
-               pos="0 0 0" range="-0.4 0.4" damping="0.5" />
+               pos="0 0 0" range="-0.4 0.4" damping="1.0" />
         <joint name="left_hip" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.0 0.5" damping="1.5" />
+               pos="0 0 0" range="-1.0 0.5" damping="3.0" />
         <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.08"
               size="0.04" rgba="0.85 0.65 0.25 1.0" />
 
         <body name="left_lower_leg" pos="0 0 -0.08">
           <joint name="left_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 1.2" damping="0.8" />
+                 pos="0 0 0" range="0 1.2" damping="2.0" />
           <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.06"
                 size="0.035" rgba="0.85 0.65 0.25 1.0" />
 
           <body name="left_foot" pos="0 0 -0.06">
             <joint name="left_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.4 0.4" damping="0.3" />
+                   pos="0 0 0" range="-0.4 0.4" damping="0.8" />
             <!-- Box foot: flat bottom for area contact, provides lateral stability -->
             <geom name="left_foot" type="box"
                   size="0.05 0.06 0.015"
@@ -68,21 +68,21 @@
       <!-- === RIGHT LEG === -->
       <body name="right_upper_leg" pos="0.14 0 -0.05">
         <joint name="right_hip_abd" type="hinge" axis="0 1 0"
-               pos="0 0 0" range="-0.4 0.4" damping="0.5" />
+               pos="0 0 0" range="-0.4 0.4" damping="1.0" />
         <joint name="right_hip" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.0 0.5" damping="1.5" />
+               pos="0 0 0" range="-1.0 0.5" damping="3.0" />
         <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.08"
               size="0.04" rgba="0.85 0.65 0.25 1.0" />
 
         <body name="right_lower_leg" pos="0 0 -0.08">
           <joint name="right_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 1.2" damping="0.8" />
+                 pos="0 0 0" range="0 1.2" damping="2.0" />
           <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.06"
                 size="0.035" rgba="0.85 0.65 0.25 1.0" />
 
           <body name="right_foot" pos="0 0 -0.06">
             <joint name="right_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.4 0.4" damping="0.3" />
+                   pos="0 0 0" range="-0.4 0.4" damping="0.8" />
             <!-- Box foot: flat bottom for area contact, provides lateral stability -->
             <geom name="right_foot" type="box"
                   size="0.05 0.06 0.015"
@@ -106,15 +106,16 @@
   </contact>
 
   <actuator>
-    <!-- Position actuators: ctrl=0 holds joints at default angle (standing) -->
-    <position name="left_hip_abd_motor" joint="left_hip_abd" kp="60" />
+    <!-- Position actuators: ctrl=0 holds joints at default angle (standing)
+         kp=40 default, reduced from 100 to match smaller/lighter duck body -->
+    <position name="left_hip_abd_motor" joint="left_hip_abd" kp="25" />
     <position name="left_hip_motor" joint="left_hip" />
     <position name="left_knee_motor" joint="left_knee" />
-    <position name="left_ankle_motor" joint="left_ankle" kp="80" />
-    <position name="right_hip_abd_motor" joint="right_hip_abd" kp="60" />
+    <position name="left_ankle_motor" joint="left_ankle" kp="30" />
+    <position name="right_hip_abd_motor" joint="right_hip_abd" kp="25" />
     <position name="right_hip_motor" joint="right_hip" />
     <position name="right_knee_motor" joint="right_knee" />
-    <position name="right_ankle_motor" joint="right_ankle" kp="80" />
+    <position name="right_ankle_motor" joint="right_ankle" kp="30" />
   </actuator>
 
   <sensor>
