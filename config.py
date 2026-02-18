@@ -234,7 +234,7 @@ class Config:
 
     @classmethod
     def for_biped(cls) -> Config:
-        """Config for the 6-joint biped walking experiment with MLPPolicy."""
+        """Config for the 8-joint duck biped with MLPPolicy (hip_abd + hip + knee + ankle per leg)."""
         return cls(
             env=EnvConfig(
                 scene_path="bots/simplebiped/scene.xml",
@@ -256,7 +256,7 @@ class Config:
                 upright_reward_scale=0.5,  # Reward staying upright
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
                 forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
-                walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.5m tall)
+                walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.3m tall)
                 joint_stagnation_window=375,  # 3 sec at 125Hz — abort frozen episodes
                 has_walking_stage=True,
             ),
@@ -271,8 +271,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=256,
-                fc_output_size=6,  # 6 joint motors
-                sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
+                fc_output_size=8,  # 8 torque motors (hip_abd + hip + knee + ankle per leg)
+                sensor_input_size=22,  # 8 pos + 8 vel + 3 gyro + 3 accel
                 init_std=1.0,  # Wide exploration
             ),
             training=TrainingConfig(
@@ -420,8 +420,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=32,
-                fc_output_size=6,
-                sensor_input_size=18,
+                fc_output_size=8,  # 8 torque motors
+                sensor_input_size=22,  # 8 pos + 8 vel + 3 gyro + 3 accel
             ),
             training=TrainingConfig(
                 batch_size=2,
