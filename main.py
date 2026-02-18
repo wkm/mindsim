@@ -309,7 +309,7 @@ class BotSelectorScreen(Screen):
                 scene_path = self._bots[idx]["scene_path"]
             else:
                 scene_path = self._bots[0]["scene_path"]
-        except Exception:
+        except (IndexError, ValueError):
             scene_path = self._bots[0]["scene_path"]
         self.app.start_training(smoketest=False, scene_path=scene_path)
 
@@ -404,7 +404,7 @@ class RunBrowserScreen(Screen):
                 elif item["type"] == "legacy":
                     # For legacy checkpoints, go straight to play
                     self.app.start_playing_run(checkpoint_path=str(item["path"]))
-        except Exception:
+        except (IndexError, ValueError):
             pass
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:

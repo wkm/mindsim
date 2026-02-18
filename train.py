@@ -12,6 +12,7 @@ import sys
 import time
 from collections import deque
 from datetime import datetime
+from queue import Empty
 
 log = logging.getLogger(__name__)
 
@@ -1434,7 +1435,7 @@ def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
     while not queue.empty():
         try:
             cmd = queue.get_nowait()
-        except Exception:
+        except Empty:
             break
 
         if cmd == "checkpoint":
@@ -1477,7 +1478,7 @@ def _wait_if_paused(queue):
     while not queue.empty():
         try:
             cmd = queue.get_nowait()
-        except Exception:
+        except Empty:
             break
         if cmd == "pause":
             paused = True
@@ -1497,7 +1498,7 @@ def _wait_if_paused(queue):
         while not queue.empty():
             try:
                 cmd = queue.get_nowait()
-            except Exception:
+            except Empty:
                 break
             if cmd == "unpause":
                 paused = False
