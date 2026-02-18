@@ -7,27 +7,13 @@ run produced each checkpoint and which run consumed it.
 """
 
 import os
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
 
 import wandb
-
-
-def _get_git_sha() -> str:
-    """Get short git SHA, or 'unknown' if not in a repo."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return "unknown"
+from git_utils import get_git_sha
 
 
 def resolve_resume_ref(ref: str) -> str:
@@ -127,7 +113,7 @@ def save_checkpoint(
         "run_id": run_id,
         "run_name": run_name,
         "timestamp": datetime.now(UTC).isoformat(),
-        "git_sha": _get_git_sha(),
+        "git_sha": get_git_sha(),
     }
 
     # Save locally — prefer run_dir/checkpoints/, fall back to checkpoints/
