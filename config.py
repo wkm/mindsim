@@ -251,7 +251,7 @@ class Config:
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
                 forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
                 walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.5m tall)
-                joint_stagnation_window=375,  # 3 sec at 125Hz — abort frozen episodes
+                joint_stagnation_window=30,  # ~0.24 sec at 125Hz — match Walker2d
                 has_walking_stage=True,
             ),
             curriculum=CurriculumConfig(

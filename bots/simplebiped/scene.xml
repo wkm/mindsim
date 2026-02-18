@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="SimpleBiped_scene">
-  <option timestep="0.002" />
+  <option timestep="0.002" integrator="RK4" />
   <include file="bot.xml" />
   <statistic extent="5" center="0 0 0" />
   <visual>
