@@ -46,6 +46,11 @@ from textual.widgets import (
 )
 
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
+from run_manager import (
+    bot_display_name,
+    discover_legacy_checkpoints,
+    discover_local_runs,
+)
 
 log = logging.getLogger(__name__)
 
@@ -171,54 +176,106 @@ def _get_experiment_info(branch: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Launcher Screen
+# Main Menu Screen
 # ---------------------------------------------------------------------------
 
 
-class LauncherScreen(Screen):
-    """Mode selection screen shown on startup."""
-
-    _MODE_ITEMS = ["View", "Smoketest", "Train", "Play", "Quit"]
-    _MODE_KEYS = {"v": 0, "s": 1, "t": 2, "p": 3, "q": 4}
+class MainMenuScreen(Screen):
+    """Top-level menu: smoketest, new run, browse runs, quit."""
 
     BINDINGS = [
-        Binding("v", "launch('v')", "View", priority=True),
-        Binding("s", "launch('s')", "Smoketest", priority=True),
-        Binding("t", "launch('t')", "Train", priority=True),
-        Binding("p", "launch('p')", "Play", priority=True),
-        Binding("q", "launch('q')", "Quit", priority=True),
+        Binding("s", "select('smoketest')", "Smoketest", priority=True),
+        Binding("n", "select('new')", "New Run", priority=True),
+        Binding("b", "select('browse')", "Browse Runs", priority=True),
+        Binding("q", "select('quit')", "Quit", priority=True),
+        Binding("escape", "select('quit')", "Quit", show=False, priority=True),
+        Binding("backspace", "select('quit')", "Quit", show=False, priority=True),
     ]
 
     CSS = """
-    LauncherScreen {
+    MainMenuScreen {
         align: center middle;
     }
 
-    #launcher-box {
-        width: 40;
+    #menu-box {
+        width: 50;
         height: auto;
         border: ascii $accent;
-        padding: 0 1;
+        padding: 1 2;
     }
 
-    #launcher-title {
+    #menu-title {
         text-style: bold;
+        text-align: center;
+        margin-bottom: 1;
     }
 
-    .launcher-section {
+    #menu-list {
+        height: auto;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="menu-box"):
+            yield Static("MindSim", id="menu-title")
+            yield OptionList(
+                "[s] Smoketest",
+                "[n] New training run",
+                "[b] Browse runs",
+                "[q] Quit",
+                id="menu-list",
+            )
+        yield Footer()
+
+    def action_select(self, choice: str) -> None:
+        if choice == "smoketest":
+            self.app.start_training(smoketest=True)
+        elif choice == "new":
+            self.app.push_screen(BotSelectorScreen())
+        elif choice == "browse":
+            self.app.push_screen(RunBrowserScreen())
+        elif choice == "quit":
+            self.app.exit()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        choices = ["smoketest", "new", "browse", "quit"]
+        if 0 <= idx < len(choices):
+            self.action_select(choices[idx])
+
+
+# ---------------------------------------------------------------------------
+# Bot Selector Screen
+# ---------------------------------------------------------------------------
+
+
+class BotSelectorScreen(Screen):
+    """Select a bot to start a new training run."""
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+        Binding("enter", "start_run", "Start", priority=True),
+    ]
+
+    CSS = """
+    BotSelectorScreen {
+        align: center middle;
+    }
+
+    #bot-box {
+        width: 50;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #bot-title {
         text-style: bold;
-        color: $accent;
+        margin-bottom: 1;
     }
 
     #bot-selector {
-        height: auto;
-    }
-
-    #stage-selector {
-        height: auto;
-    }
-
-    #mode-list {
         height: auto;
     }
     """
@@ -228,70 +285,238 @@ class LauncherScreen(Screen):
         self._bots = _discover_bots()
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="launcher-box"):
-            yield Static("MindSim", id="launcher-title")
-            yield Static("Bot:", classes="launcher-section")
+        with Vertical(id="bot-box"):
+            yield Static("Select Bot", id="bot-title")
             if self._bots:
                 with RadioSet(id="bot-selector"):
                     for i, bot in enumerate(self._bots):
-                        yield RadioButton(bot["name"], value=(i == 0))
+                        display = bot_display_name(bot["name"])
+                        yield RadioButton(f"{display} ({bot['name']})", value=(i == 0))
             else:
                 yield Static("  No bots found in bots/*/scene.xml")
-            yield Static("Stage:", classes="launcher-section")
-            with RadioSet(id="stage-selector"):
-                yield RadioButton("None", value=True)
-                for s in range(1, 5):
-                    yield RadioButton(str(s))
-            yield Static("Mode:", classes="launcher-section")
-            yield OptionList(*self._MODE_ITEMS, id="mode-list")
         yield Footer()
 
-    def _get_selected_scene(self) -> str | None:
-        """Get scene_path for the selected bot."""
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_start_run(self) -> None:
         if not self._bots:
-            return None
+            return
         try:
             radio_set = self.query_one("#bot-selector", RadioSet)
             idx = radio_set.pressed_index
             if idx >= 0:
-                return self._bots[idx]["scene_path"]
+                scene_path = self._bots[idx]["scene_path"]
+            else:
+                scene_path = self._bots[0]["scene_path"]
+        except Exception:
+            scene_path = self._bots[0]["scene_path"]
+        self.app.start_training(smoketest=False, scene_path=scene_path)
+
+
+# ---------------------------------------------------------------------------
+# Run Browser Screen
+# ---------------------------------------------------------------------------
+
+
+class RunBrowserScreen(Screen):
+    """Browse local runs and legacy checkpoints."""
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+        Binding("enter", "select_run", "Select", priority=True),
+    ]
+
+    CSS = """
+    RunBrowserScreen {
+        align: center middle;
+    }
+
+    #browser-box {
+        width: 80;
+        height: auto;
+        max-height: 30;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #browser-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #run-list {
+        height: auto;
+        max-height: 24;
+    }
+
+    #no-runs {
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._runs = discover_local_runs()
+        self._legacy = discover_legacy_checkpoints()
+        self._items: list[dict] = []  # maps list index -> run/legacy info
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="browser-box"):
+            yield Static("Browse Runs", id="browser-title")
+            items = []
+            # Local runs
+            for run_dir, info in self._runs:
+                date_str = info.created_at[:10] if info.created_at else "?"
+                display_name = bot_display_name(info.bot_name)
+                status_icon = {"running": "*", "completed": "+", "failed": "!"}.get(
+                    info.status, "?"
+                )
+                batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
+                label = f"[{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
+                items.append(label)
+                self._items.append({"type": "run", "dir": run_dir, "info": info})
+            # Legacy checkpoints
+            for ckpt_path in self._legacy[:10]:  # Limit to 10
+                label = f"    [legacy] {ckpt_path.name}"
+                items.append(label)
+                self._items.append({"type": "legacy", "path": ckpt_path})
+            if items:
+                yield OptionList(*items, id="run-list")
+            else:
+                yield Static("  No runs found.", id="no-runs")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_select_run(self) -> None:
+        try:
+            run_list = self.query_one("#run-list", OptionList)
+            idx = run_list.highlighted
+            if idx is not None and 0 <= idx < len(self._items):
+                item = self._items[idx]
+                if item["type"] == "run":
+                    self.app.push_screen(
+                        RunActionScreen(run_dir=item["dir"], run_info=item["info"])
+                    )
+                elif item["type"] == "legacy":
+                    # For legacy checkpoints, go straight to play
+                    self.app.start_playing_run(checkpoint_path=str(item["path"]))
         except Exception:
             pass
-        return self._bots[0]["scene_path"] if self._bots else None
-
-    def _get_selected_stage(self) -> int | None:
-        """Get the selected curriculum stage, or None for 'None'."""
-        try:
-            radio_set = self.query_one("#stage-selector", RadioSet)
-            idx = radio_set.pressed_index
-            if idx <= 0:
-                return None
-            return idx  # 1-4
-        except Exception:
-            return None
-
-    def action_launch(self, key: str) -> None:
-        """Handle keyboard shortcut by selecting the corresponding mode."""
-        idx = self._MODE_KEYS.get(key)
-        if idx is not None:
-            mode_list = self.query_one("#mode-list", OptionList)
-            mode_list.highlighted = idx
-            mode_list.action_select()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        scene_path = self._get_selected_scene()
-        stage = self._get_selected_stage()
-        label = str(event.option.prompt)
-        if label == "Train":
-            self.app.start_training(smoketest=False, scene_path=scene_path)
-        elif label == "Smoketest":
-            self.app.start_training(smoketest=True, scene_path=scene_path)
-        elif label == "View":
-            self.app.start_viewing(scene_path=scene_path, stage=stage)
-        elif label == "Play":
-            self.app.start_playing(scene_path=scene_path)
-        elif label == "Quit":
-            self.app.exit()
+        self.action_select_run()
+
+
+# ---------------------------------------------------------------------------
+# Run Action Screen
+# ---------------------------------------------------------------------------
+
+
+class RunActionScreen(Screen):
+    """Actions for a selected run: play, resume, view, W&B, back."""
+
+    BINDINGS = [
+        Binding("p", "play_run", "Play", priority=True),
+        Binding("r", "resume_run", "Resume", priority=True),
+        Binding("v", "view_run", "View", priority=True),
+        Binding("w", "open_wandb", "W&B", priority=True),
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+    ]
+
+    CSS = """
+    RunActionScreen {
+        align: center middle;
+    }
+
+    #action-box {
+        width: 60;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #action-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #run-metadata {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #action-list {
+        height: auto;
+    }
+    """
+
+    def __init__(self, run_dir: Path, run_info, **kwargs):
+        super().__init__(**kwargs)
+        self._run_dir = run_dir
+        self._info = run_info
+
+    def compose(self) -> ComposeResult:
+        info = self._info
+        display_name = bot_display_name(info.bot_name)
+        with Vertical(id="action-box"):
+            yield Static(f"Run: {info.name}", id="action-title")
+            meta_lines = [
+                f"  Bot: {display_name} ({info.bot_name})",
+                f"  Algorithm: {info.algorithm}  |  Policy: {info.policy_type}",
+                f"  Status: {info.status}  |  Batches: {info.batch_idx}  |  Episodes: {info.episode_count}",
+                f"  Stage: {info.curriculum_stage}  |  Created: {info.created_at or '?'}",
+            ]
+            if info.wandb_url:
+                meta_lines.append(f"  W&B: {info.wandb_url}")
+            yield Static("\n".join(meta_lines), id="run-metadata")
+            options = [
+                "[p] Play checkpoint",
+                "[r] Resume training",
+                "[v] View in MuJoCo",
+            ]
+            self._action_map = ["play_run", "resume_run", "view_run"]
+            if info.wandb_url:
+                options.append("[w] Open W&B")
+                self._action_map.append("open_wandb")
+            options.append("[Esc] Back")
+            self._action_map.append("go_back")
+            yield OptionList(*options, id="action-list")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_play_run(self) -> None:
+        self.app.start_playing_run(
+            run_name=self._info.name,
+            scene_path=self._info.scene_path,
+        )
+
+    def action_resume_run(self) -> None:
+        self.app.start_training(
+            smoketest=False,
+            scene_path=self._info.scene_path,
+            resume=self._info.name,
+        )
+
+    def action_view_run(self) -> None:
+        self.app.start_viewing(scene_path=self._info.scene_path)
+
+    def action_open_wandb(self) -> None:
+        url = self._info.wandb_url
+        if url:
+            import webbrowser
+            webbrowser.open(url)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        if 0 <= idx < len(self._action_map):
+            getattr(self, f"action_{self._action_map[idx]}")()
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +536,7 @@ class TrainingDashboard(Screen):
         Binding("down", "regress_curriculum", "Regress"),
         Binding("q", "quit_app", "Quit"),
         Binding("escape", "quit_app", "Quit", show=False),
+        Binding("backspace", "quit_app", "Quit", show=False),
     ]
 
     CSS = """
@@ -722,13 +948,15 @@ class MindSimApp(App):
         super().__init__(**kwargs)
         self.command_queue: Queue[str] = Queue()
         self._dashboard: TrainingDashboard | None = None
-        # Set by launcher to dispatch after app.run() returns
+        # Set by screens to dispatch after app.run() returns
         self.next_action: str | None = None
         self.next_scene: str | None = None
         self.next_stage: int | None = None
+        self.next_run_name: str | None = None
+        self.next_checkpoint_path: str | None = None
 
     def on_mount(self) -> None:
-        self.push_screen(LauncherScreen())
+        self.push_screen(MainMenuScreen())
 
     def start_viewing(self, scene_path: str | None = None, stage: int | None = None):
         """Exit TUI, then main() will launch the MuJoCo viewer."""
@@ -745,12 +973,31 @@ class MindSimApp(App):
         self.next_scene = scene_path
         self.exit()
 
-    def start_training(self, smoketest: bool = False, scene_path: str | None = None):
-        """Called by launcher to start training."""
+    def start_playing_run(
+        self,
+        run_name: str | None = None,
+        scene_path: str | None = None,
+        checkpoint_path: str | None = None,
+    ):
+        """Exit TUI, then main() will launch play mode for a specific run."""
+        self.next_action = "play"
+        self.next_scene = scene_path
+        self.next_run_name = run_name
+        self.next_checkpoint_path = checkpoint_path
+        self.exit()
+
+    def start_training(self, smoketest: bool = False, scene_path: str | None = None,
+                       resume: str | None = None):
+        """Called by screens to start training."""
+        # If no scene_path provided (e.g. smoketest from main menu), use default
+        if scene_path is None:
+            bots = _discover_bots()
+            scene_path = bots[0]["scene_path"] if bots else None
         dashboard = TrainingDashboard()
         self._dashboard = dashboard
         self._smoketest = smoketest
         self._scene_path = scene_path
+        self._resume = resume
         # Route Python log records into the TUI log panel
         self._tui_log_handler = TuiLogHandler(self)
         logging.getLogger().addHandler(self._tui_log_handler)
@@ -772,6 +1019,7 @@ class MindSimApp(App):
                 smoketest=self._smoketest,
                 num_workers=num_workers,
                 scene_path=self._scene_path,
+                resume=self._resume,
             )
         finally:
             # Remove TUI log handler to avoid stale references
@@ -884,6 +1132,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_play = sub.add_parser("play", help="Play trained policy in viewer")
     p_play.add_argument("checkpoint", nargs="?", default="latest", help="Checkpoint ref (default: latest)")
     p_play.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_play.add_argument("--run", type=str, default=None, help="Run name to play (resolves checkpoint from run dir)")
 
     # train
     p_train = sub.add_parser("train", help="Train (headless CLI, no TUI)")
@@ -927,6 +1176,12 @@ def _run_tui():
 
     elif app.next_action == "play":
         cmd = ["uv", "run", "mjpython", "main.py", "play"]
+        # If we have a specific checkpoint path (legacy), pass it directly
+        if app.next_checkpoint_path:
+            cmd.append(app.next_checkpoint_path)
+        # If we have a run name, use --run
+        elif app.next_run_name:
+            cmd.extend(["--run", app.next_run_name])
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
@@ -952,7 +1207,9 @@ def main():
     elif args.command == "play":
         scene_path = _resolve_scene_path(args.bot)
         from play import run_play
-        run_play(checkpoint_ref=args.checkpoint, scene_path=scene_path)
+        # --run takes priority: resolve checkpoint from run directory
+        checkpoint_ref = args.run if args.run else args.checkpoint
+        run_play(checkpoint_ref=checkpoint_ref, scene_path=scene_path)
 
     elif args.command == "train":
         scene_path = _resolve_scene_path(args.bot)

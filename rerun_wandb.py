@@ -21,17 +21,21 @@ class RerunWandbLogger:
     """
     Manages Rerun recordings linked to wandb runs.
 
-    Saves per-episode .rrd files with naming: recordings/<run_id>/episode_<N>.rrd
+    Saves per-episode .rrd files with naming: <run_dir>/recordings/episode_<N>.rrd
+    (or legacy recordings/<run_name>_<run_id>/ when no run_dir is given).
     Logs paths to wandb for cross-referencing.
     """
 
-    def __init__(self, recordings_dir: str = "recordings", live: bool = True):
+    def __init__(self, recordings_dir: str = "recordings", live: bool = True,
+                 run_dir: str | None = None):
         """
         Initialize the logger.
 
         Args:
-            recordings_dir: Base directory for storing .rrd files
+            recordings_dir: Base directory for storing .rrd files (legacy fallback)
             live: If True, spawn Rerun viewer and stream data live
+            run_dir: Run directory path. When set, saves to run_dir/recordings/.
+                     When None, falls back to recordings/<run_name>_<run_id>/.
         """
         if wandb.run is None:
             raise RuntimeError(
@@ -41,7 +45,10 @@ class RerunWandbLogger:
         self.recordings_dir = recordings_dir
         self.run_id = wandb.run.id
         self.run_name = wandb.run.name
-        self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
+        if run_dir is not None:
+            self.run_dir = os.path.join(run_dir, "recordings")
+        else:
+            self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
         os.makedirs(self.run_dir, exist_ok=True)
         self.live = live
 
