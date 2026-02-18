@@ -38,11 +38,9 @@ def run_quick_sim(num_steps=200):
     )
 
     trajectory_points = []
-    action_dt = env.action_dt
 
     for step in range(num_steps):
         rr.set_time("step", sequence=step)
-        rr.set_time("sim_time", timestamp=step * action_dt)
 
         obs, reward, done, truncated, info = env.step([LEFT_MOTOR, RIGHT_MOTOR])
 

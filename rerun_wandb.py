@@ -86,7 +86,8 @@ class RerunWandbLogger:
         rr.send_recording_name(f"episode {episode}")
 
         # Embed blueprint into recording
-        rr.send_blueprint(create_training_blueprint())
+        control_fps = round(1.0 / env.action_dt)
+        rr.send_blueprint(create_training_blueprint(control_fps=control_fps))
 
         # Log wandb context into Rerun for reverse lookup
         rr.log(

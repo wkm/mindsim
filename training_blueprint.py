@@ -8,12 +8,17 @@ Shows deterministic policy behavior (no exploration noise).
 import rerun.blueprint as rrb
 
 
-def create_training_blueprint():
+def create_training_blueprint(control_fps: float = 10.0):
     """
     Create a blueprint that organizes eval episode visualization.
 
     Uses deterministic eval episodes (mean actions, no sampling)
     to show true policy capability without exploration noise.
+
+    Args:
+        control_fps: Neural network control frequency in Hz (frames per second
+            for the step sequence timeline). Derived from the environment's
+            physics timestep and steps-per-action.
 
     Layout:
     ┌─────────────────┬──────────────────────────────┐
@@ -76,5 +81,5 @@ def create_training_blueprint():
             column_shares=[1, 2],
         ),
         rrb.SelectionPanel(state=rrb.PanelState.Hidden),
-        rrb.TimePanel(state=rrb.PanelState.Hidden),
+        rrb.TimePanel(state=rrb.PanelState.Hidden, fps=control_fps),
     )
