@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<!-- Duck Biped v3: position-controlled joints for passive standing stability
-     Design: low CoM, wide stance, short stocky legs, ellipsoid feet
+<!-- Duck Biped: position-controlled joints for passive standing stability
+     Design: low CoM, wide stance, short stocky legs, box feet
      Philosophy: position actuators provide "stiff tendons" that hold the robot
      upright passively. The RL policy outputs target joint angles, not raw torques.
      This dramatically simplifies the learning problem (don't need to learn balance
@@ -54,7 +54,7 @@
 
           <body name="left_foot" pos="0 0 -0.06">
             <joint name="left_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.4 0.4" damping="0.8" />
+                   pos="0 0 0" range="-0.4 0.4" damping="1.5" />
             <!-- Box foot: flat bottom for area contact, provides lateral stability -->
             <geom name="left_foot" type="box"
                   size="0.05 0.06 0.015"
@@ -82,7 +82,7 @@
 
           <body name="right_foot" pos="0 0 -0.06">
             <joint name="right_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.4 0.4" damping="0.8" />
+                   pos="0 0 0" range="-0.4 0.4" damping="1.5" />
             <!-- Box foot: flat bottom for area contact, provides lateral stability -->
             <geom name="right_foot" type="box"
                   size="0.05 0.06 0.015"
