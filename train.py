@@ -970,8 +970,21 @@ def _train_loop(
                 "batch/joint_stagnation_fraction": np.mean(
                     [ep.get("joint_stagnation_truncated", False) for ep in episode_batch]
                 ),
+                "batch/fell_fraction": np.mean(
+                    [ep.get("fell", False) for ep in episode_batch]
+                ),
             }
         )
+
+        # Per-component reward breakdown (averaged across batch)
+        component_keys = [
+            "reward_distance", "reward_exploration", "reward_time",
+            "reward_upright", "reward_alive", "reward_energy",
+            "reward_contact", "reward_forward_velocity", "reward_smoothness",
+        ]
+        for key in component_keys:
+            vals = [ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch]
+            log_dict[f"rewards/{key}"] = np.mean(vals)
 
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":

@@ -50,6 +50,14 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     steps = 0
     info = {}
 
+    # Accumulate reward component sums for per-episode breakdown
+    reward_component_keys = [
+        "reward_distance", "reward_exploration", "reward_time",
+        "reward_upright", "reward_alive", "reward_energy",
+        "reward_contact", "reward_forward_velocity", "reward_smoothness",
+    ]
+    reward_component_sums = {k: 0.0 for k in reward_component_keys}
+
     # Track trajectory for Rerun
     trajectory_points = []
 
@@ -97,6 +105,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         rewards.append(reward)
         distances.append(info["distance"])
         total_reward += reward
+        for k in reward_component_keys:
+            reward_component_sums[k] += info.get(k, 0.0)
 
         # Log to Rerun in real-time
         if log_rerun:
@@ -167,7 +177,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
         "joint_stagnation_truncated": info.get("joint_stagnation_truncated", False),
+        "fell": info.get("fell", False),
         "forward_distance": info.get("forward_distance", 0.0),
+        "reward_components": reward_component_sums,
     }
     if has_sensors:
         result["sensor_data"] = sensor_data

@@ -725,7 +725,7 @@ class TrainingDashboard(Screen):
                 yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
           with Vertical(id="log-panel"):
               yield Static("LOG", id="log-panel-title")
-              yield RichLog(id="log-area", wrap=True, max_lines=200, markup=True)
+              yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
