@@ -185,6 +185,7 @@ class MainMenuScreen(Screen):
     BINDINGS = [
         Binding("s", "select('smoketest')", "Smoketest", priority=True),
         Binding("n", "select('new')", "New Run", priority=True),
+        Binding("v", "select('view')", "View Bot", priority=True),
         Binding("b", "select('browse')", "Browse Runs", priority=True),
         Binding("q", "select('quit')", "Quit", priority=True),
         Binding("escape", "select('quit')", "Quit", show=False, priority=True),
@@ -220,6 +221,7 @@ class MainMenuScreen(Screen):
             yield OptionList(
                 "[s] Smoketest",
                 "[n] New training run",
+                "[v] View bot",
                 "[b] Browse runs",
                 "[q] Quit",
                 id="menu-list",
@@ -230,7 +232,9 @@ class MainMenuScreen(Screen):
         if choice == "smoketest":
             self.app.start_training(smoketest=True)
         elif choice == "new":
-            self.app.push_screen(BotSelectorScreen())
+            self.app.push_screen(BotSelectorScreen(mode="train"))
+        elif choice == "view":
+            self.app.push_screen(BotSelectorScreen(mode="view"))
         elif choice == "browse":
             self.app.push_screen(RunBrowserScreen())
         elif choice == "quit":
@@ -238,7 +242,7 @@ class MainMenuScreen(Screen):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
-        choices = ["smoketest", "new", "browse", "quit"]
+        choices = ["smoketest", "new", "view", "browse", "quit"]
         if 0 <= idx < len(choices):
             self.action_select(choices[idx])
 
@@ -249,12 +253,12 @@ class MainMenuScreen(Screen):
 
 
 class BotSelectorScreen(Screen):
-    """Select a bot to start a new training run."""
+    """Select a bot for training or viewing."""
 
     BINDINGS = [
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
-        Binding("enter", "start_run", "Start", priority=True),
+        Binding("enter", "confirm", "Select", priority=True),
     ]
 
     CSS = """
@@ -279,13 +283,15 @@ class BotSelectorScreen(Screen):
     }
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, mode: str = "train", **kwargs):
         super().__init__(**kwargs)
         self._bots = _discover_bots()
+        self._mode = mode
 
     def compose(self) -> ComposeResult:
+        title = "Select Bot to View" if self._mode == "view" else "Select Bot"
         with Vertical(id="bot-box"):
-            yield Static("Select Bot", id="bot-title")
+            yield Static(title, id="bot-title")
             if self._bots:
                 with RadioSet(id="bot-selector"):
                     for i, bot in enumerate(self._bots):
@@ -298,19 +304,26 @@ class BotSelectorScreen(Screen):
     def action_go_back(self) -> None:
         self.app.pop_screen()
 
-    def action_start_run(self) -> None:
+    def _get_selected_scene(self) -> str | None:
         if not self._bots:
-            return
+            return None
         try:
             radio_set = self.query_one("#bot-selector", RadioSet)
             idx = radio_set.pressed_index
             if idx >= 0:
-                scene_path = self._bots[idx]["scene_path"]
-            else:
-                scene_path = self._bots[0]["scene_path"]
+                return self._bots[idx]["scene_path"]
         except (IndexError, ValueError):
-            scene_path = self._bots[0]["scene_path"]
-        self.app.start_training(smoketest=False, scene_path=scene_path)
+            pass
+        return self._bots[0]["scene_path"]
+
+    def action_confirm(self) -> None:
+        scene_path = self._get_selected_scene()
+        if not scene_path:
+            return
+        if self._mode == "view":
+            self.app.start_viewing(scene_path=scene_path)
+        else:
+            self.app.start_training(smoketest=False, scene_path=scene_path)
 
 
 # ---------------------------------------------------------------------------

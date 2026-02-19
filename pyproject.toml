@@ -22,6 +22,12 @@ dependencies = [
     "textual>=1.0.0",
 ]
 
+[tool.uv]
+# mjpython needs a framework Python build on macOS. uv's managed Python uses
+# a non-framework build whose libpython can't be dlopened. Prefer Homebrew's
+# framework Python to avoid this.
+python-preference = "system"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Add project root to sys.path so tests can import modules
