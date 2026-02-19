@@ -25,10 +25,11 @@ Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smo
 **Worktree management:**
 
 ```bash
-make wt-new DESC='implement PPO'        # Claude suggests a branch name
-make wt-new NAME=my-experiment          # Use explicit name
-make wt-ls                              # List all worktrees
-make wt-rm NAME=my-experiment           # Remove worktree (keeps branch)
+make wt-new NAME=my-experiment              # exp/YYMMDD-my-experiment branch
+make wt-new NAME=better-tui TYPE=infra      # infra/better-tui branch
+make wt-new DESC='implement PPO'            # Claude suggests a branch name
+make wt-ls                                  # List all worktrees
+make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
 ```
 
 ## Project Structure
@@ -160,43 +161,54 @@ MainMenuScreen
 
 Current algorithm: **PPO** (Proximal Policy Optimization with GAE)
 
-## Experiment Organization
+## Branching & Change Philosophy
+
+### Guiding principles
+
+1. **Master stays stable.** Only small, safe changes land directly on master: hyperparameter tweaks, minor bugfixes, config changes. No big refactors, no risky rewrites.
+2. **Experiments are focused.** An `exp/` branch tests a hypothesis — it should not also reorganize the codebase or refactor tooling. Keep the diff reviewable and the intent clear.
+3. **Tooling/infra changes are separate.** Improvements to the training pipeline, TUI, visualization, build system, etc. go on `infra/` branches, not mixed into experiments.
+4. **Commit logs are a journal.** Every commit should tell a reader *why* the change was made, what was tried, and what was learned. The git log is the project's memory.
 
 ### Before ANY non-trivial change
 
-**Always bookmark your starting point before writing code.** This is the most important rule. You must be able to get back to a known-good state.
+**Always bookmark your starting point before writing code.** You must be able to get back to a known-good state.
 
-1. **Ensure the working tree is clean.** All current work must be committed. Run `git status` to verify. If there are uncommitted changes, commit or stash them first.
-2. **Classify the change** — decide which category it falls into (see below) and follow the corresponding workflow.
+1. **Ensure the working tree is clean.** Run `git status` to verify. Commit or stash first.
+2. **Classify the change** — decide which category it falls into (see below).
 
 ### Change categories
 
-**Hyperparameter tweaks** → Commit directly on main
+**Hyperparameter tweaks / minor bugfixes** → Commit directly on master
 
-- Learning rate, batch size, reward coefficients, etc.
-- Working tree must be clean before starting (rule above).
-- W&B tracks the run params; git tracks when/why they changed.
+- Learning rate, batch size, reward coefficients, small bugfixes, config changes.
+- Working tree must be clean before starting.
+- Keep changes small and low-risk.
 
-**Simple implementation changes / bugfixes** → Commit directly on main
+**Experiments** → `exp/YYMMDD-<name>` branch via worktree
 
-- Bug fixes, small refactors, code cleanup.
-- Changes that are clearly improvements, not experiments.
-- Working tree must be clean before starting (rule above).
-
-**Larger experimental changes** → Create a worktree BEFORE writing any code
-
-- This includes: new algorithms, significant architecture changes, new reward structures, new training approaches, or anything where the outcome is uncertain.
+- New algorithms, architecture changes, reward structures, training approaches — anything where the outcome is uncertain.
+- **Stay focused**: only make changes that serve the experiment's hypothesis. No drive-by refactors, no structural changes.
 - Workflow:
-  1. Ensure working tree is clean (committed to main).
+  1. Ensure working tree is clean (committed on master).
   2. Create a worktree: `make wt-new NAME=<descriptive-name>`
-     - This creates `../mindsim-<name>/` on branch `exp/<name>`
+     - This creates `../mindsim-<name>/` on branch `exp/YYMMDD-<name>` (date auto-prefixed)
   3. `cd ../mindsim-<name>/ && claude` to start a Claude Code session in the worktree.
-  4. Add an entry to `EXPERIMENTS.md` on the branch (see tracking below).
+  4. Add an entry to `EXPERIMENTS.md` on the branch.
   5. Now begin writing code.
-- Branch naming examples: `exp/curriculum-target-distance`, `exp/ppo-baseline`, `exp/reward-shaping-v2`
-- If the experiment succeeds, merge to main from the main repo: `git merge exp/<name>`
-- Clean up: `make wt-rm NAME=<name>` (then `git branch -d exp/<name>` if merged)
-- If it fails, remove the worktree — the branch stays as a record and main is untouched.
+- If the experiment succeeds, merge to master: `git merge exp/YYMMDD-<name>`
+- Clean up: `make wt-rm NAME=<name>` (then `git branch -d exp/YYMMDD-<name>` if merged)
+- If it fails, remove the worktree — the branch stays as a record.
+
+**Tooling / infrastructure improvements** → `infra/<name>` branch via worktree
+
+- TUI improvements, visualization changes, build system updates, training pipeline refactors, new CLI features.
+- Workflow:
+  1. Ensure working tree is clean.
+  2. Create a worktree: `make wt-new NAME=<name> TYPE=infra`
+     - This creates `../mindsim-<name>/` on branch `infra/<name>`
+  3. Work, commit, merge back to master when done.
+- These can be larger structural changes — that's fine, just keep them separate from experiments.
 
 ### Parallel experiments with worktrees
 
@@ -207,12 +219,14 @@ Worktrees let you run multiple experiments simultaneously, each with its own Cla
 make wt-new NAME=ppo-baseline
 make wt-new NAME=reward-shaping-v2
 
+# Infra work in parallel
+make wt-new NAME=better-tui TYPE=infra
+
 # Each gets its own isolated directory + Claude session
 cd ../mindsim-ppo-baseline && claude
 cd ../mindsim-reward-shaping-v2 && claude    # (in another terminal)
 
 # Main repo stays clean on master — you can train/view/etc. uninterrupted
-# List active worktrees anytime
 make wt-ls
 ```
 
@@ -224,7 +238,7 @@ make wt-ls
 
 Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
 
-- Branch name
+- Branch name (including date prefix)
 - Hypothesis (what you're testing and why)
 - Status (in-progress / succeeded / failed / partially worked / merged to main)
 - Outcome notes (what was learned)
@@ -236,21 +250,22 @@ Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
 
 ## Commit Message Format
 
-Commits should follow this structure:
+The git log is the project's journal. Each commit should be useful to a future reader trying to understand *why* things are the way they are.
 
 ```text
-Short summary (one sentence)
+Short summary (imperative mood, one line)
 
-Detailed description of the changes in 1-2 paragraphs using markdown.
-Explain the motivation, what was changed, and any important decisions made.
+What changed and why. Not just "updated X" — explain the motivation, the
+problem being solved, or the hypothesis being tested. Include context that
+won't be obvious from the diff alone: what alternatives were considered,
+what failed first, what tradeoffs were made.
 
-## Session Summary
-
-Brief summary of what was discussed and decided during the Claude Code session.
+For experiment branches, note observations: did the change help? What
+metrics moved? What surprised you?
 
 Session: <link to Claude session>
 ```
 
-- **First line**: Concise summary of what changed (imperative mood)
-- **Body**: More verbose explanation (~1-2 paragraphs) with context and reasoning
-- **Session section**: Summary of the development session conversation + link to the Claude session
+- **First line**: Concise summary (imperative mood, <72 chars)
+- **Body**: The "journal entry" — context, reasoning, observations. Use markdown. Be generous with detail; a too-verbose commit message is far better than a cryptic one.
+- **Session link**: Link to the Claude Code session (when applicable)
