@@ -66,6 +66,7 @@ class TrainingEnv:
             # Fall detection
             fall_height_fraction=config.fall_height_fraction,
             fall_up_z_threshold=config.fall_up_z_threshold,
+            fall_grace_steps=config.fall_grace_steps,
             # Action smoothness
             action_smoothness_scale=config.action_smoothness_scale,
             # Gait phase
@@ -126,6 +127,7 @@ class TrainingEnv:
         # Fall detection (0.0 = disabled)
         fall_height_fraction=0.0,
         fall_up_z_threshold=0.0,
+        fall_grace_steps=0,
         # Action smoothness (0.0 = disabled)
         action_smoothness_scale=0.0,
         # Gait phase (0.0 = disabled)
@@ -167,7 +169,9 @@ class TrainingEnv:
         # Fall detection
         self.fall_height_fraction = fall_height_fraction
         self.fall_up_z_threshold = fall_up_z_threshold
+        self.fall_grace_steps = fall_grace_steps
         self.initial_torso_height = None  # Set in reset()
+        self.consecutive_unhealthy = 0  # Counter for grace period
 
         # Action smoothness
         self.action_smoothness_scale = action_smoothness_scale
@@ -412,6 +416,7 @@ class TrainingEnv:
 
         # Fall detection: capture initial torso height for threshold
         self.initial_torso_height = self.prev_position[2]
+        self.consecutive_unhealthy = 0
 
         # Action smoothness: reset previous action
         self.prev_action = np.zeros(self.num_actuators)
@@ -486,6 +491,7 @@ class TrainingEnv:
 
         # Reset fall detection, action smoothness, gait phase state
         self.initial_torso_height = self.prev_position[2]
+        self.consecutive_unhealthy = 0
         self.prev_action = np.zeros(self.num_actuators)
         self.gait_step_count = 0
         self.current_sensors = self.env.get_sensor_data()
@@ -729,9 +735,16 @@ class TrainingEnv:
             done = True
             reward -= 5.0  # Penalty for going too far
 
-        # Fall termination: end episode when bot is unhealthy
-        elif not is_healthy:
-            done = True
+        # Fall termination: end episode after sustained unhealthy state.
+        # Grace period lets the bot survive brief dips (e.g. bunny hop landings)
+        # and gives the policy time to learn from the bad state before termination.
+        if not done:
+            if not is_healthy:
+                self.consecutive_unhealthy += 1
+                if self.consecutive_unhealthy > self.fall_grace_steps:
+                    done = True
+            else:
+                self.consecutive_unhealthy = 0
 
         # Distance-patience truncation: no net progress over rolling window
         # Disabled during walking stage (bot is learning to stand, not navigate)
