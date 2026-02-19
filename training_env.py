@@ -63,6 +63,13 @@ class TrainingEnv:
             energy_penalty_scale=config.energy_penalty_scale,
             ground_contact_penalty=config.ground_contact_penalty,
             forward_velocity_reward_scale=config.forward_velocity_reward_scale,
+            # Fall detection
+            fall_height_fraction=config.fall_height_fraction,
+            fall_up_z_threshold=config.fall_up_z_threshold,
+            # Action smoothness
+            action_smoothness_scale=config.action_smoothness_scale,
+            # Gait phase
+            gait_phase_period=config.gait_phase_period,
             patience_window=config.patience_window,
             patience_min_delta=config.patience_min_delta,
             joint_stagnation_window=config.joint_stagnation_window,
@@ -116,6 +123,13 @@ class TrainingEnv:
         walking_target_pos=(0.0, -10.0, 0.08),
         forward_velocity_axis=(0.0, -1.0, 0.0),
         walking_success_min_forward=0.5,
+        # Fall detection (0.0 = disabled)
+        fall_height_fraction=0.0,
+        fall_up_z_threshold=0.0,
+        # Action smoothness (0.0 = disabled)
+        action_smoothness_scale=0.0,
+        # Gait phase (0.0 = disabled)
+        gait_phase_period=0.0,
     ):
         self.env = SimpleWheelerEnv(
             scene_path=scene_path,
@@ -149,6 +163,20 @@ class TrainingEnv:
         self.energy_penalty_scale = energy_penalty_scale
         self.ground_contact_penalty = ground_contact_penalty
         self.forward_velocity_reward_scale = forward_velocity_reward_scale
+
+        # Fall detection
+        self.fall_height_fraction = fall_height_fraction
+        self.fall_up_z_threshold = fall_up_z_threshold
+        self.initial_torso_height = None  # Set in reset()
+
+        # Action smoothness
+        self.action_smoothness_scale = action_smoothness_scale
+        self.prev_action = None  # Set in reset()
+
+        # Gait phase encoding
+        self.gait_phase_period = gait_phase_period
+        self.gait_phase_dim = 4 if gait_phase_period > 0 else 0
+        self.gait_step_count = 0
 
         # Distance-patience early truncation
         self.patience_window = patience_window
@@ -196,8 +224,8 @@ class TrainingEnv:
         self.num_actuators = self.env.num_actuators
         self.actuator_names = self.env.actuator_names
 
-        # Sensor data
-        self.sensor_dim = self.env.sensor_dim
+        # Sensor data (includes gait phase dims if enabled)
+        self.sensor_dim = self.env.sensor_dim + self.gait_phase_dim
         self.sensor_info = self.env.sensor_info
         self.current_sensors = np.zeros(self.sensor_dim, dtype=np.float32)
 
@@ -381,7 +409,20 @@ class TrainingEnv:
         self.prev_distance = self.env.get_distance_to_target()
         self.prev_position = self.env.get_bot_position()
         self.start_position = self.prev_position.copy()
+
+        # Fall detection: capture initial torso height for threshold
+        self.initial_torso_height = self.prev_position[2]
+
+        # Action smoothness: reset previous action
+        self.prev_action = np.zeros(self.num_actuators)
+
+        # Gait phase: reset step counter and append phase to sensors
+        self.gait_step_count = 0
         self.current_sensors = self.env.get_sensor_data()
+        if self.gait_phase_dim > 0:
+            self.current_sensors = np.concatenate([
+                self.current_sensors, self._compute_gait_phase()
+            ])
 
         # Blank image in walking stage (camera not useful, skip render cost)
         if self.in_walking_stage:
@@ -443,6 +484,16 @@ class TrainingEnv:
         self.prev_position = self.env.get_bot_position()
         self.start_position = self.prev_position.copy()
 
+        # Reset fall detection, action smoothness, gait phase state
+        self.initial_torso_height = self.prev_position[2]
+        self.prev_action = np.zeros(self.num_actuators)
+        self.gait_step_count = 0
+        self.current_sensors = self.env.get_sensor_data()
+        if self.gait_phase_dim > 0:
+            self.current_sensors = np.concatenate([
+                self.current_sensors, self._compute_gait_phase()
+            ])
+
         obs = camera_img.astype(np.float32) / 255.0
         return obs
 
@@ -469,6 +520,20 @@ class TrainingEnv:
         """Move all distractors off-screen."""
         for mocap_id in self.env.distractor_mocap_ids:
             self.env.data.mocap_pos[mocap_id] = [0.0, 100.0, 0.08]
+
+    def _compute_gait_phase(self):
+        """
+        Compute gait phase signals: [sin(phase), cos(phase), sin(phase+pi), cos(phase+pi)].
+
+        The second pair is anti-phase (for the other leg), giving the policy
+        a clock for coordinating alternating leg movements.
+        """
+        t = self.gait_step_count * self.action_dt
+        phase = 2 * np.pi * t / self.gait_phase_period
+        return np.array([
+            np.sin(phase), np.cos(phase),
+            np.sin(phase + np.pi), np.cos(phase + np.pi),
+        ], dtype=np.float32)
 
     def _update_target_position(self):
         """Move target by velocity, bounce off arena boundaries."""
@@ -541,6 +606,11 @@ class TrainingEnv:
         else:
             obs = np.zeros(self.observation_shape, dtype=np.float32)
         self.current_sensors = self.env.get_sensor_data()
+        self.gait_step_count += 1
+        if self.gait_phase_dim > 0:
+            self.current_sensors = np.concatenate([
+                self.current_sensors, self._compute_gait_phase()
+            ])
 
         # Get current state (before moving target, so reward reflects robot's action)
         current_distance = self.env.get_distance_to_target()
@@ -560,16 +630,26 @@ class TrainingEnv:
         time_cost = -self.time_penalty
 
         # 4. Upright reward (biped only, 0 when disabled)
-        #    Also compute up_vec for forward velocity gating below.
+        #    Also compute up_vec for forward velocity gating and fall detection.
         upright_reward = 0.0
         up_z = 1.0  # default for wheeler (no torso orientation)
-        if self.upright_reward_scale > 0 or self.forward_velocity_reward_scale > 0:
+        if self.upright_reward_scale > 0 or self.forward_velocity_reward_scale > 0 or self.fall_up_z_threshold > 0:
             up_vec = self.env.get_torso_up_vector()
             up_z = up_vec[2]
             upright_reward = self.upright_reward_scale * up_z
 
-        # 5. Alive bonus (biped only, 0 when disabled)
-        alive_reward = self.alive_bonus
+        # 5. Alive bonus — health-gated (biped only, 0 when disabled)
+        #    Check if the bot is "healthy" (not fallen). When unhealthy,
+        #    alive bonus is zero so lying on the floor earns nothing.
+        is_healthy = True
+        if self.fall_height_fraction > 0 and self.initial_torso_height is not None:
+            min_height = self.fall_height_fraction * self.initial_torso_height
+            if current_position[2] < min_height:
+                is_healthy = False
+        if self.fall_up_z_threshold > 0:
+            if up_z < self.fall_up_z_threshold:
+                is_healthy = False
+        alive_reward = self.alive_bonus if is_healthy else 0.0
 
         # 6. Energy penalty (biped only, 0 when disabled)
         energy_cost = 0.0
@@ -594,9 +674,17 @@ class TrainingEnv:
             forward_vel = np.dot(vel, self.forward_velocity_axis)
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
+        # 9. Action smoothness penalty (penalize jerky action changes)
+        smoothness_penalty = 0.0
+        if self.action_smoothness_scale > 0 and self.prev_action is not None:
+            action_diff = action - self.prev_action
+            smoothness_penalty = -self.action_smoothness_scale * np.sum(action_diff ** 2)
+        self.prev_action = action.copy()
+
         reward = (distance_reward + exploration_reward + time_cost
                   + upright_reward + alive_reward + energy_cost
-                  + contact_penalty + forward_velocity_reward)
+                  + contact_penalty + forward_velocity_reward
+                  + smoothness_penalty)
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -640,6 +728,10 @@ class TrainingEnv:
         elif not self.in_walking_stage and current_distance > self.failure_distance:
             done = True
             reward -= 5.0  # Penalty for going too far
+
+        # Fall termination: end episode when bot is unhealthy
+        elif not is_healthy:
+            done = True
 
         # Distance-patience truncation: no net progress over rolling window
         # Disabled during walking stage (bot is learning to stand, not navigate)
@@ -688,10 +780,13 @@ class TrainingEnv:
             "reward_energy": energy_cost,
             "reward_contact": contact_penalty,
             "reward_forward_velocity": forward_velocity_reward,
+            "reward_smoothness": smoothness_penalty,
             "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
             "torso_height": bot_z,
+            "is_healthy": is_healthy,
+            "fell": not is_healthy,
             # Patience truncation
             "patience_truncated": patience_truncated,
             # Joint stagnation truncation
