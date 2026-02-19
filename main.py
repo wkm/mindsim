@@ -29,7 +29,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
+from train import CommandChannel
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -763,15 +763,19 @@ class TrainingDashboard(Screen):
 
     def action_checkpoint(self) -> None:
         self.app.send_command("checkpoint")
+        self.log_message("[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)")
 
     def action_send_rerun(self) -> None:
         self.app.send_command("log_rerun")
+        self.log_message("[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)")
 
     def action_advance_curriculum(self) -> None:
         self.app.send_command("advance_curriculum")
+        self.log_message("Advancing curriculum...")
 
     def action_regress_curriculum(self) -> None:
         self.app.send_command("regress_curriculum")
+        self.log_message("Regressing curriculum...")
 
     def action_open_wandb(self) -> None:
         if self._wandb_url:
@@ -969,7 +973,7 @@ class MindSimApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.command_queue: Queue[str] = Queue()
+        self.commands = CommandChannel()
         self._dashboard: TrainingDashboard | None = None
         # Set by screens to dispatch after app.run() returns
         self.next_action: str | None = None
@@ -1038,7 +1042,7 @@ class MindSimApp(App):
         try:
             run_training(
                 self,
-                self.command_queue,
+                self.commands,
                 smoketest=self._smoketest,
                 num_workers=num_workers,
                 scene_path=self._scene_path,
@@ -1050,7 +1054,7 @@ class MindSimApp(App):
                 logging.getLogger().removeHandler(self._tui_log_handler)
 
     def send_command(self, cmd: str):
-        self.command_queue.put(cmd)
+        self.commands.send(cmd)
 
     def update_metrics(self, batch: int, metrics: dict):
         """Called from training thread via call_from_thread."""
