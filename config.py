@@ -72,6 +72,7 @@ class EnvConfig:
     # Fall detection (0.0 = disabled for wheeler)
     fall_height_fraction: float = 0.0  # Fraction of initial height below which = fallen (e.g. 0.5)
     fall_up_z_threshold: float = 0.0  # Min torso up_z to be "healthy" (e.g. 0.54 = ~57°)
+    fall_grace_steps: int = 0  # Consecutive unhealthy steps before termination (0 = immediate)
 
     # Action smoothness penalty (0.0 = disabled)
     action_smoothness_scale: float = 0.0  # Penalty for action jerk: -scale * ||a_t - a_{t-1}||^2
@@ -272,6 +273,7 @@ class Config:
                 # Fall detection
                 fall_height_fraction=0.5,  # Fallen if torso drops below 50% of initial height
                 fall_up_z_threshold=0.54,  # Fallen if torso tilts past ~57° from vertical
+                fall_grace_steps=50,  # 0.4s at 125Hz — survive brief dips, learn from bad states
                 # Action smoothness
                 action_smoothness_scale=0.1,  # Penalize jerky actions
                 # Gait phase encoding
@@ -426,6 +428,7 @@ class Config:
                 has_walking_stage=True,
                 fall_height_fraction=0.5,
                 fall_up_z_threshold=0.54,
+                fall_grace_steps=50,
                 action_smoothness_scale=0.1,
                 gait_phase_period=0.6,
             ),
