@@ -1200,18 +1200,18 @@ def run_training(
     """
     is_biped = scene_path and "biped" in scene_path
     is_walker2d = scene_path and "walker2d" in scene_path
-    is_hand = scene_path and "simplehand" in scene_path
+    is_picker = scene_path and "simplepicker" in scene_path
     if smoketest:
-        if is_hand:
-            cfg = Config.for_simplehand_smoketest()
+        if is_picker:
+            cfg = Config.for_simplepicker_smoketest()
         elif is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
             cfg = Config.for_walker2d_smoketest()
         else:
             cfg = Config.for_smoketest()
-    elif is_hand:
-        cfg = Config.for_simplehand()
+    elif is_picker:
+        cfg = Config.for_simplepicker()
     elif is_biped:
         cfg = Config.for_biped()
     elif is_walker2d:
@@ -1252,10 +1252,10 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     """
     is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
     is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
-    is_hand = (bot and "simplehand" in bot) or (scene_path and "simplehand" in scene_path)
+    is_picker = (bot and "simplepicker" in bot) or (scene_path and "simplepicker" in scene_path)
     if smoketest:
-        if is_hand:
-            cfg = Config.for_simplehand_smoketest()
+        if is_picker:
+            cfg = Config.for_simplepicker_smoketest()
         elif is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
@@ -1263,8 +1263,8 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         else:
             cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    elif is_hand:
-        cfg = Config.for_simplehand()
+    elif is_picker:
+        cfg = Config.for_simplepicker()
     elif is_biped:
         cfg = Config.for_biped()
     elif is_walker2d:

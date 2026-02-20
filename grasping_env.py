@@ -53,7 +53,7 @@ class GraspingTrainingEnv:
 
     def __init__(
         self,
-        scene_path="bots/simplehand/scene.xml",
+        scene_path="bots/simplepicker/scene.xml",
         render_width=64,
         render_height=64,
         max_episode_steps=500,

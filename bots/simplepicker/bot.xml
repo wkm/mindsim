@@ -1,10 +1,10 @@
 <?xml version='1.0' encoding='utf-8'?>
-<!-- Simple Hand: parallel jaw gripper on 3-DOF Cartesian gantry
+<!-- Simple Picker: parallel jaw gripper on 3-DOF Cartesian gantry
      Design: no balance problem (rails, not freejoints). The RL policy
      controls X/Y/Z position and finger open/close to grasp objects.
      5 position actuators: x_motor, y_motor, z_motor, left_finger_motor, right_finger_motor
      12 sensors: 5 joint pos + 5 joint vel + 2 touch -->
-<mujoco model="SimpleHand">
+<mujoco model="SimplePicker">
   <compiler angle="radian" />
 
   <default>

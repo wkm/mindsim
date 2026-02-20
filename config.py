@@ -84,7 +84,7 @@ class EnvConfig:
     env_type: str = "locomotion"
 
     # Grasping reward shaping (all 0.0 = disabled for locomotion bots)
-    reach_reward_scale: float = 0.0  # Hand→cup potential-based reward
+    reach_reward_scale: float = 0.0  # Gripper→cup potential-based reward
     grasp_bonus: float = 0.0  # Per-step bonus when both fingers contact cup
     lift_reward_scale: float = 0.0  # Cup→target potential-based reward (gated on grasp)
 
@@ -466,11 +466,11 @@ class Config:
         )
 
     @classmethod
-    def for_simplehand(cls) -> Config:
+    def for_simplepicker(cls) -> Config:
         """Config for parallel-jaw gripper grasping task with MLPPolicy."""
         return cls(
             env=EnvConfig(
-                scene_path="bots/simplehand/scene.xml",
+                scene_path="bots/simplepicker/scene.xml",
                 render_width=64,
                 render_height=64,
                 max_episode_steps=500,  # 4s at 125Hz
@@ -510,11 +510,11 @@ class Config:
         )
 
     @classmethod
-    def for_simplehand_smoketest(cls) -> Config:
-        """Config for fast simplehand end-to-end validation."""
+    def for_simplepicker_smoketest(cls) -> Config:
+        """Config for fast simplepicker end-to-end validation."""
         return cls(
             env=EnvConfig(
-                scene_path="bots/simplehand/scene.xml",
+                scene_path="bots/simplepicker/scene.xml",
                 render_width=64,
                 render_height=64,
                 max_episode_steps=10,

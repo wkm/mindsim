@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<mujoco model="SimpleHand_scene">
+<mujoco model="SimplePicker_scene">
   <!-- 500Hz sim (0.002s timestep) — needed for stable contact dynamics.
        Elliptic cone + noslip iterations for stable high-friction contacts. -->
   <option timestep="0.002" cone="elliptic" noslip_iterations="3" />
