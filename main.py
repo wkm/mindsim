@@ -672,6 +672,20 @@ class TrainingDashboard(Screen):
                 yield Static(
                     "  avg steps           ---", id="m-avg-steps", classes="metric-line"
                 )
+                yield Static("REWARD INPUTS", classes="section-title", id="ri-title")
+                yield Static("  distance            ---", id="ri-distance", classes="metric-line")
+                yield Static("  height              ---", id="ri-height", classes="metric-line")
+                yield Static("  survival            ---", id="ri-survival", classes="metric-line")
+                yield Static("  fwd distance        ---", id="ri-fwd-dist", classes="metric-line")
+                yield Static("  speed               ---", id="ri-speed", classes="metric-line")
+                yield Static("  lateral drift       ---", id="ri-lateral", classes="metric-line")
+                yield Static("  uprightness         ---", id="ri-uprightness", classes="metric-line")
+                yield Static("  fwd velocity        ---", id="ri-fwd-vel", classes="metric-line")
+                yield Static("  energy              ---", id="ri-energy", classes="metric-line")
+                yield Static("  contact             ---", id="ri-contact", classes="metric-line")
+                yield Static("  action jerk         ---", id="ri-jerk", classes="metric-line")
+                yield Static("  fell                ---", id="ri-fell", classes="metric-line")
+                yield Static("  joint activity      ---", id="ri-joint", classes="metric-line")
                 yield Static("SUCCESS RATES", classes="section-title")
                 yield Static(
                     "  eval (rolling)      ---",
@@ -865,6 +879,69 @@ class TrainingDashboard(Screen):
         self.query_one("#m-avg-steps").update(
             f"  avg steps        {_fmt_int(m.get('avg_steps'))}"
         )
+
+        # Reward inputs (raw physical measures)
+        ri = m.get("raw_inputs", {})
+        scales = m.get("reward_scales", {})
+
+        def _ri_row(widget_id, label, value, fmt_str, scale_key=None):
+            """Update a reward-input row. Hidden when scale_key is set and its scale is 0."""
+            show = scale_key is None or scales.get(scale_key, 0) > 0
+            widget = self.query_one(widget_id)
+            if show and value is not None:
+                widget.update(f"  {label:<15s}{fmt_str.rjust(8)}")
+                widget.display = True
+            elif show:
+                widget.update(f"  {label:<15s}{'---':>8s}")
+                widget.display = True
+            else:
+                widget.display = False
+
+        # Always shown
+        ri_dist = ri.get("distance_to_target")
+        _ri_row("#ri-distance", "distance", ri_dist, f"{ri_dist:.2f} m" if ri_dist is not None else None)
+        ri_h = ri.get("torso_height")
+        _ri_row("#ri-height", "height", ri_h, f"{ri_h:.2f} m" if ri_h is not None else None)
+        ri_surv = ri.get("survival_time")
+        _ri_row("#ri-survival", "survival", ri_surv, f"{ri_surv:.1f} s" if ri_surv is not None else None)
+
+        # Walking stage measures (biped only)
+        ri_fd = ri.get("forward_distance")
+        _ri_row("#ri-fwd-dist", "fwd distance", ri_fd, f"{ri_fd:+.2f} m" if ri_fd is not None else None, "has_walking_stage")
+        ri_spd = ri.get("avg_speed")
+        _ri_row("#ri-speed", "speed", ri_spd, f"{ri_spd:.2f} m/s" if ri_spd is not None else None, "has_walking_stage")
+        ri_lat = ri.get("lateral_drift")
+        _ri_row("#ri-lateral", "lateral drift", ri_lat, f"{ri_lat:.2f} m" if ri_lat is not None else None, "has_walking_stage")
+
+        # Reward-component-gated
+        ri_up = ri.get("up_z")
+        _ri_row("#ri-uprightness", "uprightness", ri_up, f"{ri_up:.2f}" if ri_up is not None else None, "upright")
+        ri_fv = ri.get("forward_vel")
+        _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, "forward_vel")
+        ri_en = ri.get("energy")
+        _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, "energy")
+        ri_ct = ri.get("contact_frac")
+        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, "contact")
+        ri_jk = ri.get("action_jerk")
+        _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, "smoothness")
+
+        # Fall detection gated
+        ri_fell = ri.get("fell_frac")
+        _ri_row("#ri-fell", "fell", ri_fell, f"{ri_fell:.0%}" if ri_fell is not None else None, "fall_detection")
+
+        # Joint activity (shown when sensors exist, i.e. value > 0 or biped)
+        ri_ja = ri.get("joint_activity")
+        has_sensors = ri_ja is not None and ri_ja > 0
+        widget = self.query_one("#ri-joint")
+        if has_sensors:
+            widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
+            widget.display = True
+        elif ri_ja is not None and any(scales.get(k, 0) > 0 for k in ("upright", "energy", "contact")):
+            # Biped with no joint movement yet
+            widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
+            widget.display = True
+        else:
+            widget.display = False
 
         # Success rates
         self.query_one("#m-eval-rolling").update(

@@ -664,6 +664,7 @@ class TrainingEnv:
 
         # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
         contact_penalty = 0.0
+        bad_contacts = 0
         if self.ground_contact_penalty > 0:
             bad_contacts = self.env.get_non_foot_ground_contacts()
             if bad_contacts > 0:
@@ -674,17 +675,20 @@ class TrainingEnv:
         #    MuJoCo cvel, which reports subtree COM velocity and can be misleading
         #    when legs swing.  Gated on uprightness so falling doesn't count.
         forward_velocity_reward = 0.0
+        forward_vel = 0.0
         if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
             dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
             vel = (current_position - self.prev_position) / dt
-            forward_vel = np.dot(vel, self.forward_velocity_axis)
+            forward_vel = float(np.dot(vel, self.forward_velocity_axis))
             forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
 
         # 9. Action smoothness penalty (penalize jerky action changes)
         smoothness_penalty = 0.0
-        if self.action_smoothness_scale > 0 and self.prev_action is not None:
-            action_diff = action - self.prev_action
-            smoothness_penalty = -self.action_smoothness_scale * np.sum(action_diff ** 2)
+        action_jerk = 0.0
+        if self.prev_action is not None:
+            action_jerk = float(np.sum((action - self.prev_action) ** 2))
+            if self.action_smoothness_scale > 0:
+                smoothness_penalty = -self.action_smoothness_scale * action_jerk
         self.prev_action = action.copy()
 
         reward = (distance_reward + exploration_reward + time_cost
@@ -806,10 +810,22 @@ class TrainingEnv:
             "joint_stagnation_truncated": joint_stagnation_truncated,
             # Walking stage flag
             "in_walking_stage": self.in_walking_stage,
+            # Raw reward inputs (physical measures before scaling)
+            "raw_up_z": float(up_z),
+            "raw_forward_vel": forward_vel,
+            "raw_energy": float(np.sum(action ** 2)),
+            "raw_contact_count": int(bad_contacts),
+            "raw_action_jerk": action_jerk,
             # Forward distance from start (projected onto forward axis)
             "forward_distance": float(np.dot(
                 current_position - self.start_position,
                 self.forward_velocity_axis,
+            )) if self.start_position is not None else 0.0,
+            # Lateral drift (displacement perpendicular to forward axis)
+            "lateral_drift": float(np.linalg.norm(
+                (current_position - self.start_position)
+                - np.dot(current_position - self.start_position, self.forward_velocity_axis)
+                * self.forward_velocity_axis
             )) if self.start_position is not None else 0.0,
         }
 
