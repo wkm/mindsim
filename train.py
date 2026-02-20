@@ -29,7 +29,7 @@ from collection import (  # noqa: F401 — re-export
     log_episode_value_trace,
 )
 from config import Config
-from dashboard import AnsiDashboard, TuiDashboard
+from dashboard import LogDashboard, TuiDashboard
 from git_utils import get_git_branch, get_git_sha
 from parallel import ParallelCollector, resolve_num_workers
 from policies import LSTMPolicy, MLPPolicy, TinyPolicy  # noqa: F401 — re-export
@@ -398,7 +398,7 @@ def _train_loop(
 
     Args:
         cfg: Config object
-        dashboard: Dashboard instance (TuiDashboard or AnsiDashboard)
+        dashboard: Dashboard instance (TuiDashboard or LogDashboard)
         smoketest: Whether this is a smoketest run
         resume: Resume ref string (local path or wandb artifact)
         num_workers_override: Override num_workers from config
@@ -1001,6 +1001,25 @@ def _train_loop(
             vals = [ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch]
             log_dict[f"rewards/{key}"] = np.mean(vals)
 
+        # Raw reward inputs (physical measures, averaged across batch)
+        raw_input_keys = [
+            "distance_to_target", "torso_height", "up_z",
+            "forward_vel", "energy", "contact_frac", "action_jerk",
+            "forward_distance", "lateral_drift", "total_path_length",
+            "avg_speed", "survival_time", "joint_activity",
+        ]
+        batch_raw_inputs = {}
+        for key in raw_input_keys:
+            vals = [ep.get("raw_inputs", {}).get(key, 0.0) for ep in episode_batch]
+            avg = float(np.mean(vals))
+            batch_raw_inputs[key] = avg
+            log_dict[f"raw/{key}"] = avg
+        # Fell fraction (from episode-level flag, not raw_inputs)
+        batch_raw_inputs["fell_frac"] = float(np.mean(
+            [ep.get("fell", False) for ep in episode_batch]
+        ))
+        log_dict["raw/fell_frac"] = batch_raw_inputs["fell_frac"]
+
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
             log_dict.update(
@@ -1053,6 +1072,19 @@ def _train_loop(
             "eval_time": timing["eval_batch"],
             "batch_size": batch_size,
             "episode_count": episode_count,
+            # Raw reward inputs for dashboard
+            "raw_inputs": batch_raw_inputs,
+            # Reward scales so TUI can hide inactive rows
+            "reward_scales": {
+                "upright": cfg.env.upright_reward_scale,
+                "alive": cfg.env.alive_bonus,
+                "energy": cfg.env.energy_penalty_scale,
+                "contact": cfg.env.ground_contact_penalty,
+                "forward_vel": cfg.env.forward_velocity_reward_scale,
+                "smoothness": cfg.env.action_smoothness_scale,
+                "has_walking_stage": 1.0 if cfg.env.has_walking_stage else 0.0,
+                "fall_detection": 1.0 if cfg.env.fall_height_fraction > 0 or cfg.env.fall_up_z_threshold > 0 else 0.0,
+            },
         }
         if cfg.training.algorithm == "PPO":
             dash_metrics.update(
@@ -1271,12 +1303,7 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     if scene_path:
         cfg.env.scene_path = scene_path
 
-    robot_name_cli = bot_display_name(bot_name_from_scene_path(cfg.env.scene_path))
-    dashboard = AnsiDashboard(
-        total_batches=cfg.training.max_batches,
-        algorithm=cfg.training.algorithm,
-        bot_name=robot_name_cli,
-    )
+    dashboard = LogDashboard()
 
     _train_loop(
         cfg=cfg,
