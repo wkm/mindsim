@@ -113,7 +113,10 @@ class SimpleWheelerEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        # Remap policy output [-1, 1] → each actuator's ctrlrange
+        ctrl_low = self.model.actuator_ctrlrange[:self.num_actuators, 0]
+        ctrl_high = self.model.actuator_ctrlrange[:self.num_actuators, 1]
+        self.data.ctrl[:self.num_actuators] = ctrl_low + (actions + 1.0) * 0.5 * (ctrl_high - ctrl_low)
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
