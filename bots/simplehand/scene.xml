@@ -1,7 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="SimpleHand_scene">
-  <!-- 500Hz sim (0.002s timestep) — needed for stable contact dynamics -->
-  <option timestep="0.002" />
+  <!-- 500Hz sim (0.002s timestep) — needed for stable contact dynamics.
+       Elliptic cone + noslip iterations for stable high-friction contacts. -->
+  <option timestep="0.002" cone="elliptic" noslip_iterations="3" />
 
   <include file="bot.xml" />
 
@@ -33,12 +34,12 @@
             rgba="0.6 0.4 0.2 1.0" mass="100" />
     </body>
 
-    <!-- Cup: free body on table surface (z=0.2 + half height 0.04 = 0.24) -->
-    <body name="cup" pos="0 0 0.24">
+    <!-- Cup: free body on table surface (z=0.2 + half height 0.04 + 2mm gap = 0.242) -->
+    <body name="cup" pos="0 0 0.242">
       <freejoint name="cup_joint" />
       <geom name="cup_geom" type="cylinder" size="0.025 0.04"
             rgba="0.9 0.2 0.2 1.0" mass="0.05"
-            friction="1.0 0.005 0.001" condim="4" />
+            friction="5.0 0.005 0.001" condim="4" />
     </body>
 
     <!-- Target zone: green semi-transparent cube above table -->

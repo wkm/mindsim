@@ -38,7 +38,7 @@
           <!-- Palm -->
           <geom name="palm" type="box" size="0.04 0.03 0.01" pos="0 0 -0.06"
                 rgba="0.7 0.7 0.8 1.0" mass="0.3"
-                friction="0.8 0.005 0.001" />
+                friction="5.0 0.005 0.001" />
 
           <!-- Camera on base (SimpleWheelerEnv compatibility, not used in training) -->
           <camera name="camera_1_cam" fovy="90.0"
@@ -47,21 +47,21 @@
           <!-- Left finger -->
           <body name="left_finger" pos="-0.04 0 -0.06">
             <joint name="left_finger_joint" type="slide" axis="1 0 0"
-                   range="0 0.04" damping="1.0" />
-            <geom name="left_finger_geom" type="box" size="0.005 0.025 0.025"
-                  pos="0 0 -0.025" rgba="0.8 0.4 0.3 1.0" mass="0.05"
-                  friction="1.0 0.005 0.001" />
-            <site name="left_fingertip" pos="0 0 -0.045" size="0.008" />
+                   range="0 0.04" damping="2.0" />
+            <geom name="left_finger_geom" type="box" size="0.01 0.025 0.03"
+                  pos="0 0 -0.03" rgba="0.8 0.4 0.3 1.0" mass="0.05"
+                  friction="5.0 0.005 0.001" />
+            <site name="left_fingertip" pos="0 0 -0.055" size="0.008" />
           </body>
 
           <!-- Right finger -->
           <body name="right_finger" pos="0.04 0 -0.06">
             <joint name="right_finger_joint" type="slide" axis="-1 0 0"
-                   range="0 0.04" damping="1.0" />
-            <geom name="right_finger_geom" type="box" size="0.005 0.025 0.025"
-                  pos="0 0 -0.025" rgba="0.8 0.4 0.3 1.0" mass="0.05"
-                  friction="1.0 0.005 0.001" />
-            <site name="right_fingertip" pos="0 0 -0.045" size="0.008" />
+                   range="0 0.04" damping="2.0" />
+            <geom name="right_finger_geom" type="box" size="0.01 0.025 0.03"
+                  pos="0 0 -0.03" rgba="0.8 0.4 0.3 1.0" mass="0.05"
+                  friction="5.0 0.005 0.001" />
+            <site name="right_fingertip" pos="0 0 -0.055" size="0.008" />
           </body>
         </body>
       </body>
@@ -84,8 +84,8 @@
     <position name="x_motor" joint="x_joint" kp="100" ctrlrange="-0.15 0.15" />
     <position name="y_motor" joint="y_joint" kp="100" ctrlrange="-0.15 0.15" />
     <position name="z_motor" joint="z_joint" kp="100" ctrlrange="0 0.3" />
-    <position name="left_finger_motor" joint="left_finger_joint" kp="20" ctrlrange="0 0.04" />
-    <position name="right_finger_motor" joint="right_finger_joint" kp="20" ctrlrange="0 0.04" />
+    <position name="left_finger_motor" joint="left_finger_joint" kp="50" ctrlrange="0 0.04" />
+    <position name="right_finger_motor" joint="right_finger_joint" kp="50" ctrlrange="0 0.04" />
   </actuator>
 
   <!-- Sensors: 5 joint positions + 5 joint velocities + 2 touch = 12 dims -->

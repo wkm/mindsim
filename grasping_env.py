@@ -203,7 +203,7 @@ class GraspingTrainingEnv:
         self.episode_step = 0
 
         # Place cup at fixed position on table (v1: no randomization)
-        cup_pos = np.array([0.0, 0.0, 0.24])  # centered on table, resting on surface
+        cup_pos = np.array([0.0, 0.0, 0.242])  # centered on table, 2mm above surface
         # Set cup freejoint qpos: [x, y, z, qw, qx, qy, qz]
         # Find the cup's freejoint
         cup_joint_id = mujoco.mj_name2id(
