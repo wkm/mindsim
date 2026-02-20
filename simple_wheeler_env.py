@@ -46,6 +46,10 @@ class SimpleWheelerEnv:
             for i in range(self.num_actuators)
         ]
 
+        # Cache ctrlrange for remapping NN outputs [-1,1] -> [lo, hi]
+        self.ctrl_range_lo = self.model.actuator_ctrlrange[:self.num_actuators, 0].copy()
+        self.ctrl_range_hi = self.model.actuator_ctrlrange[:self.num_actuators, 1].copy()
+
         # Standard body/camera IDs (convention: all bots use these names)
         self.bot_body_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "base"
@@ -113,7 +117,10 @@ class SimpleWheelerEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        # Remap [-1, 1] -> [ctrlrange_lo, ctrlrange_hi] per actuator
+        lo = self.ctrl_range_lo
+        hi = self.ctrl_range_hi
+        self.data.ctrl[:self.num_actuators] = lo + (actions + 1.0) * 0.5 * (hi - lo)
 
         # Step physics
         mujoco.mj_step(self.model, self.data)

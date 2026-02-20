@@ -139,23 +139,23 @@
   <actuator>
     <!-- 12 position actuators with per-joint kp tuning -->
 
-    <!-- Waist -->
-    <position name="waist_tilt_motor"  joint="waist_tilt"  kp="70" />
-    <position name="waist_twist_motor" joint="waist_twist" kp="70" />
+    <!-- Waist: joint range ±0.3 rad -->
+    <position name="waist_tilt_motor"  joint="waist_tilt"  kp="70" ctrlrange="-0.3 0.3" />
+    <position name="waist_twist_motor" joint="waist_twist" kp="70" ctrlrange="-0.3 0.3" />
 
-    <!-- Left leg -->
-    <position name="left_hip_abd_motor"  joint="left_hip_abd"  kp="60" />
-    <position name="left_hip_flex_motor" joint="left_hip_flex" kp="90" />
-    <position name="left_hip_rot_motor"  joint="left_hip_rot"  kp="45" />
-    <position name="left_knee_motor"     joint="left_knee"     kp="90" />
-    <position name="left_ankle_motor"    joint="left_ankle"    kp="70" />
+    <!-- Left leg: ctrlrange matched to joint range -->
+    <position name="left_hip_abd_motor"  joint="left_hip_abd"  kp="60" ctrlrange="-0.5 0.5" />
+    <position name="left_hip_flex_motor" joint="left_hip_flex" kp="90" ctrlrange="-1.0 0.8" />
+    <position name="left_hip_rot_motor"  joint="left_hip_rot"  kp="45" ctrlrange="-0.4 0.4" />
+    <position name="left_knee_motor"     joint="left_knee"     kp="90" ctrlrange="0 2.0" />
+    <position name="left_ankle_motor"    joint="left_ankle"    kp="70" ctrlrange="-0.5 0.5" />
 
-    <!-- Right leg -->
-    <position name="right_hip_abd_motor"  joint="right_hip_abd"  kp="60" />
-    <position name="right_hip_flex_motor" joint="right_hip_flex" kp="90" />
-    <position name="right_hip_rot_motor"  joint="right_hip_rot"  kp="45" />
-    <position name="right_knee_motor"     joint="right_knee"     kp="90" />
-    <position name="right_ankle_motor"    joint="right_ankle"    kp="70" />
+    <!-- Right leg: ctrlrange matched to joint range -->
+    <position name="right_hip_abd_motor"  joint="right_hip_abd"  kp="60" ctrlrange="-0.5 0.5" />
+    <position name="right_hip_flex_motor" joint="right_hip_flex" kp="90" ctrlrange="-1.0 0.8" />
+    <position name="right_hip_rot_motor"  joint="right_hip_rot"  kp="45" ctrlrange="-0.4 0.4" />
+    <position name="right_knee_motor"     joint="right_knee"     kp="90" ctrlrange="0 2.0" />
+    <position name="right_ankle_motor"    joint="right_ankle"    kp="70" ctrlrange="-0.5 0.5" />
   </actuator>
 
   <sensor>

@@ -130,7 +130,42 @@ Always exclude collisions between:
 
 Missing exclusions cause the solver to fight self-intersection, creating jitter and instability.
 
-## 10. Gait Phase Period — Scale to Leg Length
+## 10. Actuator ctrlrange — Must Match Joint Range
+
+The policy outputs values in `ctrlrange` (default `[-1, 1]`). For position actuators, these values are **target angles in radians**. If ctrlrange doesn't match the joint's `range`, the NN wastes control authority or can't reach valid positions.
+
+Common failures:
+- **ctrlrange wider than joint range**: Most of the NN's output space commands impossible positions. The PD controller saturates pushing against the joint stop, wasting force and confusing gradient signals.
+- **ctrlrange narrower than joint range**: The NN can't command the full range of motion. For example, a knee with range `[0, 2.0]` rad but ctrlrange `[-1, 1]` can only target up to 1.0 rad — half the knee's bend.
+- **ctrlrange centered but joint range asymmetric**: A hip with range `[-1.0, 0.8]` but ctrlrange `[-1, 1]` wastes 0.2 rad on the positive side.
+
+**Rule: set each actuator's ctrlrange to exactly match its joint's range.**
+
+```xml
+<!-- BAD: default ctrlrange, mismatched -->
+<position name="knee_motor" joint="knee" kp="90" />  <!-- ctrlrange="-1 1" but joint range="0 2.0" -->
+
+<!-- GOOD: ctrlrange matches joint range -->
+<position name="knee_motor" joint="knee" kp="90" ctrlrange="0 2.0" />
+```
+
+Verify after any joint range change:
+```bash
+# Print all joint ranges and actuator ctrlranges
+uv run python -c "
+import mujoco
+m = mujoco.MjModel.from_xml_path('bots/BOTNAME/scene.xml')
+for i in range(m.nu):
+    jnt = m.actuator_trnid[i, 0]
+    name = m.joint(jnt).name
+    jlo, jhi = m.jnt_range[jnt]
+    clo, chi = m.actuator_ctrlrange[i]
+    match = 'OK' if abs(clo - jlo) < 0.01 and abs(chi - jhi) < 0.01 else 'MISMATCH'
+    print(f'{name:25s} joint=[{jlo:+.2f}, {jhi:+.2f}]  ctrl=[{clo:+.2f}, {chi:+.2f}]  {match}')
+"
+```
+
+## 11. Gait Phase Period — Scale to Leg Length
 
 The gait phase input encodes where the robot is in its stride cycle. The period must match the robot's natural stride dynamics, which scale with leg length.
 
@@ -147,7 +182,7 @@ Real human walking is faster than the natural pendulum period (we push off), typ
 
 Rule of thumb: `gait_phase_period ≈ 0.65 * 2π * sqrt(leg_length / 9.81)`
 
-## 11. Quick Validation Sequence
+## 12. Quick Validation Sequence
 
 After building or modifying a bot:
 
