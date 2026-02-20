@@ -28,9 +28,12 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs, bot_name):
     from train import LSTMPolicy, MLPPolicy, TinyPolicy
     from training_env import TrainingEnv
 
+    import warnings
     env_config = EnvConfig(**env_config_dict)
     _worker_env = TrainingEnv.from_config(env_config)
-    _worker_hierarchy = build_reward_hierarchy(bot_name, env_config)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _worker_hierarchy = build_reward_hierarchy(bot_name, env_config)
 
     if policy_class_name == "LSTMPolicy":
         _worker_policy = LSTMPolicy(**policy_kwargs)
