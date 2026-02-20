@@ -27,7 +27,11 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
     from training_env import TrainingEnv
 
     env_config = EnvConfig(**env_config_dict)
-    _worker_env = TrainingEnv.from_config(env_config)
+    if getattr(env_config, 'env_type', 'locomotion') == 'grasping':
+        from grasping_env import GraspingTrainingEnv
+        _worker_env = GraspingTrainingEnv.from_config(env_config)
+    else:
+        _worker_env = TrainingEnv.from_config(env_config)
 
     if policy_class_name == "LSTMPolicy":
         _worker_policy = LSTMPolicy(**policy_kwargs)

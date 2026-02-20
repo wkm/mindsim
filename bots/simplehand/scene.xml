@@ -1,0 +1,73 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="SimpleHand_scene">
+  <!-- 500Hz sim (0.002s timestep) — needed for stable contact dynamics -->
+  <option timestep="0.002" />
+
+  <include file="bot.xml" />
+
+  <statistic extent="1" center="0 0 0.3" />
+
+  <visual>
+    <headlight ambient=".4 .4 .4" diffuse=".8 .8 .8" specular="0.1 0.1 0.1" />
+    <map znear="0.01" />
+    <quality shadowsize="2048" />
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0"
+             width="512" height="3072" />
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge"
+             rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8"
+             width="300" height="300" />
+    <material name="groundplane" texture="groundplane" texuniform="true"
+              texrepeat="5 5" reflectance="0.2" />
+  </asset>
+
+  <worldbody>
+    <light directional="true" diffuse=".8 .8 .8" pos="0 0 10" dir="0 0 -1" />
+    <geom name="floor" type="plane" size="2 2 0.1" material="groundplane" />
+
+    <!-- Table: static box, top surface at z=0.2 -->
+    <body name="table" pos="0 0 0.1">
+      <geom name="table_top" type="box" size="0.2 0.2 0.1"
+            rgba="0.6 0.4 0.2 1.0" mass="100" />
+    </body>
+
+    <!-- Cup: free body on table surface (z=0.2 + half height 0.04 = 0.24) -->
+    <body name="cup" pos="0 0 0.24">
+      <freejoint name="cup_joint" />
+      <geom name="cup_geom" type="cylinder" size="0.025 0.04"
+            rgba="0.9 0.2 0.2 1.0" mass="0.05"
+            friction="1.0 0.005 0.001" condim="4" />
+    </body>
+
+    <!-- Target zone: green semi-transparent cube above table -->
+    <body name="target" mocap="true" pos="0 0 0.45">
+      <geom name="target_cube" type="box" size="0.04 0.04 0.04"
+            rgba="0.2 0.9 0.3 0.4" contype="0" conaffinity="0" />
+    </body>
+
+    <!-- Distractors: hidden below floor (SimpleWheelerEnv compatibility) -->
+    <body name="distractor_0" mocap="true" pos="0 0 -1">
+      <geom name="distractor_0_cube" type="box" size="0.03 0.03 0.03"
+            rgba="0.2 0.4 1.0 1.0" contype="0" conaffinity="0" />
+    </body>
+    <body name="distractor_1" mocap="true" pos="0 0 -1">
+      <geom name="distractor_1_cube" type="box" size="0.03 0.03 0.03"
+            rgba="0.2 0.9 0.3 1.0" contype="0" conaffinity="0" />
+    </body>
+    <body name="distractor_2" mocap="true" pos="0 0 -1">
+      <geom name="distractor_2_cube" type="box" size="0.03 0.03 0.03"
+            rgba="0.9 0.2 0.2 1.0" contype="0" conaffinity="0" />
+    </body>
+    <body name="distractor_3" mocap="true" pos="0 0 -1">
+      <geom name="distractor_3_cube" type="box" size="0.03 0.03 0.03"
+            rgba="0.7 0.3 0.9 1.0" contype="0" conaffinity="0" />
+    </body>
+  </worldbody>
+
+  <!-- Cup position sensor (3 dims) — total sensor dim: 12 (bot) + 3 (cup_pos) = 15 -->
+  <sensor>
+    <framepos name="cup_pos" objtype="body" objname="cup" />
+  </sensor>
+</mujoco>

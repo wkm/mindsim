@@ -1,0 +1,104 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- Simple Hand: parallel jaw gripper on 3-DOF Cartesian gantry
+     Design: no balance problem (rails, not freejoints). The RL policy
+     controls X/Y/Z position and finger open/close to grasp objects.
+     5 position actuators: x_motor, y_motor, z_motor, left_finger_motor, right_finger_motor
+     12 sensors: 5 joint pos + 5 joint vel + 2 touch -->
+<mujoco model="SimpleHand">
+  <compiler angle="radian" />
+
+  <default>
+    <joint limited="true" damping="5.0" />
+    <geom contype="1" conaffinity="1" condim="4" />
+    <position ctrlrange="-1 1" />
+  </default>
+
+  <worldbody>
+    <!-- Cartesian gantry: X rail -> Y rail -> Z rail (downward) -> palm + fingers
+         Gantry base at z=0.5, Z-slide moves downward to reach table at z=0.2 -->
+    <body name="x_carriage" pos="0 0 0.5">
+      <joint name="x_joint" type="slide" axis="1 0 0" range="-0.15 0.15"
+             damping="10.0" />
+      <geom name="x_carriage_geom" type="box" size="0.02 0.02 0.01"
+            rgba="0.5 0.5 0.5 0.3" mass="0.5" contype="0" conaffinity="0" />
+
+      <body name="y_carriage" pos="0 0 0">
+        <joint name="y_joint" type="slide" axis="0 1 0" range="-0.15 0.15"
+               damping="10.0" />
+        <geom name="y_carriage_geom" type="box" size="0.02 0.02 0.01"
+              rgba="0.5 0.5 0.5 0.3" mass="0.5" contype="0" conaffinity="0" />
+
+        <body name="base" pos="0 0 0">
+          <!-- Z-slide: range 0 to -0.3 (downward). At max extension, hand at z=0.2 (table surface) -->
+          <joint name="z_joint" type="slide" axis="0 0 -1" range="0 0.3"
+                 damping="10.0" />
+          <geom name="z_rail_geom" type="box" size="0.01 0.01 0.05"
+                rgba="0.4 0.4 0.4 0.5" mass="0.2" contype="0" conaffinity="0" />
+
+          <!-- Palm -->
+          <geom name="palm" type="box" size="0.04 0.03 0.01" pos="0 0 -0.06"
+                rgba="0.7 0.7 0.8 1.0" mass="0.3"
+                friction="0.8 0.005 0.001" />
+
+          <!-- Camera on base (SimpleWheelerEnv compatibility, not used in training) -->
+          <camera name="camera_1_cam" fovy="90.0"
+                  pos="0 -0.1 -0.03" euler="-1.5707963 0 3.14159265" />
+
+          <!-- Left finger -->
+          <body name="left_finger" pos="-0.04 0 -0.06">
+            <joint name="left_finger_joint" type="slide" axis="1 0 0"
+                   range="0 0.04" damping="1.0" />
+            <geom name="left_finger_geom" type="box" size="0.005 0.025 0.025"
+                  pos="0 0 -0.025" rgba="0.8 0.4 0.3 1.0" mass="0.05"
+                  friction="1.0 0.005 0.001" />
+            <site name="left_fingertip" pos="0 0 -0.045" size="0.008" />
+          </body>
+
+          <!-- Right finger -->
+          <body name="right_finger" pos="0.04 0 -0.06">
+            <joint name="right_finger_joint" type="slide" axis="-1 0 0"
+                   range="0 0.04" damping="1.0" />
+            <geom name="right_finger_geom" type="box" size="0.005 0.025 0.025"
+                  pos="0 0 -0.025" rgba="0.8 0.4 0.3 1.0" mass="0.05"
+                  friction="1.0 0.005 0.001" />
+            <site name="right_fingertip" pos="0 0 -0.045" size="0.008" />
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- Prevent self-collision between gantry parts -->
+  <contact>
+    <exclude body1="x_carriage" body2="y_carriage" />
+    <exclude body1="y_carriage" body2="base" />
+    <exclude body1="base" body2="left_finger" />
+    <exclude body1="base" body2="right_finger" />
+    <exclude body1="left_finger" body2="right_finger" />
+  </contact>
+
+  <!-- Position actuators: kp=100 for arm (heavy), kp=20 for fingers (light, compliant) -->
+  <actuator>
+    <position name="x_motor" joint="x_joint" kp="100" ctrlrange="-1 1" />
+    <position name="y_motor" joint="y_joint" kp="100" ctrlrange="-1 1" />
+    <position name="z_motor" joint="z_joint" kp="100" ctrlrange="-1 1" />
+    <position name="left_finger_motor" joint="left_finger_joint" kp="20" ctrlrange="-1 1" />
+    <position name="right_finger_motor" joint="right_finger_joint" kp="20" ctrlrange="-1 1" />
+  </actuator>
+
+  <!-- Sensors: 5 joint positions + 5 joint velocities + 2 touch = 12 dims -->
+  <sensor>
+    <jointpos name="x_pos" joint="x_joint" />
+    <jointpos name="y_pos" joint="y_joint" />
+    <jointpos name="z_pos" joint="z_joint" />
+    <jointpos name="left_finger_pos" joint="left_finger_joint" />
+    <jointpos name="right_finger_pos" joint="right_finger_joint" />
+    <jointvel name="x_vel" joint="x_joint" />
+    <jointvel name="y_vel" joint="y_joint" />
+    <jointvel name="z_vel" joint="z_joint" />
+    <jointvel name="left_finger_vel" joint="left_finger_joint" />
+    <jointvel name="right_finger_vel" joint="right_finger_joint" />
+    <touch name="left_touch" site="left_fingertip" />
+    <touch name="right_touch" site="right_fingertip" />
+  </sensor>
+</mujoco>

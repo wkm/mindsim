@@ -80,6 +80,14 @@ class EnvConfig:
     # Gait phase encoding (0.0 = disabled)
     gait_phase_period: float = 0.0  # Period in seconds (e.g. 0.6s for ~1.67Hz stride)
 
+    # Environment type: "locomotion" (TrainingEnv) or "grasping" (GraspingTrainingEnv)
+    env_type: str = "locomotion"
+
+    # Grasping reward shaping (all 0.0 = disabled for locomotion bots)
+    reach_reward_scale: float = 0.0  # Hand→cup potential-based reward
+    grasp_bonus: float = 0.0  # Per-step bonus when both fingers contact cup
+    lift_reward_scale: float = 0.0  # Cup→target potential-based reward (gated on grasp)
+
 
 @dataclass
 class CurriculumConfig:
@@ -446,6 +454,93 @@ class Config:
                 hidden_size=32,
                 fc_output_size=8,  # 8 motors
                 sensor_input_size=26,  # 8 pos + 8 vel + 3 gyro + 3 accel + 4 gait phase
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,
+                max_batches=3,
+                log_rerun_every=9999,
+                ppo_epochs=2,
+            ),
+        )
+
+    @classmethod
+    def for_simplehand(cls) -> Config:
+        """Config for parallel-jaw gripper grasping task with MLPPolicy."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplehand/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=500,  # 4s at 125Hz
+                max_episode_steps_final=500,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,  # 0.002s * 4 = 125Hz control
+                success_distance=0.05,  # Cup within 5cm of target zone
+                time_penalty=0.005,
+                # Grasping rewards
+                env_type="grasping",
+                reach_reward_scale=10.0,
+                grasp_bonus=0.5,
+                lift_reward_scale=20.0,
+            ),
+            curriculum=CurriculumConfig(
+                num_stages=1,  # Single stage for v1
+                window_size=10,
+                advance_threshold=0.6,
+                advance_rate=0.02,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=256,
+                fc_output_size=5,  # x, y, z, left_finger, right_finger
+                sensor_input_size=15,  # 5 pos + 5 vel + 2 touch + 3 cup_pos
+                init_std=0.5,
+            ),
+            training=TrainingConfig(
+                learning_rate=3e-4,
+                batch_size=64,
+                algorithm="PPO",
+                entropy_coeff=0.01,
+                ppo_epochs=10,
+            ),
+        )
+
+    @classmethod
+    def for_simplehand_smoketest(cls) -> Config:
+        """Config for fast simplehand end-to-end validation."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/simplehand/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=10,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,
+                success_distance=0.05,
+                time_penalty=0.005,
+                env_type="grasping",
+                reach_reward_scale=10.0,
+                grasp_bonus=0.5,
+                lift_reward_scale=20.0,
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,
+                advance_rate=1.0,
+                eval_episodes_per_batch=1,
+                num_stages=1,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=32,
+                fc_output_size=5,
+                sensor_input_size=15,
             ),
             training=TrainingConfig(
                 batch_size=2,

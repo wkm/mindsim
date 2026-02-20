@@ -17,3 +17,4 @@ Tracking experimental branches and their outcomes.
 | `exp/increase-variance-diversity` | Increasing exploration variance/diversity improves sample efficiency | Abandoned (no unique changes) | - |
 | `exp/ppo-architecture-baseline` | PPO architecture comparison baseline | Abandoned (no unique changes) | - |
 | `exp/walls-exploration` | Adding walls to the environment encourages more directed exploration | Abandoned (no unique changes) | - |
+| `exp/260220-simple-hand` | Parallel-jaw gripper on Cartesian rails can learn reach-grasp-lift with PPO + sensors-only MLPPolicy and touch feedback | In progress | - |
