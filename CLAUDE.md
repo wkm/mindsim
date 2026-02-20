@@ -117,6 +117,9 @@ Creates a Rerun recording with:
 6. **Don't duplicate model entities**
    If the model has floor/target/etc., use it - don't log separately
 
+7. **Match actuator `ctrlrange` to joint `range` for position actuators**
+   Position actuators interpret ctrl as target joint position. If `ctrlrange="-1 1"` but the joint range is `[0, 0.04]`, ~98% of the policy's output space pushes uselessly against joint limits. Set `ctrlrange` to match the joint range so the full policy output maps to the full joint travel.
+
 ## Key Files
 
 - **main.py** - Single entry point for all modes (TUI, view, play, train, etc.)

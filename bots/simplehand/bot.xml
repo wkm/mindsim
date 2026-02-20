@@ -77,13 +77,15 @@
     <exclude body1="left_finger" body2="right_finger" />
   </contact>
 
-  <!-- Position actuators: kp=100 for arm (heavy), kp=20 for fingers (light, compliant) -->
+  <!-- Position actuators: ctrlrange matches joint range so the full policy
+       output [-1,1] maps to the full joint range (after MuJoCo's internal
+       rescaling). kp=100 for arm (heavy), kp=20 for fingers (light, compliant). -->
   <actuator>
-    <position name="x_motor" joint="x_joint" kp="100" ctrlrange="-1 1" />
-    <position name="y_motor" joint="y_joint" kp="100" ctrlrange="-1 1" />
-    <position name="z_motor" joint="z_joint" kp="100" ctrlrange="-1 1" />
-    <position name="left_finger_motor" joint="left_finger_joint" kp="20" ctrlrange="-1 1" />
-    <position name="right_finger_motor" joint="right_finger_joint" kp="20" ctrlrange="-1 1" />
+    <position name="x_motor" joint="x_joint" kp="100" ctrlrange="-0.15 0.15" />
+    <position name="y_motor" joint="y_joint" kp="100" ctrlrange="-0.15 0.15" />
+    <position name="z_motor" joint="z_joint" kp="100" ctrlrange="0 0.3" />
+    <position name="left_finger_motor" joint="left_finger_joint" kp="20" ctrlrange="0 0.04" />
+    <position name="right_finger_motor" joint="right_finger_joint" kp="20" ctrlrange="0 0.04" />
   </actuator>
 
   <!-- Sensors: 5 joint positions + 5 joint velocities + 2 touch = 12 dims -->
