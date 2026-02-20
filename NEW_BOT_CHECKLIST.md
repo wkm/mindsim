@@ -37,33 +37,57 @@ Rule: **always use box or composite feet for 3D bipeds.**
 
 **Start with position actuators.** The gravitational torque on joints (e.g., ~23 Nm at the hip for a 10 kg torso) vastly exceeds what joint damping alone provides (~0.3 Nm). Without position springs, the robot instantly collapses.
 
-## 4. Motor Gains (kp) — Scale to Body Size
+## 4. Motor Gains (kp) — Scale to Gravitational Torque
 
-Position actuator spring gain (kp) must match the robot's mass and lever arms:
+Position actuator spring gain (kp) must resist gravitational torque at each joint. The required kp scales with the mass above the joint and the lever arm to the center of mass.
 
 - **Too high**: joints snap violently to targets, creating oscillation and flailing
 - **Too low**: robot sags, can't hold standing pose, sluggish response
 
-Rough guideline: for a ~18 kg robot with 8cm upper legs:
-- Hip/knee: kp = 30-50
-- Ankle: kp = 20-35
-- Hip abduction: kp = 20-30
+kp must be high enough to hold the standing pose, but the resulting movement speed is governed by damping (see section 5). Don't try to control speed by lowering kp below the gravity threshold — use damping instead.
 
-The original biped (z=0.40, 12 kg torso, 12 cm legs) used kp=100. The duck biped (z=0.22, 10 kg torso, 8 cm legs) needs kp=40. **Smaller body = lower kp.**
+| Robot | Mass | CoM height | Hip kp | Knee kp |
+|-------|-----:|-----------:|-------:|--------:|
+| Duck biped | 18 kg | 0.22m | 40 | 40 |
+| Child biped | 17 kg | 0.52m | 90 | 90 |
 
-## 5. Joint Damping — Prevent Oscillation
+The child needs ~2x the duck's kp despite similar mass, because the longer lever arms produce higher gravitational torques. **kp scales with torque demands, not just body size.**
 
-Damping resists joint velocity. Too low = underdamped oscillation. Too high = sluggish movement.
+## 5. Joint Damping — Limit Speed, Not Just Oscillation
 
-The damping ratio ζ = damping / (2 * sqrt(kp * I)), where I is the effective inertia. For RL, aim for ζ ≈ 0.3-0.5 (slightly underdamped, responsive but not wild).
+Damping resists joint velocity. It serves two purposes:
+1. **Prevent oscillation** around the target position
+2. **Limit joint speed** to physically realistic values
 
-Practical values for the duck biped (kp=40):
-- Hip: damping = 3.0
-- Knee: damping = 2.0
-- Ankle: damping = 0.8
-- Hip abduction: damping = 1.0
+The terminal angular velocity of a position-actuated joint is:
 
-**Rule of thumb**: damping should be roughly 5-10% of kp for small robots.
+```
+terminal_vel = kp * position_error / damping
+```
+
+The **tip speed** at the end of the limb is `terminal_vel * lever_arm`. This is what determines whether movement looks realistic or comically fast.
+
+**Critical insight**: damping that works for a short-legged robot will produce absurd speeds on a taller one, even with identical kp. A 3x longer leg at the same angular velocity produces 3x the tip speed.
+
+Practical approach — work backwards from realistic tip speeds:
+
+```
+damping = kp * max_position_error / target_angular_vel
+```
+
+Reference angular velocities for walking:
+- Hip: 4-5 rad/s peak (swing phase)
+- Knee: 6-8 rad/s peak (swing phase)
+- Ankle: 6-8 rad/s peak
+
+| Robot | Hip kp | Hip damping | Hip terminal vel | Leg tip speed |
+|-------|-------:|----------:|----------------:|--------------:|
+| Duck (0.17m legs) | 40 | 3.0 | 13.3 rad/s | 2.3 m/s |
+| Child (0.46m legs) | 90 | 18.0 | 5.0 rad/s | 2.3 m/s |
+
+The duck gets away with low damping because its legs are short. The child biped needs ~6x more damping to achieve the same tip speed.
+
+**Don't use a fixed damping-to-kp ratio.** Instead, compute terminal velocities and verify tip speeds are physically plausible (< 3 m/s for walking, < 5 m/s for running).
 
 ## 6. Mass Distribution — Heavy Top, Light Legs
 
@@ -106,7 +130,24 @@ Always exclude collisions between:
 
 Missing exclusions cause the solver to fight self-intersection, creating jitter and instability.
 
-## 10. Quick Validation Sequence
+## 10. Gait Phase Period — Scale to Leg Length
+
+The gait phase input encodes where the robot is in its stride cycle. The period must match the robot's natural stride dynamics, which scale with leg length.
+
+**Pendulum model**: the natural swing period of a leg is `T = 2π * sqrt(L/g)`, where L is leg length (hip to ground).
+
+| Robot | Leg length | Natural period | Good starting period |
+|-------|-----------|---------------|---------------------|
+| Duck biped | 0.17m | 0.83s | 0.6s |
+| Child biped | 0.46m | 1.36s | 0.85s |
+
+Real human walking is faster than the natural pendulum period (we push off), typically 60-70% of T.
+
+**Don't copy gait period from a different-sized robot.** A period that's too fast forces the policy to fight the physics; too slow wastes the phase signal.
+
+Rule of thumb: `gait_phase_period ≈ 0.65 * 2π * sqrt(leg_length / 9.81)`
+
+## 11. Quick Validation Sequence
 
 After building or modifying a bot:
 
@@ -117,9 +158,13 @@ uv run python -c "import mujoco; mujoco.MjModel.from_xml_path('bots/BOTNAME/scen
 # 2. Does it stand?
 uv run python stability_test.py --scene bots/BOTNAME/scene.xml --verbose
 
-# 3. Does it look right?
+# 3. Does it look right? (check for interpenetration, floating, comically fast joints)
 uv run mjpython main.py view --bot BOTNAME
 
-# 4. Does training pipeline work?
+# 4. Are joint speeds realistic?
+# Compute terminal_vel = kp * max_error / damping for each joint.
+# Multiply by lever arm to get tip speed. Should be < 3 m/s for walking bots.
+
+# 5. Does training pipeline work?
 uv run mjpython main.py train --bot BOTNAME --smoketest
 ```

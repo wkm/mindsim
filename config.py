@@ -498,7 +498,7 @@ class Config:
                 # Action smoothness
                 action_smoothness_scale=0.05,  # Softer penalty: 12 joints vs 8
                 # Gait phase
-                gait_phase_period=0.6,  # 1.67Hz stride
+                gait_phase_period=0.85,  # ~1.18Hz stride (scaled from 0.46m leg length)
             ),
             curriculum=CurriculumConfig(
                 num_stages=5,  # Walking + 4 standard stages
@@ -548,7 +548,7 @@ class Config:
                 fall_up_z_threshold=0.50,
                 fall_grace_steps=50,
                 action_smoothness_scale=0.05,
-                gait_phase_period=0.6,
+                gait_phase_period=0.85,
             ),
             curriculum=CurriculumConfig(
                 window_size=1,
