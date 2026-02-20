@@ -8,7 +8,10 @@ Automatically converts to dict for W&B logging.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from reward_hierarchy import RewardHierarchy
 
 
 @dataclass
@@ -178,6 +181,16 @@ class Config:
         """Extract bot directory name from env.scene_path (e.g. 'simple2wheeler')."""
         from pathlib import Path
         return Path(self.env.scene_path).parent.name
+
+    @property
+    def reward_hierarchy(self) -> RewardHierarchy:
+        """Build (and cache) the reward hierarchy for this config's bot."""
+        # Cache to avoid duplicate validation warnings
+        cache_attr = "_reward_hierarchy_cache"
+        if not hasattr(self, cache_attr):
+            from reward_hierarchy import build_reward_hierarchy
+            object.__setattr__(self, cache_attr, build_reward_hierarchy(self.bot_name, self.env))
+        return getattr(self, cache_attr)
 
     def to_flat_dict(self) -> dict:
         """

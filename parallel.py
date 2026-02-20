@@ -16,18 +16,21 @@ import torch
 # Worker-local globals (initialized once per worker process)
 _worker_env = None
 _worker_policy = None
+_worker_hierarchy = None
 
 
-def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
+def _init_worker(env_config_dict, policy_class_name, policy_kwargs, bot_name):
     """Initialize a persistent environment and policy in the worker process."""
-    global _worker_env, _worker_policy
+    global _worker_env, _worker_policy, _worker_hierarchy
 
     from config import EnvConfig
+    from reward_hierarchy import build_reward_hierarchy
     from train import LSTMPolicy, MLPPolicy, TinyPolicy
     from training_env import TrainingEnv
 
     env_config = EnvConfig(**env_config_dict)
     _worker_env = TrainingEnv.from_config(env_config)
+    _worker_hierarchy = build_reward_hierarchy(bot_name, env_config)
 
     if policy_class_name == "LSTMPolicy":
         _worker_policy = LSTMPolicy(**policy_kwargs)
@@ -40,7 +43,7 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs):
 
 def _collect_one(args):
     """Collect a single episode in a worker process."""
-    global _worker_env, _worker_policy
+    global _worker_env, _worker_policy, _worker_hierarchy
 
     state_dict_np, curriculum_stage, stage_progress, num_stages, deterministic = args
 
@@ -56,6 +59,7 @@ def _collect_one(args):
         _worker_policy,
         device="cpu",
         deterministic=deterministic,
+        hierarchy=_worker_hierarchy,
     )
 
 
@@ -76,7 +80,7 @@ class ParallelCollector:
     Policy weights are synced from the main process before each batch.
     """
 
-    def __init__(self, num_workers, env_config, policy_config):
+    def __init__(self, num_workers, env_config, policy_config, bot_name):
         self.num_workers = num_workers
 
         # Build policy constructor kwargs from config
@@ -99,6 +103,7 @@ class ParallelCollector:
                 asdict(env_config),
                 policy_config.policy_type,
                 policy_kwargs,
+                bot_name,
             ),
         )
 
