@@ -312,10 +312,12 @@ class AnsiDashboard:
                 _fmt_time(eval_time),
             )
         )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else ""
         lines.append(
             row(
-                "",
-                "",
+                "rec interval",
+                rec_str.rjust(8),
                 "\u2514 throughput",
                 f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8),
             )

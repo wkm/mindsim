@@ -550,6 +550,8 @@ class TrainingDashboard(Screen):
         Binding("w", "open_wandb", "W&B"),
         Binding("up", "advance_curriculum", "Advance"),
         Binding("down", "regress_curriculum", "Regress"),
+        Binding("left_square_bracket", "rerun_freq_down", "Rec \u2193"),
+        Binding("right_square_bracket", "rerun_freq_up", "Rec \u2191"),
         Binding("q", "quit_app", "Quit"),
         Binding("escape", "quit_app", "Quit", show=False),
         Binding("backspace", "quit_app", "Quit", show=False),
@@ -730,6 +732,9 @@ class TrainingDashboard(Screen):
                 yield Static(
                     "  max steps           ---", id="m-max-steps", classes="metric-line"
                 )
+                yield Static(
+                    "  rec interval        ---", id="m-rec-interval", classes="metric-line"
+                )
                 yield Static("TIMING", classes="section-title")
                 yield Static("  batch               ---", id="m-timing-batch", classes="metric-line")
                 yield Static("  \u251c collect           ---", id="m-timing-collect", classes="metric-line")
@@ -776,6 +781,14 @@ class TrainingDashboard(Screen):
     def action_regress_curriculum(self) -> None:
         self.app.send_command("regress_curriculum")
         self.log_message("Regressing curriculum...")
+
+    def action_rerun_freq_down(self) -> None:
+        self.app.send_command("rerun_freq_down")
+        self.log_message("Decreasing Rerun recording interval (more frequent)...")
+
+    def action_rerun_freq_up(self) -> None:
+        self.app.send_command("rerun_freq_up")
+        self.log_message("Increasing Rerun recording interval (less frequent)...")
 
     def action_open_wandb(self) -> None:
         if self._wandb_url:
@@ -917,6 +930,11 @@ class TrainingDashboard(Screen):
         )
         self.query_one("#m-max-steps").update(
             f"  max steps        {_fmt_int(m.get('max_episode_steps'))}"
+        )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else "---"
+        self.query_one("#m-rec-interval").update(
+            f"  rec interval     {rec_str.rjust(8)}"
         )
 
         # Timing

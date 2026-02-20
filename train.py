@@ -683,6 +683,7 @@ def _train_loop(
         if tweaks:
             changes = apply_tweaks(cfg, optimizer, env, tweaks)
             batch_size = cfg.training.batch_size
+            log_rerun_every = cfg.training.log_rerun_every
             for name, old, new in changes:
                 dashboard.message(f"  tweak: {name} {old} -> {new}")
             if changes:
@@ -709,6 +710,20 @@ def _train_loop(
                 stage_progress = max(0.0, stage_progress - 0.1)
                 dashboard.message(
                     f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
+                )
+            elif cmd == "rerun_freq_down":
+                old = log_rerun_every
+                log_rerun_every = max(batch_size, log_rerun_every // 2)
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
+                )
+            elif cmd == "rerun_freq_up":
+                old = log_rerun_every
+                log_rerun_every = log_rerun_every * 2
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
                 )
             elif cmd == "stop":
                 stop_requested = True
@@ -1030,6 +1045,7 @@ def _train_loop(
             "mastery_count": mastery_count,
             "mastery_batches": cfg.training.mastery_batches,
             "max_episode_steps": env.max_episode_steps,
+            "log_rerun_every": log_rerun_every,
             # Timing
             "batch_time": batch_time,
             "collect_time": timing["collect_batch"],
