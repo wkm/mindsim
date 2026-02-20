@@ -1,0 +1,194 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- ChildBiped: 12-DOF lower body modeled after a 4-year-old child.
+     Position-controlled joints for passive standing stability.
+
+     Kinematic chain (12 DOF):
+       base/pelvis (freejoint, z=0.52)
+         upper_body (waist_twist z + waist_tilt x, 10kg trunk)
+         left_upper_leg (hip_abd y + hip_flex x + hip_rot z)
+           left_lower_leg (knee x)
+             left_foot (ankle x)
+         right_upper_leg (mirror)
+
+     Height calculation (feet at z=0):
+       base z=0.52 -> hip z=0.46 -> knee z=0.24 -> ankle z=0.04
+       foot center z = 0.04 - 0.02 = 0.02, foot bottom = 0.02 - 0.02 = 0.00
+
+     4-year-old proportions (~16kg total):
+       Pelvis: 18cm wide, 2kg
+       Trunk: 22cm tall capsule, 10kg
+       Thigh: 22cm, shin: 20cm
+       Foot: 17cm long x 7cm wide, box
+-->
+<mujoco model="ChildBiped">
+  <compiler angle="radian" inertiafromgeom="true" />
+
+  <default>
+    <joint limited="true" damping="3.0" armature="0.01" />
+    <geom contype="1" conaffinity="1" condim="3" density="1000"
+          friction="0.8 0.1 0.1" />
+    <position ctrlrange="-1 1" kp="80" />
+  </default>
+
+  <worldbody>
+    <body name="base" pos="0 0 0.52">
+      <freejoint name="root" />
+
+      <!-- Pelvis: wide ellipsoid -->
+      <geom name="pelvis" type="ellipsoid" size="0.09 0.07 0.06"
+            rgba="0.85 0.75 0.65 1.0" mass="2.0" />
+
+      <!-- IMU site for gyro/accel sensors -->
+      <site name="imu" pos="0 0 0" />
+
+      <!-- Forward-facing camera (looks in -Y = forward) -->
+      <camera name="camera_1_cam" fovy="90.0"
+              pos="0 -0.10 0.20" euler="-1.5707963 0 3.14159265" />
+
+      <!-- === UPPER BODY (waist: 2 DOF) === -->
+      <body name="upper_body" pos="0 0 0.06">
+        <joint name="waist_tilt" type="hinge" axis="1 0 0"
+               pos="0 0 0" range="-0.3 0.3" damping="4.0" />
+        <joint name="waist_twist" type="hinge" axis="0 0 1"
+               pos="0 0 0" range="-0.3 0.3" damping="4.0" />
+        <geom name="trunk" type="capsule" fromto="0 0 0 0 0 0.22"
+              size="0.055" rgba="0.8 0.7 0.6 1.0" mass="10.0" />
+      </body>
+
+      <!-- === LEFT LEG === -->
+      <!-- Hip at 9cm left of center, 6cm below pelvis center -->
+      <body name="left_upper_leg" pos="-0.09 0 -0.06">
+        <joint name="left_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.5 0.5" damping="2.0" />
+        <joint name="left_hip_flex" type="hinge" axis="1 0 0"
+               pos="0 0 0" range="-1.0 0.8" damping="3.0" />
+        <joint name="left_hip_rot" type="hinge" axis="0 0 1"
+               pos="0 0 0" range="-0.4 0.4" damping="1.5" />
+        <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.22"
+              size="0.04" rgba="0.8 0.7 0.6 1.0" />
+
+        <!-- Knee at bottom of thigh (22cm down) -->
+        <body name="left_lower_leg" pos="0 0 -0.22">
+          <joint name="left_knee" type="hinge" axis="1 0 0"
+                 pos="0 0 0" range="0 2.0" damping="3.0" />
+          <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
+                size="0.033" rgba="0.8 0.7 0.6 1.0" />
+
+          <!-- Ankle at bottom of shin (20cm down) -->
+          <body name="left_foot" pos="0 0 -0.20">
+            <joint name="left_ankle" type="hinge" axis="1 0 0"
+                   pos="0 0 0" range="-0.5 0.5" damping="2.5" />
+            <!-- Box foot: 7cm wide x 17cm long x 4cm tall
+                 pos: 3cm forward (-Y), 2cm below ankle
+                 Bottom at ankle_z - 0.02 - 0.02 = 0.04 - 0.04 = 0.00 -->
+            <geom name="left_foot" type="box"
+                  size="0.035 0.085 0.02"
+                  pos="0 -0.03 -0.02"
+                  rgba="0.9 0.75 0.55 1.0"
+                  friction="1.2 0.3 0.1" mass="0.3" />
+          </body>
+        </body>
+      </body>
+
+      <!-- === RIGHT LEG (mirror of left) === -->
+      <body name="right_upper_leg" pos="0.09 0 -0.06">
+        <joint name="right_hip_abd" type="hinge" axis="0 1 0"
+               pos="0 0 0" range="-0.5 0.5" damping="2.0" />
+        <joint name="right_hip_flex" type="hinge" axis="1 0 0"
+               pos="0 0 0" range="-1.0 0.8" damping="3.0" />
+        <joint name="right_hip_rot" type="hinge" axis="0 0 1"
+               pos="0 0 0" range="-0.4 0.4" damping="1.5" />
+        <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.22"
+              size="0.04" rgba="0.8 0.7 0.6 1.0" />
+
+        <body name="right_lower_leg" pos="0 0 -0.22">
+          <joint name="right_knee" type="hinge" axis="1 0 0"
+                 pos="0 0 0" range="0 2.0" damping="3.0" />
+          <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
+                size="0.033" rgba="0.8 0.7 0.6 1.0" />
+
+          <body name="right_foot" pos="0 0 -0.20">
+            <joint name="right_ankle" type="hinge" axis="1 0 0"
+                   pos="0 0 0" range="-0.5 0.5" damping="2.5" />
+            <geom name="right_foot" type="box"
+                  size="0.035 0.085 0.02"
+                  pos="0 -0.03 -0.02"
+                  rgba="0.9 0.75 0.55 1.0"
+                  friction="1.2 0.3 0.1" mass="0.3" />
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <!-- Adjacent body exclusions -->
+    <exclude body1="base" body2="upper_body" />
+    <exclude body1="base" body2="left_upper_leg" />
+    <exclude body1="base" body2="right_upper_leg" />
+    <exclude body1="left_upper_leg" body2="left_lower_leg" />
+    <exclude body1="left_lower_leg" body2="left_foot" />
+    <exclude body1="right_upper_leg" body2="right_lower_leg" />
+    <exclude body1="right_lower_leg" body2="right_foot" />
+    <!-- Inner thighs + upper body vs thighs -->
+    <exclude body1="left_upper_leg" body2="right_upper_leg" />
+    <exclude body1="upper_body" body2="left_upper_leg" />
+    <exclude body1="upper_body" body2="right_upper_leg" />
+  </contact>
+
+  <actuator>
+    <!-- 12 position actuators with per-joint kp tuning -->
+
+    <!-- Waist -->
+    <position name="waist_tilt_motor"  joint="waist_tilt"  kp="70" />
+    <position name="waist_twist_motor" joint="waist_twist" kp="70" />
+
+    <!-- Left leg -->
+    <position name="left_hip_abd_motor"  joint="left_hip_abd"  kp="60" />
+    <position name="left_hip_flex_motor" joint="left_hip_flex" kp="90" />
+    <position name="left_hip_rot_motor"  joint="left_hip_rot"  kp="45" />
+    <position name="left_knee_motor"     joint="left_knee"     kp="90" />
+    <position name="left_ankle_motor"    joint="left_ankle"    kp="70" />
+
+    <!-- Right leg -->
+    <position name="right_hip_abd_motor"  joint="right_hip_abd"  kp="60" />
+    <position name="right_hip_flex_motor" joint="right_hip_flex" kp="90" />
+    <position name="right_hip_rot_motor"  joint="right_hip_rot"  kp="45" />
+    <position name="right_knee_motor"     joint="right_knee"     kp="90" />
+    <position name="right_ankle_motor"    joint="right_ankle"    kp="70" />
+  </actuator>
+
+  <sensor>
+    <!-- Joint positions (12) -->
+    <jointpos name="waist_tilt_pos"      joint="waist_tilt" />
+    <jointpos name="waist_twist_pos"     joint="waist_twist" />
+    <jointpos name="left_hip_abd_pos"    joint="left_hip_abd" />
+    <jointpos name="left_hip_flex_pos"   joint="left_hip_flex" />
+    <jointpos name="left_hip_rot_pos"    joint="left_hip_rot" />
+    <jointpos name="left_knee_pos"       joint="left_knee" />
+    <jointpos name="left_ankle_pos"      joint="left_ankle" />
+    <jointpos name="right_hip_abd_pos"   joint="right_hip_abd" />
+    <jointpos name="right_hip_flex_pos"  joint="right_hip_flex" />
+    <jointpos name="right_hip_rot_pos"   joint="right_hip_rot" />
+    <jointpos name="right_knee_pos"      joint="right_knee" />
+    <jointpos name="right_ankle_pos"     joint="right_ankle" />
+
+    <!-- Joint velocities (12) -->
+    <jointvel name="waist_tilt_vel"      joint="waist_tilt" />
+    <jointvel name="waist_twist_vel"     joint="waist_twist" />
+    <jointvel name="left_hip_abd_vel"    joint="left_hip_abd" />
+    <jointvel name="left_hip_flex_vel"   joint="left_hip_flex" />
+    <jointvel name="left_hip_rot_vel"    joint="left_hip_rot" />
+    <jointvel name="left_knee_vel"       joint="left_knee" />
+    <jointvel name="left_ankle_vel"      joint="left_ankle" />
+    <jointvel name="right_hip_abd_vel"   joint="right_hip_abd" />
+    <jointvel name="right_hip_flex_vel"  joint="right_hip_flex" />
+    <jointvel name="right_hip_rot_vel"   joint="right_hip_rot" />
+    <jointvel name="right_knee_vel"      joint="right_knee" />
+    <jointvel name="right_ankle_vel"     joint="right_ankle" />
+
+    <!-- IMU (6) -->
+    <gyro          name="torso_gyro"  site="imu" />
+    <accelerometer name="torso_accel" site="imu" />
+  </sensor>
+</mujoco>

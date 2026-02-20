@@ -1194,15 +1194,20 @@ def run_training(
         num_workers: Worker count override
         scene_path: Override bot scene XML path
     """
-    is_biped = scene_path and "biped" in scene_path
+    is_childbiped = scene_path and "childbiped" in scene_path
+    is_biped = scene_path and "biped" in scene_path and not is_childbiped
     is_walker2d = scene_path and "walker2d" in scene_path
     if smoketest:
-        if is_biped:
+        if is_childbiped:
+            cfg = Config.for_childbiped_smoketest()
+        elif is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
             cfg = Config.for_walker2d_smoketest()
         else:
             cfg = Config.for_smoketest()
+    elif is_childbiped:
+        cfg = Config.for_childbiped()
     elif is_biped:
         cfg = Config.for_biped()
     elif is_walker2d:
@@ -1241,16 +1246,21 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         num_workers: Number of parallel workers for episode collection.
         scene_path: Override bot scene XML path directly.
     """
-    is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
+    is_childbiped = (bot and "childbiped" in bot) or (scene_path and "childbiped" in scene_path)
+    is_biped = ((bot and "biped" in bot) or (scene_path and "biped" in scene_path)) and not is_childbiped
     is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
     if smoketest:
-        if is_biped:
+        if is_childbiped:
+            cfg = Config.for_childbiped_smoketest()
+        elif is_biped:
             cfg = Config.for_biped_smoketest()
         elif is_walker2d:
             cfg = Config.for_walker2d_smoketest()
         else:
             cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
+    elif is_childbiped:
+        cfg = Config.for_childbiped()
     elif is_biped:
         cfg = Config.for_biped()
     elif is_walker2d:

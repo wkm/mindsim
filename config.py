@@ -456,3 +456,121 @@ class Config:
                 ppo_epochs=2,
             ),
         )
+
+    @classmethod
+    def for_childbiped(cls) -> Config:
+        """Config for the 12-DOF child lower body with MLPPolicy.
+
+        Joints (12): waist_tilt, waist_twist,
+                     left/right hip_abd, hip_flex, hip_rot, knee, ankle.
+        Sensors (34): 12 pos + 12 vel + 3 gyro + 3 accel + 4 gait phase.
+        """
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/childbiped/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=1000,
+                max_episode_steps_final=1000,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,  # 0.002s * 4 = 125Hz
+                success_distance=0.3,
+                failure_distance=10.0,
+                min_target_distance=0.8,
+                max_target_distance=1.5,
+                # Biped rewards
+                alive_bonus=1.0,
+                energy_penalty_scale=0.001,
+                distance_reward_scale=10.0,
+                time_penalty=0.005,
+                upright_reward_scale=0.3,
+                ground_contact_penalty=0.5,
+                forward_velocity_reward_scale=8.0,
+                walking_success_min_forward=0.5,
+                joint_stagnation_window=375,  # 3s at 125Hz
+                has_walking_stage=True,
+                walking_target_pos=(0.0, -10.0, 0.08),  # -Y = forward
+                forward_velocity_axis=(0.0, -1.0, 0.0),
+                # Fall detection — taller bot, narrower stance
+                fall_height_fraction=0.5,   # Fallen if pelvis < 26cm
+                fall_up_z_threshold=0.50,   # ~60deg tilt (slightly looser than duck)
+                fall_grace_steps=50,        # 0.4s grace
+                # Action smoothness
+                action_smoothness_scale=0.05,  # Softer penalty: 12 joints vs 8
+                # Gait phase
+                gait_phase_period=0.6,  # 1.67Hz stride
+            ),
+            curriculum=CurriculumConfig(
+                num_stages=5,  # Walking + 4 standard stages
+                window_size=10,
+                advance_threshold=1.0,  # Manual advancement initially
+                advance_rate=0.01,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=256,
+                fc_output_size=12,   # 12 motors
+                sensor_input_size=34,  # 12 pos + 12 vel + 6 imu + 4 gait
+                init_std=1.0,
+            ),
+            training=TrainingConfig(
+                learning_rate=3e-4,
+                batch_size=64,
+                algorithm="PPO",
+                entropy_coeff=0.0,
+                ppo_epochs=10,
+            ),
+        )
+
+    @classmethod
+    def for_childbiped_smoketest(cls) -> Config:
+        """Config for fast child biped end-to-end validation."""
+        return cls(
+            env=EnvConfig(
+                scene_path="bots/childbiped/scene.xml",
+                render_width=64,
+                render_height=64,
+                max_episode_steps=10,
+                control_frequency_hz=125,
+                mujoco_steps_per_action=4,
+                alive_bonus=1.0,
+                energy_penalty_scale=0.001,
+                distance_reward_scale=10.0,
+                time_penalty=0.005,
+                upright_reward_scale=0.3,
+                ground_contact_penalty=0.5,
+                forward_velocity_reward_scale=8.0,
+                walking_success_min_forward=0.0,
+                has_walking_stage=True,
+                fall_height_fraction=0.5,
+                fall_up_z_threshold=0.50,
+                fall_grace_steps=50,
+                action_smoothness_scale=0.05,
+                gait_phase_period=0.6,
+            ),
+            curriculum=CurriculumConfig(
+                window_size=1,
+                advance_threshold=0.0,
+                advance_rate=1.0,
+                eval_episodes_per_batch=1,
+                num_stages=5,
+            ),
+            policy=PolicyConfig(
+                policy_type="MLPPolicy",
+                image_height=64,
+                image_width=64,
+                hidden_size=32,
+                fc_output_size=12,
+                sensor_input_size=34,
+            ),
+            training=TrainingConfig(
+                batch_size=2,
+                mastery_batches=1,
+                mastery_threshold=0.0,
+                max_batches=3,
+                log_rerun_every=9999,
+                ppo_epochs=2,
+            ),
+        )
