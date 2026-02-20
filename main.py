@@ -43,6 +43,8 @@ from textual.widgets import (
     RadioSet,
     RichLog,
     Static,
+    TabbedContent,
+    TabPane,
 )
 
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
@@ -550,6 +552,7 @@ class TrainingDashboard(Screen):
         Binding("w", "open_wandb", "W&B"),
         Binding("up", "advance_curriculum", "Advance"),
         Binding("down", "regress_curriculum", "Regress"),
+        Binding("a", "ai_commentary", "AI"),
         Binding("left_square_bracket", "rerun_freq_down", "Rec \u2193"),
         Binding("right_square_bracket", "rerun_freq_up", "Rec \u2191"),
         Binding("q", "quit_app", "Quit"),
@@ -620,13 +623,15 @@ class TrainingDashboard(Screen):
         padding: 0 1;
     }
 
-    #log-panel-title {
-        text-style: bold;
-        color: $accent;
-        height: 1;
+    #log-tabs {
+        height: 1fr;
     }
 
     #log-area {
+        height: 1fr;
+    }
+
+    #ai-area {
         height: 1fr;
     }
     """
@@ -756,8 +761,11 @@ class TrainingDashboard(Screen):
                 yield Static("  \u251c eval              ---", id="m-timing-eval", classes="metric-line")
                 yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
           with Vertical(id="log-panel"):
-              yield Static("LOG", id="log-panel-title")
-              yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
+              with TabbedContent(id="log-tabs"):
+                  with TabPane("Log", id="tab-log"):
+                      yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
+                  with TabPane("AI", id="tab-ai"):
+                      yield RichLog(id="ai-area", wrap=True, max_lines=200, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -803,6 +811,10 @@ class TrainingDashboard(Screen):
     def action_rerun_freq_up(self) -> None:
         self.app.send_command("rerun_freq_up")
         self.log_message("Increasing Rerun recording interval (less frequent)...")
+
+    def action_ai_commentary(self) -> None:
+        self.app.send_command("ai_commentary")
+        self.log_message("Generating AI commentary...")
 
     def action_open_wandb(self) -> None:
         if self._wandb_url:
@@ -1044,6 +1056,15 @@ class TrainingDashboard(Screen):
         log_widget = self.query_one("#log-area", RichLog)
         log_widget.write(f"[dim]{ts}[/dim]  {text}")
 
+    def log_ai_commentary(self, text: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        formatted = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan] {text}"
+        # Write to both Log and AI tabs
+        self.query_one("#log-area", RichLog).write(formatted)
+        self.query_one("#ai-area", RichLog).write(formatted)
+        # Switch to AI tab
+        self.query_one("#log-tabs", TabbedContent).active = "tab-ai"
+
     def mark_finished(self):
         self.log_message("[bold green]Training complete![/bold green]")
 
@@ -1165,6 +1186,11 @@ class MindSimApp(App):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
             self._dashboard.mark_finished()
+
+    def ai_commentary(self, text: str):
+        """Called from training thread via call_from_thread."""
+        if self._dashboard:
+            self._dashboard.log_ai_commentary(text)
 
     def set_header(
         self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,

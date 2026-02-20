@@ -57,7 +57,7 @@ class RerunWandbLogger:
         self.is_recording = False
         self._spawned = False
 
-    def start_episode(self, episode: int, env, namespace: str = "eval"):
+    def start_episode(self, episode: int, env, namespace: str = "eval", show_camera: bool = True):
         """
         Start a new Rerun recording for this episode.
 
@@ -65,6 +65,7 @@ class RerunWandbLogger:
             episode: Episode number
             env: Training environment instance
             namespace: Rerun namespace for logging
+            show_camera: If False, hide the camera view and skip camera logging
 
         Returns:
             Path to the .rrd file being recorded
@@ -94,7 +95,7 @@ class RerunWandbLogger:
 
         # Embed blueprint into recording
         control_fps = round(1.0 / env.action_dt)
-        rr.send_blueprint(create_training_blueprint(control_fps=control_fps))
+        rr.send_blueprint(create_training_blueprint(control_fps=control_fps, show_camera=show_camera))
 
         # Log wandb context into Rerun for reverse lookup
         rr.log(
@@ -111,7 +112,7 @@ class RerunWandbLogger:
         # Set up the 3D scene (pass arena boundary if available)
         arena_boundary = getattr(env, "arena_boundary", None)
         rerun_logger.setup_scene(
-            env, namespace=namespace, arena_boundary=arena_boundary
+            env, namespace=namespace, arena_boundary=arena_boundary, show_camera=show_camera
         )
 
         self.is_recording = True
@@ -152,6 +153,10 @@ class RerunWandbLogger:
             )
             artifact.add_file(self.rrd_path)
             wandb.log_artifact(artifact)
+
+        # Flush recording and release file handles / background threads.
+        # Without this, each start_episode() accumulates leaked threads.
+        rr.disconnect()
 
         self.is_recording = False
 

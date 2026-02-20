@@ -168,6 +168,15 @@ class TrainingConfig:
 
 
 @dataclass
+class CommentaryConfig:
+    """AI commentary configuration for training dashboard."""
+
+    enabled: bool = True
+    interval_seconds: float = 300.0  # 5 minutes between commentary
+    model: str = "haiku"
+
+
+@dataclass
 class Config:
     """Complete training configuration."""
 
@@ -175,6 +184,7 @@ class Config:
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    commentary: CommentaryConfig = field(default_factory=CommentaryConfig)
 
     @property
     def bot_name(self) -> str:
@@ -205,6 +215,7 @@ class Config:
             ("curriculum", self.curriculum),
             ("policy", self.policy),
             ("training", self.training),
+            ("commentary", self.commentary),
         ]:
             for key, value in asdict(section).items():
                 result[f"{section_name}/{key}"] = value
@@ -221,6 +232,7 @@ class Config:
             "curriculum": asdict(self.curriculum),
             "policy": asdict(self.policy),
             "training": asdict(self.training),
+            "commentary": asdict(self.commentary),
         }
 
     @classmethod
@@ -253,6 +265,7 @@ class Config:
                 log_rerun_every=9999,  # Effectively disable
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
 
@@ -417,6 +430,7 @@ class Config:
                 log_rerun_every=9999,
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
     @classmethod
@@ -468,6 +482,7 @@ class Config:
                 log_rerun_every=9999,
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
     @classmethod

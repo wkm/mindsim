@@ -311,6 +311,31 @@ Rules:
         return None
 
 
+def _format_config_summary(cfg) -> str:
+    """Format key config values for AI commentary context."""
+    lines = [
+        f"batch_size={cfg.training.batch_size}, lr={cfg.training.learning_rate}",
+        f"policy={cfg.policy.policy_type}, hidden={cfg.policy.hidden_size}",
+        f"entropy_coeff={cfg.training.entropy_coeff}, clip_eps={cfg.training.clip_epsilon}",
+        f"gamma={cfg.training.gamma}, gae_lambda={cfg.training.gae_lambda}",
+        f"curriculum stages={cfg.curriculum.num_stages}, advance_threshold={cfg.curriculum.advance_threshold}",
+        f"mastery: {cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches",
+    ]
+    return "\n".join(lines)
+
+
+def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
+    """Generate AI commentary and push to TUI. Blocks the training thread briefly."""
+    try:
+        text = commentator.generate_commentary(batch, metrics, elapsed_secs)
+        if text and app is not None:
+            app.call_from_thread(app.ai_commentary, text)
+        elif text:
+            dashboard.message(f"AI: {text}")
+    except Exception:
+        log.exception("AI commentary error")
+
+
 ### Policies, collection, and algorithms extracted to separate modules.
 ### Re-exported above for backward compatibility.
 
@@ -469,6 +494,7 @@ def _train_loop(
     _verbose(f"  Run directory: {run_dir}/")
 
     # Push run metadata to TUI header
+    hypothesis = None
     if app is not None:
         from main import _get_experiment_info
 
@@ -478,6 +504,26 @@ def _train_loop(
             app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
             robot_name, hypothesis,
         )
+
+    # Set up AI commentary (skip in smoketest or when disabled)
+    commentator = None
+    if not smoketest and cfg.commentary.enabled and app is not None:
+        from ai_commentary import AICommentator, RunContext
+
+        run_context = RunContext(
+            run_name=run_name,
+            bot_name=bot_name,
+            algorithm=cfg.training.algorithm,
+            policy_type=cfg.policy.policy_type,
+            hypothesis=hypothesis,
+            wandb_url=wandb_url,
+            git_branch=get_git_branch(),
+            config_summary=_format_config_summary(cfg),
+        )
+        commentator = AICommentator(cfg.commentary, run_context)
+        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
+    last_commentary_time = time.perf_counter()
+    force_commentary = False
 
     # Create environment from config
     log_fn("Creating environment...")
@@ -672,6 +718,7 @@ def _train_loop(
     # Rolling window for eval success rate (used for curriculum)
     eval_success_history = deque(maxlen=curr.window_size)
 
+    run_start_time = time.monotonic()
     episode_count = resumed_episode_count
     batch_idx = resumed_batch_idx
     mastered = False
@@ -740,6 +787,8 @@ def _train_loop(
                 dashboard.message(
                     f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
                 )
+            elif cmd == "ai_commentary":
+                force_commentary = True
             elif cmd == "stop":
                 stop_requested = True
                 dashboard.message("Stopping after this batch...")
@@ -859,7 +908,15 @@ def _train_loop(
                     try:
                         t_rerun_start = time.perf_counter()
                         dashboard.message("Recording eval episode to Rerun...")
-                        rr_wandb.start_episode(episode_count, env, namespace="eval")
+
+                        # Determine if we should show camera in Rerun
+                        show_camera = not getattr(env, "in_walking_stage", False)
+                        if not getattr(policy, "uses_visual_input", True):
+                            show_camera = False
+
+                        rr_wandb.start_episode(
+                            episode_count, env, namespace="eval", show_camera=show_camera
+                        )
                         timing["rerun"] += time.perf_counter() - t_rerun_start
                     except Exception:
                         log.exception("Failed to start Rerun recording")
@@ -1111,6 +1168,20 @@ def _train_loop(
             batch_idx, avg_reward, avg_distance,
             100 * rolling_eval_success_rate, curriculum_stage,
         )
+
+        # AI commentary: periodic or on-demand
+        now = time.perf_counter()
+        if commentator and (
+            force_commentary
+            or now - last_commentary_time >= cfg.commentary.interval_seconds
+        ):
+            elapsed = time.monotonic() - run_start_time
+            _run_commentary(
+                commentator, app, dashboard, batch_idx, dash_metrics, elapsed,
+            )
+            last_commentary_time = now
+            force_commentary = False
+
         batch_idx += 1
         batches_this_session += 1
 
