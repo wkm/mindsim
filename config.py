@@ -517,10 +517,10 @@ class Config:
             ),
             training=TrainingConfig(
                 learning_rate=3e-4,
-                batch_size=64,
+                batch_size=512,
                 algorithm="PPO",
                 entropy_coeff=0.0,
-                ppo_epochs=10,
+                ppo_epochs=5,
             ),
         )
 
