@@ -14,6 +14,7 @@ uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-w
 uv run mjpython main.py smoketest          # Alias for train --smoketest
 uv run mjpython main.py quicksim           # Rerun debug vis
 uv run mjpython main.py visualize [--bot NAME] [--steps N]
+uv run mjpython main.py validate-rewards [--bot NAME]  # Validate reward hierarchy
 ```
 
 `--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.

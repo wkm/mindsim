@@ -440,6 +440,10 @@ def _train_loop(
     log_fn("Connecting to W&B...")
     init_wandb_for_run(run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes)
 
+    # Log reward hierarchy metadata to W&B
+    if wandb.run:
+        wandb.config.update(cfg.reward_hierarchy.to_wandb_config(), allow_val_change=True)
+
     wandb_url = None
     if not smoketest and wandb.run:
         wandb_url = wandb.run.url
@@ -486,6 +490,17 @@ def _train_loop(
     if env.has_walking_stage:
         _verbose("Verifying forward direction...")
         verify_forward_direction(env, log_fn=_verbose)
+
+    # Validate reward hierarchy (warns if dominance violations found)
+    hierarchy = cfg.reward_hierarchy
+    _verbose("Reward hierarchy:")
+    for line in hierarchy.summary_table().split("\n"):
+        _verbose(line)
+    dom_check = hierarchy.dominance_check()
+    if dom_check:
+        _verbose("Dominance check:")
+        for line in dom_check.split("\n"):
+            _verbose(line)
 
     # Log bot model info
     mj_model = env.env.model
@@ -594,7 +609,7 @@ def _train_loop(
     collector = None
     if num_workers > 1:
         _verbose(f"Starting {num_workers} parallel workers...")
-        collector = ParallelCollector(num_workers, cfg.env, cfg.policy)
+        collector = ParallelCollector(num_workers, cfg.env, cfg.policy, bot_name)
         if is_tui:
             log_fn(f"Started {num_workers} parallel workers")
         else:
@@ -763,6 +778,7 @@ def _train_loop(
                     env,
                     policy,
                     device,
+                    hierarchy=hierarchy,
                 )
                 episode_batch.append(episode_data)
         timing["collect_batch"] = time.perf_counter() - t_collect_start
@@ -851,7 +867,8 @@ def _train_loop(
                         log_this_eval = False
 
                 eval_data = collect_episode(
-                    env, policy, device, log_rerun=log_this_eval, deterministic=True
+                    env, policy, device, log_rerun=log_this_eval, deterministic=True,
+                    hierarchy=hierarchy,
                 )
                 eval_successes.append(eval_data["success"])
 
@@ -992,11 +1009,7 @@ def _train_loop(
         )
 
         # Per-component reward breakdown (averaged across batch)
-        component_keys = [
-            "reward_distance", "reward_exploration", "reward_time",
-            "reward_upright", "reward_alive", "reward_energy",
-            "reward_contact", "reward_forward_velocity", "reward_smoothness",
-        ]
+        component_keys = hierarchy.reward_component_keys()
         for key in component_keys:
             vals = [ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch]
             log_dict[f"rewards/{key}"] = np.mean(vals)
@@ -1075,16 +1088,7 @@ def _train_loop(
             # Raw reward inputs for dashboard
             "raw_inputs": batch_raw_inputs,
             # Reward scales so TUI can hide inactive rows
-            "reward_scales": {
-                "upright": cfg.env.upright_reward_scale,
-                "alive": cfg.env.alive_bonus,
-                "energy": cfg.env.energy_penalty_scale,
-                "contact": cfg.env.ground_contact_penalty,
-                "forward_vel": cfg.env.forward_velocity_reward_scale,
-                "smoothness": cfg.env.action_smoothness_scale,
-                "has_walking_stage": 1.0 if cfg.env.has_walking_stage else 0.0,
-                "fall_detection": 1.0 if cfg.env.fall_height_fraction > 0 or cfg.env.fall_up_z_threshold > 0 else 0.0,
-            },
+            "reward_scales": hierarchy.reward_scales_for_dashboard(),
         }
         if cfg.training.algorithm == "PPO":
             dash_metrics.update(

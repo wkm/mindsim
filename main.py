@@ -1274,6 +1274,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_viz.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
     p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
 
+    # validate-rewards
+    p_vr = sub.add_parser("validate-rewards", help="Validate reward hierarchy for a bot")
+    p_vr.add_argument("--bot", type=str, default=None, help="Bot name (default: all bots)")
+
     return parser
 
 
@@ -1366,6 +1370,130 @@ def main():
         scene_path = _resolve_scene_path(args.bot)
         from visualize import run_visualization
         run_visualization(scene_path=scene_path, num_steps=args.steps)
+
+    elif args.command == "validate-rewards":
+        _validate_rewards(args.bot)
+
+
+def _validate_rewards(bot_name: str | None):
+    """Print reward hierarchy summary and run dominance checks."""
+    from config import Config
+    from reward_hierarchy import build_reward_hierarchy
+
+    # If no bot specified, validate all bots
+    if bot_name is None:
+        bots = _discover_bots()
+        bot_names = [b["name"] for b in bots]
+    else:
+        bot_names = [bot_name]
+
+    for name in bot_names:
+        cfg = _config_for_bot(name)
+        hierarchy = build_reward_hierarchy(name, cfg.env)
+
+        print(f"\nReward Hierarchy for {name}")
+        print("=" * 50)
+        print(hierarchy.summary_table())
+        print()
+
+        dom = hierarchy.dominance_check()
+        if dom:
+            print("Dominance check:")
+            print(dom)
+        else:
+            print("Dominance check: (single priority level, no check needed)")
+        print()
+
+        # Scenario tests
+        _run_scenario_tests(name, hierarchy, cfg)
+
+
+def _config_for_bot(bot_name: str):
+    """Get the Config for a bot by name."""
+    from config import Config
+
+    config_map = {
+        "childbiped": Config.for_childbiped,
+        "simplebiped": Config.for_biped,
+        "walker2d": Config.for_walker2d,
+    }
+    factory = config_map.get(bot_name)
+    if factory:
+        return factory()
+    # Default Config() has simple2wheeler reward scales
+    return Config()
+
+
+def _run_scenario_tests(bot_name: str, hierarchy, cfg):
+    """Run scenario tests showing per-step reward in different situations."""
+    from reward_hierarchy import SURVIVE, TASK, STYLE, GUARD
+
+    active = hierarchy.active_components()
+    if not active:
+        print("Scenario tests: no active components")
+        return
+
+    print("Scenario tests:")
+
+    # Scenario 1: "Perfect stand" — healthy, no movement
+    stand_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            stand_reward += c.scale * 1.0  # healthy
+        elif c.name == "upright":
+            stand_reward += c.scale * 1.0  # perfectly upright
+        elif c.name == "time":
+            stand_reward += c.scale * (-1.0)  # time penalty always applies
+        # Everything else is 0 (no movement, no contact, etc.)
+    print(f"  Perfect stand  (healthy, no movement):    {stand_reward:+.3f}/step")
+
+    # Scenario 2: "Diving forward" — unhealthy, fast forward
+    dive_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            dive_reward += 0.0  # unhealthy — no alive bonus
+        elif c.name == "forward_velocity":
+            dive_reward += c.scale * 1.0  # max forward vel, but gated by up_z
+            # If gated by is_healthy, diving doesn't earn this either
+            if c.gated_by and "is_healthy" in c.gated_by:
+                dive_reward -= c.scale * 1.0  # undo: not healthy
+        elif c.name == "distance":
+            dive_reward += c.scale * 0.5  # some distance progress
+        elif c.name == "time":
+            dive_reward += c.scale * (-1.0)
+        elif c.name == "contact":
+            dive_reward += c.scale * (-1.0)  # body on floor
+    print(f"  Diving forward (unhealthy, fast):         {dive_reward:+.3f}/step")
+
+    # Scenario 3: "Walking well" — healthy, moderate forward, upright
+    walk_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            walk_reward += c.scale * 1.0
+        elif c.name == "forward_velocity":
+            walk_reward += c.scale * 0.5  # moderate speed
+        elif c.name == "distance":
+            walk_reward += c.scale * 0.3  # some progress
+        elif c.name == "upright":
+            walk_reward += c.scale * 0.9  # mostly upright
+        elif c.name == "energy":
+            walk_reward += c.scale * (-3.0)  # moderate energy
+        elif c.name == "smoothness":
+            walk_reward += c.scale * (-1.0)  # some jerk
+        elif c.name == "time":
+            walk_reward += c.scale * (-1.0)
+    print(f"  Walking well   (healthy, forward):        {walk_reward:+.3f}/step")
+
+    # Check key invariant: standing must beat diving
+    if stand_reward > dive_reward:
+        print(f"\n  Standing ({stand_reward:+.3f}) > Diving ({dive_reward:+.3f}) [ok]")
+    else:
+        print(f"\n  Standing ({stand_reward:+.3f}) <= Diving ({dive_reward:+.3f}) [!!] — diving is more rewarding than standing!")
+
+    if walk_reward > stand_reward:
+        print(f"  Walking ({walk_reward:+.3f}) > Standing ({stand_reward:+.3f}) [ok] — walking is the best outcome")
+    else:
+        print(f"  Walking ({walk_reward:+.3f}) <= Standing ({stand_reward:+.3f}) [!!] — standing is better than walking")
 
 
 if __name__ == "__main__":

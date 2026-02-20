@@ -12,7 +12,7 @@ import torch
 import rerun_logger
 
 
-def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False):
+def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False, *, hierarchy):
     """
     Run one episode and collect data.
 
@@ -23,6 +23,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         log_rerun: Log episode to Rerun for visualization
         deterministic: If True, use mean actions (no sampling) for evaluation.
                        If False, sample from policy distribution for training.
+        hierarchy: RewardHierarchy instance (required).
 
     Returns:
         episode_data: Dict with observations, actions, rewards, log_probs (if not deterministic), etc.
@@ -51,11 +52,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     info = {}
 
     # Accumulate reward component sums for per-episode breakdown
-    reward_component_keys = [
-        "reward_distance", "reward_exploration", "reward_time",
-        "reward_upright", "reward_alive", "reward_energy",
-        "reward_contact", "reward_forward_velocity", "reward_smoothness",
-    ]
+    reward_component_keys = hierarchy.reward_component_keys()
     reward_component_sums = {k: 0.0 for k in reward_component_keys}
 
     # Accumulate raw reward inputs (physical measures)
