@@ -8,7 +8,7 @@ Shows deterministic policy behavior (no exploration noise).
 import rerun.blueprint as rrb
 
 
-def create_training_blueprint(control_fps: float = 10.0):
+def create_training_blueprint(control_fps: float = 10.0, show_camera: bool = True):
     """
     Create a blueprint that organizes eval episode visualization.
 
@@ -19,6 +19,7 @@ def create_training_blueprint(control_fps: float = 10.0):
         control_fps: Neural network control frequency in Hz (frames per second
             for the step sequence timeline). Derived from the environment's
             physics timestep and steps-per-action.
+        show_camera: If False, don't include the camera view in the blueprint.
 
     Layout:
     ┌─────────────────┬──────────────────────────────┐
@@ -31,19 +32,32 @@ def create_training_blueprint(control_fps: float = 10.0):
     │                 │  Actions (left, right motor) │
     └─────────────────┴──────────────────────────────┘
     """
+    # Left column visual views
+    visual_views = []
+    row_shares = []
+    if show_camera:
+        visual_views.append(
+            rrb.Spatial2DView(
+                name="Camera",
+                origin="eval/camera",
+            )
+        )
+        row_shares.append(1)
+
+    visual_views.append(
+        rrb.Spatial3DView(
+            name="Scene",
+            origin="eval",
+        )
+    )
+    row_shares.append(1)
+
     return rrb.Blueprint(
         rrb.Horizontal(
             # Left column: visual views
             rrb.Vertical(
-                rrb.Spatial2DView(
-                    name="Camera",
-                    origin="eval/camera",
-                ),
-                rrb.Spatial3DView(
-                    name="Scene",
-                    origin="eval",
-                ),
-                row_shares=[1, 1],
+                *visual_views,
+                row_shares=row_shares,
             ),
             # Right column: time series metrics
             rrb.Vertical(

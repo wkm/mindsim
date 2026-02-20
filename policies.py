@@ -36,6 +36,8 @@ class LSTMPolicy(nn.Module):
     This allows the policy to remember past observations and actions.
     """
 
+    uses_visual_input = True
+
     def __init__(
         self,
         image_height=128,
@@ -276,6 +278,8 @@ class TinyPolicy(nn.Module):
     std is a learnable parameter (not state-dependent for simplicity).
     """
 
+    uses_visual_input = True
+
     def __init__(
         self, image_height=128, image_width=128, num_actions=2, init_std=0.5, max_log_std=0.7,
         sensor_input_size=0,
@@ -436,6 +440,8 @@ class MLPPolicy(nn.Module):
     Separate actor/critic networks with tanh activations.
     Includes running observation normalization as registered buffers.
     """
+
+    uses_visual_input = False
 
     def __init__(
         self,

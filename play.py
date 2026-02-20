@@ -99,6 +99,13 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     env_cfg = ckpt["config"].get("env", {})
     mujoco_steps_per_action = env_cfg.get("mujoco_steps_per_action", 5)
 
+    # Gait phase encoding: if the policy was trained with gait phase inputs,
+    # we must compute and append them in play mode too.
+    gait_phase_period = env_cfg.get("gait_phase_period", 0.0)
+    gait_phase_dim = 4 if gait_phase_period > 0 else 0
+    gait_step_count = 0
+    control_dt = mujoco_steps_per_action * model.opt.timestep
+
     # Target move step size and arena bounds
     target_step = 0.3  # meters per key press
     arena_bound = 4.0
@@ -192,7 +199,16 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
 
                 sensor_tensor = None
                 if env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0:
-                    sensor_tensor = torch.from_numpy(env.get_sensor_data()).unsqueeze(0)
+                    sensors = env.get_sensor_data()
+                    if gait_phase_dim > 0:
+                        t = gait_step_count * control_dt
+                        phase = 2 * np.pi * t / gait_phase_period
+                        gait_phase = np.array([
+                            np.sin(phase), np.cos(phase),
+                            np.sin(phase + np.pi), np.cos(phase + np.pi),
+                        ], dtype=np.float32)
+                        sensors = np.concatenate([sensors, gait_phase])
+                    sensor_tensor = torch.from_numpy(sensors).unsqueeze(0)
 
                 with torch.no_grad():
                     action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
@@ -201,6 +217,7 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                 data.ctrl[:env.num_actuators] = action
                 for _ in range(mujoco_steps_per_action):
                     mujoco.mj_step(model, data)
+                gait_step_count += 1
 
             # --- Update viewer overlays ---
             distance = env.get_distance_to_target()
