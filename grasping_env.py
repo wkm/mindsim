@@ -93,6 +93,9 @@ class GraspingTrainingEnv:
         self.observation_shape = (render_height, render_width, 3)
         self.action_shape = (self.num_actuators,)
 
+        # Time step for compatibility (used by rerun_wandb for video fps)
+        self.action_dt = mujoco_steps_per_action * self.env.model.opt.timestep
+
         # Lookup geom IDs for contact detection
         self.cup_geom_id = mujoco.mj_name2id(
             self.env.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_geom"

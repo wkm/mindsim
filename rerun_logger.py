@@ -364,6 +364,53 @@ def log_mujoco_scene(env, namespace="world"):
                     )
                     geom_count += 1
 
+                # Handle cylinder geometries (e.g. cups, pegs)
+                elif geom_type == mujoco.mjtGeom.mjGEOM_CYLINDER:
+                    geom_name = mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, geom_id
+                    )
+                    radius = model.geom_size[geom_id][0]
+                    half_length = model.geom_size[geom_id][1]
+                    rgba = model.geom_rgba[geom_id]
+                    geom_pos = model.geom_pos[geom_id]
+                    geom_quat = model.geom_quat[geom_id]
+
+                    entity_path = f"{namespace}/{body_name}/{geom_name or 'geom'}"
+
+                    rr.log(
+                        entity_path,
+                        rr.Transform3D(
+                            translation=geom_pos,
+                            rotation=rr.Quaternion(
+                                xyzw=[
+                                    geom_quat[1],
+                                    geom_quat[2],
+                                    geom_quat[3],
+                                    geom_quat[0],
+                                ]
+                            ),
+                        ),
+                        static=True,
+                    )
+
+                    # Approximate cylinder as an ellipsoid (radius, radius, half_length)
+                    color = [
+                        int(rgba[0] * 255),
+                        int(rgba[1] * 255),
+                        int(rgba[2] * 255),
+                        int(rgba[3] * 255),
+                    ]
+                    rr.log(
+                        f"{entity_path}/cylinder",
+                        rr.Ellipsoids3D(
+                            half_sizes=[[radius, radius, half_length]],
+                            colors=[color],
+                            fill_mode=rr.components.FillMode.Solid,
+                        ),
+                        static=True,
+                    )
+                    geom_count += 1
+
                 # Warn on unhandled geom types
                 elif geom_type not in (mujoco.mjtGeom.mjGEOM_PLANE,):
                     geom_name = mujoco.mj_id2name(
