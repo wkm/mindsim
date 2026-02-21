@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 import mujoco
@@ -148,6 +149,7 @@ class SceneComposer:
         max_objects: int | None = None,
         arena_size: float = 3.5,
         min_spacing: float = 0.6,
+        seed: int | None = None,
         rng: np.random.Generator | None = None,
     ) -> list[PlacedObject]:
         """Sample a random scene layout.
@@ -161,9 +163,12 @@ class SceneComposer:
             max_objects: Maximum object count (defaults to self.max_objects).
             arena_size: Half-extent of placement area (meters from origin).
             min_spacing: Minimum distance between object centers.
+            seed: Integer seed for reproducibility. Overrides rng if both given.
             rng: Numpy random generator (for reproducibility).
         """
-        if rng is None:
+        if seed is not None:
+            rng = np.random.default_rng(seed)
+        elif rng is None:
             rng = np.random.default_rng()
 
         if max_objects is None:
@@ -273,3 +278,71 @@ class SceneComposer:
         self.model.geom_rgba[geom_id] = [0, 0, 0, 0]
         self.model.geom_contype[geom_id] = 0
         self.model.geom_conaffinity[geom_id] = 0
+
+
+# ---------------------------------------------------------------------------
+# Scene description & identity
+# ---------------------------------------------------------------------------
+
+# Param fields that represent key spatial dimensions (for describe_scene)
+_DIMENSION_FIELDS = {
+    "width",
+    "depth",
+    "height",
+    "seat_width",
+    "seat_depth",
+    "seat_height",
+    "n_shelves",
+}
+
+
+def scene_id(seed: int) -> str:
+    """Short hex identifier for a scene seed (6 chars)."""
+    return f"{seed & 0xFFFFFF:06x}"
+
+
+def describe_object(obj: PlacedObject) -> str:
+    """One-line description of a placed object."""
+    x, y = obj.pos
+    rot_deg = np.degrees(obj.rotation)
+
+    # Extract key dimensions from params
+    dims = []
+    for f in dataclasses.fields(obj.params):
+        if f.name in _DIMENSION_FIELDS:
+            val = getattr(obj.params, f.name)
+            if isinstance(val, float):
+                dims.append(f"{f.name}={val:.2f}")
+            else:
+                dims.append(f"{f.name}={val}")
+
+    dim_str = f"  ({', '.join(dims)})" if dims else ""
+    return f"{obj.concept} at ({x:+.2f}, {y:+.2f}) rot {rot_deg:.0f}\u00b0{dim_str}"
+
+
+def describe_scene(
+    placed_objects: list[PlacedObject],
+    seed: int | None = None,
+) -> str:
+    """Multi-line textual description of a full scene.
+
+    Example output:
+        Scene #a3f2b1 (seed=2847391)  3 objects
+          [0] table at (+2.10, -1.30) rot 45°  (width=1.00, depth=0.60, height=0.75)
+          [1] chair at (-0.80, +1.50) rot 180°  (seat_width=0.45, ...)
+          [2] shelf at (+1.20, +0.40) rot 271°  (width=0.80, depth=0.30, height=1.20)
+    """
+    lines = []
+
+    # Header
+    if seed is not None:
+        sid = scene_id(seed)
+        lines.append(f"Scene #{sid} (seed={seed})  {len(placed_objects)} objects")
+    else:
+        lines.append(f"Scene  {len(placed_objects)} objects")
+
+    # Each object
+    for i, obj in enumerate(placed_objects):
+        lines.append(f"  [{i}] {describe_object(obj)}")
+
+    return "\n".join(lines)
