@@ -11,7 +11,7 @@ import sys
 import time
 from collections import deque
 from datetime import datetime
-from queue import Empty
+from queue import Empty, Queue
 
 log = logging.getLogger(__name__)
 
@@ -311,102 +311,101 @@ Rules:
         return None
 
 
+def _format_config_summary(cfg) -> str:
+    """Format key config values for AI commentary context."""
+    lines = [
+        f"batch_size={cfg.training.batch_size}, lr={cfg.training.learning_rate}",
+        f"policy={cfg.policy.policy_type}, hidden={cfg.policy.hidden_size}",
+        f"entropy_coeff={cfg.training.entropy_coeff}, clip_eps={cfg.training.clip_epsilon}",
+        f"gamma={cfg.training.gamma}, gae_lambda={cfg.training.gae_lambda}",
+        f"curriculum stages={cfg.curriculum.num_stages}, advance_threshold={cfg.curriculum.advance_threshold}",
+        f"mastery: {cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches",
+    ]
+    return "\n".join(lines)
+
+
+def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
+    """Generate AI commentary and push to TUI. Blocks the training thread briefly."""
+    try:
+        text = commentator.generate_commentary(batch, metrics, elapsed_secs)
+        if text and app is not None:
+            app.call_from_thread(app.ai_commentary, text)
+        elif text:
+            dashboard.message(f"AI: {text}")
+    except Exception:
+        log.exception("AI commentary error")
+
+
 ### Policies, collection, and algorithms extracted to separate modules.
 ### Re-exported above for backward compatibility.
 
-def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
+class CommandChannel:
+    """Thread-safe command channel between TUI and training loop.
+
+    Uses two internal queues so flow-control commands (pause/unpause/step/stop)
+    and action commands (checkpoint/log_rerun/curriculum) never interfere.
+    wait_if_paused() only reads the flow queue; drain_actions() only reads the
+    action queue.  No put-back logic needed.
     """
-    Drain commands from the TUI command queue.
 
-    Returns:
-        (stage_progress, pending_save, should_stop, force_rerun)
-    """
-    if queue is None:
-        return stage_progress, pending_save, False, False
+    _FLOW = frozenset({"pause", "unpause", "step", "stop"})
 
-    should_stop = False
-    force_rerun = False
+    def __init__(self):
+        self._flow: Queue[str] = Queue()
+        self._actions: Queue[str] = Queue()
 
-    while not queue.empty():
-        try:
-            cmd = queue.get_nowait()
-        except Empty:
-            break
-
-        if cmd == "checkpoint":
-            pending_save = ("manual", [])
-            dashboard.message("Checkpoint will be saved after this batch")
-        elif cmd == "log_rerun":
-            force_rerun = True
-            dashboard.message("Rerun recording queued for next eval")
-        elif cmd == "advance_curriculum":
-            old = stage_progress
-            stage_progress = min(1.0, stage_progress + 0.1)
-            dashboard.message(f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}")
-        elif cmd == "regress_curriculum":
-            old = stage_progress
-            stage_progress = max(0.0, stage_progress - 0.1)
-            dashboard.message(
-                f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
-            )
-        elif cmd == "stop":
-            should_stop = True
-            dashboard.message("Stopping after this batch...")
-        # pause/unpause/step handled by _wait_if_paused
-
-    return stage_progress, pending_save, should_stop, force_rerun
-
-
-def _wait_if_paused(queue):
-    """
-    Block the training thread while paused.
-
-    Checks the queue for unpause/step/stop commands.
-    Returns True if training should stop, False otherwise.
-    """
-    if queue is None:
-        return False
-
-    paused = False
-
-    # Check for pause command without blocking
-    while not queue.empty():
-        try:
-            cmd = queue.get_nowait()
-        except Empty:
-            break
-        if cmd == "pause":
-            paused = True
-        elif cmd == "unpause":
-            paused = False
-        elif cmd == "step":
-            return False  # Run one batch then re-check
-        elif cmd == "stop":
-            return True
+    def send(self, cmd: str):
+        """Queue a command (called from TUI thread)."""
+        if cmd in self._FLOW:
+            self._flow.put(cmd)
         else:
-            # Put non-pause commands back for _drain_command_queue
-            queue.put(cmd)
+            self._actions.put(cmd)
 
-    # If paused, block until unpaused/stepped/stopped
-    while paused:
-        time.sleep(0.05)  # 50ms poll interval
-        while not queue.empty():
+    def wait_if_paused(self) -> bool:
+        """Block while paused.  Returns True if stop was requested."""
+        paused = False
+
+        # Drain pending flow commands
+        while not self._flow.empty():
             try:
-                cmd = queue.get_nowait()
+                cmd = self._flow.get_nowait()
             except Empty:
                 break
-            if cmd == "unpause":
+            if cmd == "pause":
+                paused = True
+            elif cmd == "unpause":
                 paused = False
             elif cmd == "step":
-                return False  # Run one batch
+                return False
             elif cmd == "stop":
                 return True
-            elif cmd == "pause":
-                pass  # Already paused
-            else:
-                queue.put(cmd)
 
-    return False
+        # Block until un-paused, stepped, or stopped
+        while paused:
+            time.sleep(0.05)
+            while not self._flow.empty():
+                try:
+                    cmd = self._flow.get_nowait()
+                except Empty:
+                    break
+                if cmd == "unpause":
+                    paused = False
+                elif cmd == "step":
+                    return False
+                elif cmd == "stop":
+                    return True
+
+        return False
+
+    def drain_actions(self) -> list[str]:
+        """Return all pending action commands (non-blocking)."""
+        cmds: list[str] = []
+        while not self._actions.empty():
+            try:
+                cmds.append(self._actions.get_nowait())
+            except Empty:
+                break
+        return cmds
 
 
 def _train_loop(
@@ -415,7 +414,7 @@ def _train_loop(
     smoketest=False,
     resume=None,
     num_workers_override=None,
-    command_queue=None,
+    commands: CommandChannel | None = None,
     app=None,
     log_fn=print,
 ):
@@ -428,7 +427,7 @@ def _train_loop(
         smoketest: Whether this is a smoketest run
         resume: Resume ref string (local path or wandb artifact)
         num_workers_override: Override num_workers from config
-        command_queue: Optional Queue for TUI commands
+        commands: Optional CommandChannel for TUI commands
         app: Optional TUI app for pushing metadata
         log_fn: Function for print-style logging (print or dashboard.message).
                 In TUI mode this is dashboard.message (shows in log area).
@@ -491,6 +490,7 @@ def _train_loop(
     _verbose(f"  Run directory: {run_dir}/")
 
     # Push run metadata to TUI header
+    hypothesis = None
     if app is not None:
         from main import _get_experiment_info
 
@@ -500,6 +500,26 @@ def _train_loop(
             app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
             robot_name, hypothesis,
         )
+
+    # Set up AI commentary (skip in smoketest or when disabled)
+    commentator = None
+    if not smoketest and cfg.commentary.enabled and app is not None:
+        from ai_commentary import AICommentator, RunContext
+
+        run_context = RunContext(
+            run_name=run_name,
+            bot_name=bot_name,
+            algorithm=cfg.training.algorithm,
+            policy_type=cfg.policy.policy_type,
+            hypothesis=hypothesis,
+            wandb_url=wandb_url,
+            git_branch=get_git_branch(),
+            config_summary=_format_config_summary(cfg),
+        )
+        commentator = AICommentator(cfg.commentary, run_context)
+        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
+    last_commentary_time = time.perf_counter()
+    force_commentary = False
 
     # Create environment from config
     log_fn("Creating environment...")
@@ -683,6 +703,7 @@ def _train_loop(
     # Rolling window for eval success rate (used for curriculum)
     eval_success_history = deque(maxlen=curr.window_size)
 
+    run_start_time = time.monotonic()
     episode_count = resumed_episode_count
     batch_idx = resumed_batch_idx
     mastered = False
@@ -695,7 +716,7 @@ def _train_loop(
         and (max_batches is None or batch_idx < max_batches)
     ):
         # Block while paused (checks for unpause/step/stop)
-        if _wait_if_paused(command_queue):
+        if commands and commands.wait_if_paused():
             stop_requested = True
             dashboard.message("Stopping...")
             break
@@ -709,19 +730,53 @@ def _train_loop(
         if tweaks:
             changes = apply_tweaks(cfg, optimizer, env, tweaks)
             batch_size = cfg.training.batch_size
+            log_rerun_every = cfg.training.log_rerun_every
             for name, old, new in changes:
                 dashboard.message(f"  tweak: {name} {old} -> {new}")
             if changes:
                 wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
-        # Drain TUI command queue
+        # Drain TUI action commands
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
-        stage_progress, pending_save, stop_requested, force_rerun = (
-            _drain_command_queue(
-                command_queue, dashboard, stage_progress, curr, pending_save
-            )
-        )
+        for cmd in (commands.drain_actions() if commands else []):
+            if cmd == "checkpoint":
+                pending_save = ("manual", [])
+                dashboard.message("Checkpoint will be saved after this batch")
+            elif cmd == "log_rerun":
+                force_rerun = True
+                dashboard.message("Rerun recording queued for next eval")
+            elif cmd == "advance_curriculum":
+                old = stage_progress
+                stage_progress = min(1.0, stage_progress + 0.1)
+                dashboard.message(
+                    f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}"
+                )
+            elif cmd == "regress_curriculum":
+                old = stage_progress
+                stage_progress = max(0.0, stage_progress - 0.1)
+                dashboard.message(
+                    f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
+                )
+            elif cmd == "rerun_freq_down":
+                old = log_rerun_every
+                log_rerun_every = max(batch_size, log_rerun_every // 2)
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
+                )
+            elif cmd == "rerun_freq_up":
+                old = log_rerun_every
+                log_rerun_every = log_rerun_every * 2
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
+                )
+            elif cmd == "ai_commentary":
+                force_commentary = True
+            elif cmd == "stop":
+                stop_requested = True
+                dashboard.message("Stopping after this batch...")
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -834,10 +889,23 @@ def _train_loop(
                 log_this_eval = should_log_rerun_this_batch and (eval_idx == 0)
 
                 if log_this_eval:
-                    t_rerun_start = time.perf_counter()
-                    dashboard.message("Recording eval episode to Rerun...")
-                    rr_wandb.start_episode(episode_count, env, namespace="eval")
-                    timing["rerun"] += time.perf_counter() - t_rerun_start
+                    try:
+                        t_rerun_start = time.perf_counter()
+                        dashboard.message("Recording eval episode to Rerun...")
+
+                        # Determine if we should show camera in Rerun
+                        show_camera = not getattr(env, "in_walking_stage", False)
+                        if not getattr(policy, "uses_visual_input", True):
+                            show_camera = False
+
+                        rr_wandb.start_episode(
+                            episode_count, env, namespace="eval", show_camera=show_camera
+                        )
+                        timing["rerun"] += time.perf_counter() - t_rerun_start
+                    except Exception:
+                        log.exception("Failed to start Rerun recording")
+                        dashboard.message("Rerun recording failed (see log)")
+                        log_this_eval = False
 
                 eval_data = collect_episode(
                     env, policy, device, log_rerun=log_this_eval, deterministic=True
@@ -845,20 +913,24 @@ def _train_loop(
                 eval_successes.append(eval_data["success"])
 
                 if log_this_eval:
-                    t_rerun_start = time.perf_counter()
-                    # Log per-step value function traces for PPO
-                    if cfg.training.algorithm == "PPO":
-                        log_episode_value_trace(
-                            policy,
-                            eval_data,
-                            gamma=cfg.training.gamma,
-                            gae_lambda=cfg.training.gae_lambda,
-                            device=device,
-                            namespace="eval",
-                        )
-                    rr_wandb.finish_episode(eval_data, upload_artifact=True)
-                    timing["rerun"] += time.perf_counter() - t_rerun_start
-                    last_rerun_time = time.perf_counter()
+                    try:
+                        t_rerun_start = time.perf_counter()
+                        # Log per-step value function traces for PPO
+                        if cfg.training.algorithm == "PPO":
+                            log_episode_value_trace(
+                                policy,
+                                eval_data,
+                                gamma=cfg.training.gamma,
+                                gae_lambda=cfg.training.gae_lambda,
+                                device=device,
+                                namespace="eval",
+                            )
+                        rr_wandb.finish_episode(eval_data, upload_artifact=True)
+                        timing["rerun"] += time.perf_counter() - t_rerun_start
+                        last_rerun_time = time.perf_counter()
+                    except Exception:
+                        log.exception("Failed to finish Rerun recording")
+                        dashboard.message("Rerun upload failed (see log)")
 
             eval_success_rate = np.mean(eval_successes)
             eval_success_history.append(eval_success_rate)
@@ -970,8 +1042,21 @@ def _train_loop(
                 "batch/joint_stagnation_fraction": np.mean(
                     [ep.get("joint_stagnation_truncated", False) for ep in episode_batch]
                 ),
+                "batch/fell_fraction": np.mean(
+                    [ep.get("fell", False) for ep in episode_batch]
+                ),
             }
         )
+
+        # Per-component reward breakdown (averaged across batch)
+        component_keys = [
+            "reward_distance", "reward_exploration", "reward_time",
+            "reward_upright", "reward_alive", "reward_energy",
+            "reward_contact", "reward_forward_velocity", "reward_smoothness",
+        ]
+        for key in component_keys:
+            vals = [ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch]
+            log_dict[f"rewards/{key}"] = np.mean(vals)
 
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
@@ -1017,6 +1102,7 @@ def _train_loop(
             "mastery_count": mastery_count,
             "mastery_batches": cfg.training.mastery_batches,
             "max_episode_steps": env.max_episode_steps,
+            "log_rerun_every": log_rerun_every,
             # Timing
             "batch_time": batch_time,
             "collect_time": timing["collect_batch"],
@@ -1046,41 +1132,59 @@ def _train_loop(
             batch_idx, avg_reward, avg_distance,
             100 * rolling_eval_success_rate, curriculum_stage,
         )
+
+        # AI commentary: periodic or on-demand
+        now = time.perf_counter()
+        if commentator and (
+            force_commentary
+            or now - last_commentary_time >= cfg.commentary.interval_seconds
+        ):
+            elapsed = time.monotonic() - run_start_time
+            _run_commentary(
+                commentator, app, dashboard, batch_idx, dash_metrics, elapsed,
+            )
+            last_commentary_time = now
+            force_commentary = False
+
         batch_idx += 1
         batches_this_session += 1
 
         # Save checkpoints (milestone/final take priority over periodic)
-        if pending_save:
-            trigger, aliases = pending_save
-            save_checkpoint(
-                policy,
-                optimizer,
-                cfg,
-                curriculum_stage,
-                stage_progress,
-                mastery_count,
-                batch_idx,
-                episode_count,
-                trigger=trigger,
-                aliases=aliases,
-                run_dir=run_dir,
-            )
-        elif (
-            cfg.training.checkpoint_every
-            and batch_idx % cfg.training.checkpoint_every == 0
-        ):
-            save_checkpoint(
-                policy,
-                optimizer,
-                cfg,
-                curriculum_stage,
-                stage_progress,
-                mastery_count,
-                batch_idx,
-                episode_count,
-                trigger="periodic",
-                run_dir=run_dir,
-            )
+        try:
+            if pending_save:
+                trigger, aliases = pending_save
+                save_checkpoint(
+                    policy,
+                    optimizer,
+                    cfg,
+                    curriculum_stage,
+                    stage_progress,
+                    mastery_count,
+                    batch_idx,
+                    episode_count,
+                    trigger=trigger,
+                    aliases=aliases,
+                    run_dir=run_dir,
+                )
+            elif (
+                cfg.training.checkpoint_every
+                and batch_idx % cfg.training.checkpoint_every == 0
+            ):
+                save_checkpoint(
+                    policy,
+                    optimizer,
+                    cfg,
+                    curriculum_stage,
+                    stage_progress,
+                    mastery_count,
+                    batch_idx,
+                    episode_count,
+                    trigger="periodic",
+                    run_dir=run_dir,
+                )
+        except Exception:
+            log.exception("Failed to save checkpoint")
+            dashboard.message("Checkpoint save failed (see log)")
 
     dashboard.finish()
 
@@ -1148,14 +1252,14 @@ def _train_loop(
 
 
 def run_training(
-    app, command_queue, smoketest=False, resume=None, num_workers=None, scene_path=None
+    app, commands: CommandChannel, smoketest=False, resume=None, num_workers=None, scene_path=None
 ):
     """
     Entry point for TUI-driven training (called from worker thread).
 
     Args:
         app: MindSimApp instance
-        command_queue: Queue for TUI commands
+        commands: CommandChannel for TUI commands
         smoketest: Whether to use smoketest config
         resume: Checkpoint resume reference
         num_workers: Worker count override
@@ -1197,7 +1301,7 @@ def run_training(
         smoketest=smoketest,
         resume=resume,
         num_workers_override=num_workers,
-        command_queue=command_queue,
+        commands=commands,
         app=app,
         log_fn=dashboard.message,
     )

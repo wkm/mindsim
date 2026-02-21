@@ -50,12 +50,25 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     steps = 0
     info = {}
 
+    # Accumulate reward component sums for per-episode breakdown
+    reward_component_keys = [
+        "reward_distance", "reward_exploration", "reward_time",
+        "reward_upright", "reward_alive", "reward_energy",
+        "reward_contact", "reward_forward_velocity", "reward_smoothness",
+    ]
+    reward_component_sums = {k: 0.0 for k in reward_component_keys}
+
     # Track trajectory for Rerun
     trajectory_points = []
 
+    # Only record camera if it's being used by the policy and not in walking stage
+    show_camera = log_rerun and not getattr(env, "in_walking_stage", False)
+    if not getattr(policy, "uses_visual_input", True):
+        show_camera = False
+
     # Set up video encoder for Rerun (H.264 instead of per-frame JPEG)
     video_encoder = None
-    if log_rerun:
+    if show_camera:
         # Compute actual control frequency from physics config
         action_dt = env.env.model.opt.timestep * env.mujoco_steps_per_action
         control_fps = max(1, int(round(1.0 / action_dt)))
@@ -97,11 +110,14 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         rewards.append(reward)
         distances.append(info["distance"])
         total_reward += reward
+        for k in reward_component_keys:
+            reward_component_sums[k] += info.get(k, 0.0)
 
         # Log to Rerun in real-time
         if log_rerun:
             rr.set_time("step", sequence=steps)
-            video_encoder.log_frame(observations[-1])
+            if video_encoder:
+                video_encoder.log_frame(observations[-1])
             # Sensor inputs
             if has_sensors:
                 sensor_vals = env.current_sensors
@@ -136,7 +152,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     # Flush video encoder and log episode summary
     if log_rerun:
-        video_encoder.flush()
+        if video_encoder:
+            video_encoder.flush()
         rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
         rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
         rr.log(f"{ns}/episode/steps", rr.Scalars([steps]))
@@ -167,7 +184,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "truncated": truncated,
         "patience_truncated": info.get("patience_truncated", False),
         "joint_stagnation_truncated": info.get("joint_stagnation_truncated", False),
+        "fell": info.get("fell", False),
         "forward_distance": info.get("forward_distance", 0.0),
+        "reward_components": reward_component_sums,
     }
     if has_sensors:
         result["sensor_data"] = sensor_data

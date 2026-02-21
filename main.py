@@ -29,7 +29,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
+from train import CommandChannel
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -43,6 +43,8 @@ from textual.widgets import (
     RadioSet,
     RichLog,
     Static,
+    TabbedContent,
+    TabPane,
 )
 
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
@@ -185,6 +187,7 @@ class MainMenuScreen(Screen):
     BINDINGS = [
         Binding("s", "select('smoketest')", "Smoketest", priority=True),
         Binding("n", "select('new')", "New Run", priority=True),
+        Binding("v", "select('view')", "View Bot", priority=True),
         Binding("b", "select('browse')", "Browse Runs", priority=True),
         Binding("q", "select('quit')", "Quit", priority=True),
         Binding("escape", "select('quit')", "Quit", show=False, priority=True),
@@ -220,6 +223,7 @@ class MainMenuScreen(Screen):
             yield OptionList(
                 "[s] Smoketest",
                 "[n] New training run",
+                "[v] View bot",
                 "[b] Browse runs",
                 "[q] Quit",
                 id="menu-list",
@@ -230,7 +234,9 @@ class MainMenuScreen(Screen):
         if choice == "smoketest":
             self.app.start_training(smoketest=True)
         elif choice == "new":
-            self.app.push_screen(BotSelectorScreen())
+            self.app.push_screen(BotSelectorScreen(mode="train"))
+        elif choice == "view":
+            self.app.push_screen(BotSelectorScreen(mode="view"))
         elif choice == "browse":
             self.app.push_screen(RunBrowserScreen())
         elif choice == "quit":
@@ -238,7 +244,7 @@ class MainMenuScreen(Screen):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
-        choices = ["smoketest", "new", "browse", "quit"]
+        choices = ["smoketest", "new", "view", "browse", "quit"]
         if 0 <= idx < len(choices):
             self.action_select(choices[idx])
 
@@ -249,12 +255,12 @@ class MainMenuScreen(Screen):
 
 
 class BotSelectorScreen(Screen):
-    """Select a bot to start a new training run."""
+    """Select a bot for training or viewing."""
 
     BINDINGS = [
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
-        Binding("enter", "start_run", "Start", priority=True),
+        Binding("enter", "confirm", "Select", priority=True),
     ]
 
     CSS = """
@@ -279,13 +285,15 @@ class BotSelectorScreen(Screen):
     }
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, mode: str = "train", **kwargs):
         super().__init__(**kwargs)
         self._bots = _discover_bots()
+        self._mode = mode
 
     def compose(self) -> ComposeResult:
+        title = "Select Bot to View" if self._mode == "view" else "Select Bot"
         with Vertical(id="bot-box"):
-            yield Static("Select Bot", id="bot-title")
+            yield Static(title, id="bot-title")
             if self._bots:
                 with RadioSet(id="bot-selector"):
                     for i, bot in enumerate(self._bots):
@@ -298,19 +306,26 @@ class BotSelectorScreen(Screen):
     def action_go_back(self) -> None:
         self.app.pop_screen()
 
-    def action_start_run(self) -> None:
+    def _get_selected_scene(self) -> str | None:
         if not self._bots:
-            return
+            return None
         try:
             radio_set = self.query_one("#bot-selector", RadioSet)
             idx = radio_set.pressed_index
             if idx >= 0:
-                scene_path = self._bots[idx]["scene_path"]
-            else:
-                scene_path = self._bots[0]["scene_path"]
+                return self._bots[idx]["scene_path"]
         except (IndexError, ValueError):
-            scene_path = self._bots[0]["scene_path"]
-        self.app.start_training(smoketest=False, scene_path=scene_path)
+            pass
+        return self._bots[0]["scene_path"]
+
+    def action_confirm(self) -> None:
+        scene_path = self._get_selected_scene()
+        if not scene_path:
+            return
+        if self._mode == "view":
+            self.app.start_viewing(scene_path=scene_path)
+        else:
+            self.app.start_training(smoketest=False, scene_path=scene_path)
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +552,9 @@ class TrainingDashboard(Screen):
         Binding("w", "open_wandb", "W&B"),
         Binding("up", "advance_curriculum", "Advance"),
         Binding("down", "regress_curriculum", "Regress"),
+        Binding("a", "ai_commentary", "AI"),
+        Binding("left_square_bracket", "rerun_freq_down", "Rec \u2193"),
+        Binding("right_square_bracket", "rerun_freq_up", "Rec \u2191"),
         Binding("q", "quit_app", "Quit"),
         Binding("escape", "quit_app", "Quit", show=False),
         Binding("backspace", "quit_app", "Quit", show=False),
@@ -605,13 +623,15 @@ class TrainingDashboard(Screen):
         padding: 0 1;
     }
 
-    #log-panel-title {
-        text-style: bold;
-        color: $accent;
-        height: 1;
+    #log-tabs {
+        height: 1fr;
     }
 
     #log-area {
+        height: 1fr;
+    }
+
+    #ai-area {
         height: 1fr;
     }
     """
@@ -717,6 +737,9 @@ class TrainingDashboard(Screen):
                 yield Static(
                     "  max steps           ---", id="m-max-steps", classes="metric-line"
                 )
+                yield Static(
+                    "  rec interval        ---", id="m-rec-interval", classes="metric-line"
+                )
                 yield Static("TIMING", classes="section-title")
                 yield Static("  batch               ---", id="m-timing-batch", classes="metric-line")
                 yield Static("  \u251c collect           ---", id="m-timing-collect", classes="metric-line")
@@ -724,8 +747,11 @@ class TrainingDashboard(Screen):
                 yield Static("  \u251c eval              ---", id="m-timing-eval", classes="metric-line")
                 yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
           with Vertical(id="log-panel"):
-              yield Static("LOG", id="log-panel-title")
-              yield RichLog(id="log-area", wrap=True, max_lines=200, markup=True)
+              with TabbedContent(id="log-tabs"):
+                  with TabPane("Log", id="tab-log"):
+                      yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
+                  with TabPane("AI", id="tab-ai"):
+                      yield RichLog(id="ai-area", wrap=True, max_lines=200, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -750,15 +776,31 @@ class TrainingDashboard(Screen):
 
     def action_checkpoint(self) -> None:
         self.app.send_command("checkpoint")
+        self.log_message("[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)")
 
     def action_send_rerun(self) -> None:
         self.app.send_command("log_rerun")
+        self.log_message("[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)")
 
     def action_advance_curriculum(self) -> None:
         self.app.send_command("advance_curriculum")
+        self.log_message("Advancing curriculum...")
 
     def action_regress_curriculum(self) -> None:
         self.app.send_command("regress_curriculum")
+        self.log_message("Regressing curriculum...")
+
+    def action_rerun_freq_down(self) -> None:
+        self.app.send_command("rerun_freq_down")
+        self.log_message("Decreasing Rerun recording interval (more frequent)...")
+
+    def action_rerun_freq_up(self) -> None:
+        self.app.send_command("rerun_freq_up")
+        self.log_message("Increasing Rerun recording interval (less frequent)...")
+
+    def action_ai_commentary(self) -> None:
+        self.app.send_command("ai_commentary")
+        self.log_message("Generating AI commentary...")
 
     def action_open_wandb(self) -> None:
         if self._wandb_url:
@@ -901,6 +943,11 @@ class TrainingDashboard(Screen):
         self.query_one("#m-max-steps").update(
             f"  max steps        {_fmt_int(m.get('max_episode_steps'))}"
         )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else "---"
+        self.query_one("#m-rec-interval").update(
+            f"  rec interval     {rec_str.rjust(8)}"
+        )
 
         # Timing
         bt = m.get("batch_time")
@@ -932,6 +979,15 @@ class TrainingDashboard(Screen):
         log_widget = self.query_one("#log-area", RichLog)
         log_widget.write(f"[dim]{ts}[/dim]  {text}")
 
+    def log_ai_commentary(self, text: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        formatted = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan] {text}"
+        # Write to both Log and AI tabs
+        self.query_one("#log-area", RichLog).write(formatted)
+        self.query_one("#ai-area", RichLog).write(formatted)
+        # Switch to AI tab
+        self.query_one("#log-tabs", TabbedContent).active = "tab-ai"
+
     def mark_finished(self):
         self.log_message("[bold green]Training complete![/bold green]")
 
@@ -956,7 +1012,7 @@ class MindSimApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.command_queue: Queue[str] = Queue()
+        self.commands = CommandChannel()
         self._dashboard: TrainingDashboard | None = None
         # Set by screens to dispatch after app.run() returns
         self.next_action: str | None = None
@@ -1025,7 +1081,7 @@ class MindSimApp(App):
         try:
             run_training(
                 self,
-                self.command_queue,
+                self.commands,
                 smoketest=self._smoketest,
                 num_workers=num_workers,
                 scene_path=self._scene_path,
@@ -1037,7 +1093,7 @@ class MindSimApp(App):
                 logging.getLogger().removeHandler(self._tui_log_handler)
 
     def send_command(self, cmd: str):
-        self.command_queue.put(cmd)
+        self.commands.send(cmd)
 
     def update_metrics(self, batch: int, metrics: dict):
         """Called from training thread via call_from_thread."""
@@ -1053,6 +1109,11 @@ class MindSimApp(App):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
             self._dashboard.mark_finished()
+
+    def ai_commentary(self, text: str):
+        """Called from training thread via call_from_thread."""
+        if self._dashboard:
+            self._dashboard.log_ai_commentary(text)
 
     def set_header(
         self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,

@@ -69,6 +69,17 @@ class EnvConfig:
     ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
     forward_velocity_reward_scale: float = 0.0  # Reward forward movement (walking stage)
 
+    # Fall detection (0.0 = disabled for wheeler)
+    fall_height_fraction: float = 0.0  # Fraction of initial height below which = fallen (e.g. 0.5)
+    fall_up_z_threshold: float = 0.0  # Min torso up_z to be "healthy" (e.g. 0.54 = ~57°)
+    fall_grace_steps: int = 0  # Consecutive unhealthy steps before termination (0 = immediate)
+
+    # Action smoothness penalty (0.0 = disabled)
+    action_smoothness_scale: float = 0.0  # Penalty for action jerk: -scale * ||a_t - a_{t-1}||^2
+
+    # Gait phase encoding (0.0 = disabled)
+    gait_phase_period: float = 0.0  # Period in seconds (e.g. 0.6s for ~1.67Hz stride)
+
     # Arm-specific reward shaping (all 0.0 = disabled for non-arm bots)
     is_arm_task: bool = False
     grasp_reward: float = 0.0  # Per-step reward when both fingers contact the cup
@@ -160,6 +171,15 @@ class TrainingConfig:
 
 
 @dataclass
+class CommentaryConfig:
+    """AI commentary configuration for training dashboard."""
+
+    enabled: bool = True
+    interval_seconds: float = 300.0  # 5 minutes between commentary
+    model: str = "haiku"
+
+
+@dataclass
 class Config:
     """Complete training configuration."""
 
@@ -167,6 +187,7 @@ class Config:
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    commentary: CommentaryConfig = field(default_factory=CommentaryConfig)
 
     @property
     def bot_name(self) -> str:
@@ -187,6 +208,7 @@ class Config:
             ("curriculum", self.curriculum),
             ("policy", self.policy),
             ("training", self.training),
+            ("commentary", self.commentary),
         ]:
             for key, value in asdict(section).items():
                 result[f"{section_name}/{key}"] = value
@@ -203,6 +225,7 @@ class Config:
             "curriculum": asdict(self.curriculum),
             "policy": asdict(self.policy),
             "training": asdict(self.training),
+            "commentary": asdict(self.commentary),
         }
 
     @classmethod
@@ -235,12 +258,13 @@ class Config:
                 log_rerun_every=9999,  # Effectively disable
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
 
     @classmethod
     def for_biped(cls) -> Config:
-        """Config for the 6-joint biped walking experiment with MLPPolicy."""
+        """Config for the 8-joint duck biped with MLPPolicy (hip_abd + hip + knee + ankle per leg)."""
         return cls(
             env=EnvConfig(
                 scene_path="bots/simplebiped/scene.xml",
@@ -255,21 +279,29 @@ class Config:
                 min_target_distance=0.8,
                 max_target_distance=1.5,  # Closer targets initially
                 # Biped rewards
-                alive_bonus=0.1,
+                alive_bonus=1.0,  # Health-gated: only when standing
                 energy_penalty_scale=0.001,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,  # Small per-step cost for efficiency
-                upright_reward_scale=0.5,  # Reward staying upright
+                upright_reward_scale=0.3,  # Reward staying upright (reduced from 0.5)
                 ground_contact_penalty=0.5,  # Penalize non-foot ground contact
                 forward_velocity_reward_scale=8.0,  # Strong forward signal — must clearly beat standing-still rewards
-                walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.5m tall)
+                walking_success_min_forward=0.5,  # ~1 body length (biped is ~0.3m tall)
                 joint_stagnation_window=375,  # 3 sec at 125Hz — abort frozen episodes
                 has_walking_stage=True,
+                # Fall detection
+                fall_height_fraction=0.5,  # Fallen if torso drops below 50% of initial height
+                fall_up_z_threshold=0.54,  # Fallen if torso tilts past ~57° from vertical
+                fall_grace_steps=50,  # 0.4s at 125Hz — survive brief dips, learn from bad states
+                # Action smoothness
+                action_smoothness_scale=0.1,  # Penalize jerky actions
+                # Gait phase encoding
+                gait_phase_period=0.6,  # 0.6s stride = ~1.67Hz
             ),
             curriculum=CurriculumConfig(
                 num_stages=5,  # Walking + 4 standard stages
                 window_size=10,
-                advance_threshold=0.4,  # Lower threshold — walking is harder
+                advance_threshold=1.0,  # Manual advancement only
                 advance_rate=0.01,
             ),
             policy=PolicyConfig(
@@ -277,8 +309,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=256,
-                fc_output_size=6,  # 6 joint motors
-                sensor_input_size=18,  # 6 pos + 6 vel + 3 gyro + 3 accel
+                fc_output_size=8,  # 8 motors (hip_abd + hip + knee + ankle per leg)
+                sensor_input_size=26,  # 8 pos + 8 vel + 3 gyro + 3 accel + 4 gait phase
                 init_std=1.0,  # Wide exploration
             ),
             training=TrainingConfig(
@@ -391,6 +423,7 @@ class Config:
                 log_rerun_every=9999,
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
     @classmethod
@@ -404,15 +437,20 @@ class Config:
                 max_episode_steps=10,
                 control_frequency_hz=125,
                 mujoco_steps_per_action=4,
-                alive_bonus=0.1,
+                alive_bonus=1.0,
                 energy_penalty_scale=0.001,
                 distance_reward_scale=10.0,
                 time_penalty=0.005,
-                upright_reward_scale=0.5,
+                upright_reward_scale=0.3,
                 ground_contact_penalty=0.5,
                 forward_velocity_reward_scale=8.0,
                 walking_success_min_forward=0.0,  # Smoketest: no forward requirement
                 has_walking_stage=True,
+                fall_height_fraction=0.5,
+                fall_up_z_threshold=0.54,
+                fall_grace_steps=50,
+                action_smoothness_scale=0.1,
+                gait_phase_period=0.6,
             ),
             curriculum=CurriculumConfig(
                 window_size=1,
@@ -426,8 +464,8 @@ class Config:
                 image_height=64,
                 image_width=64,
                 hidden_size=32,
-                fc_output_size=6,
-                sensor_input_size=18,
+                fc_output_size=8,  # 8 motors
+                sensor_input_size=26,  # 8 pos + 8 vel + 3 gyro + 3 accel + 4 gait phase
             ),
             training=TrainingConfig(
                 batch_size=2,
@@ -437,6 +475,7 @@ class Config:
                 log_rerun_every=9999,
                 ppo_epochs=2,
             ),
+            commentary=CommentaryConfig(enabled=False),
         )
 
     @classmethod
