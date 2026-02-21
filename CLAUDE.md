@@ -40,7 +40,7 @@ mindsim/
 ├── main.py                   # Single entry point for all modes
 ├── run_manager.py            # Run directory lifecycle & W&B init
 ├── worlds/
-│   └── room.xml             # Standalone arena (floor, curbs, target, obstacle slots)
+│   └── room.xml             # Standalone arena (floor, curbs, target, distractors)
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
 │   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
@@ -124,7 +124,7 @@ Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next sce
 
 **Adding new furniture:** Drop a file in `scene_gen/concepts/` following the pattern in `concepts/__init__.py` docstring. Needs a `Params` frozen dataclass + `generate(params) -> tuple[Prim, ...]`. That's it — auto-discovered.
 
-**Scene XML slots:** `worlds/room.xml` contains 8 obstacle bodies x 8 geom slots each (64 total). Initially hidden (transparent, non-colliding). The composer writes to these at runtime. Bot `scene.xml` files include `room.xml` via `<include>`, so all room-scale bots get the slots automatically.
+**Obstacle slots via MjSpec:** Obstacle body+geom slots are injected programmatically via `SceneComposer.prepare_spec(spec)` before model compilation (uses MuJoCo's MjSpec API). The slot count is configurable (default: 8 objects x 8 geoms). `worlds/room.xml` contains only the static arena (floor, curbs, target, distractors) — no pre-allocated placeholders. Bot `scene.xml` files include `room.xml` via `<include>`.
 
 **Scale progression (planned):** Room → Apartment → House → Village.
 
@@ -161,7 +161,7 @@ Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next sce
 - **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
 - **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
-- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors, obstacle slots)
+- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors)
 - **scene.xml** - Thin wrapper: timestep + bot.xml + room.xml include
 - **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
