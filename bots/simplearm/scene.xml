@@ -27,7 +27,8 @@
 
     <!-- Table surface (top at z=0.40) -->
     <geom name="table_surface" type="box" size="0.30 0.25 0.02"
-          pos="0 0.25 0.38" rgba="0.6 0.45 0.3 1.0" />
+          pos="0 0.25 0.38" rgba="0.6 0.45 0.3 1.0"
+          solref="0.005 1" solimp="0.999 0.9999 0.001 0.5 2" />
     <!-- Table legs -->
     <geom name="table_leg_1" type="cylinder" size="0.015 0.18"
           pos="0.25 0.05 0.18" rgba="0.5 0.35 0.2 1.0" />

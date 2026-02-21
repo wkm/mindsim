@@ -134,7 +134,7 @@
     <position name="wrist_pitch_motor" joint="wrist_pitch" kp="10" />
     <position name="wrist_roll_motor" joint="wrist_roll" kp="10" />
     <!-- Gripper (coupled: controls both fingers via equality constraint) -->
-    <position name="gripper_motor" joint="finger_left" kp="20" />
+    <position name="gripper_motor" joint="finger_left" kp="40" />
   </actuator>
 
   <sensor>
