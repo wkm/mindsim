@@ -63,19 +63,27 @@ class AICommentator:
             lines.append(f"Experiment hypothesis: {ctx.hypothesis}")
         if ctx.wandb_url:
             lines.append(f"W&B dashboard: {ctx.wandb_url}")
-            lines.append("You can use WebFetch to browse the W&B URL for charts and detailed metrics.")
+            lines.append(
+                "You can use WebFetch to browse the W&B URL for charts and detailed metrics."
+            )
         lines.append("")
         lines.append(f"Config:\n{ctx.config_summary}")
         lines.append("")
         lines.append("Instructions:")
         lines.append("- Be concise: 2-4 sentences per commentary.")
-        lines.append("- Note trends across snapshots (you'll see multiple over the run).")
-        lines.append("- Flag concerns: entropy collapse, reward plateaus, KL spikes, etc.")
+        lines.append(
+            "- Note trends across snapshots (you'll see multiple over the run)."
+        )
+        lines.append(
+            "- Flag concerns: entropy collapse, reward plateaus, KL spikes, etc."
+        )
         lines.append("- Suggest what to watch or consider adjusting.")
         lines.append("- Use plain text, no markdown headers. Keep it conversational.")
         return "\n".join(lines)
 
-    def generate_commentary(self, batch: int, metrics: dict, elapsed_secs: float) -> str | None:
+    def generate_commentary(
+        self, batch: int, metrics: dict, elapsed_secs: float
+    ) -> str | None:
         """Generate commentary for the current training state.
 
         Returns the commentary text, or None on failure.
@@ -83,9 +91,12 @@ class AICommentator:
         prompt = self._format_metrics_snapshot(batch, metrics, elapsed_secs)
 
         cmd = [
-            "claude", "-p",
-            "--model", self._config.model,
-            "--allowedTools", "WebFetch Read Grep",
+            "claude",
+            "-p",
+            "--model",
+            self._config.model,
+            "--allowedTools",
+            "WebFetch Read Grep",
         ]
 
         if self._call_count == 0:
@@ -114,13 +125,17 @@ class AICommentator:
             log.warning("AI commentary timed out (60s)")
             return None
         except subprocess.CalledProcessError as e:
-            log.warning("AI commentary failed: %s", e.stderr[:200] if e.stderr else str(e))
+            log.warning(
+                "AI commentary failed: %s", e.stderr[:200] if e.stderr else str(e)
+            )
             return None
         except FileNotFoundError:
             log.warning("claude CLI not found — AI commentary disabled")
             return None
 
-    def _format_metrics_snapshot(self, batch: int, metrics: dict, elapsed_secs: float) -> str:
+    def _format_metrics_snapshot(
+        self, batch: int, metrics: dict, elapsed_secs: float
+    ) -> str:
         """Format current metrics as a human-readable prompt."""
         m = metrics
         elapsed_min = elapsed_secs / 60
@@ -129,29 +144,33 @@ class AICommentator:
 
         # Episode performance
         lines.append(f"Avg reward: {m.get('avg_reward', '?'):.2f}")
-        lines.append(f"Best/worst reward: {m.get('best_reward', '?'):.2f} / {m.get('worst_reward', '?'):.2f}")
+        lines.append(
+            f"Best/worst reward: {m.get('best_reward', '?'):.2f} / {m.get('worst_reward', '?'):.2f}"
+        )
         lines.append(f"Avg distance to target: {m.get('avg_distance', '?'):.2f}m")
         lines.append(f"Avg episode steps: {m.get('avg_steps', '?'):.0f}")
 
         # Success rates
-        lines.append(f"Eval success (rolling): {m.get('rolling_eval_success_rate', 0):.0%}")
+        lines.append(
+            f"Eval success (rolling): {m.get('rolling_eval_success_rate', 0):.0%}"
+        )
         lines.append(f"Eval success (batch): {m.get('eval_success_rate', 0):.0%}")
         lines.append(f"Train success (batch): {m.get('batch_success_rate', 0):.0%}")
 
         # Optimization
         lines.append(f"Entropy: {m.get('entropy', '?')}")
         lines.append(f"Grad norm: {m.get('grad_norm', '?')}")
-        if 'policy_loss' in m:
+        if "policy_loss" in m:
             lines.append(f"Policy loss: {m['policy_loss']:.4f}")
-        if 'value_loss' in m:
+        if "value_loss" in m:
             lines.append(f"Value loss: {m['value_loss']:.4f}")
-        if 'clip_fraction' in m:
+        if "clip_fraction" in m:
             lines.append(f"Clip fraction: {m['clip_fraction']:.3f}")
-        if 'approx_kl' in m:
+        if "approx_kl" in m:
             lines.append(f"Approx KL: {m['approx_kl']:.4f}")
 
         # Policy std
-        ps = m.get('policy_std')
+        ps = m.get("policy_std")
         if ps is not None:
             try:
                 lines.append(f"Policy std: {' / '.join(f'{s:.3f}' for s in ps)}")
@@ -159,9 +178,13 @@ class AICommentator:
                 lines.append(f"Policy std: {ps:.3f}")
 
         # Curriculum
-        lines.append(f"Curriculum stage: {m.get('curriculum_stage', '?')} / {m.get('num_stages', '?')}")
+        lines.append(
+            f"Curriculum stage: {m.get('curriculum_stage', '?')} / {m.get('num_stages', '?')}"
+        )
         lines.append(f"Stage progress: {m.get('stage_progress', 0):.2f}")
-        lines.append(f"Mastery: {m.get('mastery_count', 0)} / {m.get('mastery_batches', '?')}")
+        lines.append(
+            f"Mastery: {m.get('mastery_count', 0)} / {m.get('mastery_batches', '?')}"
+        )
 
         # Timing
         lines.append(f"Batch time: {m.get('batch_time', 0):.1f}s")

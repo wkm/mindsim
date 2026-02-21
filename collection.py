@@ -52,9 +52,15 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     # Accumulate reward component sums for per-episode breakdown
     reward_component_keys = [
-        "reward_distance", "reward_exploration", "reward_time",
-        "reward_upright", "reward_alive", "reward_energy",
-        "reward_contact", "reward_forward_velocity", "reward_smoothness",
+        "reward_distance",
+        "reward_exploration",
+        "reward_time",
+        "reward_upright",
+        "reward_alive",
+        "reward_energy",
+        "reward_contact",
+        "reward_forward_velocity",
+        "reward_smoothness",
     ]
     reward_component_sums = {k: 0.0 for k in reward_component_keys}
 
@@ -84,16 +90,22 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)
         sensor_tensor = None
         if has_sensors:
-            sensor_tensor = torch.from_numpy(env.current_sensors).unsqueeze(0).to(device)
+            sensor_tensor = (
+                torch.from_numpy(env.current_sensors).unsqueeze(0).to(device)
+            )
 
         # Get action (deterministic or stochastic)
         with torch.no_grad():
             if deterministic:
-                action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
+                action = policy.get_deterministic_action(
+                    obs_tensor, sensors=sensor_tensor
+                )
                 action = action.cpu().numpy()[0]
                 log_prob = None
             else:
-                action, log_prob = policy.sample_action(obs_tensor, sensors=sensor_tensor)
+                action, log_prob = policy.sample_action(
+                    obs_tensor, sensors=sensor_tensor
+                )
                 action = action.cpu().numpy()[0]
                 log_prob = log_prob.cpu().numpy()[0]
 
@@ -124,7 +136,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
                 for si in env.sensor_info:
                     adr, dim = si["adr"], si["dim"]
                     if dim == 1:
-                        rr.log(f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]]))
+                        rr.log(
+                            f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]])
+                        )
                     else:
                         for d in range(dim):
                             rr.log(
@@ -165,7 +179,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     if info.get("in_walking_stage"):
         # Walking stage: success = survived AND moved forward enough
         forward_dist = info.get("forward_distance", 0.0)
-        success = bool(truncated and not done and forward_dist >= env.walking_success_min_forward)
+        success = bool(
+            truncated and not done and forward_dist >= env.walking_success_min_forward
+        )
     else:
         # Standard stages: success = reached target
         success = bool(done and info["distance"] < env.success_distance)

@@ -16,7 +16,9 @@ LOGGING_FREQUENCY_HZ = 30.0
 PROGRESS_PRINT_INTERVAL = 100
 
 
-def run_visualization(scene_path="bots/simple2wheeler/scene.xml", output_dir="recordings", num_steps=1000):
+def run_visualization(
+    scene_path="bots/simple2wheeler/scene.xml", output_dir="recordings", num_steps=1000
+):
     """Run a visualization recording for the given scene.
 
     Args:
@@ -50,9 +52,7 @@ def run_visualization(scene_path="bots/simple2wheeler/scene.xml", output_dir="re
     print(f"  Running {num_steps} steps...")
     print()
 
-    log_interval = max(
-        1, int(1.0 / (LOGGING_FREQUENCY_HZ * env.model.opt.timestep))
-    )
+    log_interval = max(1, int(1.0 / (LOGGING_FREQUENCY_HZ * env.model.opt.timestep)))
     trajectory_points = []
     start_time = time.time()
 
@@ -82,9 +82,7 @@ def run_visualization(scene_path="bots/simple2wheeler/scene.xml", output_dir="re
             if len(trajectory_points) > 1:
                 rr.log(
                     "world/trajectory",
-                    rr.LineStrips3D(
-                        [trajectory_points], colors=[[100, 200, 100]]
-                    ),
+                    rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]),
                 )
 
         if step % PROGRESS_PRINT_INTERVAL == 0:

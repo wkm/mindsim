@@ -41,7 +41,9 @@ class EnvConfig:
     distractor_max_distance: float = 3.0  # Max spawn distance from origin
 
     # Stage 4: moving distractors
-    distractor_max_speed: float = 0.2  # Max distractor speed (m/s) at stage 4 progress=1
+    distractor_max_speed: float = (
+        0.2  # Max distractor speed (m/s) at stage 4 progress=1
+    )
 
     # Distance-patience early truncation
     patience_window: int = 100  # Steps to look back (10 sec at 10Hz, 0=disabled)
@@ -53,9 +55,19 @@ class EnvConfig:
 
     # Walking stage: learn to stand/walk before target navigation
     has_walking_stage: bool = False
-    walking_target_pos: tuple[float, float, float] = (0.0, -10.0, 0.08)  # Where to place target in walking stage
-    forward_velocity_axis: tuple[float, float, float] = (0.0, -1.0, 0.0)  # "Forward" for velocity reward
-    walking_success_min_forward: float = 0.5  # Min forward distance (meters) for walking stage success
+    walking_target_pos: tuple[float, float, float] = (
+        0.0,
+        -10.0,
+        0.08,
+    )  # Where to place target in walking stage
+    forward_velocity_axis: tuple[float, float, float] = (
+        0.0,
+        -1.0,
+        0.0,
+    )  # "Forward" for velocity reward
+    walking_success_min_forward: float = (
+        0.5  # Min forward distance (meters) for walking stage success
+    )
 
     # Reward shaping
     distance_reward_scale: float = 20.0
@@ -66,16 +78,28 @@ class EnvConfig:
     upright_reward_scale: float = 0.0
     alive_bonus: float = 0.0
     energy_penalty_scale: float = 0.0
-    ground_contact_penalty: float = 0.0  # Penalty per step when non-foot geoms touch floor
-    forward_velocity_reward_scale: float = 0.0  # Reward forward movement (walking stage)
+    ground_contact_penalty: float = (
+        0.0  # Penalty per step when non-foot geoms touch floor
+    )
+    forward_velocity_reward_scale: float = (
+        0.0  # Reward forward movement (walking stage)
+    )
 
     # Fall detection (0.0 = disabled for wheeler)
-    fall_height_fraction: float = 0.0  # Fraction of initial height below which = fallen (e.g. 0.5)
-    fall_up_z_threshold: float = 0.0  # Min torso up_z to be "healthy" (e.g. 0.54 = ~57°)
-    fall_grace_steps: int = 0  # Consecutive unhealthy steps before termination (0 = immediate)
+    fall_height_fraction: float = (
+        0.0  # Fraction of initial height below which = fallen (e.g. 0.5)
+    )
+    fall_up_z_threshold: float = (
+        0.0  # Min torso up_z to be "healthy" (e.g. 0.54 = ~57°)
+    )
+    fall_grace_steps: int = (
+        0  # Consecutive unhealthy steps before termination (0 = immediate)
+    )
 
     # Action smoothness penalty (0.0 = disabled)
-    action_smoothness_scale: float = 0.0  # Penalty for action jerk: -scale * ||a_t - a_{t-1}||^2
+    action_smoothness_scale: float = (
+        0.0  # Penalty for action jerk: -scale * ||a_t - a_{t-1}||^2
+    )
 
     # Gait phase encoding (0.0 = disabled)
     gait_phase_period: float = 0.0  # Period in seconds (e.g. 0.6s for ~1.67Hz stride)
@@ -187,6 +211,7 @@ class Config:
     def bot_name(self) -> str:
         """Extract bot directory name from env.scene_path (e.g. 'simple2wheeler')."""
         from pathlib import Path
+
         return Path(self.env.scene_path).parent.name
 
     def to_flat_dict(self) -> dict:
@@ -254,7 +279,6 @@ class Config:
             ),
             commentary=CommentaryConfig(enabled=False),
         )
-
 
     @classmethod
     def for_biped(cls) -> Config:
