@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play wt-new wt-ls wt-rm
+.PHONY: tui train quick-sim test smoketest view play wt-new wt-ls wt-rm setup lint
 
 tui:
 	uv run mjpython main.py
@@ -32,6 +32,14 @@ view:
 
 play:
 	uv run mjpython main.py play
+
+lint:
+	uv run ruff check --fix .
+	uv run ruff format .
+
+setup:
+	git config core.hooksPath .githooks
+	@echo "Git hooks configured (pre-commit: ruff lint + format)"
 
 # --- Worktree management ---
 # TYPE=infra -> infra/<name> branch (no date prefix)
