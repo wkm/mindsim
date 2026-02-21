@@ -47,6 +47,8 @@ from textual.widgets import (
     TabPane,
 )
 
+from rich.markdown import Markdown as RichMarkdown
+
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
 from run_manager import (
     bot_display_name,
@@ -154,6 +156,27 @@ def _fmt(value, precision=3, width=8):
     return f"{value:+.{precision}f}".rjust(width)
 
 
+def _color_val(formatted: str, value: float | None, ranges: dict) -> str:
+    """Wrap a formatted string in Rich color markup based on health ranges.
+
+    Args:
+        formatted: Already-formatted display string.
+        value: Raw numeric value (None → no coloring).
+        ranges: Dict with 'green', 'yellow', 'red' keys.
+            Each is a callable(value) -> bool, checked in order: green, yellow, red.
+            First match wins; no match → no coloring.
+    """
+    if value is None:
+        return formatted
+    if ranges.get("green") and ranges["green"](value):
+        return f"[green]{formatted}[/green]"
+    if ranges.get("yellow") and ranges["yellow"](value):
+        return f"[yellow]{formatted}[/yellow]"
+    if ranges.get("red") and ranges["red"](value):
+        return f"[red]{formatted}[/red]"
+    return formatted
+
+
 def _get_experiment_info(branch: str) -> str | None:
     """Look up the hypothesis for a branch from EXPERIMENTS.md.
 
@@ -174,6 +197,51 @@ def _get_experiment_info(branch: str) -> str | None:
         if m and m.group(1).strip() == branch:
             return m.group(2).strip()
     return None
+
+
+def _git_is_clean() -> tuple[bool, str]:
+    """Check whether the git working tree is clean.
+
+    Returns (is_clean, status_lines) where status_lines is the raw
+    ``git status --porcelain`` output.  If this isn't a git repo or
+    git isn't available, returns (True, "") so training proceeds.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=10,
+        )
+        output = result.stdout.strip()
+        return (output == "", output)
+    except Exception:
+        return (True, "")
+
+
+def _run_claude_commit() -> bool:
+    """Run Claude in print mode to commit all changes.
+
+    Returns True if the worktree is clean afterward.
+    """
+    import subprocess
+
+    print("Running Claude to commit changes...")
+    try:
+        subprocess.run(
+            [
+                "claude", "-p",
+                "Run git status and git diff to see current changes, then commit all changes with a descriptive commit message.",
+                "--allowedTools", "Bash Read Grep Glob",
+            ],
+            timeout=120,
+        )
+    except Exception as e:
+        print(f"Claude commit failed: {e}")
+        return False
+
+    clean, _ = _git_is_clean()
+    return clean
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +394,116 @@ class BotSelectorScreen(Screen):
             self.app.start_viewing(scene_path=scene_path)
         else:
             self.app.start_training(smoketest=False, scene_path=scene_path)
+
+
+# ---------------------------------------------------------------------------
+# Dirty Tree Screen
+# ---------------------------------------------------------------------------
+
+
+class DirtyTreeScreen(Screen):
+    """Shown before training when the git worktree has uncommitted changes."""
+
+    BINDINGS = [
+        Binding("c", "commit", "Commit with Claude", priority=True),
+        Binding("s", "start_anyway", "Start Anyway", priority=True),
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+    ]
+
+    CSS = """
+    DirtyTreeScreen {
+        align: center middle;
+    }
+
+    #dirty-box {
+        width: 60;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #dirty-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #dirty-status {
+        margin-bottom: 1;
+    }
+
+    #dirty-actions {
+        height: auto;
+    }
+    """
+
+    def __init__(
+        self,
+        status_lines: str,
+        smoketest: bool,
+        scene_path: str | None,
+        resume: str | None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._status_lines = status_lines
+        self._smoketest = smoketest
+        self._scene_path = scene_path
+        self._resume = resume
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dirty-box"):
+            yield Static("Uncommitted Changes", id="dirty-title")
+            yield Static(self._status_lines, id="dirty-status")
+            yield OptionList(
+                "[c] Commit with Claude",
+                "[s] Start anyway",
+                "[Esc] Back",
+                id="dirty-actions",
+            )
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_start_anyway(self) -> None:
+        self.app.pop_screen()
+        self.app._do_start_training(
+            smoketest=self._smoketest,
+            scene_path=self._scene_path,
+            resume=self._resume,
+        )
+
+    def action_commit(self) -> None:
+        self.query_one("#dirty-title", Static).update("Committing...")
+        self._do_commit()
+
+    @work(thread=True)
+    def _do_commit(self) -> None:
+        clean = _run_claude_commit()
+        if clean:
+            self.app.call_from_thread(self._start_after_commit)
+        else:
+            _, new_status = _git_is_clean()
+            self.app.call_from_thread(self._update_after_commit, new_status)
+
+    def _start_after_commit(self) -> None:
+        self.app.pop_screen()
+        self.app._do_start_training(
+            smoketest=self._smoketest,
+            scene_path=self._scene_path,
+            resume=self._resume,
+        )
+
+    def _update_after_commit(self, new_status: str) -> None:
+        self.query_one("#dirty-title", Static).update("Still Uncommitted Changes")
+        self.query_one("#dirty-status", Static).update(new_status)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        actions = ["commit", "start_anyway", "go_back"]
+        if 0 <= idx < len(actions):
+            getattr(self, f"action_{actions[idx]}")()
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +916,9 @@ class TrainingDashboard(Screen):
                 yield Static(
                     "  approx KL           ---", id="m-approx-kl", classes="metric-line"
                 )
+                yield Static(
+                    "  explained var       ---", id="m-explained-var", classes="metric-line"
+                )
                 yield Static("CURRICULUM", classes="section-title")
                 yield Static(
                     "  stage               ---", id="m-stage", classes="metric-line"
@@ -976,7 +1157,7 @@ class TrainingDashboard(Screen):
             std_str = "---"
         self.query_one("#m-policy-std").update(f"  policy std       {std_str.rjust(8)}")
 
-        # Optimization
+        # Optimization (with health colorization for PPO diagnostics)
         if is_ppo:
             self.query_one("#m-policy-loss").update(
                 f"  policy loss      {_fmt(m.get('policy_loss'), precision=4)}"
@@ -984,12 +1165,33 @@ class TrainingDashboard(Screen):
             self.query_one("#m-value-loss").update(
                 f"  value loss       {_fmt(m.get('value_loss'), precision=4)}"
             )
-            self.query_one("#m-clip-fraction").update(
-                f"  clip fraction    {_fmt(m.get('clip_fraction'), precision=2)}"
-            )
-            self.query_one("#m-approx-kl").update(
-                f"  approx KL        {_fmt(m.get('approx_kl'), precision=4)}"
-            )
+            # Clip fraction: green 0.05-0.30, yellow <0.05 or 0.30-0.50, red >0.50
+            cf_val = m.get('clip_fraction')
+            cf_str = _fmt(cf_val, precision=2)
+            cf_str = _color_val(cf_str, cf_val, {
+                "green": lambda v: 0.05 <= v <= 0.30,
+                "yellow": lambda v: v < 0.05 or 0.30 < v <= 0.50,
+                "red": lambda v: v > 0.50,
+            })
+            self.query_one("#m-clip-fraction").update(f"  clip fraction    {cf_str}")
+            # Approx KL: green 0.005-0.05, yellow <0.005 or 0.05-0.1, red >0.1
+            kl_val = m.get('approx_kl')
+            kl_str = _fmt(kl_val, precision=4)
+            kl_str = _color_val(kl_str, kl_val, {
+                "green": lambda v: 0.005 <= v <= 0.05,
+                "yellow": lambda v: v < 0.005 or 0.05 < v <= 0.1,
+                "red": lambda v: v > 0.1,
+            })
+            self.query_one("#m-approx-kl").update(f"  approx KL        {kl_str}")
+            # Explained variance: green >0.5, yellow 0.0-0.5, red <0.0
+            ev_val = m.get('explained_variance')
+            ev_str = _fmt(ev_val, precision=3)
+            ev_str = _color_val(ev_str, ev_val, {
+                "green": lambda v: v > 0.5,
+                "yellow": lambda v: 0.0 <= v <= 0.5,
+                "red": lambda v: v < 0.0,
+            })
+            self.query_one("#m-explained-var").update(f"  explained var    {ev_str}")
         else:
             self.query_one("#m-policy-loss").update(
                 f"  loss             {_fmt(m.get('loss'), precision=4)}"
@@ -997,9 +1199,20 @@ class TrainingDashboard(Screen):
             self.query_one("#m-value-loss").update("  value loss       ---")
             self.query_one("#m-clip-fraction").update("  clip fraction    ---")
             self.query_one("#m-approx-kl").update("  approx KL        ---")
-        self.query_one("#m-grad-norm").update(
-            f"  grad norm        {_fmt(m.get('grad_norm'), precision=3)}"
-        )
+            self.query_one("#m-explained-var").update("  explained var    ---")
+        # Grad norm: colored relative to max_grad_norm config
+        gn_val = m.get('grad_norm')
+        max_gn = m.get('max_grad_norm', 0.5)
+        gn_str = _fmt(gn_val, precision=3)
+        if gn_val is not None and max_gn > 0:
+            ratio = gn_val / max_gn
+            if ratio > 10:
+                gn_str = f"[red]{gn_str}[/red] [dim]({ratio:.0f}x)[/dim]"
+            elif ratio > 2:
+                gn_str = f"[yellow]{gn_str}[/yellow] [dim]({ratio:.0f}x)[/dim]"
+            else:
+                gn_str = f"[green]{gn_str}[/green]"
+        self.query_one("#m-grad-norm").update(f"  grad norm        {gn_str}")
         self.query_one("#m-entropy").update(
             f"  entropy          {_fmt(m.get('entropy'), precision=3)}"
         )
@@ -1058,10 +1271,13 @@ class TrainingDashboard(Screen):
 
     def log_ai_commentary(self, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        formatted = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan] {text}"
-        # Write to both Log and AI tabs
-        self.query_one("#log-area", RichLog).write(formatted)
-        self.query_one("#ai-area", RichLog).write(formatted)
+        header = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan]"
+        md = RichMarkdown(text)
+        # Write header + rendered markdown to both Log and AI tabs
+        for widget_id in ("#log-area", "#ai-area"):
+            log_widget = self.query_one(widget_id, RichLog)
+            log_widget.write(header)
+            log_widget.write(md)
         # Switch to AI tab
         self.query_one("#log-tabs", TabbedContent).active = "tab-ai"
 
@@ -1131,11 +1347,31 @@ class MindSimApp(App):
 
     def start_training(self, smoketest: bool = False, scene_path: str | None = None,
                        resume: str | None = None):
-        """Called by screens to start training."""
+        """Called by screens to start training (with dirty-tree gate)."""
         # If no scene_path provided (e.g. smoketest from main menu), use default
         if scene_path is None:
             bots = _discover_bots()
             scene_path = bots[0]["scene_path"] if bots else None
+
+        # Smoketests skip the dirty-tree check
+        if smoketest:
+            self._do_start_training(smoketest=True, scene_path=scene_path, resume=resume)
+            return
+
+        clean, status = _git_is_clean()
+        if clean:
+            self._do_start_training(smoketest=False, scene_path=scene_path, resume=resume)
+        else:
+            self.push_screen(DirtyTreeScreen(
+                status_lines=status,
+                smoketest=False,
+                scene_path=scene_path,
+                resume=resume,
+            ))
+
+    def _do_start_training(self, smoketest: bool = False, scene_path: str | None = None,
+                           resume: str | None = None):
+        """Actually start training (push dashboard and kick off worker)."""
         dashboard = TrainingDashboard()
         self._dashboard = dashboard
         self._smoketest = smoketest
@@ -1288,6 +1524,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
     p_train.add_argument("--resume", type=str, default=None, help="Resume from checkpoint")
     p_train.add_argument("--num-workers", type=int, default=None, help="Number of parallel workers")
+    p_train.add_argument("--no-dirty-check", action="store_true", help="Skip uncommitted-changes check")
 
     # smoketest (alias for train --smoketest)
     sub.add_parser("smoketest", help="Alias for train --smoketest")
@@ -1365,6 +1602,29 @@ def main():
 
     elif args.command == "train":
         scene_path = _resolve_scene_path(args.bot)
+        # Dirty-tree check (skip for smoketests and --no-dirty-check)
+        if not args.smoketest and not args.no_dirty_check:
+            clean, status = _git_is_clean()
+            if not clean:
+                print("Uncommitted changes:")
+                print(status)
+                print()
+                while True:
+                    choice = input("[c] Commit with Claude  [s] Start anyway  [q] Quit: ").strip().lower()
+                    if choice == "q":
+                        sys.exit(0)
+                    elif choice == "s":
+                        break
+                    elif choice == "c":
+                        if _run_claude_commit():
+                            print("Worktree is clean. Starting training.")
+                        else:
+                            _, new_status = _git_is_clean()
+                            print("Still dirty after commit attempt:")
+                            print(new_status)
+                            print()
+                            continue
+                        break
         from train import main as train_main
         train_main(
             smoketest=args.smoketest,
