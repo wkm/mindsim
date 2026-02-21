@@ -8,7 +8,7 @@ import numpy as np
 import rerun as rr
 
 import rerun_logger
-from simple_wheeler_env import SimpleWheelerEnv
+from sim_env import SimEnv
 
 CAMERA_WIDTH = 128
 CAMERA_HEIGHT = 128
@@ -33,7 +33,7 @@ def run_visualization(scene_path="bots/simple2wheeler/scene.xml", output_dir="re
     scene_label = Path(scene_path).parent.name
 
     print(f"Loading {scene_path} ({CAMERA_WIDTH}x{CAMERA_HEIGHT})...")
-    env = SimpleWheelerEnv(
+    env = SimEnv(
         scene_path=scene_path,
         render_width=CAMERA_WIDTH,
         render_height=CAMERA_HEIGHT,

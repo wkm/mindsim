@@ -13,7 +13,7 @@ import numpy as np
 import torch
 
 from checkpoint import resolve_resume_ref
-from simple_wheeler_env import SimpleWheelerEnv
+from sim_env import SimEnv
 
 # GLFW key constants (avoid importing glfw directly)
 KEY_UP = 265
@@ -86,7 +86,7 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     img_w = ckpt["config"]["policy"]["image_width"]
 
     # Create environment (raw env, no training wrapper)
-    env = SimpleWheelerEnv(
+    env = SimEnv(
         scene_path=scene_path,
         render_width=img_w,
         render_height=img_h,

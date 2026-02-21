@@ -105,7 +105,7 @@ def log_mujoco_scene(env, namespace="world"):
     Skips bodies hidden off-screen (e.g. distractors at y=100).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
     model = env.env.model if hasattr(env, "env") else env.model
@@ -414,7 +414,7 @@ def setup_camera(env, namespace="world", show_camera=True):
     Set up Pinhole camera for the robot's camera.
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
         show_camera: If False, skip logging the camera pinhole.
 
@@ -455,7 +455,7 @@ def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None, sh
     Log static scene elements (world origin, bodies, meshes, floor).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
         floor_size: Size of floor plane in meters (default 10.0)
         arena_boundary: If set, log arena boundary lines at ±boundary (meters)
@@ -514,7 +514,7 @@ def log_body_transforms(env, namespace="world"):
     Log transforms for all bodies in the scene (updates meshes).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
     model = env.env.model if hasattr(env, "env") else env.model
