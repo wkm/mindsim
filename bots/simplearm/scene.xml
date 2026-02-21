@@ -2,7 +2,7 @@
 <mujoco model="SimpleArm_scene">
   <option timestep="0.002" />
   <include file="bot.xml" />
-  <statistic extent="2" center="0 0.2 0.4" />
+  <statistic extent="2" center="0 0.1 0.4" />
   <visual>
     <headlight ambient=".4 .4 .4" diffuse=".8 .8 .8" specular="0.1 0.1 0.1" />
     <map znear="0.01" />
@@ -23,7 +23,7 @@
 
     <!-- Workspace camera: angled overhead view of table and arm -->
     <camera name="camera_1_cam" fovy="60"
-            pos="0.7 -0.3 1.0" xyaxes="-0.4 1 0 -0.3 -0.12 0.95" />
+            pos="0.7 -0.4 1.0" xyaxes="-0.4 1 0 -0.3 -0.12 0.95" />
 
     <!-- Table surface (top at z=0.40) -->
     <geom name="table_surface" type="box" size="0.30 0.25 0.02"

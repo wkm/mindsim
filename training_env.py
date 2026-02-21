@@ -534,9 +534,11 @@ class TrainingEnv:
 
         # Randomize cup position on table surface
         # Stage 1: small range near center, Stage 2+: wider range
-        x_range = 0.05 + progress * 0.10  # ±5cm to ±15cm
+        # Ranges sized to stay within arm's kinematic reach (~0.525m from
+        # shoulder at y=-0.10) — see checklist item 17.
+        x_range = 0.05 + progress * 0.08  # ±5cm to ±13cm
         y_center = 0.25
-        y_range = 0.05 + progress * 0.10
+        y_range = 0.05 + progress * 0.05  # ±5cm to ±10cm (tighter: forward reach limited)
         cup_x = np.random.uniform(-x_range, x_range)
         cup_y = np.random.uniform(y_center - y_range, y_center + y_range)
         cup_z = self.cup_table_height
