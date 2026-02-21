@@ -1,21 +1,30 @@
 """Scene composer — maps procedural concepts to MuJoCo model geom slots.
 
-The scene XML must contain pre-allocated "obstacle slot" bodies, each
-with child geoms. The composer discovers these at init and writes
-concept primitives into them at reset time.
+Two-phase workflow:
+  1. **Build time** — call SceneComposer.prepare_spec(spec) to inject obstacle
+     body+geom slots into an MjSpec before compilation.
+  2. **Runtime** — create a SceneComposer(model, data) and call apply() to
+     write concept primitives into the slots. No recompilation needed.
 
 Slot naming convention:
     Bodies:  obstacle_0, obstacle_1, ..., obstacle_{N-1}
     Geoms:   obs_0_g0, obs_0_g1, ..., obs_{N-1}_g{M-1}
 
 Usage:
+    # Phase 1: inject slots into spec
+    spec = mujoco.MjSpec.from_file("worlds/room.xml")
+    SceneComposer.prepare_spec(spec)
+    model = spec.compile()
+    data = mujoco.MjData(model)
+
+    # Phase 2: write scenes at runtime
     composer = SceneComposer(model, data)
 
-    # Option 1: random scene
+    # Option A: random scene
     scene = composer.random_scene(n_objects=3)
     composer.apply(scene)
 
-    # Option 2: explicit placement
+    # Option B: explicit placement
     from scene_gen.concepts import table
     scene = [
         PlacedObject("table", table.Params(width=1.2), pos=(1, 0), rotation=0.3),
@@ -35,6 +44,13 @@ import numpy as np
 
 from scene_gen import concepts
 from scene_gen.primitives import Prim, euler_to_quat
+
+# ---------------------------------------------------------------------------
+# Defaults for obstacle slot allocation
+# ---------------------------------------------------------------------------
+
+DEFAULT_MAX_OBJECTS = 8
+DEFAULT_GEOMS_PER_OBJECT = 8
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -79,6 +95,30 @@ class SceneComposer:
         self.data = data
         self._slots: list[_ObjectSlot] = []
         self._discover_slots()
+
+    @staticmethod
+    def prepare_spec(
+        spec,
+        max_objects: int = DEFAULT_MAX_OBJECTS,
+        geoms_per_object: int = DEFAULT_GEOMS_PER_OBJECT,
+    ):
+        """Add obstacle body+geom slots to an MjSpec before compilation.
+
+        Call this once before spec.compile(). The compiled model will contain
+        the same named bodies/geoms that SceneComposer discovers at runtime.
+        """
+        for i in range(max_objects):
+            body = spec.worldbody.add_body()
+            body.name = f"obstacle_{i}"
+            body.pos = [0, 0, 0]
+            for j in range(geoms_per_object):
+                geom = body.add_geom()
+                geom.name = f"obs_{i}_g{j}"
+                geom.type = mujoco.mjtGeom.mjGEOM_BOX
+                geom.size = [0.001, 0.001, 0.001]
+                geom.rgba = [0, 0, 0, 0]
+                geom.contype = 0
+                geom.conaffinity = 0
 
     @property
     def max_objects(self) -> int:

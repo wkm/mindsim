@@ -45,7 +45,9 @@ def run_scene_preview():
     print("Controls: Space=next scene, Backspace=regenerate, Arrows=move target")
     print()
 
-    m = mujoco.MjModel.from_xml_path(ROOM_XML)
+    spec = mujoco.MjSpec.from_file(ROOM_XML)
+    SceneComposer.prepare_spec(spec)
+    m = spec.compile()
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
 
