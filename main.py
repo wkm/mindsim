@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import logging.handlers
 import os
 import re
 import shutil
@@ -1400,6 +1399,8 @@ class MindSimApp(App):
                 scene_path=self._scene_path,
                 resume=self._resume,
             )
+        except Exception:
+            log.exception("Training crashed in TUI worker thread")
         finally:
             # Remove TUI log handler to avoid stale references
             if hasattr(self, "_tui_log_handler"):
@@ -1444,28 +1445,16 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
-def _setup_logging() -> Path:
-    """Configure file logging for all MindSim operations.
+def _setup_logging() -> None:
+    """Configure root logger level and install an excepthook.
 
-    Returns the log file path. Logs are written to logs/mindsim.log with
-    rotation (5 x 5MB). Also installs an excepthook so unhandled exceptions
-    are captured in the log.
+    Per-run file logging is set up in train.py when the run directory is
+    created.  This function only sets the root level and installs an
+    excepthook so unhandled exceptions are captured by whatever handlers
+    are active at the time.
     """
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / "mindsim.log"
-
-    handler = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=5 * 1024 * 1024, backupCount=5,
-    )
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
-
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    root.addHandler(handler)
 
     # Capture unhandled exceptions to the log
     _original_excepthook = sys.excepthook
@@ -1478,9 +1467,6 @@ def _setup_logging() -> Path:
         _original_excepthook(exc_type, exc_value, exc_tb)
 
     sys.excepthook = _logging_excepthook
-
-    logging.info("MindSim started: %s", " ".join(sys.argv))
-    return log_file
 
 
 def _is_mjpython() -> bool:
@@ -1578,7 +1564,7 @@ def _run_tui():
 
 
 def main():
-    log_file = _setup_logging()
+    _setup_logging()
     _check_mjpython()
 
     parser = _build_parser()

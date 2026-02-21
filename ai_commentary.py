@@ -31,6 +31,10 @@ class RunContext:
     wandb_url: str | None
     git_branch: str
     config_summary: str
+    reward_hierarchy_summary: str = ""
+    git_log_summary: str = ""
+    bot_architecture: str = ""
+    wandb_run_path: str = ""
 
 
 class AICommentator:
@@ -64,15 +68,26 @@ class AICommentator:
         if ctx.wandb_url:
             lines.append(f"W&B dashboard: {ctx.wandb_url}")
             lines.append("You can use WebFetch to browse the W&B URL for charts and detailed metrics.")
+        if ctx.wandb_run_path:
+            lines.append(f"W&B run path: {ctx.wandb_run_path}")
+            lines.append("You can use the Bash tool to query W&B via `wandb api` or Python snippets.")
         lines.append("")
         lines.append(f"Config:\n{ctx.config_summary}")
+        if ctx.bot_architecture:
+            lines.append(f"\nBot architecture:\n{ctx.bot_architecture}")
+        if ctx.reward_hierarchy_summary:
+            lines.append(f"\nReward hierarchy:\n{ctx.reward_hierarchy_summary}")
+        if ctx.git_log_summary:
+            lines.append(f"\nRecent git history:\n{ctx.git_log_summary}")
         lines.append("")
         lines.append("Instructions:")
         lines.append("- Be concise: 2-4 sentences per commentary.")
         lines.append("- Note trends across snapshots (you'll see multiple over the run).")
-        lines.append("- Flag concerns: entropy collapse, reward plateaus, KL spikes, etc.")
+        lines.append("- Flag concerns: entropy collapse, reward plateaus, KL spikes, grad norm explosions, etc.")
         lines.append("- Suggest what to watch or consider adjusting.")
-        lines.append("- Use plain text, no markdown headers. Keep it conversational.")
+        lines.append("- You can suggest live parameter tweaks via `tweaks.py` (e.g. `uv run python tweaks.py learning_rate=0.0001`).")
+        lines.append("- Use markdown formatting: **bold** for emphasis, tables, bullet points.")
+        lines.append("- Keep it conversational but data-driven.")
         return "\n".join(lines)
 
     def generate_commentary(self, batch: int, metrics: dict, elapsed_secs: float) -> str | None:
@@ -85,7 +100,7 @@ class AICommentator:
         cmd = [
             "claude", "-p",
             "--model", self._config.model,
-            "--allowedTools", "WebFetch Read Grep",
+            "--allowedTools", "Bash WebFetch Read Grep",
         ]
 
         if self._call_count == 0:
@@ -141,6 +156,9 @@ class AICommentator:
         # Optimization
         lines.append(f"Entropy: {m.get('entropy', '?')}")
         lines.append(f"Grad norm: {m.get('grad_norm', '?')}")
+        max_gn = m.get('max_grad_norm', 0.5)
+        if max_gn:
+            lines.append(f"Max grad norm (config): {max_gn}")
         if 'policy_loss' in m:
             lines.append(f"Policy loss: {m['policy_loss']:.4f}")
         if 'value_loss' in m:
@@ -149,6 +167,8 @@ class AICommentator:
             lines.append(f"Clip fraction: {m['clip_fraction']:.3f}")
         if 'approx_kl' in m:
             lines.append(f"Approx KL: {m['approx_kl']:.4f}")
+        if 'explained_variance' in m:
+            lines.append(f"Explained variance: {m['explained_variance']:.3f}")
 
         # Policy std
         ps = m.get('policy_std')
@@ -162,6 +182,27 @@ class AICommentator:
         lines.append(f"Curriculum stage: {m.get('curriculum_stage', '?')} / {m.get('num_stages', '?')}")
         lines.append(f"Stage progress: {m.get('stage_progress', 0):.2f}")
         lines.append(f"Mastery: {m.get('mastery_count', 0)} / {m.get('mastery_batches', '?')}")
+
+        # Raw reward inputs (physical measures)
+        ri = m.get('raw_inputs', {})
+        if ri:
+            lines.append("--- Raw reward inputs ---")
+            if 'fell_frac' in ri:
+                lines.append(f"Fell fraction: {ri['fell_frac']:.0%}")
+            if 'survival_time' in ri:
+                lines.append(f"Survival time: {ri['survival_time']:.1f}s")
+            if 'forward_vel' in ri:
+                lines.append(f"Forward velocity: {ri['forward_vel']:.3f} m/s")
+            if 'torso_height' in ri:
+                lines.append(f"Torso height: {ri['torso_height']:.3f}m")
+            if 'up_z' in ri:
+                lines.append(f"Uprightness (up_z): {ri['up_z']:.3f}")
+            if 'forward_distance' in ri:
+                lines.append(f"Forward distance: {ri['forward_distance']:.3f}m")
+            if 'energy' in ri:
+                lines.append(f"Energy: {ri['energy']:.4f}")
+            if 'action_jerk' in ri:
+                lines.append(f"Action jerk: {ri['action_jerk']:.4f}")
 
         # Timing
         lines.append(f"Batch time: {m.get('batch_time', 0):.1f}s")

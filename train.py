@@ -450,6 +450,35 @@ def _train_loop(
     # Generate run name and create run directory
     run_name = generate_run_name(bot_name, cfg.policy.policy_type)
     run_dir = create_run_dir(run_name)
+
+    # Attach a per-run file handler so all log output lands in run.log
+    run_log_handler = logging.FileHandler(run_dir / "run.log")
+    run_log_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logging.getLogger().addHandler(run_log_handler)
+
+    try:
+        _train_loop_body(
+            cfg, dashboard, smoketest, resume, num_workers_override,
+            commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
+            is_tui, _verbose,
+        )
+    except Exception:
+        log.exception("Training run %s crashed", run_name)
+        raise
+    finally:
+        logging.getLogger().removeHandler(run_log_handler)
+        run_log_handler.close()
+
+
+def _train_loop_body(
+    cfg, dashboard, smoketest, resume, num_workers_override,
+    commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
+    is_tui, _verbose,
+):
+    """Inner body of the training loop, called with run log handler active."""
     log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
@@ -505,25 +534,9 @@ def _train_loop(
             robot_name, hypothesis,
         )
 
-    # Set up AI commentary (skip in smoketest or when disabled)
-    commentator = None
-    if not smoketest and cfg.commentary.enabled and app is not None:
-        from ai_commentary import AICommentator, RunContext
-
-        run_context = RunContext(
-            run_name=run_name,
-            bot_name=bot_name,
-            algorithm=cfg.training.algorithm,
-            policy_type=cfg.policy.policy_type,
-            hypothesis=hypothesis,
-            wandb_url=wandb_url,
-            git_branch=get_git_branch(),
-            config_summary=_format_config_summary(cfg),
-        )
-        commentator = AICommentator(cfg.commentary, run_context)
-        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
     last_commentary_time = time.perf_counter()
     force_commentary = False
+    commentator = None
 
     # Create environment from config
     log_fn("Creating environment...")
@@ -558,6 +571,46 @@ def _train_loop(
     )
     _verbose(f"  {bot_info}")
     log_fn(bot_info)
+
+    # Set up AI commentary (skip in smoketest or when disabled)
+    # Placed after env/hierarchy/mj_model so all context is available
+    if not smoketest and cfg.commentary.enabled and app is not None:
+        from ai_commentary import AICommentator, RunContext
+
+        try:
+            _git_log = subprocess.run(
+                ["git", "log", "--oneline", "-10"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+        except Exception:
+            _git_log = ""
+
+        _wandb_run_path = ""
+        if wandb.run and not wandb.run.disabled:
+            try:
+                _wandb_run_path = f"{wandb.run.entity}/{wandb.run.project}/{wandb.run.id}"
+            except Exception:
+                pass
+
+        run_context = RunContext(
+            run_name=run_name,
+            bot_name=bot_name,
+            algorithm=cfg.training.algorithm,
+            policy_type=cfg.policy.policy_type,
+            hypothesis=hypothesis,
+            wandb_url=wandb_url,
+            git_branch=get_git_branch(),
+            config_summary=_format_config_summary(cfg),
+            reward_hierarchy_summary=hierarchy.summary_table(),
+            git_log_summary=_git_log,
+            bot_architecture=(
+                f"{mj_model.njnt} joints, {mj_model.nu} actuators, "
+                f"{mj_model.nsensor} sensors, {mj_model.nbody} bodies"
+            ),
+            wandb_run_path=_wandb_run_path,
+        )
+        commentator = AICommentator(cfg.commentary, run_context)
+        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
 
     # Create policy from config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -806,7 +859,7 @@ def _train_loop(
         time_since_rerun = time.perf_counter() - last_rerun_time
         should_log_rerun_this_batch = rr_wandb is not None and (
             batch_idx % log_every_n_batches == 0
-            or time_since_rerun >= 60.0
+            or time_since_rerun >= 300.0
             or force_rerun
         )
 
@@ -872,6 +925,7 @@ def _train_loop(
                 ppo_epochs=cfg.training.ppo_epochs,
                 entropy_coeff=cfg.training.entropy_coeff,
                 value_coeff=cfg.training.value_coeff,
+                max_grad_norm=cfg.training.max_grad_norm,
             )
             loss = policy_loss  # For backward-compatible logging
         else:
@@ -1146,6 +1200,8 @@ def _train_loop(
             "raw_inputs": batch_raw_inputs,
             # Reward scales so TUI can hide inactive rows
             "reward_scales": hierarchy.reward_scales_for_dashboard(),
+            # Config values for TUI colorization
+            "max_grad_norm": cfg.training.max_grad_norm,
         }
         if cfg.training.algorithm == "PPO":
             dash_metrics.update(
