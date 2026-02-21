@@ -46,6 +46,14 @@ class SimpleWheelerEnv:
             for i in range(self.num_actuators)
         ]
 
+        # Precompute action scaling: maps policy output [-1, 1] → actuator ctrlrange.
+        # For bots with ctrlrange=[-1, 1] (e.g. wheeler motors), this is a no-op.
+        ctrl_range = self.model.actuator_ctrlrange[:self.num_actuators]
+        self._ctrl_low = ctrl_range[:, 0].copy()
+        self._ctrl_high = ctrl_range[:, 1].copy()
+        self._ctrl_scale = 0.5 * (self._ctrl_high - self._ctrl_low)
+        self._ctrl_offset = 0.5 * (self._ctrl_high + self._ctrl_low)
+
         # Standard body/camera IDs (convention: all bots use these names)
         self.bot_body_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "base"
@@ -64,6 +72,24 @@ class SimpleWheelerEnv:
         self.distractor_mocap_ids = [
             self.model.body_mocapid[bid] for bid in self.distractor_body_ids
         ]
+
+        # Arm-specific IDs (optional, -1 if not present)
+        self.gripper_site_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_SITE, "gripper_site"
+        )
+        self.cup_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "cup"
+        )
+        self.cup_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_geom"
+        )
+        self.finger_left_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "finger_left_geom"
+        )
+        self.finger_right_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "finger_right_geom"
+        )
+        self.is_arm = self.gripper_site_id >= 0 and self.cup_body_id >= 0
 
         # Geom IDs for ground contact detection (biped fall penalty)
         # These use mj_name2id which returns -1 if not found — safe for wheeler
@@ -113,7 +139,8 @@ class SimpleWheelerEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        # Scale from [-1, 1] to each actuator's ctrlrange
+        self.data.ctrl[:self.num_actuators] = actions * self._ctrl_scale + self._ctrl_offset
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -220,6 +247,49 @@ class SimpleWheelerEnv:
             if other not in self.foot_geom_ids:
                 bad_contacts += 1
         return bad_contacts
+
+    # --- Arm-specific methods ---
+
+    def get_gripper_position(self):
+        """Get gripper center position in world coordinates (arm only)."""
+        if self.gripper_site_id >= 0:
+            return self.data.site_xpos[self.gripper_site_id].copy()
+        return None
+
+    def get_cup_position(self):
+        """Get cup body position in world coordinates (arm only)."""
+        if self.cup_body_id >= 0:
+            return self.data.xpos[self.cup_body_id].copy()
+        return None
+
+    def get_gripper_to_cup_distance(self):
+        """Get distance from gripper center to cup (arm only)."""
+        gripper = self.get_gripper_position()
+        cup = self.get_cup_position()
+        if gripper is None or cup is None:
+            return None
+        return float(np.linalg.norm(gripper - cup))
+
+    def get_cup_contacts(self):
+        """Check if finger geoms are in contact with the cup.
+
+        Returns:
+            (left_contact, right_contact): Booleans for each finger.
+        """
+        left_contact = False
+        right_contact = False
+        if self.cup_geom_id < 0:
+            return left_contact, right_contact
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            g1, g2 = c.geom1, c.geom2
+            if g1 == self.cup_geom_id or g2 == self.cup_geom_id:
+                other = g2 if g1 == self.cup_geom_id else g1
+                if other == self.finger_left_geom_id:
+                    left_contact = True
+                elif other == self.finger_right_geom_id:
+                    right_contact = True
+        return left_contact, right_contact
 
     def launch_viewer(self):
         """Launch interactive 3D viewer for debugging."""
