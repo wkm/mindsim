@@ -203,18 +203,25 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                     if gait_phase_dim > 0:
                         t = gait_step_count * control_dt
                         phase = 2 * np.pi * t / gait_phase_period
-                        gait_phase = np.array([
-                            np.sin(phase), np.cos(phase),
-                            np.sin(phase + np.pi), np.cos(phase + np.pi),
-                        ], dtype=np.float32)
+                        gait_phase = np.array(
+                            [
+                                np.sin(phase),
+                                np.cos(phase),
+                                np.sin(phase + np.pi),
+                                np.cos(phase + np.pi),
+                            ],
+                            dtype=np.float32,
+                        )
                         sensors = np.concatenate([sensors, gait_phase])
                     sensor_tensor = torch.from_numpy(sensors).unsqueeze(0)
 
                 with torch.no_grad():
-                    action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
+                    action = policy.get_deterministic_action(
+                        obs_tensor, sensors=sensor_tensor
+                    )
                     action = action.cpu().numpy()[0]
 
-                data.ctrl[:env.num_actuators] = action
+                data.ctrl[: env.num_actuators] = action
                 for _ in range(mujoco_steps_per_action):
                     mujoco.mj_step(model, data)
                 gait_step_count += 1

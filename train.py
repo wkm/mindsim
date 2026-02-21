@@ -13,13 +13,11 @@ from collections import deque
 from datetime import datetime
 from queue import Empty, Queue
 
-log = logging.getLogger(__name__)
-
 import numpy as np
 import torch
 import torch.optim as optim
-
 import wandb
+
 from algorithms import train_step_batched, train_step_ppo  # noqa: F401 — re-export
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
 from collection import (  # noqa: F401 — re-export
@@ -46,22 +44,28 @@ from run_manager import (
 from training_env import TrainingEnv
 from tweaks import apply_tweaks, load_tweaks
 
+log = logging.getLogger(__name__)
+
 
 def _quat_rotate(quat, vec):
     """Rotate a 3D vector by a quaternion [w, x, y, z]."""
     w, x, y, z = quat
     vx, vy, vz = vec
     # q * v * q_conj (Hamilton product)
-    t = np.array([
-        2.0 * (y * vz - z * vy),
-        2.0 * (z * vx - x * vz),
-        2.0 * (x * vy - y * vx),
-    ])
-    return np.array([
-        vx + w * t[0] + (y * t[2] - z * t[1]),
-        vy + w * t[1] + (z * t[0] - x * t[2]),
-        vz + w * t[2] + (x * t[1] - y * t[0]),
-    ])
+    t = np.array(
+        [
+            2.0 * (y * vz - z * vy),
+            2.0 * (z * vx - x * vz),
+            2.0 * (x * vy - y * vx),
+        ]
+    )
+    return np.array(
+        [
+            vx + w * t[0] + (y * t[2] - z * t[1]),
+            vy + w * t[1] + (z * t[0] - x * t[2]),
+            vz + w * t[2] + (x * t[1] - y * t[0]),
+        ]
+    )
 
 
 def verify_forward_direction(env, log_fn=print):
@@ -128,8 +132,10 @@ def verify_forward_direction(env, log_fn=print):
     displacement = end_pos - start_pos
     forward_displacement = float(np.dot(displacement, fwd_axis))
 
-    log_fn(f"  Teleport check: displacement={forward_displacement:.4f}m, "
-           f"dist_delta={start_dist - end_dist:.4f}m")
+    log_fn(
+        f"  Teleport check: displacement={forward_displacement:.4f}m, "
+        f"dist_delta={start_dist - end_dist:.4f}m"
+    )
 
     assert forward_displacement > 0.5, (
         f"Forward displacement after teleport is too small ({forward_displacement:.4f})! "
@@ -154,7 +160,7 @@ def verify_forward_direction(env, log_fn=print):
 
         if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
             qpos_adr = model.jnt_qposadr[j]
-            quat = data.qpos[qpos_adr + 3:qpos_adr + 7].copy()
+            quat = data.qpos[qpos_adr + 3 : qpos_adr + 7].copy()
             quat_conj = np.array([quat[0], -quat[1], -quat[2], -quat[3]])
             local_fwd = _quat_rotate(quat_conj, fwd_axis)
             data.qvel[qvel_adr + 0] = vel_nudge * local_fwd[0]
@@ -176,8 +182,10 @@ def verify_forward_direction(env, log_fn=print):
     vel = (pos_after - pos_before) / dt
     forward_vel = float(np.dot(vel, fwd_axis))
 
-    log_fn(f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
-           f"(vel={[f'{v:.3f}' for v in vel]})")
+    log_fn(
+        f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
+        f"(vel={[f'{v:.3f}' for v in vel]})"
+    )
 
     assert forward_vel > 0.5, (
         f"Position-based forward velocity is too small ({forward_vel:.3f})! "
@@ -339,6 +347,7 @@ def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
 ### Policies, collection, and algorithms extracted to separate modules.
 ### Re-exported above for backward compatibility.
 
+
 class CommandChannel:
     """Thread-safe command channel between TUI and training loop.
 
@@ -440,7 +449,9 @@ def _train_loop(
 
     bot_name = bot_name_from_scene_path(cfg.env.scene_path)
     robot_name = bot_display_name(bot_name)
-    log.info("Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest)
+    log.info(
+        "Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest
+    )
     log.info("Config: %s", cfg.to_wandb_config())
     _verbose("=" * 60)
     _verbose(f"Training {robot_name} ({cfg.training.algorithm})")
@@ -463,7 +474,9 @@ def _train_loop(
 
     # Initialize W&B (single project 'mindsim', tags for filtering)
     log_fn("Connecting to W&B...")
-    init_wandb_for_run(run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes)
+    init_wandb_for_run(
+        run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes
+    )
 
     wandb_url = None
     if not smoketest and wandb.run:
@@ -497,8 +510,13 @@ def _train_loop(
         branch = get_git_branch()
         hypothesis = _get_experiment_info(branch)
         app.call_from_thread(
-            app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
-            robot_name, hypothesis,
+            app.set_header,
+            run_name,
+            branch,
+            cfg.training.algorithm,
+            wandb_url,
+            robot_name,
+            hypothesis,
         )
 
     # Set up AI commentary (skip in smoketest or when disabled)
@@ -739,7 +757,7 @@ def _train_loop(
         # Drain TUI action commands
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
-        for cmd in (commands.drain_actions() if commands else []):
+        for cmd in commands.drain_actions() if commands else []:
             if cmd == "checkpoint":
                 pending_save = ("manual", [])
                 dashboard.message("Checkpoint will be saved after this batch")
@@ -899,7 +917,10 @@ def _train_loop(
                             show_camera = False
 
                         rr_wandb.start_episode(
-                            episode_count, env, namespace="eval", show_camera=show_camera
+                            episode_count,
+                            env,
+                            namespace="eval",
+                            show_camera=show_camera,
                         )
                         timing["rerun"] += time.perf_counter() - t_rerun_start
                     except Exception:
@@ -941,7 +962,6 @@ def _train_loop(
             rolling_eval_success_rate = rolling_success_rate
         timing["eval_batch"] = time.perf_counter() - t_eval_start
         timing["eval"] += timing["eval_batch"]
-
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
@@ -1040,7 +1060,10 @@ def _train_loop(
                     [ep.get("patience_truncated", False) for ep in episode_batch]
                 ),
                 "batch/joint_stagnation_fraction": np.mean(
-                    [ep.get("joint_stagnation_truncated", False) for ep in episode_batch]
+                    [
+                        ep.get("joint_stagnation_truncated", False)
+                        for ep in episode_batch
+                    ]
                 ),
                 "batch/fell_fraction": np.mean(
                     [ep.get("fell", False) for ep in episode_batch]
@@ -1050,12 +1073,20 @@ def _train_loop(
 
         # Per-component reward breakdown (averaged across batch)
         component_keys = [
-            "reward_distance", "reward_exploration", "reward_time",
-            "reward_upright", "reward_alive", "reward_energy",
-            "reward_contact", "reward_forward_velocity", "reward_smoothness",
+            "reward_distance",
+            "reward_exploration",
+            "reward_time",
+            "reward_upright",
+            "reward_alive",
+            "reward_energy",
+            "reward_contact",
+            "reward_forward_velocity",
+            "reward_smoothness",
         ]
         for key in component_keys:
-            vals = [ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch]
+            vals = [
+                ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch
+            ]
             log_dict[f"rewards/{key}"] = np.mean(vals)
 
         # PPO-specific metrics
@@ -1129,8 +1160,11 @@ def _train_loop(
         dashboard.update(batch_idx, dash_metrics)
         log.info(
             "batch %d  reward=%+.2f  dist=%.2fm  eval=%.0f%%  S%d",
-            batch_idx, avg_reward, avg_distance,
-            100 * rolling_eval_success_rate, curriculum_stage,
+            batch_idx,
+            avg_reward,
+            avg_distance,
+            100 * rolling_eval_success_rate,
+            curriculum_stage,
         )
 
         # AI commentary: periodic or on-demand
@@ -1141,7 +1175,12 @@ def _train_loop(
         ):
             elapsed = time.monotonic() - run_start_time
             _run_commentary(
-                commentator, app, dashboard, batch_idx, dash_metrics, elapsed,
+                commentator,
+                app,
+                dashboard,
+                batch_idx,
+                dash_metrics,
+                elapsed,
             )
             last_commentary_time = now
             force_commentary = False
@@ -1248,11 +1287,18 @@ def _train_loop(
         log.info("Smoketest passed (%d batches, %d episodes)", batch_idx, episode_count)
     else:
         log_fn("Training complete!")
-        log.info("Training complete (%d batches, %d episodes)", batch_idx, episode_count)
+        log.info(
+            "Training complete (%d batches, %d episodes)", batch_idx, episode_count
+        )
 
 
 def run_training(
-    app, commands: CommandChannel, smoketest=False, resume=None, num_workers=None, scene_path=None
+    app,
+    commands: CommandChannel,
+    smoketest=False,
+    resume=None,
+    num_workers=None,
+    scene_path=None,
 ):
     """
     Entry point for TUI-driven training (called from worker thread).
@@ -1313,7 +1359,9 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         scene_path: Override bot scene XML path directly.
     """
     is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
-    is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
+    is_walker2d = (bot and "walker2d" in bot) or (
+        scene_path and "walker2d" in scene_path
+    )
     if smoketest:
         if is_biped:
             cfg = Config.for_biped_smoketest()

@@ -7,6 +7,7 @@ Shared logging code for both visualization and training scripts.
 from __future__ import annotations
 
 import logging
+
 import mujoco
 import numpy as np
 import rerun as rr
@@ -450,7 +451,9 @@ def setup_camera(env, namespace="world", show_camera=True):
     return camera_entity_path
 
 
-def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None, show_camera=True):
+def setup_scene(
+    env, namespace="world", floor_size=10.0, arena_boundary=None, show_camera=True
+):
     """
     Log static scene elements (world origin, bodies, meshes, floor).
 

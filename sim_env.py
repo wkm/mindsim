@@ -72,9 +72,7 @@ class SimEnv:
         )
         self.foot_geom_ids = set()
         for foot_name in ("left_foot", "right_foot"):
-            gid = mujoco.mj_name2id(
-                self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name
-            )
+            gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name)
             if gid >= 0:
                 self.foot_geom_ids.add(gid)
 
@@ -113,7 +111,7 @@ class SimEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        self.data.ctrl[: self.num_actuators] = actions
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -168,7 +166,7 @@ class SimEnv:
 
     def get_sensor_data(self):
         """Get all sensor readings as a flat array."""
-        return self.data.sensordata[:self.sensor_dim].copy().astype(np.float32)
+        return self.data.sensordata[: self.sensor_dim].copy().astype(np.float32)
 
     def get_actuated_joint_positions(self):
         """Get current positions of all actuated joints."""
@@ -181,7 +179,9 @@ class SimEnv:
 
     def get_bot_velocity(self):
         """Get the bot's linear velocity in world frame."""
-        return self.data.cvel[self.bot_body_id][3:].copy()  # linear part of 6D spatial vel
+        return self.data.cvel[self.bot_body_id][
+            3:
+        ].copy()  # linear part of 6D spatial vel
 
     def get_torso_up_vector(self):
         """

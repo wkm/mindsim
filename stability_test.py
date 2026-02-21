@@ -13,14 +13,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
 from dataclasses import dataclass
 
 import mujoco
 import numpy as np
 
-
 # --- Fall detection helpers ---
+
 
 def get_torso_up_z(data: mujoco.MjData, body_id: int) -> float:
     """Get Z component of torso's up vector (1.0 = perfectly upright)."""
@@ -33,16 +32,23 @@ def get_torso_height(data: mujoco.MjData, body_id: int) -> float:
     return data.xpos[body_id][2]
 
 
-def has_fallen(data: mujoco.MjData, body_id: int,
-               min_height: float, min_up_z: float) -> bool:
+def has_fallen(
+    data: mujoco.MjData, body_id: int, min_height: float, min_up_z: float
+) -> bool:
     """Check if the biped has fallen over."""
-    return (get_torso_height(data, body_id) < min_height or
-            get_torso_up_z(data, body_id) < min_up_z)
+    return (
+        get_torso_height(data, body_id) < min_height
+        or get_torso_up_z(data, body_id) < min_up_z
+    )
 
 
-def compute_support_polygon_margin(model: mujoco.MjModel, data: mujoco.MjData,
-                                    body_id: int, floor_geom_id: int,
-                                    foot_geom_ids: set[int]) -> float:
+def compute_support_polygon_margin(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    body_id: int,
+    floor_geom_id: int,
+    foot_geom_ids: set[int],
+) -> float:
     """
     Compute static stability margin: minimum distance from CoM projection
     to the edge of the support polygon (convex hull of foot contacts).
@@ -86,6 +92,7 @@ def compute_support_polygon_margin(model: mujoco.MjModel, data: mujoco.MjData,
 
 # --- Model loading ---
 
+
 def load_model(scene_path: str) -> tuple[mujoco.MjModel, mujoco.MjData, dict]:
     """Load model and discover key IDs."""
     model = mujoco.MjModel.from_xml_path(scene_path)
@@ -117,6 +124,7 @@ def reset_to_standing(model: mujoco.MjModel, data: mujoco.MjData):
 
 # --- Test 1: Passive Standing ---
 
+
 @dataclass
 class PassiveStandingResult:
     time_to_fall: float  # seconds until fall (-1 = survived full duration)
@@ -128,12 +136,16 @@ class PassiveStandingResult:
     initial_up_z: float
 
 
-def test_passive_standing(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
-                          duration: float = 10.0,
-                          settle_time: float = 1.0,
-                          fall_height_frac: float = 0.5,
-                          fall_up_z: float = 0.3,
-                          verbose: bool = False) -> PassiveStandingResult:
+def test_passive_standing(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    duration: float = 10.0,
+    settle_time: float = 1.0,
+    fall_height_frac: float = 0.5,
+    fall_up_z: float = 0.3,
+    verbose: bool = False,
+) -> PassiveStandingResult:
     """
     Test 1: Can the biped stand with zero motor input?
 
@@ -156,7 +168,9 @@ def test_passive_standing(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
     fall_height = initial_height * fall_height_frac
 
     if verbose:
-        print(f"  After {settle_time}s settle: height={initial_height:.4f}m, up_z={initial_up_z:.4f}")
+        print(
+            f"  After {settle_time}s settle: height={initial_height:.4f}m, up_z={initial_up_z:.4f}"
+        )
 
     # Already fallen during settling?
     if has_fallen(data, ids["body"], fall_height, fall_up_z):
@@ -189,7 +203,8 @@ def test_passive_standing(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
 
         if step % 50 == 0:
             margin = compute_support_polygon_margin(
-                model, data, ids["body"], ids["floor"], ids["feet"])
+                model, data, ids["body"], ids["floor"], ids["feet"]
+            )
             margins.append(margin)
 
         if has_fallen(data, ids["body"], fall_height, fall_up_z):
@@ -197,9 +212,15 @@ def test_passive_standing(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
             break
 
     if verbose:
-        status = f"FELL at {time_to_fall:.3f}s" if time_to_fall > 0 else f"SURVIVED {duration}s"
+        status = (
+            f"FELL at {time_to_fall:.3f}s"
+            if time_to_fall > 0
+            else f"SURVIVED {duration}s"
+        )
         print(f"  Passive standing: {status}")
-        print(f"    Initial height: {initial_height:.4f}m, min height: {min_height:.4f}m")
+        print(
+            f"    Initial height: {initial_height:.4f}m, min height: {min_height:.4f}m"
+        )
         print(f"    Initial up_z: {initial_up_z:.4f}, min up_z: {min_up_z:.4f}")
         if margins:
             print(f"    Avg stability margin: {np.mean(margins):.4f}m")
@@ -217,6 +238,7 @@ def test_passive_standing(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
 
 # --- Test 2: Perturbation Resistance ---
 
+
 @dataclass
 class PerturbationResult:
     max_lateral_impulse: float  # max recoverable lateral force impulse (N*s)
@@ -228,11 +250,16 @@ class PerturbationResult:
     forward_survived: list[bool]
 
 
-def _test_impulse(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
-                  force_direction: np.ndarray, impulse_magnitude: float,
-                  recovery_time: float = 3.0,
-                  fall_height_frac: float = 0.5,
-                  fall_up_z: float = 0.3) -> bool:
+def _test_impulse(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    force_direction: np.ndarray,
+    impulse_magnitude: float,
+    recovery_time: float = 3.0,
+    fall_height_frac: float = 0.5,
+    fall_up_z: float = 0.3,
+) -> bool:
     """Apply an impulse to the torso and check if the biped recovers."""
     reset_to_standing(model, data)
     dt = model.opt.timestep
@@ -267,11 +294,16 @@ def _test_impulse(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
     return True
 
 
-def _test_joint_perturbation(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
-                              amplitude: float, frequency: float = 2.0,
-                              duration: float = 5.0,
-                              fall_height_frac: float = 0.5,
-                              fall_up_z: float = 0.3) -> bool:
+def _test_joint_perturbation(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    amplitude: float,
+    frequency: float = 2.0,
+    duration: float = 5.0,
+    fall_height_frac: float = 0.5,
+    fall_up_z: float = 0.3,
+) -> bool:
     """Apply sinusoidal perturbations to all joints and check survival."""
     reset_to_standing(model, data)
     dt = model.opt.timestep
@@ -301,8 +333,9 @@ def _test_joint_perturbation(model: mujoco.MjModel, data: mujoco.MjData, ids: di
     return True
 
 
-def test_perturbation_resistance(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
-                                  verbose: bool = False) -> PerturbationResult:
+def test_perturbation_resistance(
+    model: mujoco.MjModel, data: mujoco.MjData, ids: dict, verbose: bool = False
+) -> PerturbationResult:
     """
     Test 2: How much perturbation before falling?
 
@@ -361,18 +394,20 @@ def test_perturbation_resistance(model: mujoco.MjModel, data: mujoco.MjData, ids
         max_lateral_impulse=max_lateral,
         max_forward_impulse=max_forward,
         max_joint_perturbation=max_joint,
-        lateral_impulses_tested=lateral_magnitudes[:len(lateral_survived)],
+        lateral_impulses_tested=lateral_magnitudes[: len(lateral_survived)],
         lateral_survived=lateral_survived,
-        forward_impulses_tested=forward_magnitudes[:len(forward_survived)],
+        forward_impulses_tested=forward_magnitudes[: len(forward_survived)],
         forward_survived=forward_survived,
     )
 
 
 # --- Test 3: Mobility-Stability Tradeoff ---
 
+
 @dataclass
 class MobilityResult:
     """Results from the mobility-stability tradeoff test."""
+
     amplitudes: list[float]
     survival_times: list[float]  # seconds survived at each amplitude
     forward_distances: list[float]  # forward displacement achieved
@@ -380,12 +415,16 @@ class MobilityResult:
     best_forward_distance: float  # max forward distance while staying upright
 
 
-def test_mobility_tradeoff(model: mujoco.MjModel, data: mujoco.MjData, ids: dict,
-                            duration: float = 5.0,
-                            gait_frequency: float = 1.5,
-                            fall_height_frac: float = 0.5,
-                            fall_up_z: float = 0.3,
-                            verbose: bool = False) -> MobilityResult:
+def test_mobility_tradeoff(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    duration: float = 5.0,
+    gait_frequency: float = 1.5,
+    fall_height_frac: float = 0.5,
+    fall_up_z: float = 0.3,
+    verbose: bool = False,
+) -> MobilityResult:
     """
     Test 3: Mobility-stability tradeoff.
 
@@ -461,7 +500,9 @@ def test_mobility_tradeoff(model: mujoco.MjModel, data: mujoco.MjData, ids: dict
 
         if verbose:
             status = f"survived {duration:.1f}s" if not fell else f"fell at {t:.2f}s"
-            print(f"  Gait amplitude {amp:.2f}: {status}, forward: {forward_dist:+.3f}m")
+            print(
+                f"  Gait amplitude {amp:.2f}: {status}, forward: {forward_dist:+.3f}m"
+            )
 
     return MobilityResult(
         amplitudes=amplitudes,
@@ -473,6 +514,7 @@ def test_mobility_tradeoff(model: mujoco.MjModel, data: mujoco.MjData, ids: dict
 
 
 # --- Summary ---
+
 
 @dataclass
 class StabilityReport:
@@ -489,7 +531,7 @@ class StabilityReport:
         # Passive standing
         p = self.passive
         if p.survived:
-            print(f"\n  1. Passive Standing:    PASS (survived 10s)")
+            print("\n  1. Passive Standing:    PASS (survived 10s)")
         else:
             print(f"\n  1. Passive Standing:    FAIL (fell at {p.time_to_fall:.3f}s)")
         print(f"     Initial height:      {p.initial_height:.4f}m")
@@ -499,14 +541,14 @@ class StabilityReport:
 
         # Perturbation resistance
         r = self.perturbation
-        print(f"\n  2. Perturbation Resistance:")
+        print("\n  2. Perturbation Resistance:")
         print(f"     Max lateral impulse: {r.max_lateral_impulse:.1f} N*s")
         print(f"     Max forward impulse: {r.max_forward_impulse:.1f} N*s")
         print(f"     Max joint perturb:   {r.max_joint_perturbation:.2f} rad")
 
         # Mobility
         m = self.mobility
-        print(f"\n  3. Mobility-Stability Tradeoff:")
+        print("\n  3. Mobility-Stability Tradeoff:")
         print(f"     Max stable gait amp: {m.max_stable_amplitude:.2f}")
         print(f"     Best forward dist:   {m.best_forward_distance:.3f}m")
 
@@ -514,12 +556,14 @@ class StabilityReport:
         standing_score = 1.0 if p.survived else p.time_to_fall / 10.0
         impulse_score = min(1.0, r.max_lateral_impulse / 10.0)
         mobility_score = min(1.0, m.max_stable_amplitude / 0.5)
-        overall = (standing_score * 0.4 + impulse_score * 0.3 + mobility_score * 0.3)
+        overall = standing_score * 0.4 + impulse_score * 0.3 + mobility_score * 0.3
 
         print(f"\n  OVERALL SCORE: {overall:.2f} / 1.00")
-        print(f"    (standing={standing_score:.2f} * 0.4 + "
-              f"impulse={impulse_score:.2f} * 0.3 + "
-              f"mobility={mobility_score:.2f} * 0.3)")
+        print(
+            f"    (standing={standing_score:.2f} * 0.4 + "
+            f"impulse={impulse_score:.2f} * 0.3 + "
+            f"mobility={mobility_score:.2f} * 0.3)"
+        )
         print("=" * 60)
 
 
@@ -534,7 +578,9 @@ def run_stability_tests(scene_path: str, verbose: bool = False) -> StabilityRepo
     # Compute total mass
     total_mass = sum(model.body_mass[i] for i in range(model.nbody))
     torso_mass = model.body_mass[ids["body"]]
-    print(f"  Total mass: {total_mass:.2f} kg (torso: {torso_mass:.2f} kg, {torso_mass/total_mass*100:.0f}%)")
+    print(
+        f"  Total mass: {total_mass:.2f} kg (torso: {torso_mass:.2f} kg, {torso_mass / total_mass * 100:.0f}%)"
+    )
 
     print("\n--- Test 1: Passive Standing ---")
     passive = test_passive_standing(model, data, ids, verbose=verbose)
@@ -556,11 +602,15 @@ def run_stability_tests(scene_path: str, verbose: bool = False) -> StabilityRepo
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Biped stability measurement framework")
-    parser.add_argument("--scene", default="bots/simplebiped/scene.xml",
-                        help="Path to scene XML")
-    parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Show detailed per-test output")
+    parser = argparse.ArgumentParser(
+        description="Biped stability measurement framework"
+    )
+    parser.add_argument(
+        "--scene", default="bots/simplebiped/scene.xml", help="Path to scene XML"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show detailed per-test output"
+    )
     args = parser.parse_args()
 
     run_stability_tests(args.scene, verbose=args.verbose)
