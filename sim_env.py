@@ -4,7 +4,7 @@ import mujoco
 import numpy as np
 
 
-class SimpleWheelerEnv:
+class SimEnv:
     """
     Bot-agnostic MuJoCo simulation environment.
 

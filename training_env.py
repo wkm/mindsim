@@ -1,7 +1,7 @@
 """
 Training-ready Gymnasium wrapper for MuJoCo robot environments.
 
-Wraps SimpleWheelerEnv with:
+Wraps SimEnv with:
 - 10 Hz control frequency (1 action per 0.1 seconds)
 - Reward function (distance-based + optional biped rewards)
 - Episode termination logic (+ optional fall detection)
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import mujoco
 import numpy as np
 
-from simple_wheeler_env import SimpleWheelerEnv
+from sim_env import SimEnv
 
 if TYPE_CHECKING:
     from config import EnvConfig
@@ -133,7 +133,7 @@ class TrainingEnv:
         # Gait phase (0.0 = disabled)
         gait_phase_period=0.0,
     ):
-        self.env = SimpleWheelerEnv(
+        self.env = SimEnv(
             scene_path=scene_path,
             render_width=render_width,
             render_height=render_height,
