@@ -187,6 +187,7 @@ class MainMenuScreen(Screen):
     BINDINGS = [
         Binding("s", "select('smoketest')", "Smoketest", priority=True),
         Binding("n", "select('new')", "New Run", priority=True),
+        Binding("g", "select('scene')", "Scene Gen", priority=True),
         Binding("v", "select('view')", "View Bot", priority=True),
         Binding("b", "select('browse')", "Browse Runs", priority=True),
         Binding("q", "select('quit')", "Quit", priority=True),
@@ -223,6 +224,7 @@ class MainMenuScreen(Screen):
             yield OptionList(
                 "[s] Smoketest",
                 "[n] New training run",
+                "[g] Scene gen preview",
                 "[v] View bot",
                 "[b] Browse runs",
                 "[q] Quit",
@@ -235,6 +237,8 @@ class MainMenuScreen(Screen):
             self.app.start_training(smoketest=True)
         elif choice == "new":
             self.app.push_screen(BotSelectorScreen(mode="train"))
+        elif choice == "scene":
+            self.app.push_screen(BotSelectorScreen(mode="scene"))
         elif choice == "view":
             self.app.push_screen(BotSelectorScreen(mode="view"))
         elif choice == "browse":
@@ -244,7 +248,7 @@ class MainMenuScreen(Screen):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
-        choices = ["smoketest", "new", "view", "browse", "quit"]
+        choices = ["smoketest", "new", "scene", "view", "browse", "quit"]
         if 0 <= idx < len(choices):
             self.action_select(choices[idx])
 
@@ -291,7 +295,8 @@ class BotSelectorScreen(Screen):
         self._mode = mode
 
     def compose(self) -> ComposeResult:
-        title = "Select Bot to View" if self._mode == "view" else "Select Bot"
+        titles = {"view": "Select Bot to View", "scene": "Select Bot for Scene Preview"}
+        title = titles.get(self._mode, "Select Bot")
         with Vertical(id="bot-box"):
             yield Static(title, id="bot-title")
             if self._bots:
@@ -324,6 +329,8 @@ class BotSelectorScreen(Screen):
             return
         if self._mode == "view":
             self.app.start_viewing(scene_path=scene_path)
+        elif self._mode == "scene":
+            self.app.start_scene_preview(scene_path=scene_path)
         else:
             self.app.start_training(smoketest=False, scene_path=scene_path)
 
@@ -1093,6 +1100,14 @@ class MindSimApp(App):
         self.next_stage = stage
         self.exit()
 
+    def start_scene_preview(self, scene_path: str | None = None):
+        """Exit TUI, then main() will launch the scene preview."""
+        if not scene_path:
+            return
+        self.next_action = "scene"
+        self.next_scene = scene_path
+        self.exit()
+
     def start_playing(self, scene_path: str | None = None):
         """Exit TUI, then main() will launch play mode."""
         self.next_action = "play"
@@ -1272,6 +1287,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
+    # scene
+    p_scene = sub.add_parser("scene", help="Scene gen preview (procedural furniture)")
+    p_scene.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
     p_view.add_argument(
@@ -1349,6 +1370,13 @@ def _run_tui():
             cmd.extend(["--stage", str(app.next_stage)])
         os.execvp("uv", cmd)
 
+    elif app.next_action == "scene":
+        cmd = ["uv", "run", "mjpython", "main.py", "scene"]
+        if app.next_scene:
+            bot_name = Path(app.next_scene).parent.name
+            cmd.extend(["--bot", bot_name])
+        os.execvp("uv", cmd)
+
     elif app.next_action == "play":
         cmd = ["uv", "run", "mjpython", "main.py", "play"]
         # If we have a specific checkpoint path (legacy), pass it directly
@@ -1373,6 +1401,12 @@ def main():
     if args.command is None:
         # No subcommand → interactive TUI
         _run_tui()
+
+    elif args.command == "scene":
+        scene_path = _resolve_scene_path(args.bot)
+        from scene_preview import run_scene_preview
+
+        run_scene_preview(scene_path)
 
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)

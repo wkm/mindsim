@@ -13,7 +13,7 @@ Usage:
     mujoco.mj_forward(model, data)     # update kinematics
 """
 
-from scene_gen.composer import PlacedObject, SceneComposer
+from scene_gen.composer import PlacedObject, SceneComposer, describe_scene, scene_id
 from scene_gen.primitives import GeomType, Prim
 
 __all__ = [
@@ -21,4 +21,6 @@ __all__ = [
     "PlacedObject",
     "Prim",
     "GeomType",
+    "describe_scene",
+    "scene_id",
 ]
