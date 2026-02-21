@@ -15,7 +15,7 @@
        foot center z = 0.04 - 0.02 = 0.02, foot bottom = 0.02 - 0.02 = 0.00
 
      4-year-old proportions (~16kg total):
-       Pelvis: 18cm wide, 2kg
+       Pelvis: 22cm wide, 2kg (widened for lateral stability)
        Trunk: 22cm tall capsule, 10kg
        Thigh: 22cm, shin: 20cm
        Foot: 17cm long x 7cm wide, box
@@ -34,8 +34,8 @@
     <body name="base" pos="0 0 0.52">
       <freejoint name="root" />
 
-      <!-- Pelvis: wide ellipsoid -->
-      <geom name="pelvis" type="ellipsoid" size="0.09 0.07 0.06"
+      <!-- Pelvis: wide ellipsoid (22cm wide to match widened stance) -->
+      <geom name="pelvis" type="ellipsoid" size="0.11 0.07 0.06"
             rgba="0.85 0.75 0.65 1.0" mass="2.0" />
 
       <!-- IMU site for gyro/accel sensors -->
@@ -56,8 +56,8 @@
       </body>
 
       <!-- === LEFT LEG === -->
-      <!-- Hip at 9cm left of center, 6cm below pelvis center -->
-      <body name="left_upper_leg" pos="-0.09 0 -0.06">
+      <!-- Hip at 12cm left of center, 6cm below pelvis center -->
+      <body name="left_upper_leg" pos="-0.12 0 -0.06">
         <joint name="left_hip_abd" type="hinge" axis="0 1 0"
                pos="0 0 0" range="-0.5 0.5" damping="15.0" />
         <joint name="left_hip_flex" type="hinge" axis="1 0 0"
@@ -70,7 +70,7 @@
         <!-- Knee at bottom of thigh (22cm down) -->
         <body name="left_lower_leg" pos="0 0 -0.22">
           <joint name="left_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 2.0" damping="11.0" />
+                 pos="0 0 0" range="0 2.0" damping="26.0" />
           <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
                 size="0.033" rgba="0.8 0.7 0.6 1.0" />
 
@@ -91,7 +91,7 @@
       </body>
 
       <!-- === RIGHT LEG (mirror of left) === -->
-      <body name="right_upper_leg" pos="0.09 0 -0.06">
+      <body name="right_upper_leg" pos="0.12 0 -0.06">
         <joint name="right_hip_abd" type="hinge" axis="0 1 0"
                pos="0 0 0" range="-0.5 0.5" damping="15.0" />
         <joint name="right_hip_flex" type="hinge" axis="1 0 0"
@@ -103,7 +103,7 @@
 
         <body name="right_lower_leg" pos="0 0 -0.22">
           <joint name="right_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 2.0" damping="11.0" />
+                 pos="0 0 0" range="0 2.0" damping="26.0" />
           <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
                 size="0.033" rgba="0.8 0.7 0.6 1.0" />
 

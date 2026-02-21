@@ -144,6 +144,7 @@ class TrainingConfig:
     clip_epsilon: float = 0.2
     gae_lambda: float = 0.95
     value_coeff: float = 0.5
+    max_grad_norm: float = 0.5  # Max gradient norm for clipping
 
     # Batching
     batch_size: int = 64  # Episodes per gradient update
@@ -509,7 +510,7 @@ class Config:
                 # Biped rewards — alive must dominate so standing beats diving
                 alive_bonus=5.0,
                 energy_penalty_scale=0.001,
-                distance_reward_scale=10.0,
+                distance_reward_scale=20.0,
                 time_penalty=0.005,
                 upright_reward_scale=0.3,
                 ground_contact_penalty=0.5,
@@ -524,7 +525,7 @@ class Config:
                 fall_up_z_threshold=0.50,   # ~60deg tilt (slightly looser than duck)
                 fall_grace_steps=50,        # 0.4s grace
                 # Action smoothness
-                action_smoothness_scale=0.05,  # Softer penalty: 12 joints vs 8
+                action_smoothness_scale=0.0,  # Disabled: creates death spiral with increasing std
                 # Gait phase
                 gait_phase_period=0.85,  # ~1.18Hz stride (scaled from 0.46m leg length)
             ),
@@ -541,14 +542,16 @@ class Config:
                 hidden_size=256,
                 fc_output_size=12,   # 12 motors
                 sensor_input_size=34,  # 12 pos + 12 vel + 6 imu + 4 gait
-                init_std=1.0,
+                init_std=0.3,  # Start near-quiet so robot stands longer before exploring
             ),
             training=TrainingConfig(
                 learning_rate=3e-4,
                 batch_size=64,
                 algorithm="PPO",
-                entropy_coeff=0.01,
+                entropy_coeff=0.0,  # SB3 default; 0.01 pushed std monotonically upward
                 ppo_epochs=10,
+                max_grad_norm=10.0,  # Default 0.5 clips 660x in 12-DOF; 10.0 clips ~30x
+                log_rerun_every=9999,  # Rely on 5-min wall-clock timer + manual sends
             ),
         )
 
@@ -575,7 +578,7 @@ class Config:
                 fall_height_fraction=0.5,
                 fall_up_z_threshold=0.50,
                 fall_grace_steps=50,
-                action_smoothness_scale=0.05,
+                action_smoothness_scale=0.0,  # Disabled: matches for_childbiped()
                 gait_phase_period=0.85,
             ),
             curriculum=CurriculumConfig(
@@ -600,6 +603,7 @@ class Config:
                 max_batches=3,
                 log_rerun_every=9999,
                 ppo_epochs=2,
-                entropy_coeff=0.01,
+                entropy_coeff=0.0,  # Matches for_childbiped()
+                max_grad_norm=10.0,  # Matches for_childbiped()
             ),
         )
