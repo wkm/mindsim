@@ -4,7 +4,8 @@
 
   <default>
     <joint limited="true" damping="1.0" armature="0.01" />
-    <geom contype="1" conaffinity="1" condim="3" friction="1.0 0.5 0.01" />
+    <!-- Arm geoms use contype=2: collide with cup (3) and floor (affi=3), not table (1) -->
+    <geom contype="2" conaffinity="2" condim="3" friction="1.0 0.5 0.01" />
     <position ctrlrange="-1 1" kp="50" />
   </default>
 
@@ -12,14 +13,15 @@
     <body name="base" pos="0 -0.10 0">
       <!-- Pedestal: raises the arm above the table surface -->
       <geom name="pedestal" type="cylinder" size="0.06 0.30"
-            pos="0 0 0.30" rgba="0.3 0.3 0.3 1.0" />
+            pos="0 0 0.30" rgba="0.3 0.3 0.3 1.0"
+            contype="1" conaffinity="1" />
 
       <!-- Shoulder yaw: rotates arm around vertical axis -->
       <body name="shoulder" pos="0 0 0.62">
         <inertial pos="0 0 0" mass="1.0"
                   fullinertia="0.002 0.002 0.002 0 0 0" />
         <joint name="shoulder_yaw" type="hinge" axis="0 0 1"
-               range="-2.094 2.094" damping="2.0" />
+               range="-3.14159 3.14159" damping="5.0" />
         <geom name="shoulder_geom" type="sphere" size="0.04"
               rgba="0.4 0.4 0.7 1.0" />
 
@@ -28,7 +30,7 @@
           <inertial pos="0 0 -0.125" mass="2.0"
                     fullinertia="0.02 0.02 0.003 0 0 0" />
           <joint name="shoulder_pitch" type="hinge" axis="1 0 0"
-                 range="-1.571 1.571" damping="2.0" />
+                 range="-1.571 2.618" damping="5.0" />
           <geom name="upper_arm_geom" type="capsule"
                 fromto="0 0 0 0 0 -0.25" size="0.025"
                 rgba="0.4 0.4 0.7 1.0" />
@@ -38,7 +40,7 @@
             <inertial pos="0 0 -0.10" mass="1.0"
                       fullinertia="0.008 0.008 0.001 0 0 0" />
             <joint name="elbow" type="hinge" axis="1 0 0"
-                   range="-2.356 0" damping="1.0" />
+                   range="-2.356 0" damping="3.0" />
             <geom name="forearm_geom" type="capsule"
                   fromto="0 0 0 0 0 -0.20" size="0.02"
                   rgba="0.4 0.7 0.4 1.0" />
@@ -48,7 +50,7 @@
               <inertial pos="0 0 0" mass="0.3"
                         fullinertia="0.0005 0.0005 0.0005 0 0 0" />
               <joint name="wrist_pitch" type="hinge" axis="1 0 0"
-                     range="-1.571 1.571" damping="0.3" />
+                     range="-1.571 1.571" damping="1.0" />
 
               <!-- Wrist roll: rotates end effector -->
               <body name="wrist_roll_link" pos="0 0 0">
@@ -124,19 +126,30 @@
     <exclude body1="wrist_roll_link" body2="gripper_base" />
     <exclude body1="gripper_base" body2="finger_left" />
     <exclude body1="gripper_base" body2="finger_right" />
+    <!-- Arm hangs inside pedestal at rest — exclude base vs all arm bodies -->
+    <exclude body1="base" body2="upper_arm" />
+    <exclude body1="base" body2="forearm" />
+    <exclude body1="base" body2="wrist" />
+    <exclude body1="base" body2="wrist_roll_link" />
+    <exclude body1="base" body2="gripper_base" />
+    <exclude body1="base" body2="finger_left" />
+    <exclude body1="base" body2="finger_right" />
+    <!-- Near-joint geom overlaps (wrist_geom is on wrist_roll_link body) -->
+    <exclude body1="forearm" body2="wrist_roll_link" />
+    <exclude body1="forearm" body2="gripper_base" />
   </contact>
 
   <actuator>
     <!-- 5-DOF arm joints (position control, ctrlrange matches joint range) -->
-    <position name="shoulder_yaw_motor" joint="shoulder_yaw" kp="50"
-              ctrlrange="-2.094 2.094" />
-    <position name="shoulder_pitch_motor" joint="shoulder_pitch" kp="50"
-              ctrlrange="-1.571 1.571" />
-    <position name="elbow_motor" joint="elbow" kp="30"
+    <position name="shoulder_yaw_motor" joint="shoulder_yaw" kp="200"
+              ctrlrange="-3.14159 3.14159" />
+    <position name="shoulder_pitch_motor" joint="shoulder_pitch" kp="200"
+              ctrlrange="-1.571 2.618" />
+    <position name="elbow_motor" joint="elbow" kp="100"
               ctrlrange="-2.356 0" />
-    <position name="wrist_pitch_motor" joint="wrist_pitch" kp="10"
+    <position name="wrist_pitch_motor" joint="wrist_pitch" kp="50"
               ctrlrange="-1.571 1.571" />
-    <position name="wrist_roll_motor" joint="wrist_roll" kp="10"
+    <position name="wrist_roll_motor" joint="wrist_roll" kp="20"
               ctrlrange="-3.14159 3.14159" />
     <!-- Gripper (coupled: controls both fingers via equality constraint) -->
     <position name="gripper_motor" joint="finger_left" kp="40"
