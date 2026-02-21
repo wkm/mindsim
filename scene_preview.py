@@ -11,6 +11,7 @@ Controls:
 """
 
 import time
+from pathlib import Path
 
 import mujoco
 import mujoco.viewer
@@ -30,17 +31,21 @@ KEY_UP = 265
 ARROW_STEP = 0.1
 
 
-def run_scene_preview(scene_path: str):
+ROOM_XML = str(Path(__file__).parent / "worlds" / "room.xml")
+
+
+def run_scene_preview():
     """Open MuJoCo viewer with procedurally generated scenes.
 
+    Loads the standalone arena (worlds/room.xml) directly — no bot needed.
     Generates a random scene on startup. Press Space to cycle through
     scenes. Each scene's seed and description are printed to the terminal.
     """
-    print(f"Loading {scene_path}...")
+    print(f"Loading {ROOM_XML}...")
     print("Controls: Space=next scene, Backspace=regenerate, Arrows=move target")
     print()
 
-    m = mujoco.MjModel.from_xml_path(scene_path)
+    m = mujoco.MjModel.from_xml_path(ROOM_XML)
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
 
