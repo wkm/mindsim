@@ -275,10 +275,13 @@ After building or modifying any bot:
 # 1. Does it load?
 uv run python -c "import mujoco; mujoco.MjModel.from_xml_path('bots/BOTNAME/scene.xml'); print('OK')"
 
-# 2. Does it look right? (visual check)
+# 2. Automated actuator sweep & geometry check (writes bots/BOTNAME/validation.md)
+uv run python validate_bot.py --bot BOTNAME
+
+# 3. Does it look right? (visual check)
 uv run mjpython main.py view --bot BOTNAME
 
-# 3. Does the training pipeline work end-to-end?
+# 4. Does the training pipeline work end-to-end?
 uv run mjpython main.py train --bot BOTNAME --smoketest
 ```
 

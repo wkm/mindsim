@@ -42,6 +42,7 @@ mindsim/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
 │   ├── scene.xml            # World: floor, lighting, target
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
+├── validate_bot.py          # Automated actuator sweep & geometry check
 ├── simple_wheeler_env.py    # Environment API
 ├── train.py                 # Training loop & policy networks
 ├── checkpoint.py            # Checkpoint save/load/resolve
@@ -125,6 +126,7 @@ Creates a Rerun recording with:
 - **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
 - **scene.xml** - World setup (target, floor, lighting)
+- **validate_bot.py** - Automated actuator sweep & geometry validation (writes `bots/<name>/validation.md`)
 - **simple_wheeler_env.py** - Env logic (step, reset, reward)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
 - **play.py** - Interactive play mode (called via `main.py play`)
