@@ -238,7 +238,7 @@ class MainMenuScreen(Screen):
         elif choice == "new":
             self.app.push_screen(BotSelectorScreen(mode="train"))
         elif choice == "scene":
-            self.app.push_screen(BotSelectorScreen(mode="scene"))
+            self.app.start_scene_preview()
         elif choice == "view":
             self.app.push_screen(BotSelectorScreen(mode="view"))
         elif choice == "browse":
@@ -295,8 +295,7 @@ class BotSelectorScreen(Screen):
         self._mode = mode
 
     def compose(self) -> ComposeResult:
-        titles = {"view": "Select Bot to View", "scene": "Select Bot for Scene Preview"}
-        title = titles.get(self._mode, "Select Bot")
+        title = "Select Bot to View" if self._mode == "view" else "Select Bot"
         with Vertical(id="bot-box"):
             yield Static(title, id="bot-title")
             if self._bots:
@@ -329,8 +328,6 @@ class BotSelectorScreen(Screen):
             return
         if self._mode == "view":
             self.app.start_viewing(scene_path=scene_path)
-        elif self._mode == "scene":
-            self.app.start_scene_preview(scene_path=scene_path)
         else:
             self.app.start_training(smoketest=False, scene_path=scene_path)
 
@@ -1100,12 +1097,9 @@ class MindSimApp(App):
         self.next_stage = stage
         self.exit()
 
-    def start_scene_preview(self, scene_path: str | None = None):
+    def start_scene_preview(self):
         """Exit TUI, then main() will launch the scene preview."""
-        if not scene_path:
-            return
         self.next_action = "scene"
-        self.next_scene = scene_path
         self.exit()
 
     def start_playing(self, scene_path: str | None = None):
@@ -1288,10 +1282,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     # scene
-    p_scene = sub.add_parser("scene", help="Scene gen preview (procedural furniture)")
-    p_scene.add_argument(
-        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
-    )
+    sub.add_parser("scene", help="Scene gen preview (procedural furniture)")
 
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
@@ -1372,9 +1363,6 @@ def _run_tui():
 
     elif app.next_action == "scene":
         cmd = ["uv", "run", "mjpython", "main.py", "scene"]
-        if app.next_scene:
-            bot_name = Path(app.next_scene).parent.name
-            cmd.extend(["--bot", bot_name])
         os.execvp("uv", cmd)
 
     elif app.next_action == "play":
@@ -1403,10 +1391,9 @@ def main():
         _run_tui()
 
     elif args.command == "scene":
-        scene_path = _resolve_scene_path(args.bot)
         from scene_preview import run_scene_preview
 
-        run_scene_preview(scene_path)
+        run_scene_preview()
 
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)

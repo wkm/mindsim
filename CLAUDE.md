@@ -8,7 +8,7 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 
 ```bash
 uv run mjpython main.py                    # Interactive TUI (default)
-uv run mjpython main.py scene [--bot NAME] # Scene gen preview (procedural furniture)
+uv run mjpython main.py scene              # Scene gen preview (procedural furniture)
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
 uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]  # Play trained policy
 uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
@@ -39,16 +39,18 @@ make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
 mindsim/
 ├── main.py                   # Single entry point for all modes
 ├── run_manager.py            # Run directory lifecycle & W&B init
+├── worlds/
+│   └── room.xml             # Standalone arena (floor, curbs, target, obstacle slots)
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
-│   ├── scene.xml            # World: floor, lighting, target, obstacle slots
+│   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
 ├── sim_env.py               # Environment API (SimEnv)
 ├── train.py                 # Training loop & policy networks
 ├── checkpoint.py            # Checkpoint save/load/resolve
 ├── view.py                  # MuJoCo viewer
 ├── play.py                  # Interactive play mode
-├── scene_preview.py          # Scene gen preview (procedural furniture)
+├── scene_preview.py          # Scene gen preview (loads room.xml directly)
 ├── scene_gen/                # Procedural scene generation
 │   ├── primitives.py        # Prim types, GeomType, material colors
 │   ├── composer.py          # SceneComposer, placement, descriptions
@@ -108,10 +110,9 @@ The `scene_gen/` module generates rooms with parametric furniture for training d
 
 ```bash
 uv run mjpython main.py scene              # MuJoCo viewer with random furniture
-uv run mjpython main.py scene --bot NAME   # For a specific bot
 ```
 
-Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys` = move target.
+Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys` = move target.
 
 **Architecture:**
 
@@ -123,7 +124,7 @@ Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys
 
 **Adding new furniture:** Drop a file in `scene_gen/concepts/` following the pattern in `concepts/__init__.py` docstring. Needs a `Params` frozen dataclass + `generate(params) -> tuple[Prim, ...]`. That's it — auto-discovered.
 
-**Scene XML slots:** `scene.xml` contains 8 obstacle bodies x 8 geom slots each (64 total). Initially hidden (transparent, non-colliding). The composer writes to these at runtime.
+**Scene XML slots:** `worlds/room.xml` contains 8 obstacle bodies x 8 geom slots each (64 total). Initially hidden (transparent, non-colliding). The composer writes to these at runtime. Bot `scene.xml` files include `room.xml` via `<include>`, so all room-scale bots get the slots automatically.
 
 **Scale progression (planned):** Room → Apartment → House → Village.
 
@@ -160,7 +161,8 @@ Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys
 - **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
 - **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
-- **scene.xml** - World setup (target, floor, lighting)
+- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors, obstacle slots)
+- **scene.xml** - Thin wrapper: timestep + bot.xml + room.xml include
 - **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
 - **play.py** - Interactive play mode (called via `main.py play`)
@@ -187,7 +189,7 @@ The interactive TUI (`uv run mjpython main.py`) has a screen-based flow:
 MainMenuScreen
   ├── [s] Smoketest     -> runs smoketest
   ├── [n] New run       -> BotSelectorScreen -> TrainingDashboard
-  ├── [g] Scene gen     -> BotSelectorScreen -> MuJoCo viewer with procedural scenes
+  ├── [g] Scene gen     -> MuJoCo viewer with procedural scenes (loads room.xml directly)
   ├── [b] Browse runs   -> RunBrowserScreen -> RunActionScreen
   └── [q] Quit
 ```
