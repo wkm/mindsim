@@ -26,7 +26,7 @@ import torch
 
 import rerun_logger
 from collection import collect_episode, log_episode_value_trace
-from config import EnvConfig
+from pipeline import EnvConfig
 from play import build_policy
 from training_blueprint import create_training_blueprint
 from training_env import TrainingEnv

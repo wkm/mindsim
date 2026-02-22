@@ -13,7 +13,8 @@ import numpy as np
 import torch
 
 from checkpoint import resolve_resume_ref
-from sim_env import SimEnv
+from pipeline import Pipeline
+from sim_env import SimEnv, assemble_sensor_data
 
 # GLFW key constants (avoid importing glfw directly)
 KEY_UP = 265
@@ -25,39 +26,6 @@ KEY_MINUS = 45  # '-'
 KEY_EQUAL = 61  # '='
 
 SPEED_OPTIONS = [1, 2, 4, 8]
-
-
-def build_policy(ckpt_config):
-    """Reconstruct the policy network from a checkpoint's embedded config."""
-    # Import policy classes (defined in train.py)
-    from train import LSTMPolicy, MLPPolicy, TinyPolicy
-
-    policy_cfg = ckpt_config["policy"]
-    policy_type = policy_cfg["policy_type"]
-
-    common_kwargs = dict(
-        image_height=policy_cfg["image_height"],
-        image_width=policy_cfg["image_width"],
-        num_actions=policy_cfg.get("fc_output_size", 2),
-        init_std=policy_cfg.get("init_std", 0.5),
-        max_log_std=policy_cfg.get("max_log_std", 0.7),
-        sensor_input_size=policy_cfg.get("sensor_input_size", 0),
-    )
-
-    if policy_type == "LSTMPolicy":
-        return LSTMPolicy(
-            hidden_size=policy_cfg["hidden_size"],
-            **common_kwargs,
-        )
-    elif policy_type == "MLPPolicy":
-        return MLPPolicy(
-            hidden_size=policy_cfg["hidden_size"],
-            **common_kwargs,
-        )
-    elif policy_type == "TinyPolicy":
-        return TinyPolicy(**common_kwargs)
-    else:
-        raise ValueError(f"Unknown policy type: {policy_type}")
 
 
 def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"):
@@ -72,37 +40,32 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     print(f"Loading checkpoint: {ckpt_path}")
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
-    # Reconstruct policy
-    policy = build_policy(ckpt["config"])
+    # Reconstruct pipeline and policy from checkpoint config
+    pipeline = Pipeline.from_wandb_dict(ckpt["config"])
+    policy = pipeline.build_policy()
     policy.load_state_dict(ckpt["policy_state_dict"])
     policy.eval()
     print(
-        f"Policy: {ckpt['config']['policy']['policy_type']} "
-        f"(hidden={ckpt['config']['policy'].get('hidden_size', 'n/a')})"
+        f"Policy: {pipeline.policy.policy_type} "
+        f"(hidden={pipeline.policy.hidden_size})"
     )
-
-    # Image dimensions from checkpoint config
-    img_h = ckpt["config"]["policy"]["image_height"]
-    img_w = ckpt["config"]["policy"]["image_width"]
 
     # Create environment (raw env, no training wrapper)
     env = SimEnv(
         scene_path=scene_path,
-        render_width=img_w,
-        render_height=img_h,
+        render_width=pipeline.policy.image_width,
+        render_height=pipeline.policy.image_height,
     )
 
     model = env.model
     data = env.data
 
-    # Physics sub-steps per action (read from checkpoint config, fallback to 5 for legacy checkpoints)
-    env_cfg = ckpt["config"].get("env", {})
-    mujoco_steps_per_action = env_cfg.get("mujoco_steps_per_action", 5)
+    # Physics sub-steps per action
+    mujoco_steps_per_action = pipeline.env.mujoco_steps_per_action
 
     # Gait phase encoding: if the policy was trained with gait phase inputs,
     # we must compute and append them in play mode too.
-    gait_phase_period = env_cfg.get("gait_phase_period", 0.0)
-    gait_phase_dim = 4 if gait_phase_period > 0 else 0
+    gait_phase_period = pipeline.env.gait_phase_period
     gait_step_count = 0
     control_dt = mujoco_steps_per_action * model.opt.timestep
 
@@ -199,20 +162,12 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
 
                 sensor_tensor = None
                 if env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0:
-                    sensors = env.get_sensor_data()
-                    if gait_phase_dim > 0:
-                        t = gait_step_count * control_dt
-                        phase = 2 * np.pi * t / gait_phase_period
-                        gait_phase = np.array(
-                            [
-                                np.sin(phase),
-                                np.cos(phase),
-                                np.sin(phase + np.pi),
-                                np.cos(phase + np.pi),
-                            ],
-                            dtype=np.float32,
-                        )
-                        sensors = np.concatenate([sensors, gait_phase])
+                    sensors = assemble_sensor_data(
+                        env.get_sensor_data(),
+                        gait_step_count,
+                        control_dt,
+                        gait_phase_period,
+                    )
                     sensor_tensor = torch.from_numpy(sensors).unsqueeze(0)
 
                 with torch.no_grad():
@@ -221,9 +176,8 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                     )
                     action = action.cpu().numpy()[0]
 
-                data.ctrl[: env.num_actuators] = action
                 for _ in range(mujoco_steps_per_action):
-                    mujoco.mj_step(model, data)
+                    env.step(action, render=False)
                 gait_step_count += 1
 
             # --- Update viewer overlays ---

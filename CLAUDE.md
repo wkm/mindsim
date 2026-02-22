@@ -15,6 +15,7 @@ uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-w
 uv run mjpython main.py smoketest          # Alias for train --smoketest
 uv run mjpython main.py quicksim           # Rerun debug vis
 uv run mjpython main.py visualize [--bot NAME] [--steps N]
+uv run mjpython main.py validate-rewards [--bot NAME]  # Validate reward hierarchy
 ```
 
 `--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.
@@ -288,6 +289,7 @@ Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
 ## Development Notes
 
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
+- **Bot changes require the checklist** - When creating a new bot or modifying bot XML (geometry, actuators, damping, sensors), read and follow `NEW_BOT_CHECKLIST.md` before committing. Common mistakes it catches: unrealistic joint speeds from wrong damping, gait phase period copied from a different-sized robot, feet not touching the floor, missing contact exclusions.
 
 ## Commit Message Format
 

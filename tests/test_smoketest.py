@@ -14,7 +14,7 @@ import torch
 import wandb
 
 from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
-from config import Config
+from pipeline import pipeline_for_bot
 from train import (
     LSTMPolicy,
     TinyPolicy,
@@ -27,11 +27,11 @@ from training_env import TrainingEnv
 
 
 def _smoketest_config():
-    return Config.for_smoketest()
+    return pipeline_for_bot("simple2wheeler", smoketest=True)
 
 
 def _biped_smoketest_config():
-    return Config.for_biped_smoketest()
+    return pipeline_for_bot("simplebiped", smoketest=True)
 
 
 def _make_env(cfg):

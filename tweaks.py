@@ -29,6 +29,7 @@ TWEAKABLE = {
     "gamma": ("training", "gamma", float),
     "gae_lambda": ("training", "gae_lambda", float),
     "value_coeff": ("training", "value_coeff", float),
+    "max_grad_norm": ("training", "max_grad_norm", float),
     "batch_size": ("training", "batch_size", int),
     "mastery_threshold": ("training", "mastery_threshold", float),
     "mastery_batches": ("training", "mastery_batches", int),

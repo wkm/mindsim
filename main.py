@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import logging.handlers
 import os
 import re
 import shutil
@@ -50,6 +49,8 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
+
+from rich.markdown import Markdown as RichMarkdown
 
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
 from run_manager import (
@@ -159,6 +160,27 @@ def _fmt(value, precision=3, width=8):
     return f"{value:+.{precision}f}".rjust(width)
 
 
+def _color_val(formatted: str, value: float | None, ranges: dict) -> str:
+    """Wrap a formatted string in Rich color markup based on health ranges.
+
+    Args:
+        formatted: Already-formatted display string.
+        value: Raw numeric value (None → no coloring).
+        ranges: Dict with 'green', 'yellow', 'red' keys.
+            Each is a callable(value) -> bool, checked in order: green, yellow, red.
+            First match wins; no match → no coloring.
+    """
+    if value is None:
+        return formatted
+    if ranges.get("green") and ranges["green"](value):
+        return f"[green]{formatted}[/green]"
+    if ranges.get("yellow") and ranges["yellow"](value):
+        return f"[yellow]{formatted}[/yellow]"
+    if ranges.get("red") and ranges["red"](value):
+        return f"[red]{formatted}[/red]"
+    return formatted
+
+
 def _get_experiment_info(branch: str) -> str | None:
     """Look up the hypothesis for a branch from EXPERIMENTS.md.
 
@@ -179,6 +201,51 @@ def _get_experiment_info(branch: str) -> str | None:
         if m and m.group(1).strip() == branch:
             return m.group(2).strip()
     return None
+
+
+def _git_is_clean() -> tuple[bool, str]:
+    """Check whether the git working tree is clean.
+
+    Returns (is_clean, status_lines) where status_lines is the raw
+    ``git status --porcelain`` output.  If this isn't a git repo or
+    git isn't available, returns (True, "") so training proceeds.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=10,
+        )
+        output = result.stdout.strip()
+        return (output == "", output)
+    except Exception:
+        return (True, "")
+
+
+def _run_claude_commit() -> bool:
+    """Run Claude in print mode to commit all changes.
+
+    Returns True if the worktree is clean afterward.
+    """
+    import subprocess
+
+    print("Running Claude to commit changes...")
+    try:
+        subprocess.run(
+            [
+                "claude", "-p",
+                "Run git status and git diff to see current changes, then commit all changes with a descriptive commit message.",
+                "--allowedTools", "Bash Read Grep Glob",
+            ],
+            timeout=120,
+        )
+    except Exception as e:
+        print(f"Claude commit failed: {e}")
+        return False
+
+    clean, _ = _git_is_clean()
+    return clean
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +657,116 @@ class BotSelectorScreen(Screen):
 
 
 # ---------------------------------------------------------------------------
+# Dirty Tree Screen
+# ---------------------------------------------------------------------------
+
+
+class DirtyTreeScreen(Screen):
+    """Shown before training when the git worktree has uncommitted changes."""
+
+    BINDINGS = [
+        Binding("c", "commit", "Commit with Claude", priority=True),
+        Binding("s", "start_anyway", "Start Anyway", priority=True),
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+    ]
+
+    CSS = """
+    DirtyTreeScreen {
+        align: center middle;
+    }
+
+    #dirty-box {
+        width: 60;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #dirty-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #dirty-status {
+        margin-bottom: 1;
+    }
+
+    #dirty-actions {
+        height: auto;
+    }
+    """
+
+    def __init__(
+        self,
+        status_lines: str,
+        smoketest: bool,
+        scene_path: str | None,
+        resume: str | None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._status_lines = status_lines
+        self._smoketest = smoketest
+        self._scene_path = scene_path
+        self._resume = resume
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dirty-box"):
+            yield Static("Uncommitted Changes", id="dirty-title")
+            yield Static(self._status_lines, id="dirty-status")
+            yield OptionList(
+                "[c] Commit with Claude",
+                "[s] Start anyway",
+                "[Esc] Back",
+                id="dirty-actions",
+            )
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_start_anyway(self) -> None:
+        self.app.pop_screen()
+        self.app._do_start_training(
+            smoketest=self._smoketest,
+            scene_path=self._scene_path,
+            resume=self._resume,
+        )
+
+    def action_commit(self) -> None:
+        self.query_one("#dirty-title", Static).update("Committing...")
+        self._do_commit()
+
+    @work(thread=True)
+    def _do_commit(self) -> None:
+        clean = _run_claude_commit()
+        if clean:
+            self.app.call_from_thread(self._start_after_commit)
+        else:
+            _, new_status = _git_is_clean()
+            self.app.call_from_thread(self._update_after_commit, new_status)
+
+    def _start_after_commit(self) -> None:
+        self.app.pop_screen()
+        self.app._do_start_training(
+            smoketest=self._smoketest,
+            scene_path=self._scene_path,
+            resume=self._resume,
+        )
+
+    def _update_after_commit(self, new_status: str) -> None:
+        self.query_one("#dirty-title", Static).update("Still Uncommitted Changes")
+        self.query_one("#dirty-status", Static).update(new_status)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        actions = ["commit", "start_anyway", "go_back"]
+        if 0 <= idx < len(actions):
+            getattr(self, f"action_{actions[idx]}")()
+
+
+# ---------------------------------------------------------------------------
 # Run Browser Screen
 # ---------------------------------------------------------------------------
 
@@ -771,17 +948,14 @@ class RunActionScreen(Screen):
         self.app.pop_screen()
 
     def action_play_run(self) -> None:
-        self.app.start_playing_run(
-            run_name=self._info.name,
-            scene_path=self._info.scene_path,
-        )
+        self.app.push_screen(CheckpointPickerScreen(
+            run_dir=self._run_dir, run_info=self._info, mode="play",
+        ))
 
     def action_resume_run(self) -> None:
-        self.app.start_training(
-            smoketest=False,
-            scene_path=self._info.scene_path,
-            resume=self._info.name,
-        )
+        self.app.push_screen(CheckpointPickerScreen(
+            run_dir=self._run_dir, run_info=self._info, mode="resume",
+        ))
 
     def action_view_run(self) -> None:
         self.app.start_viewing(scene_path=self._info.scene_path)
@@ -797,6 +971,113 @@ class RunActionScreen(Screen):
         idx = event.option_index
         if 0 <= idx < len(self._action_map):
             getattr(self, f"action_{self._action_map[idx]}")()
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint Picker Screen
+# ---------------------------------------------------------------------------
+
+
+class CheckpointPickerScreen(Screen):
+    """Pick a checkpoint from a run before playing or resuming."""
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+        Binding("enter", "confirm", "Select", priority=True),
+    ]
+
+    CSS = """
+    CheckpointPickerScreen {
+        align: center middle;
+    }
+
+    #picker-box {
+        width: 70;
+        height: auto;
+        max-height: 30;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #picker-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #checkpoint-list {
+        height: auto;
+        max-height: 22;
+    }
+
+    #no-checkpoints {
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, run_dir: Path, run_info, mode: str, **kwargs):
+        """
+        Args:
+            run_dir: Path to the run directory.
+            run_info: RunInfo for the selected run.
+            mode: "play" or "resume".
+        """
+        super().__init__(**kwargs)
+        self._run_dir = run_dir
+        self._info = run_info
+        self._mode = mode
+        from checkpoint import list_checkpoints
+        self._checkpoints = list_checkpoints(run_dir)
+
+    def compose(self) -> ComposeResult:
+        action_label = "Play" if self._mode == "play" else "Resume"
+        with Vertical(id="picker-box"):
+            yield Static(f"{action_label}: {self._info.name}", id="picker-title")
+            if self._checkpoints:
+                items = []
+                for i, ckpt in enumerate(self._checkpoints):
+                    stage = f"Stage {ckpt['stage']}" if ckpt["stage"] is not None else "?"
+                    batch = f"Batch {ckpt['batch']}" if ckpt["batch"] is not None else "?"
+                    tag = "  (latest)" if i == 0 else ""
+                    items.append(f"{stage}  {batch}{tag}")
+                yield OptionList(*items, id="checkpoint-list")
+            else:
+                yield Static("  No checkpoints found.", id="no-checkpoints")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_confirm(self) -> None:
+        if not self._checkpoints:
+            self.app.pop_screen()
+            return
+
+        try:
+            ol = self.query_one("#checkpoint-list", OptionList)
+            idx = ol.highlighted
+            if idx is None:
+                idx = 0
+        except Exception:
+            idx = 0
+
+        ckpt_path = self._checkpoints[idx]["path"]
+
+        if self._mode == "play":
+            self.app.start_playing_run(
+                run_name=self._info.name,
+                scene_path=self._info.scene_path,
+                checkpoint_path=ckpt_path,
+            )
+        else:
+            self.app.start_training(
+                smoketest=False,
+                scene_path=self._info.scene_path,
+                resume=ckpt_path,
+            )
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.action_confirm()
 
 
 # ---------------------------------------------------------------------------
@@ -942,6 +1223,76 @@ class TrainingDashboard(Screen):
                         id="m-avg-steps",
                         classes="metric-line",
                     )
+                    yield Static(
+                        "REWARD INPUTS",
+                        classes="section-title",
+                        id="ri-title",
+                    )
+                    yield Static(
+                        "  distance            ---",
+                        id="ri-distance",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  height              ---",
+                        id="ri-height",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  survival            ---",
+                        id="ri-survival",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fwd distance        ---",
+                        id="ri-fwd-dist",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  speed               ---",
+                        id="ri-speed",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  lateral drift       ---",
+                        id="ri-lateral",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  uprightness         ---",
+                        id="ri-uprightness",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fwd velocity        ---",
+                        id="ri-fwd-vel",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  energy              ---",
+                        id="ri-energy",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  contact             ---",
+                        id="ri-contact",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  action jerk         ---",
+                        id="ri-jerk",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fell                ---",
+                        id="ri-fell",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  joint activity      ---",
+                        id="ri-joint",
+                        classes="metric-line",
+                    )
                     yield Static("SUCCESS RATES", classes="section-title")
                     yield Static(
                         "  eval (rolling)      ---",
@@ -995,9 +1346,16 @@ class TrainingDashboard(Screen):
                         id="m-approx-kl",
                         classes="metric-line",
                     )
+                    yield Static(
+                        "  explained var       ---",
+                        id="m-explained-var",
+                        classes="metric-line",
+                    )
                     yield Static("CURRICULUM", classes="section-title")
                     yield Static(
-                        "  stage               ---", id="m-stage", classes="metric-line"
+                        "  stage               ---",
+                        id="m-stage",
+                        classes="metric-line",
                     )
                     yield Static(
                         "  progress            ---",
@@ -1191,6 +1549,69 @@ class TrainingDashboard(Screen):
             f"  avg steps        {_fmt_int(m.get('avg_steps'))}"
         )
 
+        # Reward inputs (raw physical measures)
+        ri = m.get("raw_inputs", {})
+        scales = m.get("reward_scales", {})
+
+        def _ri_row(widget_id, label, value, fmt_str, scale_key=None):
+            """Update a reward-input row. Hidden when scale_key is set and its scale is 0."""
+            show = scale_key is None or scales.get(scale_key, 0) > 0
+            widget = self.query_one(widget_id)
+            if show and value is not None:
+                widget.update(f"  {label:<15s}{fmt_str.rjust(8)}")
+                widget.display = True
+            elif show:
+                widget.update(f"  {label:<15s}{'---':>8s}")
+                widget.display = True
+            else:
+                widget.display = False
+
+        # Always shown
+        ri_dist = ri.get("distance_to_target")
+        _ri_row("#ri-distance", "distance", ri_dist, f"{ri_dist:.2f} m" if ri_dist is not None else None)
+        ri_h = ri.get("torso_height")
+        _ri_row("#ri-height", "height", ri_h, f"{ri_h:.2f} m" if ri_h is not None else None)
+        ri_surv = ri.get("survival_time")
+        _ri_row("#ri-survival", "survival", ri_surv, f"{ri_surv:.1f} s" if ri_surv is not None else None)
+
+        # Walking stage measures (biped only)
+        ri_fd = ri.get("forward_distance")
+        _ri_row("#ri-fwd-dist", "fwd distance", ri_fd, f"{ri_fd:+.2f} m" if ri_fd is not None else None, "has_walking_stage")
+        ri_spd = ri.get("avg_speed")
+        _ri_row("#ri-speed", "speed", ri_spd, f"{ri_spd:.2f} m/s" if ri_spd is not None else None, "has_walking_stage")
+        ri_lat = ri.get("lateral_drift")
+        _ri_row("#ri-lateral", "lateral drift", ri_lat, f"{ri_lat:.2f} m" if ri_lat is not None else None, "has_walking_stage")
+
+        # Reward-component-gated
+        ri_up = ri.get("up_z")
+        _ri_row("#ri-uprightness", "uprightness", ri_up, f"{ri_up:.2f}" if ri_up is not None else None, "upright")
+        ri_fv = ri.get("forward_vel")
+        _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, "forward_vel")
+        ri_en = ri.get("energy")
+        _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, "energy")
+        ri_ct = ri.get("contact_frac")
+        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, "contact")
+        ri_jk = ri.get("action_jerk")
+        _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, "smoothness")
+
+        # Fall detection gated
+        ri_fell = ri.get("fell_frac")
+        _ri_row("#ri-fell", "fell", ri_fell, f"{ri_fell:.0%}" if ri_fell is not None else None, "fall_detection")
+
+        # Joint activity (shown when sensors exist, i.e. value > 0 or biped)
+        ri_ja = ri.get("joint_activity")
+        has_sensors = ri_ja is not None and ri_ja > 0
+        widget = self.query_one("#ri-joint")
+        if has_sensors:
+            widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
+            widget.display = True
+        elif ri_ja is not None and any(scales.get(k, 0) > 0 for k in ("upright", "energy", "contact")):
+            # Biped with no joint movement yet
+            widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
+            widget.display = True
+        else:
+            widget.display = False
+
         # Success rates
         self.query_one("#m-eval-rolling").update(
             f"  eval (rolling)   {_fmt_pct(m.get('rolling_eval_success_rate'))}"
@@ -1212,7 +1633,7 @@ class TrainingDashboard(Screen):
             std_str = "---"
         self.query_one("#m-policy-std").update(f"  policy std       {std_str.rjust(8)}")
 
-        # Optimization
+        # Optimization (with health colorization for PPO diagnostics)
         if is_ppo:
             self.query_one("#m-policy-loss").update(
                 f"  policy loss      {_fmt(m.get('policy_loss'), precision=4)}"
@@ -1220,12 +1641,33 @@ class TrainingDashboard(Screen):
             self.query_one("#m-value-loss").update(
                 f"  value loss       {_fmt(m.get('value_loss'), precision=4)}"
             )
-            self.query_one("#m-clip-fraction").update(
-                f"  clip fraction    {_fmt(m.get('clip_fraction'), precision=2)}"
-            )
-            self.query_one("#m-approx-kl").update(
-                f"  approx KL        {_fmt(m.get('approx_kl'), precision=4)}"
-            )
+            # Clip fraction: green 0.05-0.30, yellow <0.05 or 0.30-0.50, red >0.50
+            cf_val = m.get('clip_fraction')
+            cf_str = _fmt(cf_val, precision=2)
+            cf_str = _color_val(cf_str, cf_val, {
+                "green": lambda v: 0.05 <= v <= 0.30,
+                "yellow": lambda v: v < 0.05 or 0.30 < v <= 0.50,
+                "red": lambda v: v > 0.50,
+            })
+            self.query_one("#m-clip-fraction").update(f"  clip fraction    {cf_str}")
+            # Approx KL: green 0.005-0.05, yellow <0.005 or 0.05-0.1, red >0.1
+            kl_val = m.get('approx_kl')
+            kl_str = _fmt(kl_val, precision=4)
+            kl_str = _color_val(kl_str, kl_val, {
+                "green": lambda v: 0.005 <= v <= 0.05,
+                "yellow": lambda v: v < 0.005 or 0.05 < v <= 0.1,
+                "red": lambda v: v > 0.1,
+            })
+            self.query_one("#m-approx-kl").update(f"  approx KL        {kl_str}")
+            # Explained variance: green >0.5, yellow 0.0-0.5, red <0.0
+            ev_val = m.get('explained_variance')
+            ev_str = _fmt(ev_val, precision=3)
+            ev_str = _color_val(ev_str, ev_val, {
+                "green": lambda v: v > 0.5,
+                "yellow": lambda v: 0.0 <= v <= 0.5,
+                "red": lambda v: v < 0.0,
+            })
+            self.query_one("#m-explained-var").update(f"  explained var    {ev_str}")
         else:
             self.query_one("#m-policy-loss").update(
                 f"  loss             {_fmt(m.get('loss'), precision=4)}"
@@ -1233,9 +1675,20 @@ class TrainingDashboard(Screen):
             self.query_one("#m-value-loss").update("  value loss       ---")
             self.query_one("#m-clip-fraction").update("  clip fraction    ---")
             self.query_one("#m-approx-kl").update("  approx KL        ---")
-        self.query_one("#m-grad-norm").update(
-            f"  grad norm        {_fmt(m.get('grad_norm'), precision=3)}"
-        )
+            self.query_one("#m-explained-var").update("  explained var    ---")
+        # Grad norm: colored relative to max_grad_norm config
+        gn_val = m.get('grad_norm')
+        max_gn = m.get('max_grad_norm', 0.5)
+        gn_str = _fmt(gn_val, precision=3)
+        if gn_val is not None and max_gn > 0:
+            ratio = gn_val / max_gn
+            if ratio > 10:
+                gn_str = f"[red]{gn_str}[/red] [dim]({ratio:.0f}x)[/dim]"
+            elif ratio > 2:
+                gn_str = f"[yellow]{gn_str}[/yellow] [dim]({ratio:.0f}x)[/dim]"
+            else:
+                gn_str = f"[green]{gn_str}[/green]"
+        self.query_one("#m-grad-norm").update(f"  grad norm        {gn_str}")
         self.query_one("#m-entropy").update(
             f"  entropy          {_fmt(m.get('entropy'), precision=3)}"
         )
@@ -1302,10 +1755,13 @@ class TrainingDashboard(Screen):
 
     def log_ai_commentary(self, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        formatted = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan] {text}"
-        # Write to both Log and AI tabs
-        self.query_one("#log-area", RichLog).write(formatted)
-        self.query_one("#ai-area", RichLog).write(formatted)
+        header = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan]"
+        md = RichMarkdown(text)
+        # Write header + rendered markdown to both Log and AI tabs
+        for widget_id in ("#log-area", "#ai-area"):
+            log_widget = self.query_one(widget_id, RichLog)
+            log_widget.write(header)
+            log_widget.write(md)
         # Switch to AI tab
         self.query_one("#log-tabs", TabbedContent).active = "tab-ai"
 
@@ -1384,11 +1840,31 @@ class MindSimApp(App):
         scene_path: str | None = None,
         resume: str | None = None,
     ):
-        """Called by screens to start training."""
+        """Called by screens to start training (with dirty-tree gate)."""
         # If no scene_path provided (e.g. smoketest from main menu), use default
         if scene_path is None:
             bots = _discover_bots()
             scene_path = bots[0]["scene_path"] if bots else None
+
+        # Smoketests skip the dirty-tree check
+        if smoketest:
+            self._do_start_training(smoketest=True, scene_path=scene_path, resume=resume)
+            return
+
+        clean, status = _git_is_clean()
+        if clean:
+            self._do_start_training(smoketest=False, scene_path=scene_path, resume=resume)
+        else:
+            self.push_screen(DirtyTreeScreen(
+                status_lines=status,
+                smoketest=False,
+                scene_path=scene_path,
+                resume=resume,
+            ))
+
+    def _do_start_training(self, smoketest: bool = False, scene_path: str | None = None,
+                           resume: str | None = None):
+        """Actually start training (push dashboard and kick off worker)."""
         dashboard = TrainingDashboard()
         self._dashboard = dashboard
         self._smoketest = smoketest
@@ -1417,6 +1893,8 @@ class MindSimApp(App):
                 scene_path=self._scene_path,
                 resume=self._resume,
             )
+        except Exception:
+            log.exception("Training crashed in TUI worker thread")
         finally:
             # Remove TUI log handler to avoid stale references
             if hasattr(self, "_tui_log_handler"):
@@ -1471,32 +1949,16 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
-def _setup_logging() -> Path:
-    """Configure file logging for all MindSim operations.
+def _setup_logging() -> None:
+    """Configure root logger level and install an excepthook.
 
-    Returns the log file path. Logs are written to logs/mindsim.log with
-    rotation (5 x 5MB). Also installs an excepthook so unhandled exceptions
-    are captured in the log.
+    Per-run file logging is set up in train.py when the run directory is
+    created.  This function only sets the root level and installs an
+    excepthook so unhandled exceptions are captured by whatever handlers
+    are active at the time.
     """
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / "mindsim.log"
-
-    handler = logging.handlers.RotatingFileHandler(
-        log_file,
-        maxBytes=5 * 1024 * 1024,
-        backupCount=5,
-    )
-    handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-    )
-
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    root.addHandler(handler)
 
     # Capture unhandled exceptions to the log
     _original_excepthook = sys.excepthook
@@ -1509,9 +1971,6 @@ def _setup_logging() -> Path:
         _original_excepthook(exc_type, exc_value, exc_tb)
 
     sys.excepthook = _logging_excepthook
-
-    logging.info("MindSim started: %s", " ".join(sys.argv))
-    return log_file
 
 
 def _is_mjpython() -> bool:
@@ -1582,6 +2041,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_train.add_argument(
         "--num-workers", type=int, default=None, help="Number of parallel workers"
     )
+    p_train.add_argument(
+        "--no-dirty-check",
+        action="store_true",
+        help="Skip uncommitted-changes check",
+    )
 
     # smoketest (alias for train --smoketest)
     sub.add_parser("smoketest", help="Alias for train --smoketest")
@@ -1595,6 +2059,20 @@ def _build_parser() -> argparse.ArgumentParser:
         "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
     )
     p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
+
+    # validate-rewards
+    p_vr = sub.add_parser(
+        "validate-rewards", help="Validate reward hierarchy for a bot"
+    )
+    p_vr.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: all bots)"
+    )
+
+    # describe
+    p_desc = sub.add_parser("describe", help="Print human-readable pipeline summary")
+    p_desc.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
 
     # replay
     p_replay = sub.add_parser(
@@ -1697,6 +2175,29 @@ def main():
 
     elif args.command == "train":
         scene_path = _resolve_scene_path(args.bot)
+        # Dirty-tree check (skip for smoketests and --no-dirty-check)
+        if not args.smoketest and not args.no_dirty_check:
+            clean, status = _git_is_clean()
+            if not clean:
+                print("Uncommitted changes:")
+                print(status)
+                print()
+                while True:
+                    choice = input("[c] Commit with Claude  [s] Start anyway  [q] Quit: ").strip().lower()
+                    if choice == "q":
+                        sys.exit(0)
+                    elif choice == "s":
+                        break
+                    elif choice == "c":
+                        if _run_claude_commit():
+                            print("Worktree is clean. Starting training.")
+                        else:
+                            _, new_status = _git_is_clean()
+                            print("Still dirty after commit attempt:")
+                            print(new_status)
+                            print()
+                            continue
+                        break
         from train import main as train_main
 
         train_main(
@@ -1733,6 +2234,16 @@ def main():
 
         run_visualization(scene_path=scene_path, num_steps=args.steps)
 
+    elif args.command == "validate-rewards":
+        _validate_rewards(args.bot)
+
+    elif args.command == "describe":
+        from pipeline import pipeline_for_bot
+
+        bot_name = args.bot or "simple2wheeler"
+        pipeline = pipeline_for_bot(bot_name)
+        print(pipeline.describe())
+
     elif args.command == "replay":
         from replay import run_replay
 
@@ -1745,6 +2256,120 @@ def main():
             seed=args.seed,
             regenerate=args.regenerate,
             last_n=args.last,
+        )
+
+
+def _validate_rewards(bot_name: str | None):
+    """Print reward hierarchy summary and run dominance checks."""
+    from pipeline import pipeline_for_bot
+    from reward_hierarchy import build_reward_hierarchy
+
+    # If no bot specified, validate all bots
+    if bot_name is None:
+        bots = _discover_bots()
+        bot_names = [b["name"] for b in bots]
+    else:
+        bot_names = [bot_name]
+
+    for name in bot_names:
+        cfg = pipeline_for_bot(name)
+        hierarchy = build_reward_hierarchy(name, cfg.env)
+
+        print(f"\nReward Hierarchy for {name}")
+        print("=" * 50)
+        print(hierarchy.summary_table())
+        print()
+
+        dom = hierarchy.dominance_check()
+        if dom:
+            print("Dominance check:")
+            print(dom)
+        else:
+            print("Dominance check: (single priority level, no check needed)")
+        print()
+
+        # Scenario tests
+        _run_scenario_tests(name, hierarchy, cfg)
+
+
+def _run_scenario_tests(bot_name: str, hierarchy, cfg):
+    """Run scenario tests showing per-step reward in different situations."""
+    from reward_hierarchy import GUARD, STYLE, SURVIVE, TASK
+
+    active = hierarchy.active_components()
+    if not active:
+        print("Scenario tests: no active components")
+        return
+
+    print("Scenario tests:")
+
+    # Scenario 1: "Perfect stand" -- healthy, no movement
+    stand_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            stand_reward += c.scale * 1.0  # healthy
+        elif c.name == "upright":
+            stand_reward += c.scale * 1.0  # perfectly upright
+        elif c.name == "time":
+            stand_reward += c.scale * (-1.0)  # time penalty always applies
+        # Everything else is 0 (no movement, no contact, etc.)
+    print(f"  Perfect stand  (healthy, no movement):    {stand_reward:+.3f}/step")
+
+    # Scenario 2: "Diving forward" -- unhealthy, fast forward
+    dive_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            dive_reward += 0.0  # unhealthy -- no alive bonus
+        elif c.name == "forward_velocity":
+            dive_reward += c.scale * 1.0  # max forward vel, but gated by up_z
+            # If gated by is_healthy, diving doesn't earn this either
+            if c.gated_by and "is_healthy" in c.gated_by:
+                dive_reward -= c.scale * 1.0  # undo: not healthy
+        elif c.name == "distance":
+            dive_reward += c.scale * 0.5  # some distance progress
+        elif c.name == "time":
+            dive_reward += c.scale * (-1.0)
+        elif c.name == "contact":
+            dive_reward += c.scale * (-1.0)  # body on floor
+    print(f"  Diving forward (unhealthy, fast):         {dive_reward:+.3f}/step")
+
+    # Scenario 3: "Walking well" -- healthy, moderate forward, upright
+    walk_reward = 0.0
+    for c in active:
+        if c.name == "alive":
+            walk_reward += c.scale * 1.0
+        elif c.name == "forward_velocity":
+            walk_reward += c.scale * 0.5  # moderate speed
+        elif c.name == "distance":
+            walk_reward += c.scale * 0.3  # some progress
+        elif c.name == "upright":
+            walk_reward += c.scale * 0.9  # mostly upright
+        elif c.name == "energy":
+            walk_reward += c.scale * (-3.0)  # moderate energy
+        elif c.name == "smoothness":
+            walk_reward += c.scale * (-1.0)  # some jerk
+        elif c.name == "time":
+            walk_reward += c.scale * (-1.0)
+    print(f"  Walking well   (healthy, forward):        {walk_reward:+.3f}/step")
+
+    # Check key invariant: standing must beat diving
+    if stand_reward > dive_reward:
+        print(f"\n  Standing ({stand_reward:+.3f}) > Diving ({dive_reward:+.3f}) [ok]")
+    else:
+        print(
+            f"\n  Standing ({stand_reward:+.3f}) <= Diving ({dive_reward:+.3f}) "
+            "[!!] -- diving is more rewarding than standing!"
+        )
+
+    if walk_reward > stand_reward:
+        print(
+            f"  Walking ({walk_reward:+.3f}) > Standing ({stand_reward:+.3f}) "
+            "[ok] -- walking is the best outcome"
+        )
+    else:
+        print(
+            f"  Walking ({walk_reward:+.3f}) <= Standing ({stand_reward:+.3f}) "
+            "[!!] -- standing is better than walking"
         )
 
 
