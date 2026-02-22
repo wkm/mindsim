@@ -19,37 +19,13 @@ from git_utils import get_git_sha
 def build_policy(ckpt_config):
     """Reconstruct a policy network from a checkpoint's embedded config dict.
 
-    Imports policy classes directly from policies.py and uses the checkpoint's
-    saved architecture config to instantiate the correct policy type.
+    Delegates to Pipeline.from_wandb_dict() + Pipeline.build_policy() so there
+    is a single source of truth for policy construction.
     """
-    from policies import LSTMPolicy, MLPPolicy, TinyPolicy
+    from pipeline import Pipeline
 
-    policy_cfg = ckpt_config["policy"]
-    policy_type = policy_cfg["policy_type"]
-
-    common_kwargs = dict(
-        image_height=policy_cfg["image_height"],
-        image_width=policy_cfg["image_width"],
-        num_actions=policy_cfg.get("fc_output_size", 2),
-        init_std=policy_cfg.get("init_std", 0.5),
-        max_log_std=policy_cfg.get("max_log_std", 0.7),
-        sensor_input_size=policy_cfg.get("sensor_input_size", 0),
-    )
-
-    if policy_type == "LSTMPolicy":
-        return LSTMPolicy(
-            hidden_size=policy_cfg["hidden_size"],
-            **common_kwargs,
-        )
-    elif policy_type == "MLPPolicy":
-        return MLPPolicy(
-            hidden_size=policy_cfg["hidden_size"],
-            **common_kwargs,
-        )
-    elif policy_type == "TinyPolicy":
-        return TinyPolicy(**common_kwargs)
-    else:
-        raise ValueError(f"Unknown policy type: {policy_type}")
+    pipeline = Pipeline.from_wandb_dict(ckpt_config)
+    return pipeline.build_policy(device="cpu")
 
 
 def resolve_resume_ref(ref: str) -> str:
