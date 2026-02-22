@@ -22,8 +22,11 @@ from scene_gen.primitives import (
     PLASTIC_BLACK,
     WOOD_DARK,
     GeomType,
+    Placement,
     Prim,
 )
+
+PLACEMENT = Placement.CORNER
 
 
 @dataclass(frozen=True)

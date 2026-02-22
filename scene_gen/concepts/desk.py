@@ -24,8 +24,11 @@ from scene_gen.primitives import (
     WOOD_LIGHT,
     WOOD_MEDIUM,
     GeomType,
+    Placement,
     Prim,
 )
+
+PLACEMENT = Placement.WALL
 
 
 @dataclass(frozen=True)

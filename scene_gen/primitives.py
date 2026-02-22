@@ -18,10 +18,18 @@ Size convention (matches MuJoCo):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 import mujoco
 import numpy as np
+
+
+class Placement(Enum):
+    """Where a concept prefers to be placed in a room."""
+
+    WALL = "wall"  # Against a wall, back facing wall
+    CENTER = "center"  # Interior of room
+    CORNER = "corner"  # Near a corner
 
 
 class GeomType(IntEnum):
@@ -126,3 +134,87 @@ def rotate_vec_z(v: tuple[float, float, float], angle: float) -> np.ndarray:
     c, s = np.cos(angle), np.sin(angle)
     x, y, z = v
     return np.array([x * c - y * s, x * s + y * c, z])
+
+
+# ---------------------------------------------------------------------------
+# Footprint / bounding box utilities
+# ---------------------------------------------------------------------------
+
+
+def footprint(prims: tuple[Prim, ...]) -> tuple[float, float]:
+    """Compute XY half-extents of the bounding box around a set of prims.
+
+    Returns (half_x, half_y) — the smallest axis-aligned rectangle (before
+    world rotation) that contains all prims.  Used for overlap checking.
+    """
+    if not prims:
+        return (0.0, 0.0)
+
+    min_x = float("inf")
+    max_x = float("-inf")
+    min_y = float("inf")
+    max_y = float("-inf")
+
+    for p in prims:
+        # XY extent depends on geom type
+        if p.geom_type == GeomType.BOX:
+            hx, hy = p.size[0], p.size[1]
+        elif p.geom_type in (GeomType.CYLINDER, GeomType.CAPSULE, GeomType.SPHERE):
+            hx = hy = p.size[0]  # radius
+        elif p.geom_type == GeomType.ELLIPSOID:
+            hx, hy = p.size[0], p.size[1]
+        else:
+            hx = hy = p.size[0]
+
+        min_x = min(min_x, p.pos[0] - hx)
+        max_x = max(max_x, p.pos[0] + hx)
+        min_y = min(min_y, p.pos[1] - hy)
+        max_y = max(max_y, p.pos[1] + hy)
+
+    return ((max_x - min_x) / 2, (max_y - min_y) / 2)
+
+
+def obb_overlaps(
+    cx_a: float,
+    cy_a: float,
+    hx_a: float,
+    hy_a: float,
+    rot_a: float,
+    cx_b: float,
+    cy_b: float,
+    hx_b: float,
+    hy_b: float,
+    rot_b: float,
+    margin: float = 0.1,
+) -> bool:
+    """2D oriented-bounding-box overlap test (Separating Axis Theorem).
+
+    Each box is defined by center (cx, cy), half-extents (hx, hy), and
+    rotation angle (radians, around Z).  *margin* is added to every
+    half-extent so objects don't sit flush against each other.
+    """
+    hx_a += margin
+    hy_a += margin
+    hx_b += margin
+    hy_b += margin
+
+    ca, sa = np.cos(rot_a), np.sin(rot_a)
+    cb, sb = np.cos(rot_b), np.sin(rot_b)
+
+    # Local axes for each box
+    ax_a = np.array([ca, sa])
+    ay_a = np.array([-sa, ca])
+    ax_b = np.array([cb, sb])
+    ay_b = np.array([-sb, cb])
+
+    d = np.array([cx_b - cx_a, cy_b - cy_a])
+
+    # Test each of the 4 potential separating axes
+    for axis in (ax_a, ay_a, ax_b, ay_b):
+        proj_d = abs(np.dot(d, axis))
+        proj_a = hx_a * abs(np.dot(ax_a, axis)) + hy_a * abs(np.dot(ay_a, axis))
+        proj_b = hx_b * abs(np.dot(ax_b, axis)) + hy_b * abs(np.dot(ay_b, axis))
+        if proj_d > proj_a + proj_b:
+            return False  # separating axis found — no overlap
+
+    return True  # no separator — boxes overlap

@@ -43,7 +43,131 @@ import mujoco
 import numpy as np
 
 from scene_gen import concepts
-from scene_gen.primitives import Prim, euler_to_quat
+from scene_gen.primitives import Placement, Prim, euler_to_quat, footprint, obb_overlaps
+
+# ---------------------------------------------------------------------------
+# Placement sampling helpers
+# ---------------------------------------------------------------------------
+
+# Wall offset: how far from the arena edge the object center sits
+_WALL_OFFSET = 0.15
+# Inner zone fraction for CENTER placement (±65% of arena)
+_CENTER_FRAC = 0.65
+# Corner offset from arena edge
+_CORNER_OFFSET = 0.4
+# Rotation jitter: ±3° in radians
+_ROT_JITTER = np.radians(3.0)
+
+# The 4 cardinal rotations (facing into room from N/E/S/W walls)
+# Wall at +Y → face -Y (π), wall at -Y → face +Y (0),
+# wall at +X → face -X (π/2), wall at -X → face +X (-π/2)
+_WALL_ROTS = {
+    "N": np.pi,        # back against +Y wall, face into room
+    "S": 0.0,          # back against -Y wall
+    "E": np.pi / 2,    # back against +X wall
+    "W": -np.pi / 2,   # back against -X wall
+}
+
+
+def _snap_rotation(rng: np.random.Generator) -> float:
+    """Random axis-aligned rotation (0/90/180/270°) + small jitter."""
+    base = rng.choice([0.0, np.pi / 2, np.pi, -np.pi / 2])
+    return float(base + rng.uniform(-_ROT_JITTER, _ROT_JITTER))
+
+
+def _sample_position(
+    rng: np.random.Generator,
+    placement: Placement,
+    arena_size: float,
+    hx: float,
+    hy: float,
+) -> tuple[float, float, float]:
+    """Sample (cx, cy, rotation) according to placement type.
+
+    Args:
+        rng: Random generator
+        placement: WALL, CENTER, or CORNER
+        arena_size: Half-extent of the arena
+        hx, hy: Object half-extents (used to keep objects inside arena)
+
+    Returns:
+        (cx, cy, rotation) tuple
+    """
+    if placement == Placement.WALL:
+        return _sample_wall_pos(rng, arena_size, hx, hy)
+    elif placement == Placement.CORNER:
+        return _sample_corner_pos(rng, arena_size, hx, hy)
+    else:  # CENTER
+        return _sample_center_pos(rng, arena_size)
+
+
+def _sample_wall_pos(
+    rng: np.random.Generator,
+    arena_size: float,
+    hx: float,
+    hy: float,
+) -> tuple[float, float, float]:
+    """Place against a random wall, back facing wall, slide along wall."""
+    wall = rng.choice(["N", "S", "E", "W"])
+    rotation = float(_WALL_ROTS[wall] + rng.uniform(-_ROT_JITTER, _ROT_JITTER))
+
+    # The "depth" extent that faces the wall depends on rotation:
+    # for N/S walls the object's local Y faces the wall → use hy
+    # for E/W walls the object's local Y faces the wall → use hy
+    # (rotation already handles orientation, hy is the back-facing extent)
+    depth = max(hx, hy)
+    slide_extent = arena_size - depth - 0.1  # keep off adjacent walls
+
+    if wall == "N":
+        cy = float(arena_size - _WALL_OFFSET - depth)
+        cx = float(rng.uniform(-slide_extent, slide_extent))
+    elif wall == "S":
+        cy = float(-arena_size + _WALL_OFFSET + depth)
+        cx = float(rng.uniform(-slide_extent, slide_extent))
+    elif wall == "E":
+        cx = float(arena_size - _WALL_OFFSET - depth)
+        cy = float(rng.uniform(-slide_extent, slide_extent))
+    else:  # W
+        cx = float(-arena_size + _WALL_OFFSET + depth)
+        cy = float(rng.uniform(-slide_extent, slide_extent))
+
+    return (cx, cy, rotation)
+
+
+def _sample_center_pos(
+    rng: np.random.Generator,
+    arena_size: float,
+) -> tuple[float, float, float]:
+    """Place in the inner zone with axis-aligned rotation."""
+    inner = arena_size * _CENTER_FRAC
+    cx = float(rng.uniform(-inner, inner))
+    cy = float(rng.uniform(-inner, inner))
+    rotation = _snap_rotation(rng)
+    return (cx, cy, rotation)
+
+
+def _sample_corner_pos(
+    rng: np.random.Generator,
+    arena_size: float,
+    hx: float,
+    hy: float,
+) -> tuple[float, float, float]:
+    """Place near one of 4 corners with axis-aligned rotation."""
+    corner_base = arena_size - _CORNER_OFFSET
+    # Pick a random corner
+    signs = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    sx, sy = signs[rng.integers(4)]
+    # Small random offset from the corner
+    jitter = 0.3
+    cx = float(sx * corner_base + rng.uniform(-jitter, jitter))
+    cy = float(sy * corner_base + rng.uniform(-jitter, jitter))
+    # Clamp to stay inside arena
+    limit = arena_size - max(hx, hy) - 0.05
+    cx = float(np.clip(cx, -limit, limit))
+    cy = float(np.clip(cy, -limit, limit))
+    rotation = _snap_rotation(rng)
+    return (cx, cy, rotation)
+
 
 # ---------------------------------------------------------------------------
 # Defaults for obstacle slot allocation
@@ -188,21 +312,35 @@ class SceneComposer:
         min_objects: int = 1,
         max_objects: int | None = None,
         arena_size: float = 3.5,
-        min_spacing: float = 0.6,
+        margin: float = 0.1,
         seed: int | None = None,
         rng: np.random.Generator | None = None,
     ) -> list[PlacedObject]:
-        """Sample a random scene layout.
+        """Sample a random scene layout with placement-aware positioning.
 
         Returns a list of PlacedObject that can be passed to apply().
-        Objects are placed with rejection sampling to avoid overlaps.
+
+        Objects are placed via rejection sampling.  Overlap is checked with
+        rotated bounding boxes (SAT), not just center distance.  Objects on
+        different *layers* are allowed to overlap — e.g. a table can sit on
+        a rug.  Layer is determined by the concept module: modules with
+        ``GROUND_COVER = True`` are on the ground-cover layer; everything
+        else is furniture.
+
+        Position sampling respects each concept's ``PLACEMENT`` attribute:
+        - WALL: placed near a wall edge, facing into the room
+        - CENTER: placed in the inner zone with axis-aligned rotation
+        - CORNER: placed near a room corner with axis-aligned rotation
+
+        Objects are sorted by placement priority (ground_cover first, then
+        WALL, CORNER, CENTER) so the most constrained objects get first pick.
 
         Args:
             n_objects: Exact count (overrides min/max). None = random.
             min_objects: Minimum object count when n_objects is None.
             max_objects: Maximum object count (defaults to self.max_objects).
             arena_size: Half-extent of placement area (meters from origin).
-            min_spacing: Minimum distance between object centers.
+            margin: Extra padding (meters) added to each bounding box edge.
             seed: Integer seed for reproducibility. Overrides rng if both given.
             rng: Numpy random generator (for reproducibility).
         """
@@ -223,35 +361,74 @@ class SceneComposer:
         if not available:
             return []
 
-        placed: list[PlacedObject] = []
-        positions: list[np.ndarray] = []
-
+        # Pick concepts first, then sort by placement priority
+        picks: list[tuple[str, object, bool, Placement]] = []
         for _ in range(n_objects):
-            # Pick a random concept
             concept_name = available[rng.integers(len(available))]
             concept_mod = concepts.get(concept_name)
-
-            # Use default params (with random color variation later)
             params = concept_mod.Params()
+            is_ground = getattr(concept_mod, "GROUND_COVER", False)
+            placement = getattr(concept_mod, "PLACEMENT", Placement.CENTER)
+            picks.append((concept_name, params, is_ground, placement))
 
-            # Rejection-sample a position that doesn't overlap
+        # Sort: ground_cover first, then WALL (most constrained) → CORNER → CENTER
+        _priority = {Placement.WALL: 0, Placement.CORNER: 1, Placement.CENTER: 2}
+        picks.sort(key=lambda p: (not p[2], _priority.get(p[3], 2)))
+
+        placed: list[PlacedObject] = []
+        # Parallel tracking arrays for fast collision checks
+        _cx: list[float] = []  # center x
+        _cy: list[float] = []  # center y
+        _hx: list[float] = []  # half-extent x
+        _hy: list[float] = []  # half-extent y
+        _rot: list[float] = []  # rotation
+        _ground: list[bool] = []  # is ground-cover layer?
+
+        for concept_name, params, is_ground, placement in picks:
+            concept_mod = concepts.get(concept_name)
+
+            # Compute footprint from generated prims
+            prims = concept_mod.generate(params)
+            hx, hy = footprint(prims)
+
+            # Rejection-sample a position with OBB overlap check
             pos = None
             for _attempt in range(50):
-                candidate = rng.uniform(-arena_size, arena_size, size=2)
-                if all(np.linalg.norm(candidate - p) >= min_spacing for p in positions):
-                    pos = candidate
+                cx, cy, rotation = _sample_position(
+                    rng, placement, arena_size, hx, hy,
+                )
+
+                # Only check against objects on the same layer
+                ok = True
+                for j in range(len(placed)):
+                    if _ground[j] != is_ground:
+                        continue  # different layers — skip
+                    if obb_overlaps(
+                        cx, cy, hx, hy, rotation,
+                        _cx[j], _cy[j], _hx[j], _hy[j], _rot[j],
+                        margin=margin,
+                    ):
+                        ok = False
+                        break
+
+                if ok:
+                    pos = (cx, cy)
                     break
 
             if pos is None:
-                break  # couldn't place — stop adding objects
+                continue  # couldn't place — skip, try next object
 
-            rotation = rng.uniform(0, 2 * np.pi)
-            positions.append(pos)
+            _cx.append(pos[0])
+            _cy.append(pos[1])
+            _hx.append(hx)
+            _hy.append(hy)
+            _rot.append(rotation)
+            _ground.append(is_ground)
             placed.append(
                 PlacedObject(
                     concept=concept_name,
                     params=params,
-                    pos=(float(pos[0]), float(pos[1])),
+                    pos=pos,
                     rotation=rotation,
                 )
             )

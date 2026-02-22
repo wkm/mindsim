@@ -12,7 +12,16 @@ Parameters:
 from dataclasses import dataclass
 from functools import lru_cache
 
-from scene_gen.primitives import WOOD_DARK, WOOD_LIGHT, WOOD_MEDIUM, GeomType, Prim
+from scene_gen.primitives import (
+    WOOD_DARK,
+    WOOD_LIGHT,
+    WOOD_MEDIUM,
+    GeomType,
+    Placement,
+    Prim,
+)
+
+PLACEMENT = Placement.CENTER
 
 
 @dataclass(frozen=True)
