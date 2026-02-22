@@ -67,10 +67,14 @@ class AICommentator:
             lines.append(f"Experiment hypothesis: {ctx.hypothesis}")
         if ctx.wandb_url:
             lines.append(f"W&B dashboard: {ctx.wandb_url}")
-            lines.append("You can use WebFetch to browse the W&B URL for charts and detailed metrics.")
+            lines.append(
+                "You can use WebFetch to browse the W&B URL for charts and detailed metrics."
+            )
         if ctx.wandb_run_path:
             lines.append(f"W&B run path: {ctx.wandb_run_path}")
-            lines.append("You can use the Bash tool to query W&B via `wandb api` or Python snippets.")
+            lines.append(
+                "You can use the Bash tool to query W&B via `wandb api` or Python snippets."
+            )
         lines.append("")
         lines.append(f"Config:\n{ctx.config_summary}")
         if ctx.bot_architecture:
@@ -82,15 +86,21 @@ class AICommentator:
         lines.append("")
         lines.append("Instructions:")
         lines.append("- Be concise: 2-4 sentences per commentary.")
-        lines.append("- Note trends across snapshots (you'll see multiple over the run).")
-        lines.append("- Flag concerns: entropy collapse, reward plateaus, KL spikes, grad norm explosions, etc.")
+        lines.append(
+            "- Note trends across snapshots (you'll see multiple over the run)."
+        )
+        lines.append(
+            "- Flag concerns: entropy collapse, reward plateaus, KL spikes, grad norm explosions, etc."
+        )
         lines.append("- Suggest what to watch or consider adjusting.")
         lines.append("- You can suggest live parameter tweaks via `tweaks.py` (e.g. `uv run python tweaks.py learning_rate=0.0001`).")
         lines.append("- Use markdown formatting: **bold** for emphasis, tables, bullet points.")
         lines.append("- Keep it conversational but data-driven.")
         return "\n".join(lines)
 
-    def generate_commentary(self, batch: int, metrics: dict, elapsed_secs: float) -> str | None:
+    def generate_commentary(
+        self, batch: int, metrics: dict, elapsed_secs: float
+    ) -> str | None:
         """Generate commentary for the current training state.
 
         Returns the commentary text, or None on failure.
@@ -98,9 +108,12 @@ class AICommentator:
         prompt = self._format_metrics_snapshot(batch, metrics, elapsed_secs)
 
         cmd = [
-            "claude", "-p",
-            "--model", self._config.model,
-            "--allowedTools", "Bash WebFetch Read Grep",
+            "claude",
+            "-p",
+            "--model",
+            self._config.model,
+            "--allowedTools",
+            "Bash WebFetch Read Grep",
         ]
 
         if self._call_count == 0:
@@ -129,13 +142,17 @@ class AICommentator:
             log.warning("AI commentary timed out (60s)")
             return None
         except subprocess.CalledProcessError as e:
-            log.warning("AI commentary failed: %s", e.stderr[:200] if e.stderr else str(e))
+            log.warning(
+                "AI commentary failed: %s", e.stderr[:200] if e.stderr else str(e)
+            )
             return None
         except FileNotFoundError:
             log.warning("claude CLI not found — AI commentary disabled")
             return None
 
-    def _format_metrics_snapshot(self, batch: int, metrics: dict, elapsed_secs: float) -> str:
+    def _format_metrics_snapshot(
+        self, batch: int, metrics: dict, elapsed_secs: float
+    ) -> str:
         """Format current metrics as a human-readable prompt."""
         m = metrics
         elapsed_min = elapsed_secs / 60
@@ -144,34 +161,38 @@ class AICommentator:
 
         # Episode performance
         lines.append(f"Avg reward: {m.get('avg_reward', '?'):.2f}")
-        lines.append(f"Best/worst reward: {m.get('best_reward', '?'):.2f} / {m.get('worst_reward', '?'):.2f}")
+        lines.append(
+            f"Best/worst reward: {m.get('best_reward', '?'):.2f} / {m.get('worst_reward', '?'):.2f}"
+        )
         lines.append(f"Avg distance to target: {m.get('avg_distance', '?'):.2f}m")
         lines.append(f"Avg episode steps: {m.get('avg_steps', '?'):.0f}")
 
         # Success rates
-        lines.append(f"Eval success (rolling): {m.get('rolling_eval_success_rate', 0):.0%}")
+        lines.append(
+            f"Eval success (rolling): {m.get('rolling_eval_success_rate', 0):.0%}"
+        )
         lines.append(f"Eval success (batch): {m.get('eval_success_rate', 0):.0%}")
         lines.append(f"Train success (batch): {m.get('batch_success_rate', 0):.0%}")
 
         # Optimization
         lines.append(f"Entropy: {m.get('entropy', '?')}")
         lines.append(f"Grad norm: {m.get('grad_norm', '?')}")
-        max_gn = m.get('max_grad_norm', 0.5)
+        max_gn = m.get("max_grad_norm", 0.5)
         if max_gn:
             lines.append(f"Max grad norm (config): {max_gn}")
-        if 'policy_loss' in m:
+        if "policy_loss" in m:
             lines.append(f"Policy loss: {m['policy_loss']:.4f}")
-        if 'value_loss' in m:
+        if "value_loss" in m:
             lines.append(f"Value loss: {m['value_loss']:.4f}")
-        if 'clip_fraction' in m:
+        if "clip_fraction" in m:
             lines.append(f"Clip fraction: {m['clip_fraction']:.3f}")
-        if 'approx_kl' in m:
+        if "approx_kl" in m:
             lines.append(f"Approx KL: {m['approx_kl']:.4f}")
         if 'explained_variance' in m:
             lines.append(f"Explained variance: {m['explained_variance']:.3f}")
 
         # Policy std
-        ps = m.get('policy_std')
+        ps = m.get("policy_std")
         if ps is not None:
             try:
                 lines.append(f"Policy std: {' / '.join(f'{s:.3f}' for s in ps)}")
@@ -179,9 +200,13 @@ class AICommentator:
                 lines.append(f"Policy std: {ps:.3f}")
 
         # Curriculum
-        lines.append(f"Curriculum stage: {m.get('curriculum_stage', '?')} / {m.get('num_stages', '?')}")
+        lines.append(
+            f"Curriculum stage: {m.get('curriculum_stage', '?')} / {m.get('num_stages', '?')}"
+        )
         lines.append(f"Stage progress: {m.get('stage_progress', 0):.2f}")
-        lines.append(f"Mastery: {m.get('mastery_count', 0)} / {m.get('mastery_batches', '?')}")
+        lines.append(
+            f"Mastery: {m.get('mastery_count', 0)} / {m.get('mastery_batches', '?')}"
+        )
 
         # Raw reward inputs (physical measures)
         ri = m.get('raw_inputs', {})

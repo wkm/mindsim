@@ -10,13 +10,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import wandb
-from git_utils import get_git_branch, get_git_sha
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +121,9 @@ def load_run_info(run_dir: Path) -> RunInfo | None:
     try:
         data = json.loads(path.read_text())
         # Handle missing fields gracefully
-        return RunInfo(**{k: v for k, v in data.items() if k in RunInfo.__dataclass_fields__})
+        return RunInfo(
+            **{k: v for k, v in data.items() if k in RunInfo.__dataclass_fields__}
+        )
     except (json.JSONDecodeError, KeyError, TypeError):
         return None
 
@@ -151,14 +151,16 @@ def discover_wandb_runs(limit: int = 50) -> list[dict]:
         runs = api.runs("mindsim", per_page=limit)
         results = []
         for run in runs:
-            results.append({
-                "id": run.id,
-                "name": run.name,
-                "state": run.state,
-                "created_at": run.created_at,
-                "tags": run.tags,
-                "url": run.url,
-            })
+            results.append(
+                {
+                    "id": run.id,
+                    "name": run.name,
+                    "state": run.state,
+                    "created_at": run.created_at,
+                    "tags": run.tags,
+                    "url": run.url,
+                }
+            )
         return results
     except Exception:
         return []

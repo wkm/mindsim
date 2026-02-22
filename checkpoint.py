@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
-
 import wandb
+
 from git_utils import get_git_sha
 
 
@@ -51,9 +51,7 @@ def resolve_resume_ref(ref: str) -> str:
             all_pts.extend(runs_dir.glob("*/checkpoints/*.pt"))
 
         if not all_pts:
-            raise FileNotFoundError(
-                "No checkpoint files found in runs/*/checkpoints/"
-            )
+            raise FileNotFoundError("No checkpoint files found in runs/*/checkpoints/")
         # Return newest by modification time
         return str(max(all_pts, key=os.path.getmtime))
 

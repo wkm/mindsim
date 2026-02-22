@@ -281,7 +281,12 @@ class TinyPolicy(nn.Module):
     uses_visual_input = True
 
     def __init__(
-        self, image_height=128, image_width=128, num_actions=2, init_std=0.5, max_log_std=0.7,
+        self,
+        image_height=128,
+        image_width=128,
+        num_actions=2,
+        init_std=0.5,
+        max_log_std=0.7,
         sensor_input_size=0,
     ):
         super().__init__()
@@ -502,7 +507,9 @@ class MLPPolicy(nn.Module):
 
     def _normalize(self, sensors):
         """Normalize sensor observations using running stats."""
-        return ((sensors - self.obs_mean) / torch.sqrt(self.obs_var + 1e-8)).clamp(-10, 10)
+        return ((sensors - self.obs_mean) / torch.sqrt(self.obs_var + 1e-8)).clamp(
+            -10, 10
+        )
 
     def _actor(self, sensors):
         x = self._normalize(sensors)

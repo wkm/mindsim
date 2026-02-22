@@ -23,12 +23,11 @@ import logging
 import os
 import re
 import shutil
-import threading
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from train import CommandChannel
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -53,6 +52,7 @@ from run_manager import (
     bot_display_name,
     discover_local_runs,
 )
+from train import CommandChannel
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class TuiLogHandler(logging.Handler):
     to avoid stale references to a dead app.
     """
 
-    def __init__(self, app: "MindSimApp"):
+    def __init__(self, app: MindSimApp):
         super().__init__(level=logging.INFO)
         self._app = app
         self._event_loop_thread = threading.current_thread()
@@ -597,6 +597,7 @@ class RunBrowserScreen(Screen):
                 url = self._items[idx]["info"].wandb_url
                 if url:
                     import webbrowser
+
                     webbrowser.open(url)
         except (IndexError, ValueError):
             pass
@@ -702,6 +703,7 @@ class RunActionScreen(Screen):
         url = self._info.wandb_url
         if url:
             import webbrowser
+
             webbrowser.open(url)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -932,124 +934,224 @@ class TrainingDashboard(Screen):
         with Horizontal(id="progress-row"):
             yield Static("  batch 0", id="progress-label")
         with Horizontal(id="body-content"):
-          with Horizontal(id="metrics-grid"):
-            with Vertical(classes="metrics-col"):
-                yield Static("EPISODE PERFORMANCE", classes="section-title")
-                yield Static(
-                    "  avg reward          ---",
-                    id="m-avg-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  best reward         ---",
-                    id="m-best-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  worst reward        ---",
-                    id="m-worst-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  avg distance        ---",
-                    id="m-avg-distance",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  avg steps           ---", id="m-avg-steps", classes="metric-line"
-                )
-                yield Static("REWARD INPUTS", classes="section-title", id="ri-title")
-                yield Static("  distance            ---", id="ri-distance", classes="metric-line")
-                yield Static("  height              ---", id="ri-height", classes="metric-line")
-                yield Static("  survival            ---", id="ri-survival", classes="metric-line")
-                yield Static("  fwd distance        ---", id="ri-fwd-dist", classes="metric-line")
-                yield Static("  speed               ---", id="ri-speed", classes="metric-line")
-                yield Static("  lateral drift       ---", id="ri-lateral", classes="metric-line")
-                yield Static("  uprightness         ---", id="ri-uprightness", classes="metric-line")
-                yield Static("  fwd velocity        ---", id="ri-fwd-vel", classes="metric-line")
-                yield Static("  energy              ---", id="ri-energy", classes="metric-line")
-                yield Static("  contact             ---", id="ri-contact", classes="metric-line")
-                yield Static("  action jerk         ---", id="ri-jerk", classes="metric-line")
-                yield Static("  fell                ---", id="ri-fell", classes="metric-line")
-                yield Static("  joint activity      ---", id="ri-joint", classes="metric-line")
-                yield Static("SUCCESS RATES", classes="section-title")
-                yield Static(
-                    "  eval (rolling)      ---",
-                    id="m-eval-rolling",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  eval (batch)        ---",
-                    id="m-eval-batch",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  train (batch)       ---",
-                    id="m-train-batch",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  policy std          ---",
-                    id="m-policy-std",
-                    classes="metric-line",
-                )
-            with Vertical(classes="metrics-col"):
-                yield Static("OPTIMIZATION", classes="section-title")
-                yield Static(
-                    "  policy loss         ---",
-                    id="m-policy-loss",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  value loss          ---",
-                    id="m-value-loss",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  grad norm           ---", id="m-grad-norm", classes="metric-line"
-                )
-                yield Static(
-                    "  entropy             ---", id="m-entropy", classes="metric-line"
-                )
-                yield Static(
-                    "  clip fraction       ---",
-                    id="m-clip-fraction",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  approx KL           ---", id="m-approx-kl", classes="metric-line"
-                )
-                yield Static(
-                    "  explained var       ---", id="m-explained-var", classes="metric-line"
-                )
-                yield Static("CURRICULUM", classes="section-title")
-                yield Static(
-                    "  stage               ---", id="m-stage", classes="metric-line"
-                )
-                yield Static(
-                    "  progress            ---", id="m-progress", classes="metric-line"
-                )
-                yield Static(
-                    "  mastery             ---", id="m-mastery", classes="metric-line"
-                )
-                yield Static(
-                    "  max steps           ---", id="m-max-steps", classes="metric-line"
-                )
-                yield Static(
-                    "  rec interval        ---", id="m-rec-interval", classes="metric-line"
-                )
-                yield Static("TIMING", classes="section-title")
-                yield Static("  batch               ---", id="m-timing-batch", classes="metric-line")
-                yield Static("  \u251c collect           ---", id="m-timing-collect", classes="metric-line")
-                yield Static("  \u251c train             ---", id="m-timing-train", classes="metric-line")
-                yield Static("  \u251c eval              ---", id="m-timing-eval", classes="metric-line")
-                yield Static("  \u2514 throughput         ---", id="m-timing-throughput", classes="metric-line")
-          with Vertical(id="log-panel"):
-              with TabbedContent(id="log-tabs"):
-                  with TabPane("Log", id="tab-log"):
-                      yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
-                  with TabPane("AI", id="tab-ai"):
-                      yield RichLog(id="ai-area", wrap=True, max_lines=200, markup=True)
+            with Horizontal(id="metrics-grid"):
+                with Vertical(classes="metrics-col"):
+                    yield Static("EPISODE PERFORMANCE", classes="section-title")
+                    yield Static(
+                        "  avg reward          ---",
+                        id="m-avg-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  best reward         ---",
+                        id="m-best-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  worst reward        ---",
+                        id="m-worst-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  avg distance        ---",
+                        id="m-avg-distance",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  avg steps           ---",
+                        id="m-avg-steps",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "REWARD INPUTS",
+                        classes="section-title",
+                        id="ri-title",
+                    )
+                    yield Static(
+                        "  distance            ---",
+                        id="ri-distance",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  height              ---",
+                        id="ri-height",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  survival            ---",
+                        id="ri-survival",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fwd distance        ---",
+                        id="ri-fwd-dist",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  speed               ---",
+                        id="ri-speed",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  lateral drift       ---",
+                        id="ri-lateral",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  uprightness         ---",
+                        id="ri-uprightness",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fwd velocity        ---",
+                        id="ri-fwd-vel",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  energy              ---",
+                        id="ri-energy",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  contact             ---",
+                        id="ri-contact",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  action jerk         ---",
+                        id="ri-jerk",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  fell                ---",
+                        id="ri-fell",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  joint activity      ---",
+                        id="ri-joint",
+                        classes="metric-line",
+                    )
+                    yield Static("SUCCESS RATES", classes="section-title")
+                    yield Static(
+                        "  eval (rolling)      ---",
+                        id="m-eval-rolling",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  eval (batch)        ---",
+                        id="m-eval-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  train (batch)       ---",
+                        id="m-train-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  policy std          ---",
+                        id="m-policy-std",
+                        classes="metric-line",
+                    )
+                with Vertical(classes="metrics-col"):
+                    yield Static("OPTIMIZATION", classes="section-title")
+                    yield Static(
+                        "  policy loss         ---",
+                        id="m-policy-loss",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  value loss          ---",
+                        id="m-value-loss",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  grad norm           ---",
+                        id="m-grad-norm",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  entropy             ---",
+                        id="m-entropy",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  clip fraction       ---",
+                        id="m-clip-fraction",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  approx KL           ---",
+                        id="m-approx-kl",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  explained var       ---",
+                        id="m-explained-var",
+                        classes="metric-line",
+                    )
+                    yield Static("CURRICULUM", classes="section-title")
+                    yield Static(
+                        "  stage               ---",
+                        id="m-stage",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  progress            ---",
+                        id="m-progress",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  mastery             ---",
+                        id="m-mastery",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  max steps           ---",
+                        id="m-max-steps",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  rec interval        ---",
+                        id="m-rec-interval",
+                        classes="metric-line",
+                    )
+                    yield Static("TIMING", classes="section-title")
+                    yield Static(
+                        "  batch               ---",
+                        id="m-timing-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c collect           ---",
+                        id="m-timing-collect",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c train             ---",
+                        id="m-timing-train",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c eval              ---",
+                        id="m-timing-eval",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u2514 throughput         ---",
+                        id="m-timing-throughput",
+                        classes="metric-line",
+                    )
+            with Vertical(id="log-panel"):
+                with TabbedContent(id="log-tabs"):
+                    with TabPane("Log", id="tab-log"):
+                        yield RichLog(
+                            id="log-area", wrap=True, max_lines=1000, markup=True
+                        )
+                    with TabPane("AI", id="tab-ai"):
+                        yield RichLog(
+                            id="ai-area", wrap=True, max_lines=200, markup=True
+                        )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -1074,11 +1176,15 @@ class TrainingDashboard(Screen):
 
     def action_checkpoint(self) -> None:
         self.app.send_command("checkpoint")
-        self.log_message("[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)")
+        self.log_message(
+            "[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)"
+        )
 
     def action_send_rerun(self) -> None:
         self.app.send_command("log_rerun")
-        self.log_message("[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)")
+        self.log_message(
+            "[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)"
+        )
 
     def action_advance_curriculum(self) -> None:
         self.app.send_command("advance_curriculum")
@@ -1103,6 +1209,7 @@ class TrainingDashboard(Screen):
     def action_open_wandb(self) -> None:
         if self._wandb_url:
             import webbrowser
+
             webbrowser.open(self._wandb_url)
 
     def action_quit_app(self) -> None:
@@ -1117,8 +1224,13 @@ class TrainingDashboard(Screen):
         self.query_one("#header-bar", Static).update(header)
 
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
-        bot_name: str | None = None, experiment_hypothesis: str | None = None,
+        self,
+        run_name: str,
+        branch: str,
+        algorithm: str,
+        wandb_url: str | None,
+        bot_name: str | None = None,
+        experiment_hypothesis: str | None = None,
     ):
         self._algorithm = algorithm
         self._wandb_url = wandb_url
@@ -1349,16 +1461,24 @@ class TrainingDashboard(Screen):
         et = m.get("eval_time")
         bs = m.get("batch_size")
         self.query_one("#m-timing-batch").update(
-            f"  batch            {_fmt_time(bt)}" if bt is not None else "  batch               ---"
+            f"  batch            {_fmt_time(bt)}"
+            if bt is not None
+            else "  batch               ---"
         )
         self.query_one("#m-timing-collect").update(
-            f"  \u251c collect        {_fmt_time(ct)}" if ct is not None else "  \u251c collect           ---"
+            f"  \u251c collect        {_fmt_time(ct)}"
+            if ct is not None
+            else "  \u251c collect           ---"
         )
         self.query_one("#m-timing-train").update(
-            f"  \u251c train          {_fmt_time(tt)}" if tt is not None else "  \u251c train             ---"
+            f"  \u251c train          {_fmt_time(tt)}"
+            if tt is not None
+            else "  \u251c train             ---"
         )
         self.query_one("#m-timing-eval").update(
-            f"  \u251c eval           {_fmt_time(et)}" if et is not None else "  \u251c eval              ---"
+            f"  \u251c eval           {_fmt_time(et)}"
+            if et is not None
+            else "  \u251c eval              ---"
         )
         throughput_str = "---"
         if bt and bt > 0 and bs:
@@ -1448,8 +1568,12 @@ class MindSimApp(App):
         self.next_checkpoint_path = checkpoint_path
         self.exit()
 
-    def start_training(self, smoketest: bool = False, scene_path: str | None = None,
-                       resume: str | None = None):
+    def start_training(
+        self,
+        smoketest: bool = False,
+        scene_path: str | None = None,
+        resume: str | None = None,
+    ):
         """Called by screens to start training (with dirty-tree gate)."""
         # If no scene_path provided (e.g. smoketest from main menu), use default
         if scene_path is None:
@@ -1534,13 +1658,23 @@ class MindSimApp(App):
             self._dashboard.log_ai_commentary(text)
 
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None,
-        bot_name: str | None = None, experiment_hypothesis: str | None = None,
+        self,
+        run_name: str,
+        branch: str,
+        algorithm: str,
+        wandb_url: str | None,
+        bot_name: str | None = None,
+        experiment_hypothesis: str | None = None,
     ):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
             self._dashboard.set_header(
-                run_name, branch, algorithm, wandb_url, bot_name, experiment_hypothesis,
+                run_name,
+                branch,
+                algorithm,
+                wandb_url,
+                bot_name,
+                experiment_hypothesis,
             )
 
     def set_total_batches(self, total: int | None):
@@ -1599,22 +1733,50 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
-    p_view.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
-    p_view.add_argument("--stage", type=int, default=None, help="Curriculum stage 1-4 (default: none)")
+    p_view.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_view.add_argument(
+        "--stage", type=int, default=None, help="Curriculum stage 1-4 (default: none)"
+    )
 
     # play
     p_play = sub.add_parser("play", help="Play trained policy in viewer")
-    p_play.add_argument("checkpoint", nargs="?", default="latest", help="Checkpoint ref (default: latest)")
-    p_play.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
-    p_play.add_argument("--run", type=str, default=None, help="Run name to play (resolves checkpoint from run dir)")
+    p_play.add_argument(
+        "checkpoint",
+        nargs="?",
+        default="latest",
+        help="Checkpoint ref (default: latest)",
+    )
+    p_play.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_play.add_argument(
+        "--run",
+        type=str,
+        default=None,
+        help="Run name to play (resolves checkpoint from run dir)",
+    )
 
     # train
     p_train = sub.add_parser("train", help="Train (headless CLI, no TUI)")
-    p_train.add_argument("--smoketest", action="store_true", help="Fast end-to-end smoketest")
-    p_train.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
-    p_train.add_argument("--resume", type=str, default=None, help="Resume from checkpoint")
-    p_train.add_argument("--num-workers", type=int, default=None, help="Number of parallel workers")
-    p_train.add_argument("--no-dirty-check", action="store_true", help="Skip uncommitted-changes check")
+    p_train.add_argument(
+        "--smoketest", action="store_true", help="Fast end-to-end smoketest"
+    )
+    p_train.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_train.add_argument(
+        "--resume", type=str, default=None, help="Resume from checkpoint"
+    )
+    p_train.add_argument(
+        "--num-workers", type=int, default=None, help="Number of parallel workers"
+    )
+    p_train.add_argument(
+        "--no-dirty-check",
+        action="store_true",
+        help="Skip uncommitted-changes check",
+    )
 
     # smoketest (alias for train --smoketest)
     sub.add_parser("smoketest", help="Alias for train --smoketest")
@@ -1624,16 +1786,53 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # visualize
     p_viz = sub.add_parser("visualize", help="One-shot Rerun visualization")
-    p_viz.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_viz.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
     p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
 
     # validate-rewards
-    p_vr = sub.add_parser("validate-rewards", help="Validate reward hierarchy for a bot")
-    p_vr.add_argument("--bot", type=str, default=None, help="Bot name (default: all bots)")
+    p_vr = sub.add_parser(
+        "validate-rewards", help="Validate reward hierarchy for a bot"
+    )
+    p_vr.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: all bots)"
+    )
 
     # describe
     p_desc = sub.add_parser("describe", help="Print human-readable pipeline summary")
-    p_desc.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_desc.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+
+    # replay
+    p_replay = sub.add_parser(
+        "replay",
+        help="Download or regenerate Rerun recordings for a run",
+    )
+    p_replay.add_argument("run", help="Run name (local or W&B)")
+    p_replay.add_argument(
+        "--batches",
+        default=None,
+        help="Comma-separated batch numbers (e.g. 500,1000,2000)",
+    )
+    p_replay.add_argument(
+        "--last",
+        type=int,
+        default=None,
+        help="Download only the N most recent recordings",
+    )
+    p_replay.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Re-run episodes from checkpoints instead of downloading recordings",
+    )
+    p_replay.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for target placement (only with --regenerate)",
+    )
 
     return parser
 
@@ -1685,11 +1884,13 @@ def main():
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)
         from view import run_view
+
         run_view(scene_path, stage=args.stage)
 
     elif args.command == "play":
         scene_path = _resolve_scene_path(args.bot)
         from play import run_play
+
         # --run takes priority: resolve checkpoint from run directory
         checkpoint_ref = args.run if args.run else args.checkpoint
         run_play(checkpoint_ref=checkpoint_ref, scene_path=scene_path)
@@ -1720,6 +1921,7 @@ def main():
                             continue
                         break
         from train import main as train_main
+
         train_main(
             smoketest=args.smoketest,
             bot=args.bot,
@@ -1730,6 +1932,7 @@ def main():
 
     elif args.command == "smoketest":
         from train import main as train_main
+
         bots = _discover_bots()
         if not bots:
             print("Error: No bots found in bots/*/scene.xml", file=sys.stderr)
@@ -1744,11 +1947,13 @@ def main():
 
     elif args.command == "quicksim":
         from quick_sim import run_quick_sim
+
         run_quick_sim()
 
     elif args.command == "visualize":
         scene_path = _resolve_scene_path(args.bot)
         from visualize import run_visualization
+
         run_visualization(scene_path=scene_path, num_steps=args.steps)
 
     elif args.command == "validate-rewards":
@@ -1756,9 +1961,24 @@ def main():
 
     elif args.command == "describe":
         from pipeline import pipeline_for_bot
+
         bot_name = args.bot or "simple2wheeler"
         pipeline = pipeline_for_bot(bot_name)
         print(pipeline.describe())
+
+    elif args.command == "replay":
+        from replay import run_replay
+
+        batches = None
+        if args.batches:
+            batches = [int(b.strip()) for b in args.batches.split(",")]
+        run_replay(
+            args.run,
+            batches=batches,
+            seed=args.seed,
+            regenerate=args.regenerate,
+            last_n=args.last,
+        )
 
 
 def _validate_rewards(bot_name: str | None):
@@ -1796,7 +2016,7 @@ def _validate_rewards(bot_name: str | None):
 
 def _run_scenario_tests(bot_name: str, hierarchy, cfg):
     """Run scenario tests showing per-step reward in different situations."""
-    from reward_hierarchy import SURVIVE, TASK, STYLE, GUARD
+    from reward_hierarchy import GUARD, STYLE, SURVIVE, TASK
 
     active = hierarchy.active_components()
     if not active:
@@ -1805,7 +2025,7 @@ def _run_scenario_tests(bot_name: str, hierarchy, cfg):
 
     print("Scenario tests:")
 
-    # Scenario 1: "Perfect stand" — healthy, no movement
+    # Scenario 1: "Perfect stand" -- healthy, no movement
     stand_reward = 0.0
     for c in active:
         if c.name == "alive":
@@ -1817,11 +2037,11 @@ def _run_scenario_tests(bot_name: str, hierarchy, cfg):
         # Everything else is 0 (no movement, no contact, etc.)
     print(f"  Perfect stand  (healthy, no movement):    {stand_reward:+.3f}/step")
 
-    # Scenario 2: "Diving forward" — unhealthy, fast forward
+    # Scenario 2: "Diving forward" -- unhealthy, fast forward
     dive_reward = 0.0
     for c in active:
         if c.name == "alive":
-            dive_reward += 0.0  # unhealthy — no alive bonus
+            dive_reward += 0.0  # unhealthy -- no alive bonus
         elif c.name == "forward_velocity":
             dive_reward += c.scale * 1.0  # max forward vel, but gated by up_z
             # If gated by is_healthy, diving doesn't earn this either
@@ -1835,7 +2055,7 @@ def _run_scenario_tests(bot_name: str, hierarchy, cfg):
             dive_reward += c.scale * (-1.0)  # body on floor
     print(f"  Diving forward (unhealthy, fast):         {dive_reward:+.3f}/step")
 
-    # Scenario 3: "Walking well" — healthy, moderate forward, upright
+    # Scenario 3: "Walking well" -- healthy, moderate forward, upright
     walk_reward = 0.0
     for c in active:
         if c.name == "alive":
@@ -1858,12 +2078,21 @@ def _run_scenario_tests(bot_name: str, hierarchy, cfg):
     if stand_reward > dive_reward:
         print(f"\n  Standing ({stand_reward:+.3f}) > Diving ({dive_reward:+.3f}) [ok]")
     else:
-        print(f"\n  Standing ({stand_reward:+.3f}) <= Diving ({dive_reward:+.3f}) [!!] — diving is more rewarding than standing!")
+        print(
+            f"\n  Standing ({stand_reward:+.3f}) <= Diving ({dive_reward:+.3f}) "
+            "[!!] -- diving is more rewarding than standing!"
+        )
 
     if walk_reward > stand_reward:
-        print(f"  Walking ({walk_reward:+.3f}) > Standing ({stand_reward:+.3f}) [ok] — walking is the best outcome")
+        print(
+            f"  Walking ({walk_reward:+.3f}) > Standing ({stand_reward:+.3f}) "
+            "[ok] -- walking is the best outcome"
+        )
     else:
-        print(f"  Walking ({walk_reward:+.3f}) <= Standing ({stand_reward:+.3f}) [!!] — standing is better than walking")
+        print(
+            f"  Walking ({walk_reward:+.3f}) <= Standing ({stand_reward:+.3f}) "
+            "[!!] -- standing is better than walking"
+        )
 
 
 if __name__ == "__main__":

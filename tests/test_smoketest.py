@@ -11,8 +11,8 @@ import warnings
 import numpy as np
 import pytest
 import torch
-
 import wandb
+
 from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
 from pipeline import pipeline_for_bot
 from train import (

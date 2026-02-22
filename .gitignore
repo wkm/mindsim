@@ -31,5 +31,6 @@ checkpoints/
 # Run directories
 runs/
 
-# Claude Code
-.claude/
+# Claude Code (track settings.json, ignore everything else)
+.claude/*
+!.claude/settings.json

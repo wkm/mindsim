@@ -14,7 +14,7 @@ import torch
 
 from checkpoint import resolve_resume_ref
 from pipeline import Pipeline
-from simple_wheeler_env import SimpleWheelerEnv, assemble_sensor_data
+from sim_env import SimEnv, assemble_sensor_data
 
 # GLFW key constants (avoid importing glfw directly)
 KEY_UP = 265
@@ -51,7 +51,7 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     )
 
     # Create environment (raw env, no training wrapper)
-    env = SimpleWheelerEnv(
+    env = SimEnv(
         scene_path=scene_path,
         render_width=pipeline.policy.image_width,
         render_height=pipeline.policy.image_height,
@@ -163,13 +163,17 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                 sensor_tensor = None
                 if env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0:
                     sensors = assemble_sensor_data(
-                        env.get_sensor_data(), gait_step_count,
-                        control_dt, gait_phase_period,
+                        env.get_sensor_data(),
+                        gait_step_count,
+                        control_dt,
+                        gait_phase_period,
                     )
                     sensor_tensor = torch.from_numpy(sensors).unsqueeze(0)
 
                 with torch.no_grad():
-                    action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
+                    action = policy.get_deterministic_action(
+                        obs_tensor, sensors=sensor_tensor
+                    )
                     action = action.cpu().numpy()[0]
 
                 for _ in range(mujoco_steps_per_action):
