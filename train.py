@@ -946,7 +946,9 @@ def _train_loop(
                                 device=device,
                                 namespace="eval",
                             )
-                        rr_wandb.finish_episode(eval_data, upload_artifact=True)
+                        rr_wandb.finish_episode(
+                            eval_data, upload_artifact=True, batch_idx=batch_idx
+                        )
                         timing["rerun"] += time.perf_counter() - t_rerun_start
                         last_rerun_time = time.perf_counter()
                     except Exception:

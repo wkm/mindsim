@@ -1339,6 +1339,35 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
 
+    # replay
+    p_replay = sub.add_parser(
+        "replay",
+        help="Download or regenerate Rerun recordings for a run",
+    )
+    p_replay.add_argument("run", help="Run name (local or W&B)")
+    p_replay.add_argument(
+        "--batches",
+        default=None,
+        help="Comma-separated batch numbers (e.g. 500,1000,2000)",
+    )
+    p_replay.add_argument(
+        "--last",
+        type=int,
+        default=None,
+        help="Download only the N most recent recordings",
+    )
+    p_replay.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Re-run episodes from checkpoints instead of downloading recordings",
+    )
+    p_replay.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for target placement (only with --regenerate)",
+    )
+
     return parser
 
 
@@ -1446,6 +1475,20 @@ def main():
         from visualize import run_visualization
 
         run_visualization(scene_path=scene_path, num_steps=args.steps)
+
+    elif args.command == "replay":
+        from replay import run_replay
+
+        batches = None
+        if args.batches:
+            batches = [int(b.strip()) for b in args.batches.split(",")]
+        run_replay(
+            args.run,
+            batches=batches,
+            seed=args.seed,
+            regenerate=args.regenerate,
+            last_n=args.last,
+        )
 
 
 if __name__ == "__main__":
