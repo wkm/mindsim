@@ -1631,6 +1631,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_vr = sub.add_parser("validate-rewards", help="Validate reward hierarchy for a bot")
     p_vr.add_argument("--bot", type=str, default=None, help="Bot name (default: all bots)")
 
+    # describe
+    p_desc = sub.add_parser("describe", help="Print human-readable pipeline summary")
+    p_desc.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+
     return parser
 
 
@@ -1750,10 +1754,16 @@ def main():
     elif args.command == "validate-rewards":
         _validate_rewards(args.bot)
 
+    elif args.command == "describe":
+        from pipeline import pipeline_for_bot
+        bot_name = args.bot or "simple2wheeler"
+        pipeline = pipeline_for_bot(bot_name)
+        print(pipeline.describe())
+
 
 def _validate_rewards(bot_name: str | None):
     """Print reward hierarchy summary and run dominance checks."""
-    from config import Config
+    from pipeline import pipeline_for_bot
     from reward_hierarchy import build_reward_hierarchy
 
     # If no bot specified, validate all bots
@@ -1764,7 +1774,7 @@ def _validate_rewards(bot_name: str | None):
         bot_names = [bot_name]
 
     for name in bot_names:
-        cfg = _config_for_bot(name)
+        cfg = pipeline_for_bot(name)
         hierarchy = build_reward_hierarchy(name, cfg.env)
 
         print(f"\nReward Hierarchy for {name}")
@@ -1782,22 +1792,6 @@ def _validate_rewards(bot_name: str | None):
 
         # Scenario tests
         _run_scenario_tests(name, hierarchy, cfg)
-
-
-def _config_for_bot(bot_name: str):
-    """Get the Config for a bot by name."""
-    from config import Config
-
-    config_map = {
-        "childbiped": Config.for_childbiped,
-        "simplebiped": Config.for_biped,
-        "walker2d": Config.for_walker2d,
-    }
-    factory = config_map.get(bot_name)
-    if factory:
-        return factory()
-    # Default Config() has simple2wheeler reward scales
-    return Config()
 
 
 def _run_scenario_tests(bot_name: str, hierarchy, cfg):

@@ -23,7 +23,7 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs, bot_name):
     """Initialize a persistent environment and policy in the worker process."""
     global _worker_env, _worker_policy, _worker_hierarchy
 
-    from config import EnvConfig
+    from pipeline import EnvConfig
     from reward_hierarchy import build_reward_hierarchy
     from train import LSTMPolicy, MLPPolicy, TinyPolicy
     from training_env import TrainingEnv

@@ -374,28 +374,22 @@ if __name__ == "__main__":
         uv run python reward_hierarchy.py childbiped   # one bot
     """
     import sys
-    from config import Config
+    from pipeline import pipeline_for_bot
 
-    configs = {
-        "childbiped": Config.for_childbiped,
-        "simplebiped": Config.for_biped,
-        "simple2wheeler": lambda: Config(),
-        "walker2d": Config.for_walker2d,
-    }
+    all_bots = ["childbiped", "simplebiped", "simple2wheeler", "walker2d"]
 
     # Filter to requested bot(s)
-    requested = sys.argv[1:] or list(configs.keys())
+    requested = sys.argv[1:] or all_bots
 
     for name in requested:
-        factory = configs.get(name)
-        if not factory:
+        if name not in all_bots:
             print(f"Unknown bot: {name}")
             continue
 
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cfg = factory()
+            cfg = pipeline_for_bot(name)
             h = build_reward_hierarchy(name, cfg.env)
 
         # --- View 1: Structure ---
