@@ -1,7 +1,7 @@
 """
 Training-ready Gymnasium wrapper for MuJoCo robot environments.
 
-Wraps SimpleWheelerEnv with:
+Wraps SimEnv with:
 - 10 Hz control frequency (1 action per 0.1 seconds)
 - Reward function (distance-based + optional biped rewards)
 - Episode termination logic (+ optional fall detection)
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import mujoco
 import numpy as np
 
-from simple_wheeler_env import SimpleWheelerEnv, assemble_sensor_data
+from sim_env import SimEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
     from pipeline import EnvConfig
@@ -133,7 +133,7 @@ class TrainingEnv:
         # Gait phase (0.0 = disabled)
         gait_phase_period=0.0,
     ):
-        self.env = SimpleWheelerEnv(
+        self.env = SimEnv(
             scene_path=scene_path,
             render_width=render_width,
             render_height=render_height,
@@ -193,7 +193,9 @@ class TrainingEnv:
         self.joint_stagnation_window = joint_stagnation_window
         self.joint_stagnation_threshold = joint_stagnation_threshold
         self._joint_deltas = (
-            deque(maxlen=joint_stagnation_window) if joint_stagnation_window > 0 else None
+            deque(maxlen=joint_stagnation_window)
+            if joint_stagnation_window > 0
+            else None
         )
         self._prev_joint_pos = None
 
@@ -219,7 +221,9 @@ class TrainingEnv:
         self.target_velocity = np.array([0.0, 0.0])  # XY velocity
 
         # Distractor movement state (stage 4+)
-        self.distractor_velocities = [np.array([0.0, 0.0]) for _ in range(max_distractors)]
+        self.distractor_velocities = [
+            np.array([0.0, 0.0]) for _ in range(max_distractors)
+        ]
 
         # Time step for target movement (action dt = mujoco_steps * sim_dt)
         self.action_dt = mujoco_steps_per_action * self.env.model.opt.timestep
@@ -339,7 +343,9 @@ class TrainingEnv:
                 )
                 # Set random target velocity
                 speed = (
-                    stage2_progress * self.target_max_speed * np.random.uniform(0.5, 1.0)
+                    stage2_progress
+                    * self.target_max_speed
+                    * np.random.uniform(0.5, 1.0)
                 )
                 vel_angle = np.random.uniform(0, 2 * np.pi)
                 self.target_velocity = np.array(
@@ -369,7 +375,9 @@ class TrainingEnv:
                 stage3_progress = (
                     self.curriculum_stage_progress if effective_stage == 3 else 1.0
                 )
-                n_distractors = max(1, int(round(stage3_progress * self.max_distractors)))
+                n_distractors = max(
+                    1, int(round(stage3_progress * self.max_distractors))
+                )
                 self._place_distractors(n_distractors, target_x, target_y)
             else:
                 self._hide_distractors()
@@ -382,12 +390,18 @@ class TrainingEnv:
                 n_moving = max(1, int(round(stage4_progress * self.max_distractors)))
                 for i in range(self.max_distractors):
                     if i < n_moving:
-                        speed = stage4_progress * self.distractor_max_speed * np.random.uniform(0.5, 1.0)
+                        speed = (
+                            stage4_progress
+                            * self.distractor_max_speed
+                            * np.random.uniform(0.5, 1.0)
+                        )
                         vel_angle = np.random.uniform(0, 2 * np.pi)
-                        self.distractor_velocities[i] = np.array([
-                            speed * np.cos(vel_angle),
-                            speed * np.sin(vel_angle),
-                        ])
+                        self.distractor_velocities[i] = np.array(
+                            [
+                                speed * np.cos(vel_angle),
+                                speed * np.sin(vel_angle),
+                            ]
+                        )
                     else:
                         self.distractor_velocities[i] = np.array([0.0, 0.0])
             else:
@@ -405,7 +419,9 @@ class TrainingEnv:
                 self.env.data.mocap_pos[mid].copy().tolist()
                 for mid in self.env.distractor_mocap_ids
             ],
-            "distractor_velocities": [v.copy().tolist() for v in self.distractor_velocities],
+            "distractor_velocities": [
+                v.copy().tolist() for v in self.distractor_velocities
+            ],
             "curriculum_stage": self.curriculum_stage,
             "curriculum_stage_progress": self.curriculum_stage_progress,
         }
@@ -424,8 +440,10 @@ class TrainingEnv:
         # Gait phase: reset step counter and append phase to sensors
         self.gait_step_count = 0
         self.current_sensors = assemble_sensor_data(
-            self.env.get_sensor_data(), self.gait_step_count,
-            self.action_dt, self.gait_phase_period,
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
         )
 
         # Blank image in walking stage (camera not useful, skip render cost)
@@ -474,7 +492,9 @@ class TrainingEnv:
         if saved_vels:
             self.distractor_velocities = [np.array(v) for v in saved_vels]
         else:
-            self.distractor_velocities = [np.array([0.0, 0.0]) for _ in range(self.max_distractors)]
+            self.distractor_velocities = [
+                np.array([0.0, 0.0]) for _ in range(self.max_distractors)
+            ]
 
         # Restore curriculum state
         self.curriculum_stage = config["curriculum_stage"]
@@ -494,8 +514,10 @@ class TrainingEnv:
         self.prev_action = np.zeros(self.num_actuators)
         self.gait_step_count = 0
         self.current_sensors = assemble_sensor_data(
-            self.env.get_sensor_data(), self.gait_step_count,
-            self.action_dt, self.gait_phase_period,
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
         )
 
         obs = camera_img.astype(np.float32) / 255.0
@@ -597,8 +619,10 @@ class TrainingEnv:
             obs = np.zeros(self.observation_shape, dtype=np.float32)
         self.gait_step_count += 1
         self.current_sensors = assemble_sensor_data(
-            self.env.get_sensor_data(), self.gait_step_count,
-            self.action_dt, self.gait_phase_period,
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
         )
 
         # Get current state (before moving target, so reward reflects robot's action)
@@ -622,7 +646,11 @@ class TrainingEnv:
         #    Also compute up_vec for forward velocity gating and fall detection.
         upright_reward = 0.0
         up_z = 1.0  # default for wheeler (no torso orientation)
-        if self.upright_reward_scale > 0 or self.forward_velocity_reward_scale > 0 or self.fall_up_z_threshold > 0:
+        if (
+            self.upright_reward_scale > 0
+            or self.forward_velocity_reward_scale > 0
+            or self.fall_up_z_threshold > 0
+        ):
             up_vec = self.env.get_torso_up_vector()
             up_z = up_vec[2]
             upright_reward = self.upright_reward_scale * up_z
@@ -643,7 +671,7 @@ class TrainingEnv:
         # 6. Energy penalty (biped only, 0 when disabled)
         energy_cost = 0.0
         if self.energy_penalty_scale > 0:
-            energy_cost = -self.energy_penalty_scale * np.sum(action ** 2)
+            energy_cost = -self.energy_penalty_scale * np.sum(action**2)
 
         # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
         contact_penalty = 0.0
@@ -663,7 +691,11 @@ class TrainingEnv:
             dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
             vel = (current_position - self.prev_position) / dt
             forward_vel = float(np.dot(vel, self.forward_velocity_axis))
-            forward_velocity_reward = self.forward_velocity_reward_scale * max(0.0, forward_vel) * max(0.0, up_z)
+            forward_velocity_reward = (
+                self.forward_velocity_reward_scale
+                * max(0.0, forward_vel)
+                * max(0.0, up_z)
+            )
 
         # 9. Action smoothness penalty (penalize jerky action changes)
         smoothness_penalty = 0.0
@@ -674,10 +706,17 @@ class TrainingEnv:
                 smoothness_penalty = -self.action_smoothness_scale * action_jerk
         self.prev_action = action.copy()
 
-        reward = (distance_reward + exploration_reward + time_cost
-                  + upright_reward + alive_reward + energy_cost
-                  + contact_penalty + forward_velocity_reward
-                  + smoothness_penalty)
+        reward = (
+            distance_reward
+            + exploration_reward
+            + time_cost
+            + upright_reward
+            + alive_reward
+            + energy_cost
+            + contact_penalty
+            + forward_velocity_reward
+            + smoothness_penalty
+        )
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -800,16 +839,27 @@ class TrainingEnv:
             "raw_contact_count": int(bad_contacts),
             "raw_action_jerk": action_jerk,
             # Forward distance from start (projected onto forward axis)
-            "forward_distance": float(np.dot(
-                current_position - self.start_position,
-                self.forward_velocity_axis,
-            )) if self.start_position is not None else 0.0,
+            "forward_distance": float(
+                np.dot(
+                    current_position - self.start_position,
+                    self.forward_velocity_axis,
+                )
+            )
+            if self.start_position is not None
+            else 0.0,
             # Lateral drift (displacement perpendicular to forward axis)
-            "lateral_drift": float(np.linalg.norm(
-                (current_position - self.start_position)
-                - np.dot(current_position - self.start_position, self.forward_velocity_axis)
-                * self.forward_velocity_axis
-            )) if self.start_position is not None else 0.0,
+            "lateral_drift": float(
+                np.linalg.norm(
+                    (current_position - self.start_position)
+                    - np.dot(
+                        current_position - self.start_position,
+                        self.forward_velocity_axis,
+                    )
+                    * self.forward_velocity_axis
+                )
+            )
+            if self.start_position is not None
+            else 0.0,
         }
 
         return obs, reward, done, truncated, info

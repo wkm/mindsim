@@ -43,7 +43,7 @@ mindsim/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
 │   ├── scene.xml            # World: floor, lighting, target
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
-├── simple_wheeler_env.py    # Environment API
+├── sim_env.py               # Environment API (SimEnv)
 ├── train.py                 # Training loop & policy networks
 ├── checkpoint.py            # Checkpoint save/load/resolve
 ├── view.py                  # MuJoCo viewer
@@ -59,9 +59,9 @@ mindsim/
 ## Environment API
 
 ```python
-from simple_wheeler_env import SimpleWheelerEnv
+from sim_env import SimEnv
 
-env = SimpleWheelerEnv(render_width=128, render_height=128)
+env = SimEnv(render_width=128, render_height=128)
 
 # Step simulation
 camera_img = env.step(left_motor=0.5, right_motor=0.5)  # [-1, 1]
@@ -126,7 +126,7 @@ Creates a Rerun recording with:
 - **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
 - **scene.xml** - World setup (target, floor, lighting)
-- **simple_wheeler_env.py** - Env logic (step, reset, reward)
+- **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
 - **play.py** - Interactive play mode (called via `main.py play`)
 - **train.py** - Training loop and policy networks (called via `main.py train`)

@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import wandb
 from collection import compute_gae, compute_reward_to_go
 
 
@@ -177,8 +176,12 @@ def train_step_ppo(
                 dummy_act = torch.zeros(1, policy.num_actions, device=device)
                 final_sensors = None
                 if "final_sensors" in ep:
-                    final_sensors = torch.from_numpy(ep["final_sensors"]).unsqueeze(0).to(device)
-                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act, sensors=final_sensors)
+                    final_sensors = (
+                        torch.from_numpy(ep["final_sensors"]).unsqueeze(0).to(device)
+                    )
+                _, final_val, _ = policy.evaluate_actions(
+                    final_obs, dummy_act, sensors=final_sensors
+                )
                 next_value = final_val[0].item()
 
             advantages, returns = compute_gae(
@@ -253,7 +256,9 @@ def train_step_ppo(
             sensors = ep_tensors.get("sensors")
             T = len(obs)
 
-            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts, sensors=sensors)
+            new_log_probs, values, entropy = policy.evaluate_actions(
+                obs, acts, sensors=sensors
+            )
 
             # PPO clipped surrogate
             ratio = torch.exp(new_log_probs - old_lp)

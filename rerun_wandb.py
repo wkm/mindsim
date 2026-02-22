@@ -11,9 +11,9 @@ true policy capability without exploration noise.
 import os
 
 import rerun as rr
+import wandb
 
 import rerun_logger
-import wandb
 from training_blueprint import create_training_blueprint
 
 
@@ -26,8 +26,12 @@ class RerunWandbLogger:
     Logs paths to wandb for cross-referencing.
     """
 
-    def __init__(self, recordings_dir: str = "recordings", live: bool = True,
-                 run_dir: str | None = None):
+    def __init__(
+        self,
+        recordings_dir: str = "recordings",
+        live: bool = True,
+        run_dir: str | None = None,
+    ):
         """
         Initialize the logger.
 
@@ -48,7 +52,9 @@ class RerunWandbLogger:
         if run_dir is not None:
             self.run_dir = os.path.join(run_dir, "recordings")
         else:
-            self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
+            self.run_dir = os.path.join(
+                recordings_dir, f"{self.run_name}_{self.run_id}"
+            )
         os.makedirs(self.run_dir, exist_ok=True)
         self.live = live
 
@@ -57,7 +63,9 @@ class RerunWandbLogger:
         self.is_recording = False
         self._spawned = False
 
-    def start_episode(self, episode: int, env, namespace: str = "eval", show_camera: bool = True):
+    def start_episode(
+        self, episode: int, env, namespace: str = "eval", show_camera: bool = True
+    ):
         """
         Start a new Rerun recording for this episode.
 
@@ -95,7 +103,9 @@ class RerunWandbLogger:
 
         # Embed blueprint into recording
         control_fps = round(1.0 / env.action_dt)
-        rr.send_blueprint(create_training_blueprint(control_fps=control_fps, show_camera=show_camera))
+        rr.send_blueprint(
+            create_training_blueprint(control_fps=control_fps, show_camera=show_camera)
+        )
 
         # Log wandb context into Rerun for reverse lookup
         rr.log(
@@ -112,19 +122,28 @@ class RerunWandbLogger:
         # Set up the 3D scene (pass arena boundary if available)
         arena_boundary = getattr(env, "arena_boundary", None)
         rerun_logger.setup_scene(
-            env, namespace=namespace, arena_boundary=arena_boundary, show_camera=show_camera
+            env,
+            namespace=namespace,
+            arena_boundary=arena_boundary,
+            show_camera=show_camera,
         )
 
         self.is_recording = True
         return self.rrd_path
 
-    def finish_episode(self, episode_data: dict = None, upload_artifact: bool = False):
+    def finish_episode(
+        self,
+        episode_data: dict = None,
+        upload_artifact: bool = False,
+        batch_idx: int | None = None,
+    ):
         """
         Finish recording and log reference to wandb.
 
         Args:
             episode_data: Optional dict with episode stats to log
             upload_artifact: If True, upload .rrd as wandb artifact (for remote access)
+            batch_idx: Current training batch index (stored in artifact metadata)
         """
         if not self.is_recording:
             return
@@ -143,13 +162,16 @@ class RerunWandbLogger:
 
         # Optionally upload as artifact for remote access
         if upload_artifact:
+            metadata = {
+                "episode": self.current_episode,
+                "run_id": self.run_id,
+            }
+            if batch_idx is not None:
+                metadata["batch_idx"] = batch_idx
             artifact = wandb.Artifact(
                 f"rerun-episode-{self.current_episode:05d}",
                 type="rerun-recording",
-                metadata={
-                    "episode": self.current_episode,
-                    "run_id": self.run_id,
-                },
+                metadata=metadata,
             )
             artifact.add_file(self.rrd_path)
             wandb.log_artifact(artifact)

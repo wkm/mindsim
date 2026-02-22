@@ -15,14 +15,19 @@ def assemble_sensor_data(base_sensors, gait_step_count, control_dt, gait_phase_p
         return base_sensors
     t = gait_step_count * control_dt
     phase = 2 * np.pi * t / gait_phase_period
-    gait = np.array([
-        np.sin(phase), np.cos(phase),
-        np.sin(phase + np.pi), np.cos(phase + np.pi),
-    ], dtype=np.float32)
+    gait = np.array(
+        [
+            np.sin(phase),
+            np.cos(phase),
+            np.sin(phase + np.pi),
+            np.cos(phase + np.pi),
+        ],
+        dtype=np.float32,
+    )
     return np.concatenate([base_sensors, gait])
 
 
-class SimpleWheelerEnv:
+class SimEnv:
     """
     Bot-agnostic MuJoCo simulation environment.
 
@@ -94,9 +99,7 @@ class SimpleWheelerEnv:
         )
         self.foot_geom_ids = set()
         for foot_name in ("left_foot", "right_foot"):
-            gid = mujoco.mj_name2id(
-                self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name
-            )
+            gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name)
             if gid >= 0:
                 self.foot_geom_ids.add(gid)
 
@@ -138,7 +141,7 @@ class SimpleWheelerEnv:
         # Remap [-1, 1] -> [ctrlrange_lo, ctrlrange_hi] per actuator
         lo = self.ctrl_range_lo
         hi = self.ctrl_range_hi
-        self.data.ctrl[:self.num_actuators] = lo + (actions + 1.0) * 0.5 * (hi - lo)
+        self.data.ctrl[: self.num_actuators] = lo + (actions + 1.0) * 0.5 * (hi - lo)
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -193,7 +196,7 @@ class SimpleWheelerEnv:
 
     def get_sensor_data(self):
         """Get all sensor readings as a flat array."""
-        return self.data.sensordata[:self.sensor_dim].copy().astype(np.float32)
+        return self.data.sensordata[: self.sensor_dim].copy().astype(np.float32)
 
     def get_actuated_joint_positions(self):
         """Get current positions of all actuated joints."""
@@ -206,7 +209,9 @@ class SimpleWheelerEnv:
 
     def get_bot_velocity(self):
         """Get the bot's linear velocity in world frame."""
-        return self.data.cvel[self.bot_body_id][3:].copy()  # linear part of 6D spatial vel
+        return self.data.cvel[self.bot_body_id][
+            3:
+        ].copy()  # linear part of 6D spatial vel
 
     def get_torso_up_vector(self):
         """
