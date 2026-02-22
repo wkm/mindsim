@@ -7,6 +7,7 @@ Shared logging code for both visualization and training scripts.
 from __future__ import annotations
 
 import logging
+
 import mujoco
 import numpy as np
 import rerun as rr
@@ -105,7 +106,7 @@ def log_mujoco_scene(env, namespace="world"):
     Skips bodies hidden off-screen (e.g. distractors at y=100).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
     model = env.env.model if hasattr(env, "env") else env.model
@@ -409,13 +410,14 @@ def log_mujoco_scene(env, namespace="world"):
     return mesh_count, geom_count
 
 
-def setup_camera(env, namespace="world"):
+def setup_camera(env, namespace="world", show_camera=True):
     """
     Set up Pinhole camera for the robot's camera.
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
+        show_camera: If False, skip logging the camera pinhole.
 
     Returns:
         camera_entity_path: Path to the camera entity
@@ -431,31 +433,36 @@ def setup_camera(env, namespace="world"):
     body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, cam_body_id)
     fovy_deg = model.cam_fovy[cam_id]
 
-    # Calculate focal length from FOV
-    focal_length = float(render_height / (2.0 * np.tan(np.radians(fovy_deg) / 2.0)))
-
     camera_entity_path = f"{namespace}/{body_name}/{cam_name}"
-    rr.log(
-        camera_entity_path,
-        rr.Pinhole(
-            resolution=[render_width, render_height],
-            focal_length=focal_length,
-        ),
-        static=True,
-    )
+
+    if show_camera:
+        # Calculate focal length from FOV
+        focal_length = float(render_height / (2.0 * np.tan(np.radians(fovy_deg) / 2.0)))
+
+        rr.log(
+            camera_entity_path,
+            rr.Pinhole(
+                resolution=[render_width, render_height],
+                focal_length=focal_length,
+            ),
+            static=True,
+        )
 
     return camera_entity_path
 
 
-def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None):
+def setup_scene(
+    env, namespace="world", floor_size=10.0, arena_boundary=None, show_camera=True
+):
     """
     Log static scene elements (world origin, bodies, meshes, floor).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
         floor_size: Size of floor plane in meters (default 10.0)
         arena_boundary: If set, log arena boundary lines at ±boundary (meters)
+        show_camera: If False, skip logging the camera pinhole.
 
     Returns:
         camera_entity_path: Path to the camera entity
@@ -471,7 +478,7 @@ def setup_scene(env, namespace="world", floor_size=10.0, arena_boundary=None):
     )
 
     # Set up camera
-    camera_entity_path = setup_camera(env, namespace)
+    camera_entity_path = setup_camera(env, namespace, show_camera=show_camera)
 
     # Log floor plane
     half_size = floor_size / 2.0
@@ -510,7 +517,7 @@ def log_body_transforms(env, namespace="world"):
     Log transforms for all bodies in the scene (updates meshes).
 
     Args:
-        env: SimpleWheelerEnv or TrainingEnv instance
+        env: SimEnv or TrainingEnv instance
         namespace: Root namespace for logging (default "world")
     """
     model = env.env.model if hasattr(env, "env") else env.model

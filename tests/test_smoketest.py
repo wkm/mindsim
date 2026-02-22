@@ -11,8 +11,8 @@ import warnings
 import numpy as np
 import pytest
 import torch
-
 import wandb
+
 from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
 from config import Config
 from train import (
@@ -331,16 +331,16 @@ class TestBipedEnvironment:
     def test_actuator_count(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
-        assert env.num_actuators == 6
-        assert len(env.actuator_names) == 6
-        assert env.action_shape == (6,)
+        assert env.num_actuators == 8
+        assert len(env.actuator_names) == 8
+        assert env.action_shape == (8,)
         env.close()
 
-    def test_step_with_six_actions(self):
+    def test_step_with_eight_actions(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         env.reset()
-        action = [0.0] * 6
+        action = [0.0] * 8
         obs, reward, done, truncated, info = env.step(action)
         assert obs.shape == (64, 64, 3)
         assert isinstance(reward, float)
@@ -349,11 +349,11 @@ class TestBipedEnvironment:
         env.close()
 
     def test_biped_rewards_present(self):
-        """Biped config should produce upright/alive/energy rewards."""
+        """Biped config should produce upright/alive/smoothness rewards."""
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         env.reset()
-        _, _, _, _, info = env.step([0.0] * 6)
+        _, _, _, _, info = env.step([0.0] * 8)
         assert "reward_upright" in info
         assert "reward_alive" in info
         assert "reward_energy" in info
@@ -361,43 +361,43 @@ class TestBipedEnvironment:
 
 
 class TestBipedPolicy:
-    """Test policy networks with 6-action output."""
+    """Test policy networks with 8-action output."""
 
-    def test_lstm_policy_six_actions(self):
+    def test_lstm_policy_eight_actions(self):
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         obs = torch.randn(1, 64, 64, 3)
         policy.reset_hidden(batch_size=1)
         mean, std = policy.forward(obs)
-        assert mean.shape == (1, 6)
-        assert std.shape == (6,)
+        assert mean.shape == (1, 8)
+        assert std.shape == (8,)
 
-    def test_tiny_policy_six_actions(self):
-        policy = TinyPolicy(image_height=64, image_width=64, num_actions=6)
+    def test_tiny_policy_eight_actions(self):
+        policy = TinyPolicy(image_height=64, image_width=64, num_actions=8)
         obs = torch.randn(1, 64, 64, 3)
         mean, std = policy.forward(obs)
-        assert mean.shape == (1, 6)
-        assert std.shape == (6,)
+        assert mean.shape == (1, 8)
+        assert std.shape == (8,)
 
-    def test_lstm_sample_action_six(self):
+    def test_lstm_sample_action_eight(self):
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         policy.reset_hidden(batch_size=1)
         obs = torch.randn(1, 64, 64, 3)
         action, log_prob = policy.sample_action(obs)
-        assert action.shape == (1, 6)
+        assert action.shape == (1, 8)
         assert log_prob.shape == (1,)
         assert (action >= -1.0).all() and (action <= 1.0).all()
 
-    def test_lstm_log_prob_sequence_six(self):
+    def test_lstm_log_prob_sequence_eight(self):
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         T = 5
         obs = torch.randn(T, 64, 64, 3)
-        actions = torch.randn(T, 6)
+        actions = torch.randn(T, 8)
         log_probs = policy.log_prob(obs, actions)
         assert log_probs.shape == (T,)
 
@@ -409,14 +409,14 @@ class TestBipedEpisodeCollection:
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
 
         data = collect_episode(env, policy, deterministic=False)
         assert len(data["observations"]) > 0
         assert len(data["actions"]) == len(data["observations"])
-        # Each action should be 6-dimensional
-        assert data["actions"][0].shape == (6,)
+        # Each action should be 8-dimensional
+        assert data["actions"][0].shape == (8,)
         assert isinstance(data["total_reward"], float)
         env.close()
 
@@ -424,11 +424,11 @@ class TestBipedEpisodeCollection:
 class TestBipedTrainingStep:
     """Test training step with biped episodes."""
 
-    def test_train_step_six_actions(self):
+    def test_train_step_eight_actions(self):
         cfg = _biped_smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(
-            image_height=64, image_width=64, hidden_size=32, num_actions=6
+            image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
 
@@ -439,7 +439,7 @@ class TestBipedTrainingStep:
         assert isinstance(loss, float)
         assert not np.isnan(loss)
         assert grad_norm >= 0
-        assert len(policy_std) == 6
+        assert len(policy_std) == 8
         assert entropy > 0
         env.close()
 
@@ -752,7 +752,7 @@ class TestCheckpoint:
             assert len(w) == 1
             assert "learning_rate" in str(w[0].message)
 
-    def test_save_checkpoint_creates_file(self, tmp_path, monkeypatch):
+    def test_save_checkpoint_creates_file(self, tmp_path):
         """save_checkpoint should create a local .pt file."""
         cfg = _smoketest_config()
         policy = LSTMPolicy(
@@ -764,9 +764,6 @@ class TestCheckpoint:
 
         wandb.init(mode="disabled")
 
-        # Use tmp_path as working directory so checkpoints/ goes there
-        monkeypatch.chdir(tmp_path)
-
         path = save_checkpoint(
             policy,
             optimizer,
@@ -777,6 +774,7 @@ class TestCheckpoint:
             batch_idx=10,
             episode_count=100,
             trigger="periodic",
+            run_dir=tmp_path,
         )
         assert os.path.isfile(path)
 

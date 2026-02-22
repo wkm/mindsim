@@ -1,11 +1,10 @@
-import time
 from pathlib import Path
 
 import mujoco
 import numpy as np
 
 
-class SimpleWheelerEnv:
+class SimEnv:
     """
     Bot-agnostic MuJoCo simulation environment.
 
@@ -73,9 +72,7 @@ class SimpleWheelerEnv:
         )
         self.foot_geom_ids = set()
         for foot_name in ("left_foot", "right_foot"):
-            gid = mujoco.mj_name2id(
-                self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name
-            )
+            gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name)
             if gid >= 0:
                 self.foot_geom_ids.add(gid)
 
@@ -114,7 +111,7 @@ class SimpleWheelerEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        self.data.ctrl[: self.num_actuators] = actions
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -169,7 +166,7 @@ class SimpleWheelerEnv:
 
     def get_sensor_data(self):
         """Get all sensor readings as a flat array."""
-        return self.data.sensordata[:self.sensor_dim].copy().astype(np.float32)
+        return self.data.sensordata[: self.sensor_dim].copy().astype(np.float32)
 
     def get_actuated_joint_positions(self):
         """Get current positions of all actuated joints."""
@@ -182,7 +179,9 @@ class SimpleWheelerEnv:
 
     def get_bot_velocity(self):
         """Get the bot's linear velocity in world frame."""
-        return self.data.cvel[self.bot_body_id][3:].copy()  # linear part of 6D spatial vel
+        return self.data.cvel[self.bot_body_id][
+            3:
+        ].copy()  # linear part of 6D spatial vel
 
     def get_torso_up_vector(self):
         """
@@ -242,84 +241,3 @@ class SimpleWheelerEnv:
         """Clean up resources."""
         self.close_viewer()
         self.renderer.close()
-
-
-def demo_manual_control():
-    """
-    Demo script showing manual control of the robot.
-    """
-    print("=== Simple Wheeler Environment Demo ===")
-    print("Manual control demonstration")
-    print()
-
-    # Create environment
-    env = SimpleWheelerEnv(render_width=64, render_height=64)
-
-    # Launch viewer for visualization
-    viewer = env.launch_viewer()
-    print("3D viewer launched. Keep window open to continue.")
-    print()
-
-    # Get initial state
-    print("Initial state:")
-    print(f"  Bot position: {env.get_bot_position()}")
-    print(f"  Target position: {env.get_target_position()}")
-    print(f"  Distance to target: {env.get_distance_to_target():.2f}")
-    print()
-
-    # Run a simple control sequence
-    print("Running control sequence...")
-    print("  Phase 1: Drive forward (both motors positive)")
-
-    start_time = time.time()
-    step_count = 0
-
-    try:
-        while (viewer is None or viewer.is_running()) and time.time() - start_time < 10:
-            step_start = time.time()
-
-            # Simple control: drive forward
-            if step_count < 300:
-                actions = [0.5, 0.5]
-            # Turn right
-            elif step_count < 600:
-                actions = [0.5, -0.5]
-            # Drive forward again
-            else:
-                actions = [0.5, 0.5]
-
-            # Step simulation
-            camera_img = env.step(actions)
-
-            # Print status every 100 steps
-            if step_count % 100 == 0:
-                print(
-                    f"  Step {step_count}: "
-                    f"pos={env.get_bot_position()[:2]}, "
-                    f"dist={env.get_distance_to_target():.2f}, "
-                    f"camera_shape={camera_img.shape}"
-                )
-
-            step_count += 1
-
-            # Proper frame rate control
-            time_until_next_step = env.model.opt.timestep - (time.time() - step_start)
-            if time_until_next_step > 0:
-                time.sleep(time_until_next_step)
-
-    except KeyboardInterrupt:
-        print("\nInterrupted by user")
-
-    print()
-    print("Final state:")
-    print(f"  Bot position: {env.get_bot_position()}")
-    print(f"  Distance to target: {env.get_distance_to_target():.2f}")
-    print(f"  Total steps: {step_count}")
-
-    # Clean up
-    env.close()
-    print("\nDemo complete!")
-
-
-if __name__ == "__main__":
-    demo_manual_control()

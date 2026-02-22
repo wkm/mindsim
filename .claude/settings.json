@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ruff check --fix \"$CLAUDE_FILE_PATH\" && uv run ruff format \"$CLAUDE_FILE_PATH\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}
