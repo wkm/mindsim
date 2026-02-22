@@ -12,7 +12,7 @@ Parameters:
 from dataclasses import dataclass
 from functools import lru_cache
 
-from scene_gen.primitives import WOOD_MEDIUM, GeomType, Prim
+from scene_gen.primitives import WOOD_DARK, WOOD_LIGHT, WOOD_MEDIUM, GeomType, Prim
 
 
 @dataclass(frozen=True)
@@ -54,3 +54,48 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
     )
 
     return (top, *legs)
+
+
+# ---------------------------------------------------------------------------
+# Named variations for the concept catalog
+# ---------------------------------------------------------------------------
+
+VARIATIONS: dict[str, Params] = {
+    "dining table": Params(),
+    "coffee table": Params(
+        width=1.10,
+        depth=0.60,
+        height=0.45,
+        top_thickness=0.04,
+        color=WOOD_DARK,
+    ),
+    "end table": Params(
+        width=0.45,
+        depth=0.45,
+        height=0.55,
+        leg_width=0.035,
+        color=WOOD_LIGHT,
+    ),
+    "bar table": Params(
+        width=0.60,
+        depth=0.60,
+        height=1.05,
+        leg_width=0.035,
+        color=WOOD_DARK,
+    ),
+    "desk": Params(
+        width=1.20,
+        depth=0.70,
+        height=0.74,
+        top_thickness=0.035,
+        color=WOOD_MEDIUM,
+    ),
+    "console": Params(
+        width=1.20,
+        depth=0.35,
+        height=0.78,
+        top_thickness=0.025,
+        leg_width=0.03,
+        color=WOOD_LIGHT,
+    ),
+}

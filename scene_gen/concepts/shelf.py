@@ -14,7 +14,16 @@ Parameters:
 from dataclasses import dataclass
 from functools import lru_cache
 
-from scene_gen.primitives import WOOD_BIRCH, WOOD_MEDIUM, GeomType, Prim
+from scene_gen.primitives import (
+    METAL_DARK,
+    METAL_GRAY,
+    WOOD_BIRCH,
+    WOOD_DARK,
+    WOOD_LIGHT,
+    WOOD_MEDIUM,
+    GeomType,
+    Prim,
+)
 
 
 @dataclass(frozen=True)
@@ -59,3 +68,56 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
         prims.append(Prim(GeomType.BOX, (inner_hw, hd, hbt), (0, 0, z), bc))
 
     return tuple(prims)
+
+
+# ---------------------------------------------------------------------------
+# Named variations for the concept catalog
+# ---------------------------------------------------------------------------
+
+VARIATIONS: dict[str, Params] = {
+    "bookcase": Params(),
+    "tall narrow": Params(
+        width=0.45,
+        depth=0.25,
+        height=1.80,
+        n_shelves=6,
+        board_color=WOOD_DARK,
+        side_color=WOOD_DARK,
+    ),
+    "wide low": Params(
+        width=1.20,
+        depth=0.35,
+        height=0.70,
+        n_shelves=2,
+        board_color=WOOD_LIGHT,
+        side_color=WOOD_MEDIUM,
+    ),
+    "cube": Params(
+        width=0.50,
+        depth=0.50,
+        height=0.50,
+        n_shelves=2,
+        board_color=WOOD_BIRCH,
+        side_color=WOOD_BIRCH,
+    ),
+    "industrial": Params(
+        width=0.90,
+        depth=0.35,
+        height=1.40,
+        n_shelves=4,
+        board_thickness=0.035,
+        side_thickness=0.035,
+        board_color=METAL_GRAY,
+        side_color=METAL_DARK,
+    ),
+    "minimal": Params(
+        width=0.70,
+        depth=0.25,
+        height=1.10,
+        n_shelves=3,
+        board_thickness=0.015,
+        side_thickness=0.015,
+        board_color=WOOD_LIGHT,
+        side_color=WOOD_LIGHT,
+    ),
+}
