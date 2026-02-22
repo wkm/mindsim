@@ -187,6 +187,7 @@ class MainMenuScreen(Screen):
     BINDINGS = [
         Binding("s", "select('smoketest')", "Smoketest", priority=True),
         Binding("n", "select('new')", "New Run", priority=True),
+        Binding("g", "select('scene')", "Scene Gen", priority=True),
         Binding("v", "select('view')", "View Bot", priority=True),
         Binding("b", "select('browse')", "Browse Runs", priority=True),
         Binding("q", "select('quit')", "Quit", priority=True),
@@ -223,6 +224,7 @@ class MainMenuScreen(Screen):
             yield OptionList(
                 "[s] Smoketest",
                 "[n] New training run",
+                "[g] Scene gen preview",
                 "[v] View bot",
                 "[b] Browse runs",
                 "[q] Quit",
@@ -235,6 +237,8 @@ class MainMenuScreen(Screen):
             self.app.start_training(smoketest=True)
         elif choice == "new":
             self.app.push_screen(BotSelectorScreen(mode="train"))
+        elif choice == "scene":
+            self.app.start_scene_preview()
         elif choice == "view":
             self.app.push_screen(BotSelectorScreen(mode="view"))
         elif choice == "browse":
@@ -244,7 +248,7 @@ class MainMenuScreen(Screen):
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
-        choices = ["smoketest", "new", "view", "browse", "quit"]
+        choices = ["smoketest", "new", "scene", "view", "browse", "quit"]
         if 0 <= idx < len(choices):
             self.action_select(choices[idx])
 
@@ -1093,6 +1097,11 @@ class MindSimApp(App):
         self.next_stage = stage
         self.exit()
 
+    def start_scene_preview(self):
+        """Exit TUI, then main() will launch the scene preview."""
+        self.next_action = "scene"
+        self.exit()
+
     def start_playing(self, scene_path: str | None = None):
         """Exit TUI, then main() will launch play mode."""
         self.next_action = "play"
@@ -1272,6 +1281,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
+    # scene
+    sub.add_parser("scene", help="Scene gen preview (procedural furniture)")
+
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
     p_view.add_argument(
@@ -1378,6 +1390,10 @@ def _run_tui():
             cmd.extend(["--stage", str(app.next_stage)])
         os.execvp("uv", cmd)
 
+    elif app.next_action == "scene":
+        cmd = ["uv", "run", "mjpython", "main.py", "scene"]
+        os.execvp("uv", cmd)
+
     elif app.next_action == "play":
         cmd = ["uv", "run", "mjpython", "main.py", "play"]
         # If we have a specific checkpoint path (legacy), pass it directly
@@ -1402,6 +1418,11 @@ def main():
     if args.command is None:
         # No subcommand → interactive TUI
         _run_tui()
+
+    elif args.command == "scene":
+        from scene_preview import run_scene_preview
+
+        run_scene_preview()
 
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)
