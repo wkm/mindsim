@@ -27,8 +27,8 @@ from collection import (  # noqa: F401 — re-export
     compute_reward_to_go,
     log_episode_value_trace,
 )
-from config import Config
-from dashboard import AnsiDashboard, TuiDashboard
+from pipeline import Pipeline, pipeline_for_bot
+from dashboard import LogDashboard, TuiDashboard
 from git_utils import get_git_branch, get_git_sha
 from parallel import ParallelCollector, resolve_num_workers
 from policies import LSTMPolicy, MLPPolicy, TinyPolicy  # noqa: F401 — re-export
@@ -441,7 +441,7 @@ def _train_loop(
 
     Args:
         cfg: Config object
-        dashboard: Dashboard instance (TuiDashboard or AnsiDashboard)
+        dashboard: Dashboard instance (TuiDashboard or LogDashboard)
         smoketest: Whether this is a smoketest run
         resume: Resume ref string (local path or wandb artifact)
         num_workers_override: Override num_workers from config
@@ -472,6 +472,35 @@ def _train_loop(
     # matches the GCP instance label for easy cross-referencing.
     run_name = os.environ.get("RUN_NAME") or generate_run_name(bot_name, cfg.policy.policy_type)
     run_dir = create_run_dir(run_name)
+
+    # Attach a per-run file handler so all log output lands in run.log
+    run_log_handler = logging.FileHandler(run_dir / "run.log")
+    run_log_handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logging.getLogger().addHandler(run_log_handler)
+
+    try:
+        _train_loop_body(
+            cfg, dashboard, smoketest, resume, num_workers_override,
+            commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
+            is_tui, _verbose,
+        )
+    except Exception:
+        log.exception("Training run %s crashed", run_name)
+        raise
+    finally:
+        logging.getLogger().removeHandler(run_log_handler)
+        run_log_handler.close()
+
+
+def _train_loop_body(
+    cfg, dashboard, smoketest, resume, num_workers_override,
+    commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
+    is_tui, _verbose,
+):
+    """Inner body of the training loop, called with run log handler active."""
     log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
@@ -488,6 +517,10 @@ def _train_loop(
     init_wandb_for_run(
         run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes
     )
+
+    # Log reward hierarchy metadata to W&B
+    if wandb.run:
+        wandb.config.update(cfg.reward_hierarchy.to_wandb_config(), allow_val_change=True)
 
     wandb_url = None
     if not smoketest and wandb.run:
@@ -511,6 +544,8 @@ def _train_loop(
         tags=[bot_name, cfg.training.algorithm, cfg.policy.policy_type],
     )
     save_run_info(run_dir, run_info)
+    # Save human-readable pipeline description
+    (run_dir / "pipeline.txt").write_text(cfg.describe())
     _verbose(f"  Run directory: {run_dir}/")
 
     # Push run metadata to TUI header
@@ -530,25 +565,9 @@ def _train_loop(
             hypothesis,
         )
 
-    # Set up AI commentary (skip in smoketest or when disabled)
-    commentator = None
-    if not smoketest and cfg.commentary.enabled and app is not None:
-        from ai_commentary import AICommentator, RunContext
-
-        run_context = RunContext(
-            run_name=run_name,
-            bot_name=bot_name,
-            algorithm=cfg.training.algorithm,
-            policy_type=cfg.policy.policy_type,
-            hypothesis=hypothesis,
-            wandb_url=wandb_url,
-            git_branch=get_git_branch(),
-            config_summary=_format_config_summary(cfg),
-        )
-        commentator = AICommentator(cfg.commentary, run_context)
-        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
     last_commentary_time = time.perf_counter()
     force_commentary = False
+    commentator = None
 
     # Create environment from config
     log_fn("Creating environment...")
@@ -562,6 +581,17 @@ def _train_loop(
         _verbose("Verifying forward direction...")
         verify_forward_direction(env, log_fn=_verbose)
 
+    # Validate reward hierarchy (warns if dominance violations found)
+    hierarchy = cfg.reward_hierarchy
+    _verbose("Reward hierarchy:")
+    for line in hierarchy.summary_table().split("\n"):
+        _verbose(line)
+    dom_check = hierarchy.dominance_check()
+    if dom_check:
+        _verbose("Dominance check:")
+        for line in dom_check.split("\n"):
+            _verbose(line)
+
     # Log bot model info
     mj_model = env.env.model
     bot_scene = env.env.scene_path.name
@@ -573,36 +603,50 @@ def _train_loop(
     _verbose(f"  {bot_info}")
     log_fn(bot_info)
 
+    # Set up AI commentary (skip in smoketest or when disabled)
+    # Placed after env/hierarchy/mj_model so all context is available
+    if not smoketest and cfg.commentary.enabled and app is not None:
+        from ai_commentary import AICommentator, RunContext
+
+        try:
+            _git_log = subprocess.run(
+                ["git", "log", "--oneline", "-10"],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+        except Exception:
+            _git_log = ""
+
+        _wandb_run_path = ""
+        if wandb.run and not wandb.run.disabled:
+            try:
+                _wandb_run_path = f"{wandb.run.entity}/{wandb.run.project}/{wandb.run.id}"
+            except Exception:
+                pass
+
+        run_context = RunContext(
+            run_name=run_name,
+            bot_name=bot_name,
+            algorithm=cfg.training.algorithm,
+            policy_type=cfg.policy.policy_type,
+            hypothesis=hypothesis,
+            wandb_url=wandb_url,
+            git_branch=get_git_branch(),
+            config_summary=_format_config_summary(cfg),
+            reward_hierarchy_summary=hierarchy.summary_table(),
+            git_log_summary=_git_log,
+            bot_architecture=(
+                f"{mj_model.njnt} joints, {mj_model.nu} actuators, "
+                f"{mj_model.nsensor} sensors, {mj_model.nbody} bodies"
+            ),
+            wandb_run_path=_wandb_run_path,
+        )
+        commentator = AICommentator(cfg.commentary, run_context)
+        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
+
     # Create policy from config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if cfg.policy.use_mlp:
-        policy = MLPPolicy(
-            num_actions=cfg.policy.fc_output_size,
-            hidden_size=cfg.policy.hidden_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    elif cfg.policy.use_lstm:
-        policy = LSTMPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            hidden_size=cfg.policy.hidden_size,
-            num_actions=cfg.policy.fc_output_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    else:
-        policy = TinyPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            num_actions=cfg.policy.fc_output_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+    policy = cfg.build_policy(device=device)
+    optimizer = cfg.build_optimizer(policy)
 
     # Print architecture and parameter count
     num_params = sum(p.numel() for p in policy.parameters())
@@ -669,7 +713,7 @@ def _train_loop(
     collector = None
     if num_workers > 1:
         _verbose(f"Starting {num_workers} parallel workers...")
-        collector = ParallelCollector(num_workers, cfg.env, cfg.policy)
+        collector = ParallelCollector(num_workers, cfg.env, cfg.policy, bot_name)
         if is_tui:
             log_fn(f"Started {num_workers} parallel workers")
         else:
@@ -820,7 +864,7 @@ def _train_loop(
         time_since_rerun = time.perf_counter() - last_rerun_time
         should_log_rerun_this_batch = rr_wandb is not None and (
             batch_idx % log_every_n_batches == 0
-            or time_since_rerun >= 60.0
+            or time_since_rerun >= 300.0
             or force_rerun
         )
 
@@ -841,6 +885,7 @@ def _train_loop(
                     env,
                     policy,
                     device,
+                    hierarchy=hierarchy,
                 )
                 episode_batch.append(episode_data)
         timing["collect_batch"] = time.perf_counter() - t_collect_start
@@ -885,6 +930,7 @@ def _train_loop(
                 ppo_epochs=cfg.training.ppo_epochs,
                 entropy_coeff=cfg.training.entropy_coeff,
                 value_coeff=cfg.training.value_coeff,
+                max_grad_norm=cfg.training.max_grad_norm,
             )
             loss = policy_loss  # For backward-compatible logging
         else:
@@ -912,6 +958,7 @@ def _train_loop(
         # Run deterministic evaluation episodes for curriculum decisions
         t_eval_start = time.perf_counter()
         eval_successes = []
+        policy.eval()
         if curr.use_eval_for_curriculum:
             for eval_idx in range(curr.eval_episodes_per_batch):
                 # Log first eval episode to Rerun if this is a logging batch
@@ -940,7 +987,8 @@ def _train_loop(
                         log_this_eval = False
 
                 eval_data = collect_episode(
-                    env, policy, device, log_rerun=log_this_eval, deterministic=True
+                    env, policy, device, log_rerun=log_this_eval, deterministic=True,
+                    hierarchy=hierarchy,
                 )
                 eval_successes.append(eval_data["success"])
 
@@ -973,6 +1021,7 @@ def _train_loop(
             # Fall back to training success rate if eval disabled
             eval_success_rate = batch_success_rate
             rolling_eval_success_rate = rolling_success_rate
+        policy.train()
         timing["eval_batch"] = time.perf_counter() - t_eval_start
         timing["eval"] += timing["eval_batch"]
 
@@ -1085,22 +1134,31 @@ def _train_loop(
         )
 
         # Per-component reward breakdown (averaged across batch)
-        component_keys = [
-            "reward_distance",
-            "reward_exploration",
-            "reward_time",
-            "reward_upright",
-            "reward_alive",
-            "reward_energy",
-            "reward_contact",
-            "reward_forward_velocity",
-            "reward_smoothness",
-        ]
+        component_keys = hierarchy.reward_component_keys()
         for key in component_keys:
             vals = [
                 ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch
             ]
             log_dict[f"rewards/{key}"] = np.mean(vals)
+
+        # Raw reward inputs (physical measures, averaged across batch)
+        raw_input_keys = [
+            "distance_to_target", "torso_height", "up_z",
+            "forward_vel", "energy", "contact_frac", "action_jerk",
+            "forward_distance", "lateral_drift", "total_path_length",
+            "avg_speed", "survival_time", "joint_activity",
+        ]
+        batch_raw_inputs = {}
+        for key in raw_input_keys:
+            vals = [ep.get("raw_inputs", {}).get(key, 0.0) for ep in episode_batch]
+            avg = float(np.mean(vals))
+            batch_raw_inputs[key] = avg
+            log_dict[f"raw/{key}"] = avg
+        # Fell fraction (from episode-level flag, not raw_inputs)
+        batch_raw_inputs["fell_frac"] = float(np.mean(
+            [ep.get("fell", False) for ep in episode_batch]
+        ))
+        log_dict["raw/fell_frac"] = batch_raw_inputs["fell_frac"]
 
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
@@ -1154,6 +1212,12 @@ def _train_loop(
             "eval_time": timing["eval_batch"],
             "batch_size": batch_size,
             "episode_count": episode_count,
+            # Raw reward inputs for dashboard
+            "raw_inputs": batch_raw_inputs,
+            # Reward scales so TUI can hide inactive rows
+            "reward_scales": hierarchy.reward_scales_for_dashboard(),
+            # Config values for TUI colorization
+            "max_grad_norm": cfg.training.max_grad_norm,
         }
         if cfg.training.algorithm == "PPO":
             dash_metrics.update(
@@ -1324,22 +1388,8 @@ def run_training(
         num_workers: Worker count override
         scene_path: Override bot scene XML path
     """
-    is_biped = scene_path and "biped" in scene_path
-    is_walker2d = scene_path and "walker2d" in scene_path
-    if smoketest:
-        if is_biped:
-            cfg = Config.for_biped_smoketest()
-        elif is_walker2d:
-            cfg = Config.for_walker2d_smoketest()
-        else:
-            cfg = Config.for_smoketest()
-    elif is_biped:
-        cfg = Config.for_biped()
-    elif is_walker2d:
-        cfg = Config.for_walker2d()
-    else:
-        cfg = Config()
-
+    bot_name = bot_name_from_scene_path(scene_path) if scene_path else "simple2wheeler"
+    cfg = pipeline_for_bot(bot_name, smoketest=smoketest)
     if scene_path:
         cfg.env.scene_path = scene_path
 
@@ -1371,34 +1421,16 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         num_workers: Number of parallel workers for episode collection.
         scene_path: Override bot scene XML path directly.
     """
-    is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
-    is_walker2d = (bot and "walker2d" in bot) or (
-        scene_path and "walker2d" in scene_path
+    bot_name = bot or (
+        bot_name_from_scene_path(scene_path) if scene_path else "simple2wheeler"
     )
+    cfg = pipeline_for_bot(bot_name, smoketest=smoketest)
     if smoketest:
-        if is_biped:
-            cfg = Config.for_biped_smoketest()
-        elif is_walker2d:
-            cfg = Config.for_walker2d_smoketest()
-        else:
-            cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    elif is_biped:
-        cfg = Config.for_biped()
-    elif is_walker2d:
-        cfg = Config.for_walker2d()
-    else:
-        cfg = Config()
-
     if scene_path:
         cfg.env.scene_path = scene_path
 
-    robot_name_cli = bot_display_name(bot_name_from_scene_path(cfg.env.scene_path))
-    dashboard = AnsiDashboard(
-        total_batches=cfg.training.max_batches,
-        algorithm=cfg.training.algorithm,
-        bot_name=robot_name_cli,
-    )
+    dashboard = LogDashboard()
 
     _train_loop(
         cfg=cfg,

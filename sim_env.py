@@ -4,6 +4,29 @@ import mujoco
 import numpy as np
 
 
+def assemble_sensor_data(base_sensors, gait_step_count, control_dt, gait_phase_period):
+    """Assemble sensor vector with optional gait phase encoding.
+
+    Appends [sin(phase), cos(phase), sin(phase+pi), cos(phase+pi)] to the
+    base sensor array if gait_phase_period > 0.  Returns base_sensors
+    unchanged otherwise.
+    """
+    if gait_phase_period <= 0:
+        return base_sensors
+    t = gait_step_count * control_dt
+    phase = 2 * np.pi * t / gait_phase_period
+    gait = np.array(
+        [
+            np.sin(phase),
+            np.cos(phase),
+            np.sin(phase + np.pi),
+            np.cos(phase + np.pi),
+        ],
+        dtype=np.float32,
+    )
+    return np.concatenate([base_sensors, gait])
+
+
 class SimEnv:
     """
     Bot-agnostic MuJoCo simulation environment.
@@ -45,6 +68,10 @@ class SimEnv:
             mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
             for i in range(self.num_actuators)
         ]
+
+        # Cache ctrlrange for remapping NN outputs [-1,1] -> [lo, hi]
+        self.ctrl_range_lo = self.model.actuator_ctrlrange[:self.num_actuators, 0].copy()
+        self.ctrl_range_hi = self.model.actuator_ctrlrange[:self.num_actuators, 1].copy()
 
         # Standard body/camera IDs (convention: all bots use these names)
         self.bot_body_id = mujoco.mj_name2id(
@@ -111,7 +138,10 @@ class SimEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[: self.num_actuators] = actions
+        # Remap [-1, 1] -> [ctrlrange_lo, ctrlrange_hi] per actuator
+        lo = self.ctrl_range_lo
+        hi = self.ctrl_range_hi
+        self.data.ctrl[: self.num_actuators] = lo + (actions + 1.0) * 0.5 * (hi - lo)
 
         # Step physics
         mujoco.mj_step(self.model, self.data)

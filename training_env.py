@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING
 import mujoco
 import numpy as np
 
-from sim_env import SimEnv
+from sim_env import SimEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
-    from config import EnvConfig
+    from pipeline import EnvConfig
 
 
 class TrainingEnv:
@@ -439,11 +439,12 @@ class TrainingEnv:
 
         # Gait phase: reset step counter and append phase to sensors
         self.gait_step_count = 0
-        self.current_sensors = self.env.get_sensor_data()
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate(
-                [self.current_sensors, self._compute_gait_phase()]
-            )
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
+        )
 
         # Blank image in walking stage (camera not useful, skip render cost)
         if self.in_walking_stage:
@@ -512,11 +513,12 @@ class TrainingEnv:
         self.consecutive_unhealthy = 0
         self.prev_action = np.zeros(self.num_actuators)
         self.gait_step_count = 0
-        self.current_sensors = self.env.get_sensor_data()
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate(
-                [self.current_sensors, self._compute_gait_phase()]
-            )
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
+        )
 
         obs = camera_img.astype(np.float32) / 255.0
         return obs
@@ -544,25 +546,6 @@ class TrainingEnv:
         """Move all distractors off-screen."""
         for mocap_id in self.env.distractor_mocap_ids:
             self.env.data.mocap_pos[mocap_id] = [0.0, 100.0, 0.08]
-
-    def _compute_gait_phase(self):
-        """
-        Compute gait phase signals: [sin(phase), cos(phase), sin(phase+pi), cos(phase+pi)].
-
-        The second pair is anti-phase (for the other leg), giving the policy
-        a clock for coordinating alternating leg movements.
-        """
-        t = self.gait_step_count * self.action_dt
-        phase = 2 * np.pi * t / self.gait_phase_period
-        return np.array(
-            [
-                np.sin(phase),
-                np.cos(phase),
-                np.sin(phase + np.pi),
-                np.cos(phase + np.pi),
-            ],
-            dtype=np.float32,
-        )
 
     def _update_target_position(self):
         """Move target by velocity, bounce off arena boundaries."""
@@ -634,12 +617,13 @@ class TrainingEnv:
             obs = camera_img.astype(np.float32) / 255.0
         else:
             obs = np.zeros(self.observation_shape, dtype=np.float32)
-        self.current_sensors = self.env.get_sensor_data()
         self.gait_step_count += 1
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate(
-                [self.current_sensors, self._compute_gait_phase()]
-            )
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(),
+            self.gait_step_count,
+            self.action_dt,
+            self.gait_phase_period,
+        )
 
         # Get current state (before moving target, so reward reflects robot's action)
         current_distance = self.env.get_distance_to_target()
@@ -691,6 +675,7 @@ class TrainingEnv:
 
         # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
         contact_penalty = 0.0
+        bad_contacts = 0
         if self.ground_contact_penalty > 0:
             bad_contacts = self.env.get_non_foot_ground_contacts()
             if bad_contacts > 0:
@@ -701,10 +686,11 @@ class TrainingEnv:
         #    MuJoCo cvel, which reports subtree COM velocity and can be misleading
         #    when legs swing.  Gated on uprightness so falling doesn't count.
         forward_velocity_reward = 0.0
+        forward_vel = 0.0
         if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
             dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
             vel = (current_position - self.prev_position) / dt
-            forward_vel = np.dot(vel, self.forward_velocity_axis)
+            forward_vel = float(np.dot(vel, self.forward_velocity_axis))
             forward_velocity_reward = (
                 self.forward_velocity_reward_scale
                 * max(0.0, forward_vel)
@@ -713,9 +699,11 @@ class TrainingEnv:
 
         # 9. Action smoothness penalty (penalize jerky action changes)
         smoothness_penalty = 0.0
-        if self.action_smoothness_scale > 0 and self.prev_action is not None:
-            action_diff = action - self.prev_action
-            smoothness_penalty = -self.action_smoothness_scale * np.sum(action_diff**2)
+        action_jerk = 0.0
+        if self.prev_action is not None:
+            action_jerk = float(np.sum((action - self.prev_action) ** 2))
+            if self.action_smoothness_scale > 0:
+                smoothness_penalty = -self.action_smoothness_scale * action_jerk
         self.prev_action = action.copy()
 
         reward = (
@@ -844,11 +832,30 @@ class TrainingEnv:
             "joint_stagnation_truncated": joint_stagnation_truncated,
             # Walking stage flag
             "in_walking_stage": self.in_walking_stage,
+            # Raw reward inputs (physical measures before scaling)
+            "raw_up_z": float(up_z),
+            "raw_forward_vel": forward_vel,
+            "raw_energy": float(np.sum(action ** 2)),
+            "raw_contact_count": int(bad_contacts),
+            "raw_action_jerk": action_jerk,
             # Forward distance from start (projected onto forward axis)
             "forward_distance": float(
                 np.dot(
                     current_position - self.start_position,
                     self.forward_velocity_axis,
+                )
+            )
+            if self.start_position is not None
+            else 0.0,
+            # Lateral drift (displacement perpendicular to forward axis)
+            "lateral_drift": float(
+                np.linalg.norm(
+                    (current_position - self.start_position)
+                    - np.dot(
+                        current_position - self.start_position,
+                        self.forward_velocity_axis,
+                    )
+                    * self.forward_velocity_axis
                 )
             )
             if self.start_position is not None

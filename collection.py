@@ -12,7 +12,7 @@ import torch
 import rerun_logger
 
 
-def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False):
+def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False, *, hierarchy):
     """
     Run one episode and collect data.
 
@@ -23,6 +23,7 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         log_rerun: Log episode to Rerun for visualization
         deterministic: If True, use mean actions (no sampling) for evaluation.
                        If False, sample from policy distribution for training.
+        hierarchy: RewardHierarchy instance (required).
 
     Returns:
         episode_data: Dict with observations, actions, rewards, log_probs (if not deterministic), etc.
@@ -51,18 +52,25 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     info = {}
 
     # Accumulate reward component sums for per-episode breakdown
-    reward_component_keys = [
-        "reward_distance",
-        "reward_exploration",
-        "reward_time",
-        "reward_upright",
-        "reward_alive",
-        "reward_energy",
-        "reward_contact",
-        "reward_forward_velocity",
-        "reward_smoothness",
-    ]
+    reward_component_keys = hierarchy.reward_component_keys()
     reward_component_sums = {k: 0.0 for k in reward_component_keys}
+
+    # Accumulate raw reward inputs (physical measures)
+    raw_input_keys = [
+        "raw_up_z", "raw_forward_vel", "raw_energy",
+        "raw_contact_count", "raw_action_jerk",
+    ]
+    raw_input_sums = {k: 0.0 for k in raw_input_keys}
+
+    # Total path length (sum of per-step distance_moved)
+    total_path_length = 0.0
+
+    # Joint velocity sensor indices (for joint_activity)
+    joint_vel_indices = []
+    for si in env.sensor_info:
+        if si["name"].endswith("_vel") and si["dim"] == 1:
+            joint_vel_indices.append(si["adr"])
+    joint_vel_sum = 0.0  # sum of mean(|joint_vel|) across steps
 
     # Track trajectory for Rerun
     trajectory_points = []
@@ -124,6 +132,13 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         total_reward += reward
         for k in reward_component_keys:
             reward_component_sums[k] += info.get(k, 0.0)
+        for k in raw_input_keys:
+            raw_input_sums[k] += info.get(k, 0.0)
+        total_path_length += info.get("distance_moved", 0.0)
+        if joint_vel_indices and env.sensor_dim > 0:
+            sensor_vals = env.current_sensors
+            jv = np.abs([sensor_vals[i] for i in joint_vel_indices])
+            joint_vel_sum += float(np.mean(jv))
 
         # Log to Rerun in real-time
         if log_rerun:
@@ -164,6 +179,10 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
         steps += 1
 
+    # Episode wall time in simulation seconds
+    action_dt = env.env.model.opt.timestep * env.mujoco_steps_per_action
+    episode_time = steps * action_dt
+
     # Flush video encoder and log episode summary
     if log_rerun:
         if video_encoder:
@@ -203,6 +222,22 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "fell": info.get("fell", False),
         "forward_distance": info.get("forward_distance", 0.0),
         "reward_components": reward_component_sums,
+        "raw_inputs": {
+            "distance_to_target": info["distance"],
+            "torso_height": info.get("torso_height", 0.0),
+            "up_z": raw_input_sums["raw_up_z"] / max(steps, 1),
+            "forward_vel": raw_input_sums["raw_forward_vel"] / max(steps, 1),
+            "energy": raw_input_sums["raw_energy"] / max(steps, 1),
+            "contact_frac": raw_input_sums["raw_contact_count"] / max(steps, 1),
+            "action_jerk": raw_input_sums["raw_action_jerk"] / max(steps, 1),
+            # New measures
+            "forward_distance": info.get("forward_distance", 0.0),
+            "lateral_drift": info.get("lateral_drift", 0.0),
+            "total_path_length": total_path_length,
+            "avg_speed": total_path_length / (episode_time if episode_time > 0 else 1.0),
+            "survival_time": episode_time,
+            "joint_activity": joint_vel_sum / max(steps, 1),
+        },
     }
     if has_sensors:
         result["sensor_data"] = sensor_data

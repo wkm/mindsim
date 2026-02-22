@@ -16,6 +16,18 @@ import wandb
 from git_utils import get_git_sha
 
 
+def build_policy(ckpt_config):
+    """Reconstruct a policy network from a checkpoint's embedded config dict.
+
+    Delegates to Pipeline.from_wandb_dict() + Pipeline.build_policy() so there
+    is a single source of truth for policy construction.
+    """
+    from pipeline import Pipeline
+
+    pipeline = Pipeline.from_wandb_dict(ckpt_config)
+    return pipeline.build_policy(device="cpu")
+
+
 def resolve_resume_ref(ref: str) -> str:
     """
     Resolve a resume reference to an actual path or artifact ref.
@@ -53,6 +65,42 @@ def resolve_resume_ref(ref: str) -> str:
         return str(pt_files[-1])
 
     return ref
+
+
+def list_checkpoints(run_dir: str | Path) -> list[dict]:
+    """
+    List all checkpoints in a run directory, sorted newest-first by mtime.
+
+    Each entry has: path, filename, stage, batch, mtime.
+    Stage/batch are parsed from the `_stage{N}_batch{M}.pt` pattern;
+    None if the filename doesn't match.
+
+    Args:
+        run_dir: Path to the run directory (e.g. runs/s2w-lstm-0218-1045)
+
+    Returns:
+        List of checkpoint dicts, newest first.
+    """
+    import re
+
+    ckpt_dir = Path(run_dir) / "checkpoints"
+    if not ckpt_dir.is_dir():
+        return []
+
+    pattern = re.compile(r"_stage(\d+)_batch(\d+)\.pt$")
+    results = []
+    for pt in ckpt_dir.glob("*.pt"):
+        m = pattern.search(pt.name)
+        results.append({
+            "path": str(pt),
+            "filename": pt.name,
+            "stage": int(m.group(1)) if m else None,
+            "batch": int(m.group(2)) if m else None,
+            "mtime": os.path.getmtime(pt),
+        })
+
+    results.sort(key=lambda x: x["mtime"], reverse=True)
+    return results
 
 
 def save_checkpoint(
