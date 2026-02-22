@@ -23,7 +23,7 @@ local machine                    GCP
 ─────────────                    ───
 docker build + push ──────► Artifact Registry
                                     │
-./remote_train.sh ──────► COS spot VM (c3d-standard-16)
+python remote_train.py ──► COS spot VM (c3d-standard-16)
                                     │ startup script
                                     ├─ docker pull
                                     ├─ docker run (training)
@@ -43,18 +43,21 @@ docker build + push ──────► Artifact Registry
 ```bash
 # Prerequisites: gcloud CLI, Docker, WANDB_API_KEY set
 
-./remote_train.sh --smoketest              # Quick validation
-./remote_train.sh --bot simple2wheeler     # Full training run
-./remote_train.sh --bot simplebiped --num-workers 16
+python remote_train.py --smoketest              # Quick validation
+python remote_train.py --bot simple2wheeler     # Full training run
+python remote_train.py --bot simplebiped --num-workers 16
 
 # Skip rebuild if image hasn't changed
-SKIP_BUILD=1 ./remote_train.sh --smoketest
+SKIP_BUILD=1 python remote_train.py --smoketest
 
 # Override machine type
-MACHINE_TYPE=c3d-standard-32 ./remote_train.sh --bot simple2wheeler
+MACHINE_TYPE=c3d-standard-32 python remote_train.py --bot simple2wheeler
+
+# Force a specific zone (skips multi-zone search)
+ZONE=us-east1-b python remote_train.py --bot simple2wheeler
 ```
 
-The script handles everything: creates Artifact Registry repo, builds/pushes the Docker image, launches a spot VM with a startup script, and prints commands to monitor the run. The VM shuts itself down when training finishes (stopped VMs cost nothing).
+The script handles everything: creates Artifact Registry repo (multi-region US), builds/pushes the Docker image, and tries multiple US zones for spot VM availability. When a zone has no spot capacity, it automatically moves to the next. The VM shuts itself down when training finishes (stopped VMs cost nothing).
 
 ### Cost
 
