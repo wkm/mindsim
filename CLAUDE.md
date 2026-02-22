@@ -8,6 +8,7 @@ Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
 
 ```bash
 uv run mjpython main.py                    # Interactive TUI (default)
+uv run mjpython main.py scene              # Scene gen preview (procedural furniture)
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
 uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]  # Play trained policy
 uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
@@ -38,15 +39,25 @@ make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
 mindsim/
 ├── main.py                   # Single entry point for all modes
 ├── run_manager.py            # Run directory lifecycle & W&B init
+├── worlds/
+│   └── room.xml             # Standalone arena (floor, curbs, target, distractors)
 ├── bots/simple2wheeler/
 │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
-│   ├── scene.xml            # World: floor, lighting, target
+│   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
 │   └── meshes/*.stl         # Visual geometry (scaled in XML)
 ├── sim_env.py               # Environment API (SimEnv)
 ├── train.py                 # Training loop & policy networks
 ├── checkpoint.py            # Checkpoint save/load/resolve
 ├── view.py                  # MuJoCo viewer
 ├── play.py                  # Interactive play mode
+├── scene_preview.py          # Scene gen preview (loads room.xml directly)
+├── scene_gen/                # Procedural scene generation
+│   ├── primitives.py        # Prim types, GeomType, material colors
+│   ├── composer.py          # SceneComposer, placement, descriptions
+│   └── concepts/            # Parametric furniture (auto-discovered)
+│       ├── table.py         # Table (top + 4 legs)
+│       ├── chair.py         # Chair (seat + back + 4 legs)
+│       └── shelf.py         # Shelf (2 sides + N boards)
 ├── visualize.py             # Rerun visualization
 └── runs/                    # Per-run directories (gitignored)
     └── s2w-lstm-0218-1045/
@@ -91,6 +102,32 @@ Creates a Rerun recording with:
 - Trajectory trail
 - Motor inputs and distance plots
 
+## Procedural Scene Generation
+
+The `scene_gen/` module generates rooms with parametric furniture for training diversity.
+
+**Preview scenes:**
+
+```bash
+uv run mjpython main.py scene              # MuJoCo viewer with random furniture
+```
+
+Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys` = move target.
+
+**Architecture:**
+
+1. **Concepts** (`scene_gen/concepts/`) — Each concept is a Python file with a frozen `Params` dataclass + `@lru_cache`d `generate()` function that returns MuJoCo primitives. Auto-discovered via `pkgutil`.
+2. **Primitives** (`scene_gen/primitives.py`) — `Prim` dataclass mapping to MuJoCo geom types (box, cylinder, sphere). Includes material color constants.
+3. **Composer** (`scene_gen/composer.py`) — `SceneComposer` discovers pre-allocated obstacle slot bodies in the MuJoCo model, writes concept primitives into them at reset time. No model recompilation needed.
+
+**Scene identity:** Each scene has an integer `seed` for deterministic reproduction. `describe_scene()` produces a human-readable text description. `scene_id()` gives a short hex tag.
+
+**Adding new furniture:** Drop a file in `scene_gen/concepts/` following the pattern in `concepts/__init__.py` docstring. Needs a `Params` frozen dataclass + `generate(params) -> tuple[Prim, ...]`. That's it — auto-discovered.
+
+**Obstacle slots via MjSpec:** Obstacle body+geom slots are injected programmatically via `SceneComposer.prepare_spec(spec)` before model compilation (uses MuJoCo's MjSpec API). The slot count is configurable (default: 8 objects x 8 geoms). `worlds/room.xml` contains only the static arena (floor, curbs, target, distractors) — no pre-allocated placeholders. Bot `scene.xml` files include `room.xml` via `<include>`.
+
+**Scale progression (planned):** Room → Apartment → House → Village.
+
 ## MuJoCo → Visualization Gotchas
 
 1. **Always call `mj_forward()` after `mj_resetData()`**
@@ -124,10 +161,13 @@ Creates a Rerun recording with:
 - **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
 - **config.py** - Centralized training configuration (all hyperparameters)
 - **bot.xml** - Robot structure (motors, sensors, camera, meshes)
-- **scene.xml** - World setup (target, floor, lighting)
+- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors)
+- **scene.xml** - Thin wrapper: timestep + bot.xml + room.xml include
 - **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
 - **view.py** - MuJoCo viewer (called via `main.py view`)
 - **play.py** - Interactive play mode (called via `main.py play`)
+- **scene_preview.py** - Scene gen preview in MuJoCo viewer (called via `main.py scene`)
+- **scene_gen/** - Procedural scene generation (concepts, composer, primitives)
 - **train.py** - Training loop and policy networks (called via `main.py train`)
 - **rerun_wandb.py** - Rerun-W&B integration for eval episode recordings
 - **visualize.py** - Rerun visualization (called via `main.py visualize`)
@@ -149,6 +189,7 @@ The interactive TUI (`uv run mjpython main.py`) has a screen-based flow:
 MainMenuScreen
   ├── [s] Smoketest     -> runs smoketest
   ├── [n] New run       -> BotSelectorScreen -> TrainingDashboard
+  ├── [g] Scene gen     -> MuJoCo viewer with procedural scenes (loads room.xml directly)
   ├── [b] Browse runs   -> RunBrowserScreen -> RunActionScreen
   └── [q] Quit
 ```
