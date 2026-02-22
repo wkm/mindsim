@@ -16,6 +16,7 @@ mujoco_menagerie/
 # MuJoCo logs
 MUJOCO_LOG.TXT
 *.log
+logs/
 
 # Rerun recordings
 *.rrd
@@ -27,5 +28,9 @@ wandb/
 # Checkpoints
 checkpoints/
 
-# Claude Code
-.claude/
+# Run directories
+runs/
+
+# Claude Code (track settings.json, ignore everything else)
+.claude/*
+!.claude/settings.json

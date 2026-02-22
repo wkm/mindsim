@@ -20,15 +20,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import logging.handlers
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
 
 from textual import work
 from textual.app import App, ComposeResult
@@ -39,13 +42,61 @@ from textual.widgets import (
     Button,
     DataTable,
     Footer,
+    OptionList,
     RadioButton,
     RadioSet,
     RichLog,
     Static,
+    TabbedContent,
+    TabPane,
 )
 
-from dashboard import _fmt_int, _fmt_pct
+from dashboard import _fmt_int, _fmt_pct, _fmt_time
+from run_manager import (
+    bot_display_name,
+    discover_local_runs,
+)
+from train import CommandChannel
+
+log = logging.getLogger(__name__)
+
+
+class TuiLogHandler(logging.Handler):
+    """Routes Python log records into the TUI log panel.
+
+    This is the *only* path for messages to reach the log panel from
+    worker threads.  ``dashboard.message()`` just calls ``log.info()``
+    and this handler forwards the record to the RichLog widget.
+
+    UI actions on the event-loop thread write to the log panel directly
+    (calling ``call_from_thread`` from the event loop would deadlock),
+    so we skip records originating on that thread.
+
+    Installed when training starts, removed when training finishes
+    to avoid stale references to a dead app.
+    """
+
+    def __init__(self, app: MindSimApp):
+        super().__init__(level=logging.INFO)
+        self._app = app
+        self._event_loop_thread = threading.current_thread()
+        fmt = logging.Formatter("%(message)s")
+        self.setFormatter(fmt)
+
+    def emit(self, record: logging.LogRecord):
+        # UI actions on the event-loop thread write to the panel directly;
+        # routing them through call_from_thread would deadlock.
+        if threading.current_thread() is self._event_loop_thread:
+            return
+        try:
+            msg = self.format(record)
+            if record.levelno >= logging.ERROR:
+                msg = f"[bold red]{msg}[/bold red]"
+            elif record.levelno >= logging.WARNING:
+                msg = f"[bold yellow]{msg}[/bold yellow]"
+            self._app.call_from_thread(self._app.log_message, msg)
+        except Exception:
+            pass  # Don't let logging errors crash the app
 
 
 def _discover_bots() -> list[dict]:
@@ -106,6 +157,28 @@ def _fmt(value, precision=3, width=8):
     if value is None:
         return " " * width
     return f"{value:+.{precision}f}".rjust(width)
+
+
+def _get_experiment_info(branch: str) -> str | None:
+    """Look up the hypothesis for a branch from EXPERIMENTS.md.
+
+    Parses the markdown table and returns the hypothesis text for the
+    matching branch, or None if not found.
+    """
+    experiments_path = Path("EXPERIMENTS.md")
+    if not experiments_path.exists():
+        return None
+    try:
+        text = experiments_path.read_text()
+    except OSError:
+        return None
+
+    for line in text.splitlines():
+        # Match table rows: | `branch` | hypothesis | ... |
+        m = re.match(r"\|\s*`([^`]+)`\s*\|([^|]+)\|", line)
+        if m and m.group(1).strip() == branch:
+            return m.group(2).strip()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -357,90 +430,140 @@ class GCPInstancesScreen(Screen):
 
 
 # ---------------------------------------------------------------------------
-# Launcher Screen
+# Main Menu Screen
 # ---------------------------------------------------------------------------
 
 
-class LauncherScreen(Screen):
-    """Mode selection screen shown on startup."""
+class MainMenuScreen(Screen):
+    """Top-level menu: smoketest, new run, browse runs, quit."""
 
     BINDINGS = [
-        Binding("v", "launch('btn-view')", "View", priority=True),
-        Binding("s", "launch('btn-smoketest')", "Smoketest", priority=True),
-        Binding("t", "launch('btn-train')", "Train", priority=True),
-        Binding("p", "launch('btn-play')", "Play", priority=True),
-        Binding("g", "launch('btn-gcp')", "GCP Instances", priority=True),
-        Binding("q", "launch('btn-quit')", "Quit", priority=True),
+        Binding("s", "select('smoketest')", "Smoketest", priority=True),
+        Binding("n", "select('new')", "New Run", priority=True),
+        Binding("v", "select('view')", "View Bot", priority=True),
+        Binding("b", "select('browse')", "Browse Runs", priority=True),
+        Binding("g", "select('gcp')", "GCP Instances", priority=True),
+        Binding("q", "select('quit')", "Quit", priority=True),
+        Binding("escape", "select('quit')", "Quit", show=False, priority=True),
+        Binding("backspace", "select('quit')", "Quit", show=False, priority=True),
     ]
 
     CSS = """
-    LauncherScreen {
+    MainMenuScreen {
         align: center middle;
     }
 
-    #launcher-box {
-        width: 60;
+    #menu-box {
+        width: 50;
         height: auto;
-        border: round $accent;
+        border: ascii $accent;
         padding: 1 2;
     }
 
-    #launcher-title {
-        text-align: center;
+    #menu-title {
         text-style: bold;
+        text-align: center;
         margin-bottom: 1;
     }
 
-    #launcher-subtitle {
-        text-align: center;
-        color: $text-muted;
-        margin-bottom: 1;
-    }
-
-    .launcher-section {
-        text-style: bold;
-        color: $accent;
-        margin-top: 1;
-    }
-
-    #bot-selector {
-        margin: 0 2;
+    #menu-list {
         height: auto;
-    }
-
-    .launcher-btn {
-        width: 100%;
-        margin: 1 0 0 0;
     }
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._bots = _discover_bots()
-
     def compose(self) -> ComposeResult:
-        with Vertical(id="launcher-box"):
-            yield Static("MindSim", id="launcher-title")
-            yield Static("Bot:", classes="launcher-section")
-            if self._bots:
-                with RadioSet(id="bot-selector"):
-                    for i, bot in enumerate(self._bots):
-                        yield RadioButton(bot["name"], value=(i == 0))
-            else:
-                yield Static("  No bots found in bots/*/scene.xml")
-            yield Static("Mode:", classes="launcher-section")
-            yield Button("[v] View", id="btn-view", classes="launcher-btn")
-            yield Button("[s] Smoketest", id="btn-smoketest", classes="launcher-btn")
-            yield Button("[t] Train", id="btn-train", classes="launcher-btn")
-            yield Button("[p] Play", id="btn-play", classes="launcher-btn")
-            yield Button("[g] GCP Instances", id="btn-gcp", classes="launcher-btn")
-            yield Button(
-                "[q] Quit", id="btn-quit", classes="launcher-btn", variant="error"
+        with Vertical(id="menu-box"):
+            yield Static("MindSim", id="menu-title")
+            yield OptionList(
+                "[s] Smoketest",
+                "[n] New training run",
+                "[v] View bot",
+                "[b] Browse runs",
+                "[g] GCP instances",
+                "[q] Quit",
+                id="menu-list",
             )
         yield Footer()
 
+    def action_select(self, choice: str) -> None:
+        if choice == "smoketest":
+            self.app.start_training(smoketest=True)
+        elif choice == "new":
+            self.app.push_screen(BotSelectorScreen(mode="train"))
+        elif choice == "view":
+            self.app.push_screen(BotSelectorScreen(mode="view"))
+        elif choice == "browse":
+            self.app.push_screen(RunBrowserScreen())
+        elif choice == "gcp":
+            self.app.push_screen(GCPInstancesScreen())
+        elif choice == "quit":
+            self.app.exit()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        choices = ["smoketest", "new", "view", "browse", "gcp", "quit"]
+        if 0 <= idx < len(choices):
+            self.action_select(choices[idx])
+
+
+# ---------------------------------------------------------------------------
+# Bot Selector Screen
+# ---------------------------------------------------------------------------
+
+
+class BotSelectorScreen(Screen):
+    """Select a bot for training or viewing."""
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+        Binding("enter", "confirm", "Select", priority=True),
+    ]
+
+    CSS = """
+    BotSelectorScreen {
+        align: center middle;
+    }
+
+    #bot-box {
+        width: 50;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #bot-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #bot-selector {
+        height: auto;
+    }
+    """
+
+    def __init__(self, mode: str = "train", **kwargs):
+        super().__init__(**kwargs)
+        self._bots = _discover_bots()
+        self._mode = mode
+
+    def compose(self) -> ComposeResult:
+        title = "Select Bot to View" if self._mode == "view" else "Select Bot"
+        with Vertical(id="bot-box"):
+            yield Static(title, id="bot-title")
+            if self._bots:
+                with RadioSet(id="bot-selector"):
+                    for i, bot in enumerate(self._bots):
+                        display = bot_display_name(bot["name"])
+                        yield RadioButton(f"{display} ({bot['name']})", value=(i == 0))
+            else:
+                yield Static("  No bots found in bots/*/scene.xml")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
     def _get_selected_scene(self) -> str | None:
-        """Get scene_path for the selected bot."""
         if not self._bots:
             return None
         try:
@@ -448,32 +571,228 @@ class LauncherScreen(Screen):
             idx = radio_set.pressed_index
             if idx >= 0:
                 return self._bots[idx]["scene_path"]
-        except Exception:
+        except (IndexError, ValueError):
             pass
-        return self._bots[0]["scene_path"] if self._bots else None
+        return self._bots[0]["scene_path"]
 
-    def action_launch(self, button_id: str) -> None:
-        """Handle keyboard shortcut by simulating button press."""
-        try:
-            btn = self.query_one(f"#{button_id}", Button)
-            btn.press()
-        except Exception:
-            pass
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    def action_confirm(self) -> None:
         scene_path = self._get_selected_scene()
-        if event.button.id == "btn-train":
-            self.app.start_training(smoketest=False, scene_path=scene_path)
-        elif event.button.id == "btn-smoketest":
-            self.app.start_training(smoketest=True, scene_path=scene_path)
-        elif event.button.id == "btn-view":
+        if not scene_path:
+            return
+        if self._mode == "view":
             self.app.start_viewing(scene_path=scene_path)
-        elif event.button.id == "btn-play":
-            self.app.start_playing(scene_path=scene_path)
-        elif event.button.id == "btn-gcp":
-            self.app.push_screen(GCPInstancesScreen())
-        elif event.button.id == "btn-quit":
-            self.app.exit()
+        else:
+            self.app.start_training(smoketest=False, scene_path=scene_path)
+
+
+# ---------------------------------------------------------------------------
+# Run Browser Screen
+# ---------------------------------------------------------------------------
+
+
+class RunBrowserScreen(Screen):
+    """Browse local runs."""
+
+    BINDINGS = [
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+        Binding("enter", "select_run", "Select", priority=True),
+        Binding("w", "open_wandb", "W&B", priority=True),
+    ]
+
+    CSS = """
+    RunBrowserScreen {
+        align: center middle;
+    }
+
+    #browser-box {
+        width: 80;
+        height: auto;
+        max-height: 30;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #browser-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #run-list {
+        height: auto;
+        max-height: 24;
+    }
+
+    #no-runs {
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._runs = discover_local_runs()
+        self._items: list[dict] = []  # maps list index -> run info
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="browser-box"):
+            yield Static("Browse Runs", id="browser-title")
+            items = []
+            for run_dir, info in self._runs:
+                date_str = info.created_at[:10] if info.created_at else "?"
+                display_name = bot_display_name(info.bot_name)
+                status_icon = {"running": "*", "completed": "+", "failed": "!"}.get(
+                    info.status, "?"
+                )
+                batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
+                label = f"[{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
+                items.append(label)
+                self._items.append({"type": "run", "dir": run_dir, "info": info})
+            if items:
+                yield OptionList(*items, id="run-list")
+            else:
+                yield Static("  No runs found.", id="no-runs")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_select_run(self) -> None:
+        try:
+            run_list = self.query_one("#run-list", OptionList)
+            idx = run_list.highlighted
+            if idx is not None and 0 <= idx < len(self._items):
+                item = self._items[idx]
+                if item["type"] == "run":
+                    self.app.push_screen(
+                        RunActionScreen(run_dir=item["dir"], run_info=item["info"])
+                    )
+        except (IndexError, ValueError):
+            pass
+
+    def action_open_wandb(self) -> None:
+        try:
+            run_list = self.query_one("#run-list", OptionList)
+            idx = run_list.highlighted
+            if idx is not None and 0 <= idx < len(self._items):
+                url = self._items[idx]["info"].wandb_url
+                if url:
+                    import webbrowser
+
+                    webbrowser.open(url)
+        except (IndexError, ValueError):
+            pass
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.action_select_run()
+
+
+# ---------------------------------------------------------------------------
+# Run Action Screen
+# ---------------------------------------------------------------------------
+
+
+class RunActionScreen(Screen):
+    """Actions for a selected run: play, resume, view, W&B, back."""
+
+    BINDINGS = [
+        Binding("p", "play_run", "Play", priority=True),
+        Binding("r", "resume_run", "Resume", priority=True),
+        Binding("v", "view_run", "View", priority=True),
+        Binding("w", "open_wandb", "W&B", priority=True),
+        Binding("escape", "go_back", "Back", priority=True),
+        Binding("backspace", "go_back", "Back", show=False, priority=True),
+    ]
+
+    CSS = """
+    RunActionScreen {
+        align: center middle;
+    }
+
+    #action-box {
+        width: 60;
+        height: auto;
+        border: ascii $accent;
+        padding: 1 2;
+    }
+
+    #action-title {
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #run-metadata {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #action-list {
+        height: auto;
+    }
+    """
+
+    def __init__(self, run_dir: Path, run_info, **kwargs):
+        super().__init__(**kwargs)
+        self._run_dir = run_dir
+        self._info = run_info
+
+    def compose(self) -> ComposeResult:
+        info = self._info
+        display_name = bot_display_name(info.bot_name)
+        with Vertical(id="action-box"):
+            yield Static(f"Run: {info.name}", id="action-title")
+            meta_lines = [
+                f"  Bot: {display_name} ({info.bot_name})",
+                f"  Algorithm: {info.algorithm}  |  Policy: {info.policy_type}",
+                f"  Status: {info.status}  |  Batches: {info.batch_idx}  |  Episodes: {info.episode_count}",
+                f"  Stage: {info.curriculum_stage}  |  Created: {info.created_at or '?'}",
+            ]
+            if info.wandb_url:
+                meta_lines.append(f"  W&B: {info.wandb_url}")
+            yield Static("\n".join(meta_lines), id="run-metadata")
+            options = [
+                "[p] Play checkpoint",
+                "[r] Resume training",
+                "[v] View in MuJoCo",
+            ]
+            self._action_map = ["play_run", "resume_run", "view_run"]
+            if info.wandb_url:
+                options.append("[w] Open W&B")
+                self._action_map.append("open_wandb")
+            options.append("[Esc] Back")
+            self._action_map.append("go_back")
+            yield OptionList(*options, id="action-list")
+        yield Footer()
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+    def action_play_run(self) -> None:
+        self.app.start_playing_run(
+            run_name=self._info.name,
+            scene_path=self._info.scene_path,
+        )
+
+    def action_resume_run(self) -> None:
+        self.app.start_training(
+            smoketest=False,
+            scene_path=self._info.scene_path,
+            resume=self._info.name,
+        )
+
+    def action_view_run(self) -> None:
+        self.app.start_viewing(scene_path=self._info.scene_path)
+
+    def action_open_wandb(self) -> None:
+        url = self._info.wandb_url
+        if url:
+            import webbrowser
+
+            webbrowser.open(url)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        idx = event.option_index
+        if 0 <= idx < len(self._action_map):
+            getattr(self, f"action_{self._action_map[idx]}")()
 
 
 # ---------------------------------------------------------------------------
@@ -489,10 +808,15 @@ class TrainingDashboard(Screen):
         Binding("n", "step_batch", "Step 1 Batch"),
         Binding("c", "checkpoint", "Checkpoint"),
         Binding("r", "send_rerun", "Send to Rerun"),
+        Binding("w", "open_wandb", "W&B"),
         Binding("up", "advance_curriculum", "Advance"),
         Binding("down", "regress_curriculum", "Regress"),
+        Binding("a", "ai_commentary", "AI"),
+        Binding("left_square_bracket", "rerun_freq_down", "Rec \u2193"),
+        Binding("right_square_bracket", "rerun_freq_up", "Rec \u2191"),
         Binding("q", "quit_app", "Quit"),
         Binding("escape", "quit_app", "Quit", show=False),
+        Binding("backspace", "quit_app", "Quit", show=False),
     ]
 
     CSS = """
@@ -508,6 +832,13 @@ class TrainingDashboard(Screen):
         padding: 0 1;
     }
 
+    #experiment-bar {
+        height: auto;
+        max-height: 2;
+        padding: 0 1;
+        color: $text-muted;
+    }
+
     #progress-row {
         height: 1;
         padding: 0 1;
@@ -517,6 +848,10 @@ class TrainingDashboard(Screen):
     #progress-label {
         width: 100%;
         height: 1;
+    }
+
+    #body-content {
+        height: 1fr;
     }
 
     #metrics-grid {
@@ -540,12 +875,23 @@ class TrainingDashboard(Screen):
         height: 1;
     }
 
+    #log-panel {
+        width: 1fr;
+        height: 100%;
+        border-left: solid $surface;
+        padding: 0 1;
+    }
+
+    #log-tabs {
+        height: 1fr;
+    }
+
     #log-area {
         height: 1fr;
-        min-height: 6;
-        border-top: solid $surface;
-        padding: 0 1;
-        margin-top: 1;
+    }
+
+    #ai-area {
+        height: 1fr;
     }
     """
 
@@ -556,100 +902,155 @@ class TrainingDashboard(Screen):
         self._start_time = time.monotonic()
         self._header_parts: list[str] = ["MindSim"]
         self._paused = False
+        self._wandb_url: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("MindSim", id="header-bar")
+        yield Static("", id="experiment-bar")
         with Horizontal(id="progress-row"):
             yield Static("  batch 0", id="progress-label")
-        with Horizontal(id="metrics-grid"):
-            with Vertical(classes="metrics-col"):
-                yield Static("EPISODE PERFORMANCE", classes="section-title")
-                yield Static(
-                    "  avg reward          ---",
-                    id="m-avg-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  best reward         ---",
-                    id="m-best-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  worst reward        ---",
-                    id="m-worst-reward",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  avg distance        ---",
-                    id="m-avg-distance",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  avg steps           ---", id="m-avg-steps", classes="metric-line"
-                )
-                yield Static("SUCCESS RATES", classes="section-title")
-                yield Static(
-                    "  eval (rolling)      ---",
-                    id="m-eval-rolling",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  eval (batch)        ---",
-                    id="m-eval-batch",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  train (batch)       ---",
-                    id="m-train-batch",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  policy std          ---",
-                    id="m-policy-std",
-                    classes="metric-line",
-                )
-            with Vertical(classes="metrics-col"):
-                yield Static("OPTIMIZATION", classes="section-title")
-                yield Static(
-                    "  policy loss         ---",
-                    id="m-policy-loss",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  value loss          ---",
-                    id="m-value-loss",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  grad norm           ---", id="m-grad-norm", classes="metric-line"
-                )
-                yield Static(
-                    "  entropy             ---", id="m-entropy", classes="metric-line"
-                )
-                yield Static(
-                    "  clip fraction       ---",
-                    id="m-clip-fraction",
-                    classes="metric-line",
-                )
-                yield Static(
-                    "  approx KL           ---", id="m-approx-kl", classes="metric-line"
-                )
-                yield Static("CURRICULUM", classes="section-title")
-                yield Static(
-                    "  stage               ---", id="m-stage", classes="metric-line"
-                )
-                yield Static(
-                    "  progress            ---", id="m-progress", classes="metric-line"
-                )
-                yield Static(
-                    "  mastery             ---", id="m-mastery", classes="metric-line"
-                )
-                yield Static(
-                    "  max steps           ---", id="m-max-steps", classes="metric-line"
-                )
-                yield Static("TIMING", classes="section-title")
-                yield Static("  ---", id="m-timing", classes="metric-line")
-        yield RichLog(id="log-area", wrap=True, max_lines=100, markup=True)
+        with Horizontal(id="body-content"):
+            with Horizontal(id="metrics-grid"):
+                with Vertical(classes="metrics-col"):
+                    yield Static("EPISODE PERFORMANCE", classes="section-title")
+                    yield Static(
+                        "  avg reward          ---",
+                        id="m-avg-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  best reward         ---",
+                        id="m-best-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  worst reward        ---",
+                        id="m-worst-reward",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  avg distance        ---",
+                        id="m-avg-distance",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  avg steps           ---",
+                        id="m-avg-steps",
+                        classes="metric-line",
+                    )
+                    yield Static("SUCCESS RATES", classes="section-title")
+                    yield Static(
+                        "  eval (rolling)      ---",
+                        id="m-eval-rolling",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  eval (batch)        ---",
+                        id="m-eval-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  train (batch)       ---",
+                        id="m-train-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  policy std          ---",
+                        id="m-policy-std",
+                        classes="metric-line",
+                    )
+                with Vertical(classes="metrics-col"):
+                    yield Static("OPTIMIZATION", classes="section-title")
+                    yield Static(
+                        "  policy loss         ---",
+                        id="m-policy-loss",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  value loss          ---",
+                        id="m-value-loss",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  grad norm           ---",
+                        id="m-grad-norm",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  entropy             ---",
+                        id="m-entropy",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  clip fraction       ---",
+                        id="m-clip-fraction",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  approx KL           ---",
+                        id="m-approx-kl",
+                        classes="metric-line",
+                    )
+                    yield Static("CURRICULUM", classes="section-title")
+                    yield Static(
+                        "  stage               ---", id="m-stage", classes="metric-line"
+                    )
+                    yield Static(
+                        "  progress            ---",
+                        id="m-progress",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  mastery             ---",
+                        id="m-mastery",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  max steps           ---",
+                        id="m-max-steps",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  rec interval        ---",
+                        id="m-rec-interval",
+                        classes="metric-line",
+                    )
+                    yield Static("TIMING", classes="section-title")
+                    yield Static(
+                        "  batch               ---",
+                        id="m-timing-batch",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c collect           ---",
+                        id="m-timing-collect",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c train             ---",
+                        id="m-timing-train",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u251c eval              ---",
+                        id="m-timing-eval",
+                        classes="metric-line",
+                    )
+                    yield Static(
+                        "  \u2514 throughput         ---",
+                        id="m-timing-throughput",
+                        classes="metric-line",
+                    )
+            with Vertical(id="log-panel"):
+                with TabbedContent(id="log-tabs"):
+                    with TabPane("Log", id="tab-log"):
+                        yield RichLog(
+                            id="log-area", wrap=True, max_lines=1000, markup=True
+                        )
+                    with TabPane("AI", id="tab-ai"):
+                        yield RichLog(
+                            id="ai-area", wrap=True, max_lines=200, markup=True
+                        )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -661,25 +1062,54 @@ class TrainingDashboard(Screen):
         if self._paused:
             self.app.send_command("pause")
             self.log_message("[bold yellow]Paused[/bold yellow]")
+            log.info("Paused")
         else:
             self.app.send_command("unpause")
             self.log_message("[bold green]Resumed[/bold green]")
+            log.info("Resumed")
 
     def action_step_batch(self) -> None:
         self.app.send_command("step")
         self.log_message("Stepping one batch...")
+        log.info("Stepping one batch")
 
     def action_checkpoint(self) -> None:
         self.app.send_command("checkpoint")
+        self.log_message(
+            "[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)"
+        )
 
     def action_send_rerun(self) -> None:
         self.app.send_command("log_rerun")
+        self.log_message(
+            "[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)"
+        )
 
     def action_advance_curriculum(self) -> None:
         self.app.send_command("advance_curriculum")
+        self.log_message("Advancing curriculum...")
 
     def action_regress_curriculum(self) -> None:
         self.app.send_command("regress_curriculum")
+        self.log_message("Regressing curriculum...")
+
+    def action_rerun_freq_down(self) -> None:
+        self.app.send_command("rerun_freq_down")
+        self.log_message("Decreasing Rerun recording interval (more frequent)...")
+
+    def action_rerun_freq_up(self) -> None:
+        self.app.send_command("rerun_freq_up")
+        self.log_message("Increasing Rerun recording interval (less frequent)...")
+
+    def action_ai_commentary(self) -> None:
+        self.app.send_command("ai_commentary")
+        self.log_message("Generating AI commentary...")
+
+    def action_open_wandb(self) -> None:
+        if self._wandb_url:
+            import webbrowser
+
+            webbrowser.open(self._wandb_url)
 
     def action_quit_app(self) -> None:
         self.app.send_command("stop")
@@ -693,16 +1123,30 @@ class TrainingDashboard(Screen):
         self.query_one("#header-bar", Static).update(header)
 
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+        self,
+        run_name: str,
+        branch: str,
+        algorithm: str,
+        wandb_url: str | None,
+        bot_name: str | None = None,
+        experiment_hypothesis: str | None = None,
     ):
         self._algorithm = algorithm
+        self._wandb_url = wandb_url
         self._start_time = time.monotonic()
-        parts = [f"MindSim | {run_name}", branch, algorithm]
+        title = f"MindSim {bot_name}" if bot_name else "MindSim"
+        parts = [f"{title} | {run_name}", branch, algorithm]
         if wandb_url:
             parts.append(wandb_url)
         self._header_parts = parts
         # Render immediately (timer will keep updating)
         self._tick_elapsed()
+        # Show experiment hypothesis if available
+        bar = self.query_one("#experiment-bar", Static)
+        if experiment_hypothesis:
+            bar.update(f"Experiment: {experiment_hypothesis}")
+        else:
+            bar.update("")
 
     def update_metrics(self, batch: int, metrics: dict):
         m = metrics
@@ -710,6 +1154,8 @@ class TrainingDashboard(Screen):
         total = self._total_batches
 
         # Progress bar (text-based)
+        ep_count = m.get("episode_count")
+        ep_str = f" | {ep_count:,} episodes" if ep_count else ""
         if total and total > 0:
             frac = min(batch / total, 1.0)
             pct = 100 * frac
@@ -717,10 +1163,12 @@ class TrainingDashboard(Screen):
             filled = int(bar_w * frac)
             bar = "\u2588" * filled + "\u2591" * (bar_w - filled)
             self.query_one("#progress-label", Static).update(
-                f"  {bar}  {pct:5.1f}%   batch {batch:,} / {total:,}"
+                f"  {bar}  {pct:5.1f}%   batch {batch:,} / {total:,}{ep_str}"
             )
         else:
-            self.query_one("#progress-label", Static).update(f"  batch {batch:,}")
+            self.query_one("#progress-label", Static).update(
+                f"  batch {batch:,}{ep_str}"
+            )
 
         # Episode performance
         self.query_one("#m-avg-reward").update(
@@ -804,6 +1252,11 @@ class TrainingDashboard(Screen):
         self.query_one("#m-max-steps").update(
             f"  max steps        {_fmt_int(m.get('max_episode_steps'))}"
         )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else "---"
+        self.query_one("#m-rec-interval").update(
+            f"  rec interval     {rec_str.rjust(8)}"
+        )
 
         # Timing
         bt = m.get("batch_time")
@@ -811,24 +1264,46 @@ class TrainingDashboard(Screen):
         tt = m.get("train_time")
         et = m.get("eval_time")
         bs = m.get("batch_size")
-        throughput = ""
+        self.query_one("#m-timing-batch").update(
+            f"  batch            {_fmt_time(bt)}"
+            if bt is not None
+            else "  batch               ---"
+        )
+        self.query_one("#m-timing-collect").update(
+            f"  \u251c collect        {_fmt_time(ct)}"
+            if ct is not None
+            else "  \u251c collect           ---"
+        )
+        self.query_one("#m-timing-train").update(
+            f"  \u251c train          {_fmt_time(tt)}"
+            if tt is not None
+            else "  \u251c train             ---"
+        )
+        self.query_one("#m-timing-eval").update(
+            f"  \u251c eval           {_fmt_time(et)}"
+            if et is not None
+            else "  \u251c eval              ---"
+        )
+        throughput_str = "---"
         if bt and bt > 0 and bs:
-            throughput = f" | {bs / bt:.1f} ep/s"
-        timing_parts = []
-        if bt is not None:
-            timing_parts.append(f"batch {bt * 1000:.0f}ms")
-        if ct is not None:
-            timing_parts.append(f"collect {ct * 1000:.0f}ms")
-        if tt is not None:
-            timing_parts.append(f"train {tt * 1000:.0f}ms")
-        if et is not None:
-            timing_parts.append(f"eval {et * 1000:.0f}ms")
-        self.query_one("#m-timing").update(f"  {' | '.join(timing_parts)}{throughput}")
+            throughput_str = f"{bs / bt:.1f} ep/s"
+        self.query_one("#m-timing-throughput").update(
+            f"  \u2514 throughput      {throughput_str.rjust(8)}"
+        )
 
     def log_message(self, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
         log_widget = self.query_one("#log-area", RichLog)
         log_widget.write(f"[dim]{ts}[/dim]  {text}")
+
+    def log_ai_commentary(self, text: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        formatted = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan] {text}"
+        # Write to both Log and AI tabs
+        self.query_one("#log-area", RichLog).write(formatted)
+        self.query_one("#ai-area", RichLog).write(formatted)
+        # Switch to AI tab
+        self.query_one("#log-tabs", TabbedContent).active = "tab-ai"
 
     def mark_finished(self):
         self.log_message("[bold green]Training complete![/bold green]")
@@ -854,21 +1329,25 @@ class MindSimApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.command_queue: Queue[str] = Queue()
+        self.commands = CommandChannel()
         self._dashboard: TrainingDashboard | None = None
-        # Set by launcher to dispatch after app.run() returns
+        # Set by screens to dispatch after app.run() returns
         self.next_action: str | None = None
         self.next_scene: str | None = None
+        self.next_stage: int | None = None
+        self.next_run_name: str | None = None
+        self.next_checkpoint_path: str | None = None
 
     def on_mount(self) -> None:
-        self.push_screen(LauncherScreen())
+        self.push_screen(MainMenuScreen())
 
-    def start_viewing(self, scene_path: str | None = None):
+    def start_viewing(self, scene_path: str | None = None, stage: int | None = None):
         """Exit TUI, then main() will launch the MuJoCo viewer."""
         if not scene_path:
             return
         self.next_action = "view"
         self.next_scene = scene_path
+        self.next_stage = stage
         self.exit()
 
     def start_playing(self, scene_path: str | None = None):
@@ -877,12 +1356,38 @@ class MindSimApp(App):
         self.next_scene = scene_path
         self.exit()
 
-    def start_training(self, smoketest: bool = False, scene_path: str | None = None):
-        """Called by launcher to start training."""
+    def start_playing_run(
+        self,
+        run_name: str | None = None,
+        scene_path: str | None = None,
+        checkpoint_path: str | None = None,
+    ):
+        """Exit TUI, then main() will launch play mode for a specific run."""
+        self.next_action = "play"
+        self.next_scene = scene_path
+        self.next_run_name = run_name
+        self.next_checkpoint_path = checkpoint_path
+        self.exit()
+
+    def start_training(
+        self,
+        smoketest: bool = False,
+        scene_path: str | None = None,
+        resume: str | None = None,
+    ):
+        """Called by screens to start training."""
+        # If no scene_path provided (e.g. smoketest from main menu), use default
+        if scene_path is None:
+            bots = _discover_bots()
+            scene_path = bots[0]["scene_path"] if bots else None
         dashboard = TrainingDashboard()
         self._dashboard = dashboard
         self._smoketest = smoketest
         self._scene_path = scene_path
+        self._resume = resume
+        # Route Python log records into the TUI log panel
+        self._tui_log_handler = TuiLogHandler(self)
+        logging.getLogger().addHandler(self._tui_log_handler)
         self.push_screen(dashboard)
         self._run_training()
 
@@ -890,18 +1395,26 @@ class MindSimApp(App):
     def _run_training(self) -> None:
         from train import run_training
 
-        # Force serial collection in smoketest to avoid multiprocessing issues
-        num_workers = 1 if self._smoketest else None
-        run_training(
-            self,
-            self.command_queue,
-            smoketest=self._smoketest,
-            num_workers=num_workers,
-            scene_path=self._scene_path,
-        )
+        # Force serial collection in TUI to avoid multiprocessing FD issues
+        # (Textual's event loop holds file descriptors that become invalid
+        # when multiprocessing.spawn tries to inherit them)
+        num_workers = 1
+        try:
+            run_training(
+                self,
+                self.commands,
+                smoketest=self._smoketest,
+                num_workers=num_workers,
+                scene_path=self._scene_path,
+                resume=self._resume,
+            )
+        finally:
+            # Remove TUI log handler to avoid stale references
+            if hasattr(self, "_tui_log_handler"):
+                logging.getLogger().removeHandler(self._tui_log_handler)
 
     def send_command(self, cmd: str):
-        self.command_queue.put(cmd)
+        self.commands.send(cmd)
 
     def update_metrics(self, batch: int, metrics: dict):
         """Called from training thread via call_from_thread."""
@@ -918,17 +1431,78 @@ class MindSimApp(App):
         if self._dashboard:
             self._dashboard.mark_finished()
 
+    def ai_commentary(self, text: str):
+        """Called from training thread via call_from_thread."""
+        if self._dashboard:
+            self._dashboard.log_ai_commentary(text)
+
     def set_header(
-        self, run_name: str, branch: str, algorithm: str, wandb_url: str | None
+        self,
+        run_name: str,
+        branch: str,
+        algorithm: str,
+        wandb_url: str | None,
+        bot_name: str | None = None,
+        experiment_hypothesis: str | None = None,
     ):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
-            self._dashboard.set_header(run_name, branch, algorithm, wandb_url)
+            self._dashboard.set_header(
+                run_name,
+                branch,
+                algorithm,
+                wandb_url,
+                bot_name,
+                experiment_hypothesis,
+            )
 
     def set_total_batches(self, total: int | None):
         """Called from training thread via call_from_thread."""
         if self._dashboard:
             self._dashboard._total_batches = total
+
+
+def _setup_logging() -> Path:
+    """Configure file logging for all MindSim operations.
+
+    Returns the log file path. Logs are written to logs/mindsim.log with
+    rotation (5 x 5MB). Also installs an excepthook so unhandled exceptions
+    are captured in the log.
+    """
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "mindsim.log"
+
+    handler = logging.handlers.RotatingFileHandler(
+        log_file,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+    )
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+
+    # Capture unhandled exceptions to the log
+    _original_excepthook = sys.excepthook
+
+    def _logging_excepthook(exc_type, exc_value, exc_tb):
+        if not issubclass(exc_type, KeyboardInterrupt):
+            logging.critical(
+                "Unhandled exception", exc_info=(exc_type, exc_value, exc_tb)
+            )
+        _original_excepthook(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _logging_excepthook
+
+    logging.info("MindSim started: %s", " ".join(sys.argv))
+    return log_file
 
 
 def _is_mjpython() -> bool:
@@ -957,19 +1531,45 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # view
     p_view = sub.add_parser("view", help="Launch MuJoCo viewer")
-    p_view.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_view.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_view.add_argument(
+        "--stage", type=int, default=None, help="Curriculum stage 1-4 (default: none)"
+    )
 
     # play
     p_play = sub.add_parser("play", help="Play trained policy in viewer")
-    p_play.add_argument("checkpoint", nargs="?", default="latest", help="Checkpoint ref (default: latest)")
-    p_play.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_play.add_argument(
+        "checkpoint",
+        nargs="?",
+        default="latest",
+        help="Checkpoint ref (default: latest)",
+    )
+    p_play.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_play.add_argument(
+        "--run",
+        type=str,
+        default=None,
+        help="Run name to play (resolves checkpoint from run dir)",
+    )
 
     # train
     p_train = sub.add_parser("train", help="Train (headless CLI, no TUI)")
-    p_train.add_argument("--smoketest", action="store_true", help="Fast end-to-end smoketest")
-    p_train.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
-    p_train.add_argument("--resume", type=str, default=None, help="Resume from checkpoint")
-    p_train.add_argument("--num-workers", type=int, default=None, help="Number of parallel workers")
+    p_train.add_argument(
+        "--smoketest", action="store_true", help="Fast end-to-end smoketest"
+    )
+    p_train.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
+    p_train.add_argument(
+        "--resume", type=str, default=None, help="Resume from checkpoint"
+    )
+    p_train.add_argument(
+        "--num-workers", type=int, default=None, help="Number of parallel workers"
+    )
 
     # smoketest (alias for train --smoketest)
     sub.add_parser("smoketest", help="Alias for train --smoketest")
@@ -979,7 +1579,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # visualize
     p_viz = sub.add_parser("visualize", help="One-shot Rerun visualization")
-    p_viz.add_argument("--bot", type=str, default=None, help="Bot name (default: simple2wheeler)")
+    p_viz.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: simple2wheeler)"
+    )
     p_viz.add_argument("--steps", type=int, default=1000, help="Number of sim steps")
 
     return parser
@@ -1000,10 +1602,18 @@ def _run_tui():
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
+        if app.next_stage:
+            cmd.extend(["--stage", str(app.next_stage)])
         os.execvp("uv", cmd)
 
     elif app.next_action == "play":
         cmd = ["uv", "run", "mjpython", "main.py", "play"]
+        # If we have a specific checkpoint path (legacy), pass it directly
+        if app.next_checkpoint_path:
+            cmd.append(app.next_checkpoint_path)
+        # If we have a run name, use --run
+        elif app.next_run_name:
+            cmd.extend(["--run", app.next_run_name])
         if app.next_scene:
             bot_name = Path(app.next_scene).parent.name
             cmd.extend(["--bot", bot_name])
@@ -1011,6 +1621,7 @@ def _run_tui():
 
 
 def main():
+    _setup_logging()
     _check_mjpython()
 
     parser = _build_parser()
@@ -1023,16 +1634,21 @@ def main():
     elif args.command == "view":
         scene_path = _resolve_scene_path(args.bot)
         from view import run_view
-        run_view(scene_path)
+
+        run_view(scene_path, stage=args.stage)
 
     elif args.command == "play":
         scene_path = _resolve_scene_path(args.bot)
         from play import run_play
-        run_play(checkpoint_ref=args.checkpoint, scene_path=scene_path)
+
+        # --run takes priority: resolve checkpoint from run directory
+        checkpoint_ref = args.run if args.run else args.checkpoint
+        run_play(checkpoint_ref=checkpoint_ref, scene_path=scene_path)
 
     elif args.command == "train":
         scene_path = _resolve_scene_path(args.bot)
         from train import main as train_main
+
         train_main(
             smoketest=args.smoketest,
             bot=args.bot,
@@ -1043,15 +1659,28 @@ def main():
 
     elif args.command == "smoketest":
         from train import main as train_main
-        train_main(smoketest=True)
+
+        bots = _discover_bots()
+        if not bots:
+            print("Error: No bots found in bots/*/scene.xml", file=sys.stderr)
+            sys.exit(1)
+        for i, bot_info in enumerate(bots):
+            name = bot_info["name"]
+            print(f"\n{'=' * 60}")
+            print(f"Smoketest [{i + 1}/{len(bots)}]: {name}")
+            print(f"{'=' * 60}")
+            train_main(smoketest=True, bot=name, scene_path=bot_info["scene_path"])
+        print(f"\nAll {len(bots)} bots passed smoketest.")
 
     elif args.command == "quicksim":
         from quick_sim import run_quick_sim
+
         run_quick_sim()
 
     elif args.command == "visualize":
         scene_path = _resolve_scene_path(args.bot)
         from visualize import run_visualization
+
         run_visualization(scene_path=scene_path, num_steps=args.steps)
 
 

@@ -8,9 +8,13 @@ Two implementations:
 Factory function `Dashboard()` picks the right one based on context.
 """
 
+import logging
+import re
 import shutil
 import sys
 import time
+
+log = logging.getLogger(__name__)
 
 
 def _fmt_float(value, width=8, precision=3):
@@ -68,7 +72,11 @@ class TuiDashboard:
         self.app.call_from_thread(self.app.update_metrics, batch, metrics)
 
     def message(self, text):
-        self.app.call_from_thread(self.app.log_message, text)
+        # Single path: Python logging is the source of truth.
+        # TuiLogHandler routes the record to the RichLog panel;
+        # the file handler writes it to logs/mindsim.log.
+        plain = re.sub(r"\[/?[^\]]*\]", "", text)
+        log.info(plain)
 
     def finish(self):
         self.app.call_from_thread(self.app.mark_finished)
@@ -81,9 +89,10 @@ class AnsiDashboard:
     Headless fallback when no TUI is active (e.g. `python train.py --smoketest`).
     """
 
-    def __init__(self, total_batches=None, algorithm="PPO"):
+    def __init__(self, total_batches=None, algorithm="PPO", bot_name=None):
         self.total_batches = total_batches
         self.algorithm = algorithm
+        self.bot_name = bot_name
         self._lines_printed = 0
         self._last_render = 0.0
         self._min_interval = 0.1
@@ -92,7 +101,7 @@ class AnsiDashboard:
     def _get_width(self):
         try:
             w = shutil.get_terminal_size().columns
-        except Exception:
+        except (ValueError, OSError):
             w = 80
         return max(60, min(w, 120))
 
@@ -117,10 +126,13 @@ class AnsiDashboard:
         is_ppo = self.algorithm == "PPO"
 
         lines = []
-        header = " MindSim Training "
+        bot_tag = f" {self.bot_name}" if self.bot_name else ""
+        header = f" MindSim{bot_tag} Training "
         rule = "\u2500" * ((width - len(header)) // 2)
         lines.append(f"\u2500\u2500{header}{rule}")
-        lines.append(self._progress_bar(batch, self.total_batches, width))
+        ep_count = m.get("episode_count")
+        ep_str = f" | {ep_count:,} episodes" if ep_count else ""
+        lines.append(self._progress_bar(batch, self.total_batches, width) + ep_str)
         lines.append("")
 
         col1_label = "  EPISODE PERFORMANCE"
@@ -300,10 +312,12 @@ class AnsiDashboard:
                 _fmt_time(eval_time),
             )
         )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else ""
         lines.append(
             row(
-                "",
-                "",
+                "rec interval",
+                rec_str.rjust(8),
                 "\u2514 throughput",
                 f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8),
             )
