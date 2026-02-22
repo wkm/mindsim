@@ -19,7 +19,7 @@ import numpy as np
 from simple_wheeler_env import SimpleWheelerEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
-    from config import EnvConfig
+    from pipeline import EnvConfig
 
 
 class TrainingEnv:

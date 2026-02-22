@@ -12,7 +12,8 @@ import mujoco.viewer
 import numpy as np
 import torch
 
-from checkpoint import build_policy, resolve_resume_ref
+from checkpoint import resolve_resume_ref
+from pipeline import Pipeline
 from simple_wheeler_env import SimpleWheelerEnv, assemble_sensor_data
 
 # GLFW key constants (avoid importing glfw directly)
@@ -39,36 +40,32 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     print(f"Loading checkpoint: {ckpt_path}")
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
 
-    # Reconstruct policy
-    policy = build_policy(ckpt["config"])
+    # Reconstruct pipeline and policy from checkpoint config
+    pipeline = Pipeline.from_wandb_dict(ckpt["config"])
+    policy = pipeline.build_policy()
     policy.load_state_dict(ckpt["policy_state_dict"])
     policy.eval()
     print(
-        f"Policy: {ckpt['config']['policy']['policy_type']} "
-        f"(hidden={ckpt['config']['policy'].get('hidden_size', 'n/a')})"
+        f"Policy: {pipeline.policy.policy_type} "
+        f"(hidden={pipeline.policy.hidden_size})"
     )
-
-    # Image dimensions from checkpoint config
-    img_h = ckpt["config"]["policy"]["image_height"]
-    img_w = ckpt["config"]["policy"]["image_width"]
 
     # Create environment (raw env, no training wrapper)
     env = SimpleWheelerEnv(
         scene_path=scene_path,
-        render_width=img_w,
-        render_height=img_h,
+        render_width=pipeline.policy.image_width,
+        render_height=pipeline.policy.image_height,
     )
 
     model = env.model
     data = env.data
 
-    # Physics sub-steps per action (read from checkpoint config, fallback to 5 for legacy checkpoints)
-    env_cfg = ckpt["config"].get("env", {})
-    mujoco_steps_per_action = env_cfg.get("mujoco_steps_per_action", 5)
+    # Physics sub-steps per action
+    mujoco_steps_per_action = pipeline.env.mujoco_steps_per_action
 
     # Gait phase encoding: if the policy was trained with gait phase inputs,
     # we must compute and append them in play mode too.
-    gait_phase_period = env_cfg.get("gait_phase_period", 0.0)
+    gait_phase_period = pipeline.env.gait_phase_period
     gait_step_count = 0
     control_dt = mujoco_steps_per_action * model.opt.timestep
 
