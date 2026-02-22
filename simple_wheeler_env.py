@@ -4,6 +4,24 @@ import mujoco
 import numpy as np
 
 
+def assemble_sensor_data(base_sensors, gait_step_count, control_dt, gait_phase_period):
+    """Assemble sensor vector with optional gait phase encoding.
+
+    Appends [sin(phase), cos(phase), sin(phase+pi), cos(phase+pi)] to the
+    base sensor array if gait_phase_period > 0.  Returns base_sensors
+    unchanged otherwise.
+    """
+    if gait_phase_period <= 0:
+        return base_sensors
+    t = gait_step_count * control_dt
+    phase = 2 * np.pi * t / gait_phase_period
+    gait = np.array([
+        np.sin(phase), np.cos(phase),
+        np.sin(phase + np.pi), np.cos(phase + np.pi),
+    ], dtype=np.float32)
+    return np.concatenate([base_sensors, gait])
+
+
 class SimpleWheelerEnv:
     """
     Bot-agnostic MuJoCo simulation environment.

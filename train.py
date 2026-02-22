@@ -953,6 +953,7 @@ def _train_loop_body(
         # Run deterministic evaluation episodes for curriculum decisions
         t_eval_start = time.perf_counter()
         eval_successes = []
+        policy.eval()
         if curr.use_eval_for_curriculum:
             for eval_idx in range(curr.eval_episodes_per_batch):
                 # Log first eval episode to Rerun if this is a logging batch
@@ -1010,9 +1011,9 @@ def _train_loop_body(
             # Fall back to training success rate if eval disabled
             eval_success_rate = batch_success_rate
             rolling_eval_success_rate = rolling_success_rate
+        policy.train()
         timing["eval_batch"] = time.perf_counter() - t_eval_start
         timing["eval"] += timing["eval_batch"]
-
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
