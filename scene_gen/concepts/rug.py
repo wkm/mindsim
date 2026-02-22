@@ -18,8 +18,12 @@ from scene_gen.primitives import (
     RUG_SAGE,
     RUG_TAN,
     GeomType,
+    Placement,
     Prim,
 )
+
+GROUND_COVER = True
+PLACEMENT = Placement.CENTER
 
 
 @dataclass(frozen=True)
