@@ -738,8 +738,9 @@ class TrainingEnv:
         if np.any(self.target_velocity != 0):
             self._update_target_position()
 
-        # Move distractors (stage 4+)
-        if self.curriculum_stage >= 4:
+        # Move distractors (effective stage 4+)
+        stage_offset = 1 if self.has_walking_stage else 0
+        if self.curriculum_stage - stage_offset >= 4:
             self._update_distractor_positions()
 
         # Update state for next step (use post-move distance so next step's

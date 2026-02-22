@@ -164,16 +164,16 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                 for intent in intents:
                     if intent[0] == "move":
                         axis, delta = intent[1], intent[2]
-                        pos = model.body_pos[env.target_body_id].copy()
+                        pos = data.mocap_pos[env.target_mocap_id].copy()
                         pos[axis] = np.clip(
                             pos[axis] + delta, -arena_bound, arena_bound
                         )
-                        model.body_pos[env.target_body_id] = pos
+                        data.mocap_pos[env.target_mocap_id] = pos
                         reset_hidden = True
                     elif intent[0] == "randomize":
                         angle = np.random.uniform(0, 2 * np.pi)
                         dist = np.random.uniform(1.0, 3.5)
-                        model.body_pos[env.target_body_id] = [
+                        data.mocap_pos[env.target_mocap_id] = [
                             dist * np.cos(angle),
                             dist * np.sin(angle),
                             0.08,
@@ -230,13 +230,20 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
             distance = env.get_distance_to_target()
             speed = SPEED_OPTIONS[speed_idx]
 
+            # Build motor info string from actuator names
+            motor_parts = [
+                f"{env.actuator_names[i]}={action[i]:+.2f}"
+                for i in range(env.num_actuators)
+            ]
+            motor_str = "Motors: " + "  ".join(motor_parts)
+
             viewer.set_texts(
                 [
                     (
                         mujoco.mjtFontScale.mjFONTSCALE_150,
                         mujoco.mjtGridPos.mjGRID_TOPLEFT,
                         f"Distance: {distance:.2f}m",
-                        f"Motors: L={action[0]:+.2f}  R={action[1]:+.2f}",
+                        motor_str,
                     ),
                     (
                         mujoco.mjtFontScale.mjFONTSCALE_100,
