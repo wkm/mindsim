@@ -1,0 +1,13 @@
+.venv
+.git
+__pycache__
+*.pyc
+recordings/
+checkpoints/
+wandb/
+*.rrd
+*.log
+.DS_Store
+mujoco_menagerie/
+.claude/
+.ruff_cache
