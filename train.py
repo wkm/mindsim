@@ -6,6 +6,7 @@ and training algorithms (REINFORCE, PPO) in algorithms.py.
 """
 
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -201,6 +202,8 @@ def verify_forward_direction(env, log_fn=print):
 
 def set_terminal_title(title):
     """Set terminal tab/window title using ANSI escape sequence."""
+    if not sys.stdout.isatty():
+        return
     sys.stdout.write(f"\033]0;{title}\007")
     sys.stdout.flush()
 
@@ -215,6 +218,8 @@ def set_terminal_progress(percent):
     Args:
         percent: 0-100 for progress, or -1 to clear
     """
+    if not sys.stdout.isatty():
+        return
     if percent < 0:
         # Clear progress indicator
         sys.stdout.write("\033]9;4;0\007")
@@ -226,6 +231,10 @@ def set_terminal_progress(percent):
 
 def notify_completion(run_name, message=None):
     """Show macOS notification and play sound when training completes."""
+    import platform
+
+    if platform.system() != "Darwin":
+        return
     if message is None:
         message = f"Training run '{run_name}' has finished."
 
@@ -459,7 +468,9 @@ def _train_loop(
     log_fn(f"Setting up {robot_name} ({cfg.training.algorithm})...")
 
     # Generate run name and create run directory
-    run_name = generate_run_name(bot_name, cfg.policy.policy_type)
+    # RUN_NAME env var allows remote_train.sh to pre-assign a name that
+    # matches the GCP instance label for easy cross-referencing.
+    run_name = os.environ.get("RUN_NAME") or generate_run_name(bot_name, cfg.policy.policy_type)
     run_dir = create_run_dir(run_name)
 
     # Attach a per-run file handler so all log output lands in run.log
