@@ -28,7 +28,7 @@ from collection import (  # noqa: F401 — re-export
     compute_reward_to_go,
     log_episode_value_trace,
 )
-from config import Config
+from pipeline import Pipeline, pipeline_for_bot
 from dashboard import LogDashboard, TuiDashboard
 from git_utils import get_git_branch, get_git_sha
 from parallel import ParallelCollector, resolve_num_workers
@@ -520,6 +520,8 @@ def _train_loop_body(
         tags=[bot_name, cfg.training.algorithm, cfg.policy.policy_type],
     )
     save_run_info(run_dir, run_info)
+    # Save human-readable pipeline description
+    (run_dir / "pipeline.txt").write_text(cfg.describe())
     _verbose(f"  Run directory: {run_dir}/")
 
     # Push run metadata to TUI header
@@ -614,34 +616,8 @@ def _train_loop_body(
 
     # Create policy from config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if cfg.policy.use_mlp:
-        policy = MLPPolicy(
-            num_actions=cfg.policy.fc_output_size,
-            hidden_size=cfg.policy.hidden_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    elif cfg.policy.use_lstm:
-        policy = LSTMPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            hidden_size=cfg.policy.hidden_size,
-            num_actions=cfg.policy.fc_output_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    else:
-        policy = TinyPolicy(
-            image_height=cfg.policy.image_height,
-            image_width=cfg.policy.image_width,
-            num_actions=cfg.policy.fc_output_size,
-            init_std=cfg.policy.init_std,
-            max_log_std=cfg.policy.max_log_std,
-            sensor_input_size=cfg.policy.sensor_input_size,
-        ).to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+    policy = cfg.build_policy(device=device)
+    optimizer = cfg.build_optimizer(policy)
 
     # Print architecture and parameter count
     num_params = sum(p.numel() for p in policy.parameters())
@@ -1358,27 +1334,8 @@ def run_training(
         num_workers: Worker count override
         scene_path: Override bot scene XML path
     """
-    is_childbiped = scene_path and "childbiped" in scene_path
-    is_biped = scene_path and "biped" in scene_path and not is_childbiped
-    is_walker2d = scene_path and "walker2d" in scene_path
-    if smoketest:
-        if is_childbiped:
-            cfg = Config.for_childbiped_smoketest()
-        elif is_biped:
-            cfg = Config.for_biped_smoketest()
-        elif is_walker2d:
-            cfg = Config.for_walker2d_smoketest()
-        else:
-            cfg = Config.for_smoketest()
-    elif is_childbiped:
-        cfg = Config.for_childbiped()
-    elif is_biped:
-        cfg = Config.for_biped()
-    elif is_walker2d:
-        cfg = Config.for_walker2d()
-    else:
-        cfg = Config()
-
+    bot_name = bot_name_from_scene_path(scene_path) if scene_path else "simple2wheeler"
+    cfg = pipeline_for_bot(bot_name, smoketest=smoketest)
     if scene_path:
         cfg.env.scene_path = scene_path
 
@@ -1410,28 +1367,10 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         num_workers: Number of parallel workers for episode collection.
         scene_path: Override bot scene XML path directly.
     """
-    is_childbiped = (bot and "childbiped" in bot) or (scene_path and "childbiped" in scene_path)
-    is_biped = ((bot and "biped" in bot) or (scene_path and "biped" in scene_path)) and not is_childbiped
-    is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
+    bot_name = bot or (bot_name_from_scene_path(scene_path) if scene_path else "simple2wheeler")
+    cfg = pipeline_for_bot(bot_name, smoketest=smoketest)
     if smoketest:
-        if is_childbiped:
-            cfg = Config.for_childbiped_smoketest()
-        elif is_biped:
-            cfg = Config.for_biped_smoketest()
-        elif is_walker2d:
-            cfg = Config.for_walker2d_smoketest()
-        else:
-            cfg = Config.for_smoketest()
         print("[SMOKETEST MODE] Running fast end-to-end validation...")
-    elif is_childbiped:
-        cfg = Config.for_childbiped()
-    elif is_biped:
-        cfg = Config.for_biped()
-    elif is_walker2d:
-        cfg = Config.for_walker2d()
-    else:
-        cfg = Config()
-
     if scene_path:
         cfg.env.scene_path = scene_path
 
