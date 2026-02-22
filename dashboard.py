@@ -101,7 +101,7 @@ class AnsiDashboard:
     def _get_width(self):
         try:
             w = shutil.get_terminal_size().columns
-        except Exception:
+        except (ValueError, OSError):
             w = 80
         return max(60, min(w, 120))
 
@@ -312,10 +312,12 @@ class AnsiDashboard:
                 _fmt_time(eval_time),
             )
         )
+        rec = m.get("log_rerun_every")
+        rec_str = f"{int(rec):,} ep" if rec is not None else ""
         lines.append(
             row(
-                "",
-                "",
+                "rec interval",
+                rec_str.rjust(8),
                 "\u2514 throughput",
                 f"{throughput:.1f} ep/s".rjust(8) if throughput else "".rjust(8),
             )

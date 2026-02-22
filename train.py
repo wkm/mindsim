@@ -1,36 +1,50 @@
 """
-Minimal training script for 2-wheeler robot.
+Training loop and run orchestration.
 
-Starts with a trivially small neural network to validate the training loop.
-Can be extended with more sophisticated networks and RL algorithms.
+Policy networks are in policies.py, episode collection in collection.py,
+and training algorithms (REINFORCE, PPO) in algorithms.py.
 """
 
 import logging
-import math
 import subprocess
 import sys
 import time
 from collections import deque
 from datetime import datetime
-
-log = logging.getLogger(__name__)
+from queue import Empty, Queue
 
 import numpy as np
-import rerun as rr
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-
-import rerun_logger
 import wandb
+
+from algorithms import train_step_batched, train_step_ppo  # noqa: F401 — re-export
 from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
+from collection import (  # noqa: F401 — re-export
+    collect_episode,
+    compute_gae,
+    compute_reward_to_go,
+    log_episode_value_trace,
+)
 from config import Config
 from dashboard import AnsiDashboard, TuiDashboard
+from git_utils import get_git_branch, get_git_sha
 from parallel import ParallelCollector, resolve_num_workers
+from policies import LSTMPolicy, MLPPolicy, TinyPolicy  # noqa: F401 — re-export
 from rerun_wandb import RerunWandbLogger
+from run_manager import (
+    RunInfo,
+    bot_display_name,
+    bot_name_from_scene_path,
+    create_run_dir,
+    generate_run_name,
+    init_wandb_for_run,
+    save_run_info,
+)
 from training_env import TrainingEnv
 from tweaks import apply_tweaks, load_tweaks
+
+log = logging.getLogger(__name__)
 
 
 def _quat_rotate(quat, vec):
@@ -38,16 +52,20 @@ def _quat_rotate(quat, vec):
     w, x, y, z = quat
     vx, vy, vz = vec
     # q * v * q_conj (Hamilton product)
-    t = np.array([
-        2.0 * (y * vz - z * vy),
-        2.0 * (z * vx - x * vz),
-        2.0 * (x * vy - y * vx),
-    ])
-    return np.array([
-        vx + w * t[0] + (y * t[2] - z * t[1]),
-        vy + w * t[1] + (z * t[0] - x * t[2]),
-        vz + w * t[2] + (x * t[1] - y * t[0]),
-    ])
+    t = np.array(
+        [
+            2.0 * (y * vz - z * vy),
+            2.0 * (z * vx - x * vz),
+            2.0 * (x * vy - y * vx),
+        ]
+    )
+    return np.array(
+        [
+            vx + w * t[0] + (y * t[2] - z * t[1]),
+            vy + w * t[1] + (z * t[0] - x * t[2]),
+            vz + w * t[2] + (x * t[1] - y * t[0]),
+        ]
+    )
 
 
 def verify_forward_direction(env, log_fn=print):
@@ -58,7 +76,7 @@ def verify_forward_direction(env, log_fn=print):
     1. Geometry: forward_velocity_axis points toward walking_target_pos
     2. Physics: applying a world-frame force in the forward direction produces
        positive forward displacement and decreasing distance to target
-    3. Velocity: get_bot_velocity() correctly reports the direction of movement
+    3. Velocity: position-based velocity correctly reports the direction of movement
 
     Raises AssertionError if the forward direction is wrong.
     """
@@ -114,8 +132,10 @@ def verify_forward_direction(env, log_fn=print):
     displacement = end_pos - start_pos
     forward_displacement = float(np.dot(displacement, fwd_axis))
 
-    log_fn(f"  Teleport check: displacement={forward_displacement:.4f}m, "
-           f"dist_delta={start_dist - end_dist:.4f}m")
+    log_fn(
+        f"  Teleport check: displacement={forward_displacement:.4f}m, "
+        f"dist_delta={start_dist - end_dist:.4f}m"
+    )
 
     assert forward_displacement > 0.5, (
         f"Forward displacement after teleport is too small ({forward_displacement:.4f})! "
@@ -127,12 +147,10 @@ def verify_forward_direction(env, log_fn=print):
         f"Forward axis may be pointing away from the walking target."
     )
 
-    # Check 3: Verify get_bot_velocity() reports correct direction
-    # Use mj_step1 to compute cvel from qvel without integrating.
-    # (mj_forward does NOT update cvel; only mj_step/mj_step1 do.)
+    # Check 3: Verify position-based velocity reports correct direction
+    # Set qvel to move forward, step the physics, and check xpos displacement.
     env.reset()
 
-    # Set root body velocity in the forward direction via qvel
     vel_nudge = 2.0  # m/s
     for j in range(model.njnt):
         if model.jnt_bodyid[j] != base_body_id:
@@ -141,10 +159,8 @@ def verify_forward_direction(env, log_fn=print):
         qvel_adr = model.jnt_dofadr[j]
 
         if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
-            # Freejoint qvel: [vx, vy, vz, wx, wy, wz] (linear first!)
-            # Linear velocity is in the LOCAL body frame.
             qpos_adr = model.jnt_qposadr[j]
-            quat = data.qpos[qpos_adr + 3:qpos_adr + 7].copy()
+            quat = data.qpos[qpos_adr + 3 : qpos_adr + 7].copy()
             quat_conj = np.array([quat[0], -quat[1], -quat[2], -quat[3]])
             local_fwd = _quat_rotate(quat_conj, fwd_axis)
             data.qvel[qvel_adr + 0] = vel_nudge * local_fwd[0]
@@ -157,19 +173,24 @@ def verify_forward_direction(env, log_fn=print):
             if abs(proj) > 0.1:
                 data.qvel[qvel_adr] = vel_nudge * proj
 
-    # mj_step1 computes velocity-dependent quantities (cvel) without integration
-    mujoco.mj_step1(model, data)
-
-    vel = env.env.get_bot_velocity()
+    pos_before = env.env.get_bot_position().copy()
+    n_steps = 10
+    for _ in range(n_steps):
+        mujoco.mj_step(model, data)
+    pos_after = env.env.get_bot_position()
+    dt = n_steps * model.opt.timestep
+    vel = (pos_after - pos_before) / dt
     forward_vel = float(np.dot(vel, fwd_axis))
 
-    log_fn(f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
-           f"(vel={[f'{v:.3f}' for v in vel]})")
+    log_fn(
+        f"  Velocity check: forward_vel={forward_vel:.3f} m/s "
+        f"(vel={[f'{v:.3f}' for v in vel]})"
+    )
 
     assert forward_vel > 0.5, (
-        f"get_bot_velocity() dot forward_axis is too small ({forward_vel:.3f})! "
+        f"Position-based forward velocity is too small ({forward_vel:.3f})! "
         f"Expected ~{vel_nudge:.1f}. vel={vel.tolist()}, axis={fwd_axis.tolist()}. "
-        f"Either cvel convention is wrong or the forward axis doesn't match the joints."
+        f"Forward axis may not match the root joint axes."
     )
 
     log_fn("  Forward direction: OK")
@@ -298,1222 +319,102 @@ Rules:
         return None
 
 
-def _tanh_log_prob(gaussian_log_prob, pre_tanh_value):
-    """Correct Gaussian log-prob for tanh squashing.
-
-    For action = tanh(z) where z ~ Normal(mean, std):
-        log π(action) = log Normal(z; mean, std) - Σ log(1 - tanh(z)²)
-
-    Uses numerically stable formula: log(1 - tanh(z)²) = 2(log2 - z - softplus(-2z))
-    """
-    correction = 2 * (math.log(2) - pre_tanh_value - F.softplus(-2 * pre_tanh_value))
-    return gaussian_log_prob - correction.sum(dim=-1)
-
-
-class LSTMPolicy(nn.Module):
-    """
-    LSTM-based stochastic policy network with memory.
-
-    Input: RGB image (HxWx3)
-    Output: Mean of Gaussian distribution over motor commands [left, right]
-
-    Uses CNN to extract features, then LSTM to maintain temporal context.
-    This allows the policy to remember past observations and actions.
-    """
-
-    def __init__(
-        self,
-        image_height=128,
-        image_width=128,
-        hidden_size=64,
-        num_actions=2,
-        init_std=0.5,
-        max_log_std=0.7,
-        sensor_input_size=0,
-    ):
-        super().__init__()
-
-        self.hidden_size = hidden_size
-        self.num_actions = num_actions
-        self.sensor_input_size = sensor_input_size
-
-        # CNN feature extractor (same as TinyPolicy)
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-
-        # Compute flattened CNN output size from input dimensions
-        with torch.no_grad():
-            dummy = torch.zeros(1, 3, image_height, image_width)
-            dummy = self.conv2(self.conv1(dummy))
-            conv_out_size = dummy.numel()
-
-        # Compress CNN features (+ optional sensor data) to compact vector before LSTM
-        self.fc_embed = nn.Linear(conv_out_size + sensor_input_size, hidden_size)
-
-        # LSTM for temporal memory (operates on compact feature vector)
-        self.lstm = nn.LSTM(
-            input_size=hidden_size, hidden_size=hidden_size, batch_first=True
-        )
-
-        # Output layers
-        self.fc = nn.Linear(hidden_size, num_actions)
-        self.value_fc = nn.Linear(hidden_size, 1)  # Value head for PPO
-
-        # Learnable log_std (state-independent), clamped in forward()
-        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
-        self.max_log_std = max_log_std
-
-        # Hidden state (will be set during episode)
-        self.hidden = None
-
-    def reset_hidden(self, batch_size=1, device="cpu"):
-        """Reset LSTM hidden state at the start of each episode."""
-        self.hidden = (
-            torch.zeros(1, batch_size, self.hidden_size, device=device),
-            torch.zeros(1, batch_size, self.hidden_size, device=device),
-        )
-
-    def _backbone(self, x, hidden=None, sensors=None):
-        """
-        Shared CNN+LSTM backbone.
-
-        Args:
-            x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
-            hidden: Optional LSTM hidden state tuple (h, c)
-            sensors: Optional sensor data (B, sensor_dim) or (B, T, sensor_dim)
-
-        Returns:
-            features: (B, 2) or (B, T, hidden_size) LSTM output features
-            hidden: Updated hidden state
-            is_sequence: Whether the input was a sequence
-        """
-        is_sequence = x.dim() == 5
-        if is_sequence:
-            B, T, H, W, C = x.shape
-            x = x.reshape(B * T, H, W, C)
-        else:
-            B = x.size(0)
-            T = 1
-
-        x = x.permute(0, 3, 1, 2)
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.reshape(x.size(0), -1)
-
-        # Concatenate sensor data with CNN features before embedding
-        if sensors is not None and self.sensor_input_size > 0:
-            if sensors.dim() == 3:
-                sensors = sensors.reshape(B * T, -1)
-            x = torch.cat([x, sensors], dim=-1)
-
-        x = torch.relu(self.fc_embed(x))
-        x = x.reshape(B, T, -1)
-
-        if hidden is None:
-            hidden = self.hidden
-
-        lstm_out, hidden = self.lstm(x, hidden)
-        self.hidden = hidden
-
-        if is_sequence:
-            features = lstm_out  # (B, T, hidden_size)
-        else:
-            features = lstm_out.squeeze(1)  # (B, hidden_size)
-
-        return features, hidden, is_sequence
-
-    def forward(self, x, hidden=None, sensors=None):
-        """
-        Forward pass - returns action distribution parameters.
-
-        Args:
-            x: Input image (B, H, W, 3) or (B, T, H, W, 3) for sequences
-            hidden: Optional LSTM hidden state tuple (h, c)
-            sensors: Optional sensor data
-
-        Returns:
-            mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
-            std: (2,) standard deviation (shared across batch)
-        """
-        features, hidden, is_sequence = self._backbone(x, hidden, sensors=sensors)
-        mean = self.fc(features)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-        return mean, std
-
-    def evaluate_actions(self, observations, actions, sensors=None):
-        """
-        Single forward pass returning everything PPO needs.
-
-        Processes full episode sequence with fresh hidden state.
-
-        Args:
-            observations: (T, H, W, 3) episode observations
-            actions: (T, 2) tanh-squashed actions
-            sensors: Optional (T, sensor_dim) sensor data
-
-        Returns:
-            log_probs: (T,) log probability of actions
-            values: (T,) state value estimates
-            entropy: scalar mean entropy
-        """
-        device = observations.device
-        self.reset_hidden(batch_size=1, device=device)
-
-        # Process entire sequence: (1, T, H, W, 3)
-        x = observations.unsqueeze(0)
-        s = sensors.unsqueeze(0) if sensors is not None else None
-        features, _, _ = self._backbone(x, sensors=s)  # (1, T, hidden_size)
-        features = features.squeeze(0)  # (T, hidden_size)
-
-        # Action head
-        mean = self.fc(features)  # (T, 2)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-
-        # Value head
-        values = self.value_fc(features).squeeze(-1)  # (T,)
-
-        # Log prob with tanh correction
-        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
-        dist = torch.distributions.Normal(mean, std)
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        log_probs = _tanh_log_prob(gaussian_log_prob, z)
-
-        # Entropy
-        entropy = dist.entropy().sum(dim=-1).mean()
-
-        return log_probs, values, entropy
-
-    def sample_action(self, x, sensors=None):
-        """
-        Sample an action using tanh-squashed Gaussian.
-
-        Args:
-            x: Input image (B, H, W, 3)
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            action: (B, 2) sampled actions in (-1, 1)
-            log_prob: (B,) log probability of the sampled actions
-        """
-        mean, std = self.forward(x, sensors=sensors)
-        dist = torch.distributions.Normal(mean, std)
-        z = dist.sample()
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        action = torch.tanh(z)
-        log_prob = _tanh_log_prob(gaussian_log_prob, z)
-        return action, log_prob
-
-    def get_deterministic_action(self, x, sensors=None):
-        """
-        Get deterministic action (tanh of mean).
-
-        Args:
-            x: Input image (B, H, W, 3)
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            action: (B, 2) mean actions in (-1, 1)
-        """
-        mean, _ = self.forward(x, sensors=sensors)
-        return torch.tanh(mean)
-
-    def log_prob(self, x, action, sensors=None):
-        """
-        Compute log probability of given tanh-squashed actions for a sequence.
-
-        Args:
-            x: Input images (T, H, W, 3) - full episode
-            action: (T, 2) tanh-squashed actions to evaluate
-            sensors: Optional (T, sensor_dim) sensor data
-
-        Returns:
-            log_prob: (T,) log probability of actions
-        """
-        device = x.device
-
-        # Reset hidden state for fresh forward pass
-        self.reset_hidden(batch_size=1, device=device)
-
-        # Process entire sequence at once
-        x = x.unsqueeze(0)  # (1, T, H, W, 3)
-        s = sensors.unsqueeze(0) if sensors is not None else None
-        mean, std = self.forward(x, sensors=s)  # mean: (1, T, 2)
-        mean = mean.squeeze(0)  # (T, 2)
-
-        # Recover pre-tanh values
-        z = torch.atanh(action.clamp(-1 + 1e-6, 1 - 1e-6))
-
-        dist = torch.distributions.Normal(mean, std)
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        return _tanh_log_prob(gaussian_log_prob, z)
-
-
-class TinyPolicy(nn.Module):
-    """
-    Stochastic policy network for REINFORCE.
-
-    Input: RGB image (HxWx3)
-    Output: Mean of Gaussian distribution over motor commands [left, right]
-
-    The policy is stochastic: actions are sampled from N(mean, std).
-    std is a learnable parameter (not state-dependent for simplicity).
-    """
-
-    def __init__(
-        self, image_height=128, image_width=128, num_actions=2, init_std=0.5, max_log_std=0.7,
-        sensor_input_size=0,
-    ):
-        super().__init__()
-
-        self.num_actions = num_actions
-        self.sensor_input_size = sensor_input_size
-
-        # CNN: 2 conv layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-
-        # Compute flattened CNN output size from input dimensions
-        with torch.no_grad():
-            dummy = torch.zeros(1, 3, image_height, image_width)
-            dummy = self.conv2(self.conv1(dummy))
-            conv_out_size = dummy.numel()
-
-        # FC layers (CNN features + optional sensor data)
-        self.fc1 = nn.Linear(conv_out_size + sensor_input_size, 128)
-        self.fc2 = nn.Linear(128, num_actions)
-        self.value_fc = nn.Linear(128, 1)  # Value head for PPO
-
-        # Learnable log_std (state-independent), clamped in forward()
-        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
-        self.max_log_std = max_log_std
-
-    def _backbone(self, x, sensors=None):
-        """
-        Shared CNN+FC backbone.
-
-        Args:
-            x: Input image (B, H, W, 3) in range [0, 1]
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            features: (B, 128) features after fc1+relu
-        """
-        x = x.permute(0, 3, 1, 2)
-        x = torch.relu(self.conv1(x))
-        x = torch.relu(self.conv2(x))
-        x = x.reshape(x.size(0), -1)
-        if sensors is not None and self.sensor_input_size > 0:
-            x = torch.cat([x, sensors], dim=-1)
-        return torch.relu(self.fc1(x))
-
-    def forward(self, x, sensors=None):
-        """
-        Forward pass - returns action distribution parameters.
-
-        Args:
-            x: Input image (B, H, W, 3) in range [0, 1]
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            mean: (B, 2) unbounded mean (tanh applied at sampling)
-            std: (2,) standard deviation (shared across batch)
-        """
-        features = self._backbone(x, sensors=sensors)
-        mean = self.fc2(features)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-        return mean, std
-
-    def evaluate_actions(self, observations, actions, sensors=None):
-        """
-        Single forward pass returning everything PPO needs.
-
-        Args:
-            observations: (B, H, W, 3) observations
-            actions: (B, 2) tanh-squashed actions
-            sensors: Optional (B, sensor_dim) sensor data
-
-        Returns:
-            log_probs: (B,) log probability of actions
-            values: (B,) state value estimates
-            entropy: scalar mean entropy
-        """
-        features = self._backbone(observations, sensors=sensors)
-
-        # Action head
-        mean = self.fc2(features)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-
-        # Value head
-        values = self.value_fc(features).squeeze(-1)
-
-        # Log prob with tanh correction
-        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
-        dist = torch.distributions.Normal(mean, std)
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        log_probs = _tanh_log_prob(gaussian_log_prob, z)
-
-        # Entropy
-        entropy = dist.entropy().sum(dim=-1).mean()
-
-        return log_probs, values, entropy
-
-    def sample_action(self, x, sensors=None):
-        """
-        Sample an action using tanh-squashed Gaussian.
-
-        Args:
-            x: Input image (B, H, W, 3)
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            action: (B, 2) sampled actions in (-1, 1)
-            log_prob: (B,) log probability of the sampled actions
-        """
-        mean, std = self.forward(x, sensors=sensors)
-        dist = torch.distributions.Normal(mean, std)
-        z = dist.sample()
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        action = torch.tanh(z)
-        log_prob = _tanh_log_prob(gaussian_log_prob, z)
-        return action, log_prob
-
-    def get_deterministic_action(self, x, sensors=None):
-        """
-        Get deterministic action (tanh of mean).
-
-        Args:
-            x: Input image (B, H, W, 3)
-            sensors: Optional sensor data (B, sensor_dim)
-
-        Returns:
-            action: (B, 2) mean actions in (-1, 1)
-        """
-        mean, _ = self.forward(x, sensors=sensors)
-        return torch.tanh(mean)
-
-    def log_prob(self, x, action, sensors=None):
-        """
-        Compute log probability of given tanh-squashed actions.
-
-        Args:
-            x: Input image (B, H, W, 3)
-            action: (B, 2) tanh-squashed actions to evaluate
-            sensors: Optional (B, sensor_dim) sensor data
-
-        Returns:
-            log_prob: (B,) log probability of actions
-        """
-        mean, std = self.forward(x, sensors=sensors)
-        z = torch.atanh(action.clamp(-1 + 1e-6, 1 - 1e-6))
-        dist = torch.distributions.Normal(mean, std)
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        return _tanh_log_prob(gaussian_log_prob, z)
-
-
-class MLPPolicy(nn.Module):
-    """
-    MLP policy for sensor-only continuous control (no CNN, no LSTM).
-
-    Separate actor/critic networks with tanh activations.
-    Includes running observation normalization as registered buffers.
-    """
-
-    def __init__(
-        self,
-        num_actions=6,
-        hidden_size=256,
-        init_std=1.0,
-        max_log_std=0.7,
-        sensor_input_size=18,
-        # Unused — kept for interface compatibility with CNN policies
-        image_height=64,
-        image_width=64,
-    ):
-        super().__init__()
-
-        self.num_actions = num_actions
-        self.sensor_input_size = sensor_input_size
-
-        # Actor network
-        self.actor_fc1 = nn.Linear(sensor_input_size, hidden_size)
-        self.actor_fc2 = nn.Linear(hidden_size, hidden_size)
-        self.actor_out = nn.Linear(hidden_size, num_actions)
-
-        # Critic network (separate weights)
-        self.critic_fc1 = nn.Linear(sensor_input_size, hidden_size)
-        self.critic_fc2 = nn.Linear(hidden_size, hidden_size)
-        self.critic_out = nn.Linear(hidden_size, 1)
-
-        # Learnable log_std (state-independent)
-        self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
-        self.max_log_std = max_log_std
-
-        # Running observation normalizer (Welford's online algorithm)
-        self.register_buffer("obs_mean", torch.zeros(sensor_input_size))
-        self.register_buffer("obs_var", torch.ones(sensor_input_size))
-        self.register_buffer("obs_count", torch.tensor(1e-4))
-
-    def update_normalizer(self, sensor_batch):
-        """Update running mean/var from a batch of sensor observations.
-
-        Args:
-            sensor_batch: (N, sensor_dim) tensor of sensor observations
-        """
-        batch_mean = sensor_batch.mean(dim=0)
-        batch_var = sensor_batch.var(dim=0)
-        batch_count = sensor_batch.shape[0]
-
-        delta = batch_mean - self.obs_mean
-        total_count = self.obs_count + batch_count
-        new_mean = self.obs_mean + delta * batch_count / total_count
-        m_a = self.obs_var * self.obs_count
-        m_b = batch_var * batch_count
-        m2 = m_a + m_b + delta.pow(2) * self.obs_count * batch_count / total_count
-        new_var = m2 / total_count
-
-        self.obs_mean.copy_(new_mean)
-        self.obs_var.copy_(new_var)
-        self.obs_count.copy_(total_count)
-
-    def _normalize(self, sensors):
-        """Normalize sensor observations using running stats."""
-        return ((sensors - self.obs_mean) / torch.sqrt(self.obs_var + 1e-8)).clamp(-10, 10)
-
-    def _actor(self, sensors):
-        x = self._normalize(sensors)
-        x = torch.tanh(self.actor_fc1(x))
-        x = torch.tanh(self.actor_fc2(x))
-        return self.actor_out(x)
-
-    def _critic(self, sensors):
-        x = self._normalize(sensors)
-        x = torch.tanh(self.critic_fc1(x))
-        x = torch.tanh(self.critic_fc2(x))
-        return self.critic_out(x).squeeze(-1)
-
-    def forward(self, x, sensors=None):
-        """Forward pass — returns action mean and std. Image x is ignored."""
-        mean = self._actor(sensors)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-        return mean, std
-
-    def evaluate_actions(self, observations, actions, sensors=None):
-        """Single forward pass returning log_probs, values, entropy."""
-        mean = self._actor(sensors)
-        values = self._critic(sensors)
-        clamped_log_std = self.log_std.clamp(max=self.max_log_std)
-        std = torch.exp(clamped_log_std)
-
-        z = torch.atanh(actions.clamp(-1 + 1e-6, 1 - 1e-6))
-        dist = torch.distributions.Normal(mean, std)
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        log_probs = _tanh_log_prob(gaussian_log_prob, z)
-        entropy = dist.entropy().sum(dim=-1).mean()
-
-        return log_probs, values, entropy
-
-    def sample_action(self, x, sensors=None):
-        """Sample tanh-squashed Gaussian action. Image x is ignored."""
-        mean, std = self.forward(x, sensors=sensors)
-        dist = torch.distributions.Normal(mean, std)
-        z = dist.sample()
-        gaussian_log_prob = dist.log_prob(z).sum(dim=-1)
-        action = torch.tanh(z)
-        log_prob = _tanh_log_prob(gaussian_log_prob, z)
-        return action, log_prob
-
-    def get_deterministic_action(self, x, sensors=None):
-        """Get deterministic action (tanh of mean). Image x is ignored."""
-        mean, _ = self.forward(x, sensors=sensors)
-        return torch.tanh(mean)
-
-
-def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False):
-    """
-    Run one episode and collect data.
-
-    Args:
-        env: TrainingEnv instance
-        policy: Neural network policy
-        device: torch device
-        log_rerun: Log episode to Rerun for visualization
-        deterministic: If True, use mean actions (no sampling) for evaluation.
-                       If False, sample from policy distribution for training.
-
-    Returns:
-        episode_data: Dict with observations, actions, rewards, log_probs (if not deterministic), etc.
-    """
-    # Rerun namespace depends on mode
-    ns = "eval" if deterministic else "training"
-
-    observations = []
-    sensor_data = []
-    actions = []
-    log_probs = []  # Only populated when not deterministic
-    rewards = []
-    distances = []
-
-    obs = env.reset()
-    env_config = env.last_reset_config
-    has_sensors = env.sensor_dim > 0 and getattr(policy, "sensor_input_size", 0) > 0
-
-    # Reset LSTM hidden state if policy has one
-    if hasattr(policy, "reset_hidden"):
-        policy.reset_hidden(batch_size=1, device=device)
-    done = False
-    truncated = False
-    total_reward = 0
-    steps = 0
-    info = {}
-
-    # Track trajectory for Rerun
-    trajectory_points = []
-
-    # Set up video encoder for Rerun (H.264 instead of per-frame JPEG)
-    video_encoder = None
-    if log_rerun:
-        # Compute actual control frequency from physics config
-        action_dt = env.env.model.opt.timestep * env.mujoco_steps_per_action
-        control_fps = max(1, int(round(1.0 / action_dt)))
-        video_encoder = rerun_logger.VideoEncoder(
-            f"{ns}/camera",
-            width=env.observation_shape[1],
-            height=env.observation_shape[0],
-            fps=control_fps,
-        )
-
-    while not (done or truncated):
-        # Convert observation to torch tensor
-        obs_tensor = torch.from_numpy(obs).unsqueeze(0).to(device)
-        sensor_tensor = None
-        if has_sensors:
-            sensor_tensor = torch.from_numpy(env.current_sensors).unsqueeze(0).to(device)
-
-        # Get action (deterministic or stochastic)
-        with torch.no_grad():
-            if deterministic:
-                action = policy.get_deterministic_action(obs_tensor, sensors=sensor_tensor)
-                action = action.cpu().numpy()[0]
-                log_prob = None
-            else:
-                action, log_prob = policy.sample_action(obs_tensor, sensors=sensor_tensor)
-                action = action.cpu().numpy()[0]
-                log_prob = log_prob.cpu().numpy()[0]
-
-        # Store data
-        observations.append(obs)
-        if has_sensors:
-            sensor_data.append(env.current_sensors.copy())
-        actions.append(action)
-        if not deterministic:
-            log_probs.append(log_prob)
-
-        # Take step
-        obs, reward, done, truncated, info = env.step(action)
-        rewards.append(reward)
-        distances.append(info["distance"])
-        total_reward += reward
-
-        # Log to Rerun in real-time
-        if log_rerun:
-            rr.set_time("step", sequence=steps)
-            video_encoder.log_frame(observations[-1])
-            # Sensor inputs
-            if has_sensors:
-                sensor_vals = env.current_sensors
-                for si in env.sensor_info:
-                    adr, dim = si["adr"], si["dim"]
-                    if dim == 1:
-                        rr.log(f"{ns}/sensors/{si['name']}", rr.Scalars([sensor_vals[adr]]))
-                    else:
-                        for d in range(dim):
-                            rr.log(
-                                f"{ns}/sensors/{si['name']}/{d}",
-                                rr.Scalars([sensor_vals[adr + d]]),
-                            )
-            for i, name in enumerate(env.actuator_names):
-                rr.log(f"{ns}/action/{name}", rr.Scalars([action[i]]))
-            rr.log(f"{ns}/reward/total", rr.Scalars([reward]))
-            rr.log(f"{ns}/reward/cumulative", rr.Scalars([total_reward]))
-            rr.log(f"{ns}/distance_to_target", rr.Scalars([info["distance"]]))
-
-            # Log body transforms
-            rerun_logger.log_body_transforms(env, namespace=ns)
-
-            # Build and log trajectory
-            trajectory_points.append(info["position"])
-            if len(trajectory_points) > 1:
-                rr.log(
-                    f"{ns}/trajectory",
-                    rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]),
-                )
-
-        steps += 1
-
-    # Flush video encoder and log episode summary
-    if log_rerun:
-        video_encoder.flush()
-        rr.log(f"{ns}/episode/total_reward", rr.Scalars([total_reward]))
-        rr.log(f"{ns}/episode/final_distance", rr.Scalars([info["distance"]]))
-        rr.log(f"{ns}/episode/steps", rr.Scalars([steps]))
-
-    # Compute action statistics (per-actuator by name)
-    actions_array = np.array(actions)
-
-    # Determine if episode was a success
-    if info.get("in_walking_stage"):
-        # Walking stage: success = survived AND moved forward enough
-        forward_dist = info.get("forward_distance", 0.0)
-        success = bool(truncated and not done and forward_dist >= env.walking_success_min_forward)
-    else:
-        # Standard stages: success = reached target
-        success = bool(done and info["distance"] < env.success_distance)
-
-    result = {
-        "observations": observations,
-        "actions": actions,
-        "rewards": rewards,
-        "distances": distances,
-        "total_reward": total_reward,
-        "steps": steps,
-        "final_distance": info["distance"],
-        "success": success,
-        "env_config": env_config,
-        "done": done,
-        "truncated": truncated,
-        "patience_truncated": info.get("patience_truncated", False),
-        "joint_stagnation_truncated": info.get("joint_stagnation_truncated", False),
-        "forward_distance": info.get("forward_distance", 0.0),
-    }
-    if has_sensors:
-        result["sensor_data"] = sensor_data
-    # Per-actuator stats keyed by actuator name
-    for i, name in enumerate(env.actuator_names):
-        motor_actions = actions_array[:, i]
-        result[f"{name}_mean"] = float(np.mean(motor_actions))
-        result[f"{name}_std"] = float(np.std(motor_actions))
-
-    # Store final observation for GAE bootstrapping on truncated episodes
-    if truncated and not done:
-        result["final_observation"] = obs
-        if has_sensors:
-            result["final_sensors"] = env.current_sensors.copy()
-
-    # Only include log_probs for training episodes
-    if not deterministic:
-        result["log_probs"] = log_probs
-
-    return result
-
-
-
-def compute_reward_to_go(rewards, gamma=0.99):
-    """
-    Compute discounted reward-to-go for a single episode.
-
-    Args:
-        rewards: Tensor of per-step rewards (T,)
-        gamma: Discount factor
-
-    Returns:
-        reward_to_go: Tensor of discounted returns (T,)
-    """
-    reward_to_go = torch.zeros_like(rewards)
-    running_sum = 0
-    for t in reversed(range(len(rewards))):
-        running_sum = rewards[t] + gamma * running_sum
-        reward_to_go[t] = running_sum
-    return reward_to_go
-
-
-def compute_gae(rewards, values, gamma, gae_lambda, next_value=0.0):
-    """
-    Compute Generalized Advantage Estimation (GAE).
-
-    Args:
-        rewards: Tensor of per-step rewards (T,)
-        values: Tensor of per-step value estimates (T,)
-        gamma: Discount factor
-        gae_lambda: GAE lambda parameter
-        next_value: Bootstrap value for the state after the last step
-                    (0 for terminated episodes, V(s_final) for truncated)
-
-    Returns:
-        advantages: Tensor of GAE advantages (T,)
-        returns: Tensor of GAE returns / value targets (T,)
-    """
-    T = len(rewards)
-    advantages = torch.zeros(T, dtype=rewards.dtype, device=rewards.device)
-    gae = 0.0
-    for t in reversed(range(T)):
-        next_val = next_value if t == T - 1 else values[t + 1]
-        delta = rewards[t] + gamma * next_val - values[t]
-        gae = delta + gamma * gae_lambda * gae
-        advantages[t] = gae
-    returns = advantages + values
-    return advantages, returns
-
-
-def train_step_batched(
-    policy, optimizer, episode_batch, gamma=0.99, entropy_coeff=0.01
-):
-    """
-    REINFORCE policy gradient training step on a batch of episodes.
-
-    Computes reward-to-go for all episodes, normalizes advantages across
-    the entire batch (so good episodes get positive advantage, bad episodes
-    get negative), then takes one optimizer step.
-
-    Includes an entropy bonus to prevent policy collapse: when advantage
-    signal is weak (all episodes similar), the entropy term provides a
-    non-zero gradient that keeps exploration alive.
-
-    Args:
-        policy: Stochastic neural network policy
-        optimizer: PyTorch optimizer
-        episode_batch: List of episode_data dicts from collect_episode
-        gamma: Discount factor for reward-to-go
-        entropy_coeff: Weight for entropy bonus (0 = disabled)
-
-    Returns:
-        avg_loss: Average loss across batch
-        grad_norm: Gradient norm after averaging
-        policy_std: Current policy standard deviation
-        entropy: Policy entropy value
-    """
-    optimizer.zero_grad()
-
-    # First pass: compute reward-to-go for all episodes
-    all_rtg = []
-    for episode_data in episode_batch:
-        rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32)
-        all_rtg.append(compute_reward_to_go(rewards, gamma))
-
-    # Normalize advantages across the entire batch
-    all_rtg_cat = torch.cat(all_rtg)
-    batch_mean = all_rtg_cat.mean()
-    batch_std = all_rtg_cat.std()
-    if batch_std > 1e-8:
-        all_rtg = [(rtg - batch_mean) / (batch_std + 1e-8) for rtg in all_rtg]
-
-    # Second pass: compute losses with batch-normalized advantages
-    # Weight each episode by its length so every timestep contributes equally,
-    # preventing long episodes from dominating the gradient.
-    total_steps = sum(len(ep["rewards"]) for ep in episode_batch)
-    total_loss = 0.0
-    for episode_data, advantage in zip(episode_batch, all_rtg):
-        observations = torch.from_numpy(np.array(episode_data["observations"]))
-        actions = torch.from_numpy(np.array(episode_data["actions"]))
-        sensors = None
-        if "sensor_data" in episode_data:
-            sensors = torch.from_numpy(np.array(episode_data["sensor_data"]))
-
-        log_probs = policy.log_prob(observations, actions, sensors=sensors)
-        # Sum (not mean) within episode, then divide by total batch timesteps
-        loss = -torch.sum(advantage * log_probs) / total_steps
-
-        loss.backward()
-        total_loss += loss.item()
-
-    avg_loss = total_loss / len(episode_batch)
-
-    # Clip REINFORCE gradients before adding entropy bonus.
-    # This prevents large REINFORCE gradients from drowning out the
-    # entropy signal — without this, clip_grad_norm_ scales everything
-    # together and the small entropy gradient on log_std gets zeroed out.
-    total_grad_norm = nn.utils.clip_grad_norm_(policy.parameters(), max_norm=0.5)
-    total_grad_norm = total_grad_norm.item()
-
-    # Entropy bonus: H(π) = 0.5 * (1 + log(2π)) + log_std per action dim
-    # Applied AFTER clipping so the entropy gradient reaches log_std at
-    # full strength every step, preventing std collapse.
-    if entropy_coeff > 0:
-        clamped_log_std = policy.log_std.clamp(max=policy.max_log_std)
-        std = torch.exp(clamped_log_std)
-        entropy = torch.distributions.Normal(torch.zeros_like(std), std).entropy().sum()
-        entropy_loss = -entropy_coeff * entropy
-        entropy_loss.backward()
-        entropy_val = entropy.item()
-    else:
-        entropy_val = 0.0
-
-    optimizer.step()
-
-    # Get current policy std for logging
-    clamped = policy.log_std.clamp(max=policy.max_log_std)
-    policy_std = torch.exp(clamped).detach().cpu().numpy()
-
-    return avg_loss, total_grad_norm, policy_std, entropy_val
-
-
-def train_step_ppo(
-    policy,
-    optimizer,
-    episode_batch,
-    gamma=0.99,
-    gae_lambda=0.95,
-    clip_epsilon=0.2,
-    ppo_epochs=4,
-    entropy_coeff=0.01,
-    value_coeff=0.5,
-    max_grad_norm=0.5,
-):
-    """
-    PPO training step on a batch of episodes.
-
-    Phase 1: Compute GAE advantages (once, before epochs).
-    Phase 2: K optimization epochs over the data with clipped surrogate objective.
-
-    Args:
-        policy: Stochastic neural network policy with evaluate_actions()
-        optimizer: PyTorch optimizer
-        episode_batch: List of episode_data dicts from collect_episode
-        gamma: Discount factor
-        gae_lambda: GAE lambda parameter
-        clip_epsilon: PPO clip range
-        ppo_epochs: Number of optimization passes over the data
-        entropy_coeff: Entropy bonus coefficient
-        value_coeff: Value loss coefficient
-        max_grad_norm: Max gradient norm for clipping
-
-    Returns:
-        policy_loss: Average policy loss across epochs
-        value_loss: Average value loss across epochs
-        entropy: Average entropy across epochs
-        grad_norm: Average gradient norm across epochs
-        policy_std: Current policy standard deviation
-        clip_fraction: Fraction of clipped ratios (last epoch)
-        approx_kl: Approximate KL divergence (last epoch)
-        explained_variance: How well V(s) predicts returns (1.0 = perfect)
-        mean_value: Mean V(s) across batch
-        mean_return: Mean GAE return across batch
-    """
-    device = next(policy.parameters()).device
-
-    # Phase 1: Compute advantages with current policy (no grad)
-    episode_data_tensors = []
-    all_advantages = []
-    all_returns = []
-
-    with torch.no_grad():
-        for ep in episode_batch:
-            obs = torch.from_numpy(np.array(ep["observations"])).to(device)
-            acts = torch.from_numpy(np.array(ep["actions"])).to(device)
-            rewards = torch.tensor(ep["rewards"], dtype=torch.float32, device=device)
-            old_log_probs = torch.tensor(
-                ep["log_probs"], dtype=torch.float32, device=device
-            )
-            sensors = None
-            if "sensor_data" in ep:
-                sensors = torch.from_numpy(np.array(ep["sensor_data"])).to(device)
-
-            _, values, _ = policy.evaluate_actions(obs, acts, sensors=sensors)
-
-            # Bootstrap value for truncated episodes
-            next_value = 0.0
-            if ep.get("truncated") and not ep.get("done") and "final_observation" in ep:
-                final_obs = (
-                    torch.from_numpy(ep["final_observation"]).unsqueeze(0).to(device)
-                )  # (1, H, W, 3)
-                dummy_act = torch.zeros(1, policy.num_actions, device=device)
-                final_sensors = None
-                if "final_sensors" in ep:
-                    final_sensors = torch.from_numpy(ep["final_sensors"]).unsqueeze(0).to(device)
-                _, final_val, _ = policy.evaluate_actions(final_obs, dummy_act, sensors=final_sensors)
-                next_value = final_val[0].item()
-
-            advantages, returns = compute_gae(
-                rewards, values, gamma, gae_lambda, next_value
-            )
-
-            ep_tensors = {
-                "observations": obs,
-                "actions": acts,
-                "old_log_probs": old_log_probs,
-                "advantages": advantages,
-                "returns": returns,
-            }
-            if sensors is not None:
-                ep_tensors["sensors"] = sensors
-            episode_data_tensors.append(ep_tensors)
-
-            all_advantages.append(advantages)
-            all_returns.append(returns)
-
-    # Value function diagnostics (before normalization)
-    all_adv_cat = torch.cat(all_advantages)
-    all_ret_cat = torch.cat(all_returns)
-    # Explained variance: 1 - Var(returns - values) / Var(returns)
-    # values = returns - advantages (before normalization)
-    all_val_cat = all_ret_cat - all_adv_cat
-    ret_var = all_ret_cat.var()
-    explained_variance = (
-        1.0 - (all_ret_cat - all_val_cat).var() / (ret_var + 1e-8)
-        if ret_var > 1e-8
-        else 0.0
-    )
-    mean_value = all_val_cat.mean().item()
-    mean_return = all_ret_cat.mean().item()
-
-    # Normalize advantages across the entire batch
-    adv_mean = all_adv_cat.mean()
-    adv_std = all_adv_cat.std()
-    if adv_std > 1e-8:
-        for ep_tensors in episode_data_tensors:
-            ep_tensors["advantages"] = (ep_tensors["advantages"] - adv_mean) / (
-                adv_std + 1e-8
-            )
-
-    # Phase 2: PPO epochs
-    total_policy_loss = 0.0
-    total_value_loss = 0.0
-    total_entropy = 0.0
-    total_grad_norm = 0.0
-    last_clip_fraction = 0.0
-    last_approx_kl = 0.0
-
-    for epoch in range(ppo_epochs):
-        optimizer.zero_grad()
-
-        epoch_policy_loss = 0.0
-        epoch_value_loss = 0.0
-        epoch_entropy = 0.0
-        epoch_clip_count = 0
-        epoch_total_steps = 0
-        epoch_kl_sum = 0.0
-
-        total_steps = sum(len(ep["observations"]) for ep in episode_data_tensors)
-
-        # Process episodes sequentially (LSTM hidden state requirement)
-        for ep_tensors in episode_data_tensors:
-            obs = ep_tensors["observations"]
-            acts = ep_tensors["actions"]
-            old_lp = ep_tensors["old_log_probs"]
-            adv = ep_tensors["advantages"]
-            ret = ep_tensors["returns"]
-            sensors = ep_tensors.get("sensors")
-            T = len(obs)
-
-            new_log_probs, values, entropy = policy.evaluate_actions(obs, acts, sensors=sensors)
-
-            # PPO clipped surrogate
-            ratio = torch.exp(new_log_probs - old_lp)
-            surr1 = ratio * adv
-            surr2 = torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * adv
-            policy_loss = -torch.min(surr1, surr2).sum() / total_steps
-
-            # Value loss
-            value_loss = F.mse_loss(values, ret, reduction="sum") / total_steps
-
-            # Combined loss
-            loss = policy_loss + value_coeff * value_loss - entropy_coeff * entropy
-            loss.backward()
-
-            # Track metrics
-            epoch_policy_loss += policy_loss.item() * T
-            epoch_value_loss += value_loss.item() * T
-            epoch_entropy += entropy.item() * T
-
-            with torch.no_grad():
-                clipped = ((ratio - 1.0).abs() > clip_epsilon).float().sum().item()
-                epoch_clip_count += clipped
-                epoch_total_steps += T
-                epoch_kl_sum += (old_lp - new_log_probs).mean().item() * T
-
-        grad_norm = nn.utils.clip_grad_norm_(
-            policy.parameters(), max_norm=max_grad_norm
-        )
-        optimizer.step()
-
-        total_policy_loss += epoch_policy_loss / epoch_total_steps
-        total_value_loss += epoch_value_loss / epoch_total_steps
-        total_entropy += epoch_entropy / epoch_total_steps
-        total_grad_norm += grad_norm.item()
-
-        if epoch == ppo_epochs - 1:
-            last_clip_fraction = epoch_clip_count / max(epoch_total_steps, 1)
-            last_approx_kl = epoch_kl_sum / max(epoch_total_steps, 1)
-
-    # Average across epochs
-    avg_policy_loss = total_policy_loss / ppo_epochs
-    avg_value_loss = total_value_loss / ppo_epochs
-    avg_entropy = total_entropy / ppo_epochs
-    avg_grad_norm = total_grad_norm / ppo_epochs
-
-    # Get current policy std for logging
-    clamped = policy.log_std.clamp(max=policy.max_log_std)
-    policy_std = torch.exp(clamped).detach().cpu().numpy()
-
-    ev = (
-        explained_variance.item()
-        if torch.is_tensor(explained_variance)
-        else explained_variance
-    )
-
-    return (
-        avg_policy_loss,
-        avg_value_loss,
-        avg_entropy,
-        avg_grad_norm,
-        policy_std,
-        last_clip_fraction,
-        last_approx_kl,
-        ev,
-        mean_value,
-        mean_return,
-    )
-
-
-def log_episode_value_trace(
-    policy, episode_data, gamma, gae_lambda, device="cpu", namespace="eval"
-):
-    """
-    Run a forward pass on a completed episode to log V(s_t) and A(s_t) to Rerun.
-
-    Gives per-step visibility into the value function's beliefs during the episode.
-    """
-    obs = torch.from_numpy(np.array(episode_data["observations"])).to(device)
-    acts = torch.from_numpy(np.array(episode_data["actions"])).to(device)
-    rewards = torch.tensor(episode_data["rewards"], dtype=torch.float32, device=device)
-    sensors = None
-    if "sensor_data" in episode_data and len(episode_data["sensor_data"]) > 0:
-        sensors = torch.from_numpy(np.array(episode_data["sensor_data"])).to(device)
-
-    with torch.no_grad():
-        # Use evaluate_actions even for deterministic episodes — we just need values
-        # Need dummy actions for the log_prob computation but we only use the values
-        _, values, _ = policy.evaluate_actions(obs, acts, sensors=sensors)
-        advantages, returns = compute_gae(
-            rewards, values, gamma, gae_lambda, next_value=0.0
-        )
-
-    values_np = values.cpu().numpy()
-    advantages_np = advantages.cpu().numpy()
-    returns_np = returns.cpu().numpy()
-    cumulative_reward = np.cumsum(episode_data["rewards"])
-
-    for t in range(len(values_np)):
-        rr.set_time("step", sequence=t)
-        rr.log(f"{namespace}/value/V_s", rr.Scalars([values_np[t]]))
-        rr.log(f"{namespace}/value/advantage", rr.Scalars([advantages_np[t]]))
-        rr.log(
-            f"{namespace}/value/cumulative_reward", rr.Scalars([cumulative_reward[t]])
-        )
-        rr.log(f"{namespace}/value/gae_return", rr.Scalars([returns_np[t]]))
-
-
-
-
-def _get_git_branch() -> str:
+def _format_config_summary(cfg) -> str:
+    """Format key config values for AI commentary context."""
+    lines = [
+        f"batch_size={cfg.training.batch_size}, lr={cfg.training.learning_rate}",
+        f"policy={cfg.policy.policy_type}, hidden={cfg.policy.hidden_size}",
+        f"entropy_coeff={cfg.training.entropy_coeff}, clip_eps={cfg.training.clip_epsilon}",
+        f"gamma={cfg.training.gamma}, gae_lambda={cfg.training.gae_lambda}",
+        f"curriculum stages={cfg.curriculum.num_stages}, advance_threshold={cfg.curriculum.advance_threshold}",
+        f"mastery: {cfg.training.mastery_threshold:.0%} for {cfg.training.mastery_batches} batches",
+    ]
+    return "\n".join(lines)
+
+
+def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
+    """Generate AI commentary and push to TUI. Blocks the training thread briefly."""
     try:
-        return subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
+        text = commentator.generate_commentary(batch, metrics, elapsed_secs)
+        if text and app is not None:
+            app.call_from_thread(app.ai_commentary, text)
+        elif text:
+            dashboard.message(f"AI: {text}")
     except Exception:
-        return "unknown"
+        log.exception("AI commentary error")
 
 
-def _drain_command_queue(queue, dashboard, stage_progress, curr, pending_save):
+### Policies, collection, and algorithms extracted to separate modules.
+### Re-exported above for backward compatibility.
+
+
+class CommandChannel:
+    """Thread-safe command channel between TUI and training loop.
+
+    Uses two internal queues so flow-control commands (pause/unpause/step/stop)
+    and action commands (checkpoint/log_rerun/curriculum) never interfere.
+    wait_if_paused() only reads the flow queue; drain_actions() only reads the
+    action queue.  No put-back logic needed.
     """
-    Drain commands from the TUI command queue.
 
-    Returns:
-        (stage_progress, pending_save, should_stop, force_rerun)
-    """
-    if queue is None:
-        return stage_progress, pending_save, False, False
+    _FLOW = frozenset({"pause", "unpause", "step", "stop"})
 
-    should_stop = False
-    force_rerun = False
+    def __init__(self):
+        self._flow: Queue[str] = Queue()
+        self._actions: Queue[str] = Queue()
 
-    while not queue.empty():
-        try:
-            cmd = queue.get_nowait()
-        except Exception:
-            break
-
-        if cmd == "checkpoint":
-            pending_save = ("manual", [])
-            dashboard.message("Checkpoint will be saved after this batch")
-        elif cmd == "log_rerun":
-            force_rerun = True
-            dashboard.message("Rerun recording queued for next eval")
-        elif cmd == "advance_curriculum":
-            old = stage_progress
-            stage_progress = min(1.0, stage_progress + 0.1)
-            dashboard.message(f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}")
-        elif cmd == "regress_curriculum":
-            old = stage_progress
-            stage_progress = max(0.0, stage_progress - 0.1)
-            dashboard.message(
-                f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
-            )
-        elif cmd == "stop":
-            should_stop = True
-            dashboard.message("Stopping after this batch...")
-        # pause/unpause/step handled by _wait_if_paused
-
-    return stage_progress, pending_save, should_stop, force_rerun
-
-
-def _wait_if_paused(queue):
-    """
-    Block the training thread while paused.
-
-    Checks the queue for unpause/step/stop commands.
-    Returns True if training should stop, False otherwise.
-    """
-    if queue is None:
-        return False
-
-    paused = False
-
-    # Check for pause command without blocking
-    while not queue.empty():
-        try:
-            cmd = queue.get_nowait()
-        except Exception:
-            break
-        if cmd == "pause":
-            paused = True
-        elif cmd == "unpause":
-            paused = False
-        elif cmd == "step":
-            return False  # Run one batch then re-check
-        elif cmd == "stop":
-            return True
+    def send(self, cmd: str):
+        """Queue a command (called from TUI thread)."""
+        if cmd in self._FLOW:
+            self._flow.put(cmd)
         else:
-            # Put non-pause commands back for _drain_command_queue
-            queue.put(cmd)
+            self._actions.put(cmd)
 
-    # If paused, block until unpaused/stepped/stopped
-    while paused:
-        time.sleep(0.05)  # 50ms poll interval
-        while not queue.empty():
+    def wait_if_paused(self) -> bool:
+        """Block while paused.  Returns True if stop was requested."""
+        paused = False
+
+        # Drain pending flow commands
+        while not self._flow.empty():
             try:
-                cmd = queue.get_nowait()
-            except Exception:
+                cmd = self._flow.get_nowait()
+            except Empty:
                 break
-            if cmd == "unpause":
+            if cmd == "pause":
+                paused = True
+            elif cmd == "unpause":
                 paused = False
             elif cmd == "step":
-                return False  # Run one batch
+                return False
             elif cmd == "stop":
                 return True
-            elif cmd == "pause":
-                pass  # Already paused
-            else:
-                queue.put(cmd)
 
-    return False
+        # Block until un-paused, stepped, or stopped
+        while paused:
+            time.sleep(0.05)
+            while not self._flow.empty():
+                try:
+                    cmd = self._flow.get_nowait()
+                except Empty:
+                    break
+                if cmd == "unpause":
+                    paused = False
+                elif cmd == "step":
+                    return False
+                elif cmd == "stop":
+                    return True
+
+        return False
+
+    def drain_actions(self) -> list[str]:
+        """Return all pending action commands (non-blocking)."""
+        cmds: list[str] = []
+        while not self._actions.empty():
+            try:
+                cmds.append(self._actions.get_nowait())
+            except Empty:
+                break
+        return cmds
 
 
 def _train_loop(
@@ -1522,7 +423,7 @@ def _train_loop(
     smoketest=False,
     resume=None,
     num_workers_override=None,
-    command_queue=None,
+    commands: CommandChannel | None = None,
     app=None,
     log_fn=print,
 ):
@@ -1535,7 +436,7 @@ def _train_loop(
         smoketest: Whether this is a smoketest run
         resume: Resume ref string (local path or wandb artifact)
         num_workers_override: Override num_workers from config
-        command_queue: Optional Queue for TUI commands
+        commands: Optional CommandChannel for TUI commands
         app: Optional TUI app for pushing metadata
         log_fn: Function for print-style logging (print or dashboard.message).
                 In TUI mode this is dashboard.message (shows in log area).
@@ -1546,67 +447,100 @@ def _train_loop(
     is_tui = app is not None
     _verbose = (lambda msg: None) if is_tui else log_fn
 
-    if "walker2d" in cfg.env.scene_path:
-        robot_name = "Walker2d"
-    elif "biped" in cfg.env.scene_path:
-        robot_name = "Biped"
-    else:
-        robot_name = "2-Wheeler"
-    log.info("Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest)
+    bot_name = bot_name_from_scene_path(cfg.env.scene_path)
+    robot_name = bot_display_name(bot_name)
+    log.info(
+        "Training %s (%s) smoketest=%s", robot_name, cfg.training.algorithm, smoketest
+    )
     log.info("Config: %s", cfg.to_wandb_config())
     _verbose("=" * 60)
     _verbose(f"Training {robot_name} ({cfg.training.algorithm})")
     _verbose("=" * 60)
+    log_fn(f"Setting up {robot_name} ({cfg.training.algorithm})...")
+
+    # Generate run name and create run directory
+    run_name = generate_run_name(bot_name, cfg.policy.policy_type)
+    run_dir = create_run_dir(run_name)
+    log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
     if smoketest:
         run_notes = None
     else:
-        _verbose("Generating run notes...")
+        log_fn("Generating run notes...")
         run_notes = generate_run_notes()
         if run_notes:
             _verbose(run_notes)
 
-    # Initialize wandb early so the run URL and summary are available
-    run_name = (
-        f"{cfg.policy.policy_type.lower()}-{datetime.now().strftime('%m%d-%H%M')}"
+    # Initialize W&B (single project 'mindsim', tags for filtering)
+    log_fn("Connecting to W&B...")
+    init_wandb_for_run(
+        run_name, cfg, bot_name, smoketest=smoketest, run_notes=run_notes
     )
-    wandb_mode = "disabled" if smoketest else "online"
-    if "walker2d" in cfg.env.scene_path:
-        wandb_project = "mindsim-walker2d"
-    elif "biped" in cfg.env.scene_path:
-        wandb_project = "mindsim-biped"
-    else:
-        wandb_project = "mindsim-2wheeler"
-    wandb.init(
-        project=wandb_project,
-        name=run_name,
-        notes=run_notes,
-        mode=wandb_mode,
-        config=cfg.to_wandb_config(),
-    )
-    # Use "batch" as the x-axis instead of W&B's auto-incremented "step"
-    wandb.define_metric("batch")
-    wandb.define_metric("*", step_metric="batch")
 
     wandb_url = None
     if not smoketest and wandb.run:
         wandb_url = wandb.run.url
+        log_fn(f"W&B: {wandb_url}")
         _verbose(f"  W&B run: {wandb_url}")
 
+    # Write initial run_info.json
+    run_info = RunInfo(
+        name=run_name,
+        bot_name=bot_name,
+        policy_type=cfg.policy.policy_type,
+        algorithm=cfg.training.algorithm,
+        scene_path=cfg.env.scene_path,
+        status="running",
+        wandb_id=wandb.run.id if wandb.run else None,
+        wandb_url=wandb_url,
+        git_branch=get_git_branch(),
+        git_sha=get_git_sha(),
+        created_at=datetime.now().isoformat(),
+        tags=[bot_name, cfg.training.algorithm, cfg.policy.policy_type],
+    )
+    save_run_info(run_dir, run_info)
+    _verbose(f"  Run directory: {run_dir}/")
+
     # Push run metadata to TUI header
+    hypothesis = None
     if app is not None:
         from main import _get_experiment_info
 
-        branch = _get_git_branch()
+        branch = get_git_branch()
         hypothesis = _get_experiment_info(branch)
         app.call_from_thread(
-            app.set_header, run_name, branch, cfg.training.algorithm, wandb_url,
-            robot_name, hypothesis,
+            app.set_header,
+            run_name,
+            branch,
+            cfg.training.algorithm,
+            wandb_url,
+            robot_name,
+            hypothesis,
         )
 
+    # Set up AI commentary (skip in smoketest or when disabled)
+    commentator = None
+    if not smoketest and cfg.commentary.enabled and app is not None:
+        from ai_commentary import AICommentator, RunContext
+
+        run_context = RunContext(
+            run_name=run_name,
+            bot_name=bot_name,
+            algorithm=cfg.training.algorithm,
+            policy_type=cfg.policy.policy_type,
+            hypothesis=hypothesis,
+            wandb_url=wandb_url,
+            git_branch=get_git_branch(),
+            config_summary=_format_config_summary(cfg),
+        )
+        commentator = AICommentator(cfg.commentary, run_context)
+        log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
+    last_commentary_time = time.perf_counter()
+    force_commentary = False
+
     # Create environment from config
-    _verbose("Creating environment...")
+    log_fn("Creating environment...")
     env = TrainingEnv.from_config(cfg.env)
     _verbose(f"  Observation shape: {env.observation_shape}")
     _verbose(f"  Action shape: {env.action_shape}")
@@ -1711,7 +645,7 @@ def _train_loop(
     # Initialize Rerun-WandB integration (skip in smoketest)
     rr_wandb = None
     if not smoketest:
-        rr_wandb = RerunWandbLogger(recordings_dir="recordings")
+        rr_wandb = RerunWandbLogger(run_dir=str(run_dir))
         _verbose(f"  Rerun recordings: {rr_wandb.run_dir}/")
 
     # Set up parallel episode collection
@@ -1735,7 +669,7 @@ def _train_loop(
     # Training loop - use config values
     batch_size = cfg.training.batch_size
     log_rerun_every = cfg.training.log_rerun_every
-    last_rerun_time = 0.0  # Wall-clock time of last Rerun recording
+    last_rerun_time = time.perf_counter()  # Wall-clock time of last Rerun recording
 
     # Curriculum config (shorthand for readability)
     curr = cfg.curriculum
@@ -1787,6 +721,7 @@ def _train_loop(
     # Rolling window for eval success rate (used for curriculum)
     eval_success_history = deque(maxlen=curr.window_size)
 
+    run_start_time = time.monotonic()
     episode_count = resumed_episode_count
     batch_idx = resumed_batch_idx
     mastered = False
@@ -1799,7 +734,7 @@ def _train_loop(
         and (max_batches is None or batch_idx < max_batches)
     ):
         # Block while paused (checks for unpause/step/stop)
-        if _wait_if_paused(command_queue):
+        if commands and commands.wait_if_paused():
             stop_requested = True
             dashboard.message("Stopping...")
             break
@@ -1813,19 +748,53 @@ def _train_loop(
         if tweaks:
             changes = apply_tweaks(cfg, optimizer, env, tweaks)
             batch_size = cfg.training.batch_size
+            log_rerun_every = cfg.training.log_rerun_every
             for name, old, new in changes:
                 dashboard.message(f"  tweak: {name} {old} -> {new}")
             if changes:
                 wandb.log({f"tweaks/{name}": new for name, _, new in changes})
 
-        # Drain TUI command queue
+        # Drain TUI action commands
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
-        stage_progress, pending_save, stop_requested, force_rerun = (
-            _drain_command_queue(
-                command_queue, dashboard, stage_progress, curr, pending_save
-            )
-        )
+        for cmd in commands.drain_actions() if commands else []:
+            if cmd == "checkpoint":
+                pending_save = ("manual", [])
+                dashboard.message("Checkpoint will be saved after this batch")
+            elif cmd == "log_rerun":
+                force_rerun = True
+                dashboard.message("Rerun recording queued for next eval")
+            elif cmd == "advance_curriculum":
+                old = stage_progress
+                stage_progress = min(1.0, stage_progress + 0.1)
+                dashboard.message(
+                    f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}"
+                )
+            elif cmd == "regress_curriculum":
+                old = stage_progress
+                stage_progress = max(0.0, stage_progress - 0.1)
+                dashboard.message(
+                    f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
+                )
+            elif cmd == "rerun_freq_down":
+                old = log_rerun_every
+                log_rerun_every = max(batch_size, log_rerun_every // 2)
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
+                )
+            elif cmd == "rerun_freq_up":
+                old = log_rerun_every
+                log_rerun_every = log_rerun_every * 2
+                cfg.training.log_rerun_every = log_rerun_every
+                dashboard.message(
+                    f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
+                )
+            elif cmd == "ai_commentary":
+                force_commentary = True
+            elif cmd == "stop":
+                stop_requested = True
+                dashboard.message("Stopping after this batch...")
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -1938,10 +907,26 @@ def _train_loop(
                 log_this_eval = should_log_rerun_this_batch and (eval_idx == 0)
 
                 if log_this_eval:
-                    t_rerun_start = time.perf_counter()
-                    dashboard.message("Recording eval episode to Rerun...")
-                    rr_wandb.start_episode(episode_count, env, namespace="eval")
-                    timing["rerun"] += time.perf_counter() - t_rerun_start
+                    try:
+                        t_rerun_start = time.perf_counter()
+                        dashboard.message("Recording eval episode to Rerun...")
+
+                        # Determine if we should show camera in Rerun
+                        show_camera = not getattr(env, "in_walking_stage", False)
+                        if not getattr(policy, "uses_visual_input", True):
+                            show_camera = False
+
+                        rr_wandb.start_episode(
+                            episode_count,
+                            env,
+                            namespace="eval",
+                            show_camera=show_camera,
+                        )
+                        timing["rerun"] += time.perf_counter() - t_rerun_start
+                    except Exception:
+                        log.exception("Failed to start Rerun recording")
+                        dashboard.message("Rerun recording failed (see log)")
+                        log_this_eval = False
 
                 eval_data = collect_episode(
                     env, policy, device, log_rerun=log_this_eval, deterministic=True
@@ -1949,19 +934,26 @@ def _train_loop(
                 eval_successes.append(eval_data["success"])
 
                 if log_this_eval:
-                    t_rerun_start = time.perf_counter()
-                    # Log per-step value function traces for PPO
-                    if cfg.training.algorithm == "PPO":
-                        log_episode_value_trace(
-                            policy,
-                            eval_data,
-                            gamma=cfg.training.gamma,
-                            gae_lambda=cfg.training.gae_lambda,
-                            device=device,
-                            namespace="eval",
+                    try:
+                        t_rerun_start = time.perf_counter()
+                        # Log per-step value function traces for PPO
+                        if cfg.training.algorithm == "PPO":
+                            log_episode_value_trace(
+                                policy,
+                                eval_data,
+                                gamma=cfg.training.gamma,
+                                gae_lambda=cfg.training.gae_lambda,
+                                device=device,
+                                namespace="eval",
+                            )
+                        rr_wandb.finish_episode(
+                            eval_data, upload_artifact=True, batch_idx=batch_idx
                         )
-                    rr_wandb.finish_episode(eval_data, upload_artifact=True)
-                    timing["rerun"] += time.perf_counter() - t_rerun_start
+                        timing["rerun"] += time.perf_counter() - t_rerun_start
+                        last_rerun_time = time.perf_counter()
+                    except Exception:
+                        log.exception("Failed to finish Rerun recording")
+                        dashboard.message("Rerun upload failed (see log)")
 
             eval_success_rate = np.mean(eval_successes)
             eval_success_history.append(eval_success_rate)
@@ -1972,7 +964,6 @@ def _train_loop(
             rolling_eval_success_rate = rolling_success_rate
         timing["eval_batch"] = time.perf_counter() - t_eval_start
         timing["eval"] += timing["eval_batch"]
-
 
         # Update curriculum based on EVAL success rate (deterministic)
         if (
@@ -2071,10 +1062,34 @@ def _train_loop(
                     [ep.get("patience_truncated", False) for ep in episode_batch]
                 ),
                 "batch/joint_stagnation_fraction": np.mean(
-                    [ep.get("joint_stagnation_truncated", False) for ep in episode_batch]
+                    [
+                        ep.get("joint_stagnation_truncated", False)
+                        for ep in episode_batch
+                    ]
+                ),
+                "batch/fell_fraction": np.mean(
+                    [ep.get("fell", False) for ep in episode_batch]
                 ),
             }
         )
+
+        # Per-component reward breakdown (averaged across batch)
+        component_keys = [
+            "reward_distance",
+            "reward_exploration",
+            "reward_time",
+            "reward_upright",
+            "reward_alive",
+            "reward_energy",
+            "reward_contact",
+            "reward_forward_velocity",
+            "reward_smoothness",
+        ]
+        for key in component_keys:
+            vals = [
+                ep.get("reward_components", {}).get(key, 0.0) for ep in episode_batch
+            ]
+            log_dict[f"rewards/{key}"] = np.mean(vals)
 
         # PPO-specific metrics
         if cfg.training.algorithm == "PPO":
@@ -2120,6 +1135,7 @@ def _train_loop(
             "mastery_count": mastery_count,
             "mastery_batches": cfg.training.mastery_batches,
             "max_episode_steps": env.max_episode_steps,
+            "log_rerun_every": log_rerun_every,
             # Timing
             "batch_time": batch_time,
             "collect_time": timing["collect_batch"],
@@ -2146,42 +1162,70 @@ def _train_loop(
         dashboard.update(batch_idx, dash_metrics)
         log.info(
             "batch %d  reward=%+.2f  dist=%.2fm  eval=%.0f%%  S%d",
-            batch_idx, avg_reward, avg_distance,
-            100 * rolling_eval_success_rate, curriculum_stage,
+            batch_idx,
+            avg_reward,
+            avg_distance,
+            100 * rolling_eval_success_rate,
+            curriculum_stage,
         )
+
+        # AI commentary: periodic or on-demand
+        now = time.perf_counter()
+        if commentator and (
+            force_commentary
+            or now - last_commentary_time >= cfg.commentary.interval_seconds
+        ):
+            elapsed = time.monotonic() - run_start_time
+            _run_commentary(
+                commentator,
+                app,
+                dashboard,
+                batch_idx,
+                dash_metrics,
+                elapsed,
+            )
+            last_commentary_time = now
+            force_commentary = False
+
         batch_idx += 1
         batches_this_session += 1
 
         # Save checkpoints (milestone/final take priority over periodic)
-        if pending_save:
-            trigger, aliases = pending_save
-            save_checkpoint(
-                policy,
-                optimizer,
-                cfg,
-                curriculum_stage,
-                stage_progress,
-                mastery_count,
-                batch_idx,
-                episode_count,
-                trigger=trigger,
-                aliases=aliases,
-            )
-        elif (
-            cfg.training.checkpoint_every
-            and batch_idx % cfg.training.checkpoint_every == 0
-        ):
-            save_checkpoint(
-                policy,
-                optimizer,
-                cfg,
-                curriculum_stage,
-                stage_progress,
-                mastery_count,
-                batch_idx,
-                episode_count,
-                trigger="periodic",
-            )
+        try:
+            if pending_save:
+                trigger, aliases = pending_save
+                save_checkpoint(
+                    policy,
+                    optimizer,
+                    cfg,
+                    curriculum_stage,
+                    stage_progress,
+                    mastery_count,
+                    batch_idx,
+                    episode_count,
+                    trigger=trigger,
+                    aliases=aliases,
+                    run_dir=run_dir,
+                )
+            elif (
+                cfg.training.checkpoint_every
+                and batch_idx % cfg.training.checkpoint_every == 0
+            ):
+                save_checkpoint(
+                    policy,
+                    optimizer,
+                    cfg,
+                    curriculum_stage,
+                    stage_progress,
+                    mastery_count,
+                    batch_idx,
+                    episode_count,
+                    trigger="periodic",
+                    run_dir=run_dir,
+                )
+        except Exception:
+            log.exception("Failed to save checkpoint")
+            dashboard.message("Checkpoint save failed (see log)")
 
     dashboard.finish()
 
@@ -2223,6 +1267,14 @@ def _train_loop(
             f"    Training:   {1000 * timing['train'] / batches_this_session:.1f}ms"
         )
 
+    # Update run_info with final state
+    run_info.status = "completed"
+    run_info.finished_at = datetime.now().isoformat()
+    run_info.batch_idx = batch_idx
+    run_info.episode_count = episode_count
+    run_info.curriculum_stage = curriculum_stage
+    save_run_info(run_dir, run_info)
+
     # Clean up
     if collector is not None:
         collector.close()
@@ -2237,18 +1289,25 @@ def _train_loop(
         log.info("Smoketest passed (%d batches, %d episodes)", batch_idx, episode_count)
     else:
         log_fn("Training complete!")
-        log.info("Training complete (%d batches, %d episodes)", batch_idx, episode_count)
+        log.info(
+            "Training complete (%d batches, %d episodes)", batch_idx, episode_count
+        )
 
 
 def run_training(
-    app, command_queue, smoketest=False, resume=None, num_workers=None, scene_path=None
+    app,
+    commands: CommandChannel,
+    smoketest=False,
+    resume=None,
+    num_workers=None,
+    scene_path=None,
 ):
     """
     Entry point for TUI-driven training (called from worker thread).
 
     Args:
         app: MindSimApp instance
-        command_queue: Queue for TUI commands
+        commands: CommandChannel for TUI commands
         smoketest: Whether to use smoketest config
         resume: Checkpoint resume reference
         num_workers: Worker count override
@@ -2285,7 +1344,7 @@ def run_training(
         smoketest=smoketest,
         resume=resume,
         num_workers_override=num_workers,
-        command_queue=command_queue,
+        commands=commands,
         app=app,
         log_fn=dashboard.message,
     )
@@ -2302,7 +1361,9 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
         scene_path: Override bot scene XML path directly.
     """
     is_biped = (bot and "biped" in bot) or (scene_path and "biped" in scene_path)
-    is_walker2d = (bot and "walker2d" in bot) or (scene_path and "walker2d" in scene_path)
+    is_walker2d = (bot and "walker2d" in bot) or (
+        scene_path and "walker2d" in scene_path
+    )
     if smoketest:
         if is_biped:
             cfg = Config.for_biped_smoketest()
@@ -2321,12 +1382,7 @@ def main(smoketest=False, bot=None, resume=None, num_workers=None, scene_path=No
     if scene_path:
         cfg.env.scene_path = scene_path
 
-    if "walker2d" in cfg.env.scene_path:
-        robot_name_cli = "Walker2d"
-    elif "biped" in cfg.env.scene_path:
-        robot_name_cli = "Biped"
-    else:
-        robot_name_cli = "2-Wheeler"
+    robot_name_cli = bot_display_name(bot_name_from_scene_path(cfg.env.scene_path))
     dashboard = AnsiDashboard(
         total_batches=cfg.training.max_batches,
         algorithm=cfg.training.algorithm,
