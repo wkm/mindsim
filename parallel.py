@@ -27,7 +27,7 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs, env_vars=Non
         os.environ.update(env_vars)
 
     from config import EnvConfig
-    from train import LSTMPolicy, TinyPolicy
+    from train import LSTMPolicy, MLPPolicy, TinyPolicy
     from training_env import TrainingEnv
 
     env_config = EnvConfig(**env_config_dict)
@@ -35,6 +35,8 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs, env_vars=Non
 
     if policy_class_name == "LSTMPolicy":
         _worker_policy = LSTMPolicy(**policy_kwargs)
+    elif policy_class_name == "MLPPolicy":
+        _worker_policy = MLPPolicy(**policy_kwargs)
     else:
         _worker_policy = TinyPolicy(**policy_kwargs)
     _worker_policy.eval()
@@ -88,8 +90,9 @@ class ParallelCollector:
             "num_actions": policy_config.fc_output_size,
             "init_std": policy_config.init_std,
             "max_log_std": policy_config.max_log_std,
+            "sensor_input_size": policy_config.sensor_input_size,
         }
-        if policy_config.use_lstm:
+        if policy_config.use_lstm or policy_config.use_mlp:
             policy_kwargs["hidden_size"] = policy_config.hidden_size
 
         # Capture env vars to propagate to spawned workers

@@ -11,9 +11,9 @@ true policy capability without exploration noise.
 import os
 
 import rerun as rr
+import wandb
 
 import rerun_logger
-import wandb
 from training_blueprint import create_training_blueprint
 
 
@@ -21,17 +21,25 @@ class RerunWandbLogger:
     """
     Manages Rerun recordings linked to wandb runs.
 
-    Saves per-episode .rrd files with naming: recordings/<run_id>/episode_<N>.rrd
+    Saves per-episode .rrd files with naming: <run_dir>/recordings/episode_<N>.rrd
+    (or legacy recordings/<run_name>_<run_id>/ when no run_dir is given).
     Logs paths to wandb for cross-referencing.
     """
 
-    def __init__(self, recordings_dir: str = "recordings", live: bool = True):
+    def __init__(
+        self,
+        recordings_dir: str = "recordings",
+        live: bool = True,
+        run_dir: str | None = None,
+    ):
         """
         Initialize the logger.
 
         Args:
-            recordings_dir: Base directory for storing .rrd files
+            recordings_dir: Base directory for storing .rrd files (legacy fallback)
             live: If True, spawn Rerun viewer and stream data live
+            run_dir: Run directory path. When set, saves to run_dir/recordings/.
+                     When None, falls back to recordings/<run_name>_<run_id>/.
         """
         if wandb.run is None:
             raise RuntimeError(
@@ -41,7 +49,12 @@ class RerunWandbLogger:
         self.recordings_dir = recordings_dir
         self.run_id = wandb.run.id
         self.run_name = wandb.run.name
-        self.run_dir = os.path.join(recordings_dir, f"{self.run_name}_{self.run_id}")
+        if run_dir is not None:
+            self.run_dir = os.path.join(run_dir, "recordings")
+        else:
+            self.run_dir = os.path.join(
+                recordings_dir, f"{self.run_name}_{self.run_id}"
+            )
         os.makedirs(self.run_dir, exist_ok=True)
         self.live = live
 
@@ -50,7 +63,9 @@ class RerunWandbLogger:
         self.is_recording = False
         self._spawned = False
 
-    def start_episode(self, episode: int, env, namespace: str = "eval"):
+    def start_episode(
+        self, episode: int, env, namespace: str = "eval", show_camera: bool = True
+    ):
         """
         Start a new Rerun recording for this episode.
 
@@ -58,6 +73,7 @@ class RerunWandbLogger:
             episode: Episode number
             env: Training environment instance
             namespace: Rerun namespace for logging
+            show_camera: If False, hide the camera view and skip camera logging
 
         Returns:
             Path to the .rrd file being recorded
@@ -76,14 +92,20 @@ class RerunWandbLogger:
         # Set up sinks: always save to disk, optionally stream live
         sinks = [rr.FileSink(self.rrd_path)]
         if self.live:
-            sinks.append(rr.GrpcSink())
+            try:
+                sinks.append(rr.GrpcSink())
+            except Exception:
+                pass  # Viewer may have been closed; file sink still works
         rr.set_sinks(*sinks)
 
         # Set recording name to just the episode number
         rr.send_recording_name(f"episode {episode}")
 
         # Embed blueprint into recording
-        rr.send_blueprint(create_training_blueprint())
+        control_fps = round(1.0 / env.action_dt)
+        rr.send_blueprint(
+            create_training_blueprint(control_fps=control_fps, show_camera=show_camera)
+        )
 
         # Log wandb context into Rerun for reverse lookup
         rr.log(
@@ -100,7 +122,10 @@ class RerunWandbLogger:
         # Set up the 3D scene (pass arena boundary if available)
         arena_boundary = getattr(env, "arena_boundary", None)
         rerun_logger.setup_scene(
-            env, namespace=namespace, arena_boundary=arena_boundary
+            env,
+            namespace=namespace,
+            arena_boundary=arena_boundary,
+            show_camera=show_camera,
         )
 
         self.is_recording = True
@@ -141,6 +166,10 @@ class RerunWandbLogger:
             )
             artifact.add_file(self.rrd_path)
             wandb.log_artifact(artifact)
+
+        # Flush recording and release file handles / background threads.
+        # Without this, each start_episode() accumulates leaked threads.
+        rr.disconnect()
 
         self.is_recording = False
 

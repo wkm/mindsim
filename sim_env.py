@@ -1,11 +1,10 @@
-import time
 from pathlib import Path
 
 import mujoco
 import numpy as np
 
 
-class SimpleWheelerEnv:
+class SimEnv:
     """
     Bot-agnostic MuJoCo simulation environment.
 
@@ -62,6 +61,31 @@ class SimpleWheelerEnv:
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, f"distractor_{i}")
             for i in range(4)
         ]
+        self.distractor_mocap_ids = [
+            self.model.body_mocapid[bid] for bid in self.distractor_body_ids
+        ]
+
+        # Geom IDs for ground contact detection (biped fall penalty)
+        # These use mj_name2id which returns -1 if not found — safe for wheeler
+        self.floor_geom_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor"
+        )
+        self.foot_geom_ids = set()
+        for foot_name in ("left_foot", "right_foot"):
+            gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot_name)
+            if gid >= 0:
+                self.foot_geom_ids.add(gid)
+
+        # Sensor data dimension (0 if no sensors defined)
+        self.sensor_dim = self.model.nsensordata
+
+        # Discover sensor names and their spans in sensordata array
+        self.sensor_info = []
+        for i in range(self.model.nsensor):
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_SENSOR, i)
+            adr = self.model.sensor_adr[i]
+            dim = self.model.sensor_dim[i]
+            self.sensor_info.append({"name": name, "adr": adr, "dim": dim})
 
         # Viewer for debugging (optional)
         self.viewer = None
@@ -87,7 +111,7 @@ class SimpleWheelerEnv:
             camera_image: RGB image from bot camera as numpy array (H, W, 3), or None if render=False
         """
         actions = np.clip(actions, -1.0, 1.0)
-        self.data.ctrl[:self.num_actuators] = actions
+        self.data.ctrl[: self.num_actuators] = actions
 
         # Step physics
         mujoco.mj_step(self.model, self.data)
@@ -140,6 +164,25 @@ class SimpleWheelerEnv:
         target_pos = self.get_target_position()
         return np.linalg.norm(target_pos - bot_pos)
 
+    def get_sensor_data(self):
+        """Get all sensor readings as a flat array."""
+        return self.data.sensordata[: self.sensor_dim].copy().astype(np.float32)
+
+    def get_actuated_joint_positions(self):
+        """Get current positions of all actuated joints."""
+        positions = np.zeros(self.num_actuators, dtype=np.float32)
+        for i in range(self.num_actuators):
+            joint_id = self.model.actuator_trnid[i, 0]
+            qpos_adr = self.model.jnt_qposadr[joint_id]
+            positions[i] = self.data.qpos[qpos_adr]
+        return positions
+
+    def get_bot_velocity(self):
+        """Get the bot's linear velocity in world frame."""
+        return self.data.cvel[self.bot_body_id][
+            3:
+        ].copy()  # linear part of 6D spatial vel
+
     def get_torso_up_vector(self):
         """
         Get the torso's local Z-axis in world frame (uprightness indicator).
@@ -152,6 +195,31 @@ class SimpleWheelerEnv:
         up_y = 2 * (y * z - w * x)
         up_z = 1 - 2 * (x * x + y * y)
         return np.array([up_x, up_y, up_z])
+
+    def get_non_foot_ground_contacts(self):
+        """
+        Count contacts between the floor and non-foot robot geoms.
+
+        Returns 0 when only feet touch the ground (good), >0 when the
+        torso/legs are on the floor (bad — robot has fallen).
+        """
+        if self.floor_geom_id < 0:
+            return 0
+        bad_contacts = 0
+        for i in range(self.data.ncon):
+            contact = self.data.contact[i]
+            g1, g2 = contact.geom1, contact.geom2
+            # One geom must be the floor
+            if g1 == self.floor_geom_id:
+                other = g2
+            elif g2 == self.floor_geom_id:
+                other = g1
+            else:
+                continue
+            # The other geom touching floor must NOT be a foot
+            if other not in self.foot_geom_ids:
+                bad_contacts += 1
+        return bad_contacts
 
     def launch_viewer(self):
         """Launch interactive 3D viewer for debugging."""
@@ -173,84 +241,3 @@ class SimpleWheelerEnv:
         """Clean up resources."""
         self.close_viewer()
         self.renderer.close()
-
-
-def demo_manual_control():
-    """
-    Demo script showing manual control of the robot.
-    """
-    print("=== Simple Wheeler Environment Demo ===")
-    print("Manual control demonstration")
-    print()
-
-    # Create environment
-    env = SimpleWheelerEnv(render_width=64, render_height=64)
-
-    # Launch viewer for visualization
-    viewer = env.launch_viewer()
-    print("3D viewer launched. Keep window open to continue.")
-    print()
-
-    # Get initial state
-    print("Initial state:")
-    print(f"  Bot position: {env.get_bot_position()}")
-    print(f"  Target position: {env.get_target_position()}")
-    print(f"  Distance to target: {env.get_distance_to_target():.2f}")
-    print()
-
-    # Run a simple control sequence
-    print("Running control sequence...")
-    print("  Phase 1: Drive forward (both motors positive)")
-
-    start_time = time.time()
-    step_count = 0
-
-    try:
-        while (viewer is None or viewer.is_running()) and time.time() - start_time < 10:
-            step_start = time.time()
-
-            # Simple control: drive forward
-            if step_count < 300:
-                actions = [0.5, 0.5]
-            # Turn right
-            elif step_count < 600:
-                actions = [0.5, -0.5]
-            # Drive forward again
-            else:
-                actions = [0.5, 0.5]
-
-            # Step simulation
-            camera_img = env.step(actions)
-
-            # Print status every 100 steps
-            if step_count % 100 == 0:
-                print(
-                    f"  Step {step_count}: "
-                    f"pos={env.get_bot_position()[:2]}, "
-                    f"dist={env.get_distance_to_target():.2f}, "
-                    f"camera_shape={camera_img.shape}"
-                )
-
-            step_count += 1
-
-            # Proper frame rate control
-            time_until_next_step = env.model.opt.timestep - (time.time() - step_start)
-            if time_until_next_step > 0:
-                time.sleep(time_until_next_step)
-
-    except KeyboardInterrupt:
-        print("\nInterrupted by user")
-
-    print()
-    print("Final state:")
-    print(f"  Bot position: {env.get_bot_position()}")
-    print(f"  Distance to target: {env.get_distance_to_target():.2f}")
-    print(f"  Total steps: {step_count}")
-
-    # Clean up
-    env.close()
-    print("\nDemo complete!")
-
-
-if __name__ == "__main__":
-    demo_manual_control()

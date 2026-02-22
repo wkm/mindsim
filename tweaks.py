@@ -32,6 +32,7 @@ TWEAKABLE = {
     "batch_size": ("training", "batch_size", int),
     "mastery_threshold": ("training", "mastery_threshold", float),
     "mastery_batches": ("training", "mastery_batches", int),
+    "log_rerun_every": ("training", "log_rerun_every", int),
     # Curriculum params
     "advance_threshold": ("curriculum", "advance_threshold", float),
     "advance_rate": ("curriculum", "advance_rate", float),

@@ -7,51 +7,51 @@ run produced each checkpoint and which run consumed it.
 """
 
 import os
-import subprocess
-import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
-
 import wandb
 
-
-def _get_git_sha() -> str:
-    """Get short git SHA, or 'unknown' if not in a repo."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return "unknown"
+from git_utils import get_git_sha
 
 
 def resolve_resume_ref(ref: str) -> str:
     """
     Resolve a resume reference to an actual path or artifact ref.
 
-    Handles the special value "latest" by finding the most recent .pt file
-    in the checkpoints/ directory.
+    For "latest": searches runs/*/checkpoints/*.pt (newest by mtime).
+
+    Also accepts a run name (e.g. "s2w-lstm-0218-1045") and looks in that
+    run's checkpoints dir for the latest .pt file.
 
     Args:
-        ref: A local .pt path, wandb artifact ref, or "latest"
+        ref: A local .pt path, wandb artifact ref, run name, or "latest"
 
     Returns:
         Resolved path or artifact ref
     """
+    runs_dir = Path("runs")
+
     if ref == "latest":
-        ckpt_dir = Path("checkpoints")
-        if not ckpt_dir.exists():
-            raise FileNotFoundError("No checkpoints/ directory found")
+        all_pts: list[Path] = []
+        if runs_dir.is_dir():
+            all_pts.extend(runs_dir.glob("*/checkpoints/*.pt"))
+
+        if not all_pts:
+            raise FileNotFoundError("No checkpoint files found in runs/*/checkpoints/")
+        # Return newest by modification time
+        return str(max(all_pts, key=os.path.getmtime))
+
+    # Check if ref is a run name (directory under runs/)
+    run_dir = runs_dir / ref
+    if run_dir.is_dir():
+        ckpt_dir = run_dir / "checkpoints"
         pt_files = sorted(ckpt_dir.glob("*.pt"), key=os.path.getmtime)
         if not pt_files:
-            raise FileNotFoundError("No .pt files found in checkpoints/")
+            raise FileNotFoundError(f"No .pt files found in {ckpt_dir}")
         return str(pt_files[-1])
+
     return ref
 
 
@@ -66,6 +66,7 @@ def save_checkpoint(
     episode_count: int,
     trigger: str = "periodic",
     aliases: list[str] | None = None,
+    run_dir: Path | None = None,
 ) -> str:
     """
     Save a training checkpoint locally and upload as wandb artifact.
@@ -81,10 +82,14 @@ def save_checkpoint(
         episode_count: Total episodes collected so far
         trigger: What triggered the save ("milestone", "periodic", "final")
         aliases: Extra wandb artifact aliases (e.g. ["stage1-mastered"])
+        run_dir: Run directory (saves to run_dir/checkpoints/). Required.
 
     Returns:
         Local path to the saved checkpoint file
     """
+    if run_dir is None:
+        raise ValueError("run_dir is required for save_checkpoint")
+
     run = wandb.run
     run_name = run.name if run else "offline"
     run_id = run.id if run else "offline"
@@ -102,12 +107,11 @@ def save_checkpoint(
         "run_id": run_id,
         "run_name": run_name,
         "timestamp": datetime.now(UTC).isoformat(),
-        "git_sha": _get_git_sha(),
+        "git_sha": get_git_sha(),
     }
 
-    # Save locally
-    ckpt_dir = Path("checkpoints")
-    ckpt_dir.mkdir(exist_ok=True)
+    ckpt_dir = run_dir / "checkpoints"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{run_name}_stage{curriculum_stage}_batch{batch_idx}.pt"
     local_path = ckpt_dir / filename
     torch.save(ckpt, local_path)
@@ -153,19 +157,26 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
     """
     Validate that a checkpoint is compatible with the current config.
 
-    Raises ValueError on architecture mismatches (would cause load failures).
-    Warns on training parameter changes (intentional and fine).
+    Two categories:
+        Hard keys: Must match exactly. Mismatch raises ValueError because the
+            checkpoint's state_dict is structurally incompatible (wrong bot,
+            wrong network shape).
+        Soft keys: May differ intentionally. Logged for visibility but the
+            current config always wins — the checkpoint's values for these
+            are informational only.
 
     Args:
         ckpt_config: Config dict from the checkpoint (nested format from to_wandb_config)
         current_config: Config dict from the current run (same format)
     """
-    # Architecture keys that MUST match (different values = broken state_dict)
+    # Hard keys: mismatch = ValueError (incompatible checkpoint)
     hard_keys = [
+        ("env", "scene_path"),
         ("policy", "policy_type"),
         ("policy", "hidden_size"),
         ("policy", "image_height"),
         ("policy", "image_width"),
+        ("policy", "fc_output_size"),
     ]
 
     for section, key in hard_keys:
@@ -177,13 +188,14 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
                 f"current config has {curr_val}. Cannot resume."
             )
 
-    # Training keys that are OK to change but worth noting
+    # Soft keys: current config wins, log deltas for visibility
     soft_keys = [
         ("training", "learning_rate"),
         ("training", "entropy_coeff"),
         ("training", "batch_size"),
         ("curriculum", "advance_threshold"),
         ("curriculum", "advance_rate"),
+        ("curriculum", "num_stages"),
         ("env", "distance_reward_scale"),
     ]
 
@@ -191,10 +203,8 @@ def validate_checkpoint_config(ckpt_config: dict, current_config: dict) -> None:
         ckpt_val = ckpt_config.get(section, {}).get(key)
         curr_val = current_config.get(section, {}).get(key)
         if ckpt_val is not None and curr_val is not None and ckpt_val != curr_val:
-            warnings.warn(
-                f"Config changed: {section}/{key} was {ckpt_val} in checkpoint, "
-                f"now {curr_val}. This is fine but noted for tracking.",
-                stacklevel=2,
+            print(
+                f"  Resume: {section}/{key} changed {ckpt_val} -> {curr_val} (using current config)"
             )
 
 
