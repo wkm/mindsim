@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import mujoco
 import numpy as np
 
-from simple_wheeler_env import SimpleWheelerEnv
+from simple_wheeler_env import SimpleWheelerEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
     from config import EnvConfig
@@ -423,11 +423,10 @@ class TrainingEnv:
 
         # Gait phase: reset step counter and append phase to sensors
         self.gait_step_count = 0
-        self.current_sensors = self.env.get_sensor_data()
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate([
-                self.current_sensors, self._compute_gait_phase()
-            ])
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(), self.gait_step_count,
+            self.action_dt, self.gait_phase_period,
+        )
 
         # Blank image in walking stage (camera not useful, skip render cost)
         if self.in_walking_stage:
@@ -494,11 +493,10 @@ class TrainingEnv:
         self.consecutive_unhealthy = 0
         self.prev_action = np.zeros(self.num_actuators)
         self.gait_step_count = 0
-        self.current_sensors = self.env.get_sensor_data()
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate([
-                self.current_sensors, self._compute_gait_phase()
-            ])
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(), self.gait_step_count,
+            self.action_dt, self.gait_phase_period,
+        )
 
         obs = camera_img.astype(np.float32) / 255.0
         return obs
@@ -526,20 +524,6 @@ class TrainingEnv:
         """Move all distractors off-screen."""
         for mocap_id in self.env.distractor_mocap_ids:
             self.env.data.mocap_pos[mocap_id] = [0.0, 100.0, 0.08]
-
-    def _compute_gait_phase(self):
-        """
-        Compute gait phase signals: [sin(phase), cos(phase), sin(phase+pi), cos(phase+pi)].
-
-        The second pair is anti-phase (for the other leg), giving the policy
-        a clock for coordinating alternating leg movements.
-        """
-        t = self.gait_step_count * self.action_dt
-        phase = 2 * np.pi * t / self.gait_phase_period
-        return np.array([
-            np.sin(phase), np.cos(phase),
-            np.sin(phase + np.pi), np.cos(phase + np.pi),
-        ], dtype=np.float32)
 
     def _update_target_position(self):
         """Move target by velocity, bounce off arena boundaries."""
@@ -611,12 +595,11 @@ class TrainingEnv:
             obs = camera_img.astype(np.float32) / 255.0
         else:
             obs = np.zeros(self.observation_shape, dtype=np.float32)
-        self.current_sensors = self.env.get_sensor_data()
         self.gait_step_count += 1
-        if self.gait_phase_dim > 0:
-            self.current_sensors = np.concatenate([
-                self.current_sensors, self._compute_gait_phase()
-            ])
+        self.current_sensors = assemble_sensor_data(
+            self.env.get_sensor_data(), self.gait_step_count,
+            self.action_dt, self.gait_phase_period,
+        )
 
         # Get current state (before moving target, so reward reflects robot's action)
         current_distance = self.env.get_distance_to_target()
