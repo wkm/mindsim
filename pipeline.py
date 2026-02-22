@@ -570,11 +570,11 @@ _BOT_DEFAULTS: dict[str, dict] = {
         "curriculum": dict(
             num_stages=5,
             window_size=10,
-            advance_threshold=1.0,
-            advance_rate=0.01,
+            advance_threshold=0.8,
+            advance_rate=0.015,
         ),
         "policy": dict(
-            policy_type="MLPPolicy",
+            policy_type="LSTMPolicy",
             hidden_size=256,
             fc_output_size=12,
             sensor_input_size=34,
