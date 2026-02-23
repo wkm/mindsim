@@ -104,6 +104,7 @@ class RunInfo:
     episode_count: int = 0
     curriculum_stage: int = 1
     best_eval_success_rate: float = 0.0
+    error_message: str | None = None
     tags: list[str] = field(default_factory=list)
 
 

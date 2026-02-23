@@ -7,9 +7,12 @@ and training algorithms (REINFORCE, PPO) in algorithms.py.
 
 import logging
 import os
+import platform
+import resource as resource_mod
 import subprocess
 import sys
 import time
+import traceback
 from collections import deque
 from datetime import datetime
 from queue import Empty, Queue
@@ -40,6 +43,7 @@ from run_manager import (
     create_run_dir,
     generate_run_name,
     init_wandb_for_run,
+    load_run_info,
     save_run_info,
 )
 from training_env import TrainingEnv
@@ -426,6 +430,23 @@ class CommandChannel:
         return cmds
 
 
+def _mark_run_failed(run_dir, error_msg: str, status: str = "failed") -> None:
+    """Best-effort: persist crash state to run_info.json and crash.txt."""
+    try:
+        from pathlib import Path
+
+        run_dir = Path(run_dir)
+        info = load_run_info(run_dir)
+        if info is not None:
+            info.status = status
+            info.finished_at = datetime.now().isoformat()
+            info.error_message = error_msg.splitlines()[0][:200] if error_msg else status
+            save_run_info(run_dir, info)
+        (run_dir / "crash.txt").write_text(error_msg or status)
+    except Exception:
+        pass  # Never mask the original error
+
+
 def _train_loop(
     cfg,
     dashboard,
@@ -487,8 +508,14 @@ def _train_loop(
             commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
             is_tui, _verbose,
         )
+    except KeyboardInterrupt:
+        log.warning("Training run %s interrupted by user", run_name)
+        _mark_run_failed(run_dir, "KeyboardInterrupt", status="interrupted")
+        raise
     except Exception:
+        tb = traceback.format_exc()
         log.exception("Training run %s crashed", run_name)
+        _mark_run_failed(run_dir, tb, status="failed")
         raise
     finally:
         logging.getLogger().removeHandler(run_log_handler)
@@ -501,6 +528,19 @@ def _train_loop_body(
     is_tui, _verbose,
 ):
     """Inner body of the training loop, called with run log handler active."""
+    # Startup diagnostic banner (invaluable for post-mortem)
+    rss_mb = resource_mod.getrusage(resource_mod.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+    log.info(
+        "Startup: Python %s | %s %s | torch %s | MPS=%s CUDA=%s | PID=%d | RSS=%.0fMB",
+        platform.python_version(),
+        platform.system(),
+        platform.machine(),
+        torch.__version__,
+        torch.backends.mps.is_available(),
+        torch.cuda.is_available(),
+        os.getpid(),
+        rss_mb,
+    )
     log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
@@ -817,6 +857,7 @@ def _train_loop_body(
         # Drain TUI action commands
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
+        curriculum_net = 0  # Collapse multiple advance/regress into one
         for cmd in commands.drain_actions() if commands else []:
             if cmd == "checkpoint":
                 pending_save = ("manual", [])
@@ -825,17 +866,9 @@ def _train_loop_body(
                 force_rerun = True
                 dashboard.message("Rerun recording queued for next eval")
             elif cmd == "advance_curriculum":
-                old = stage_progress
-                stage_progress = min(1.0, stage_progress + 0.1)
-                dashboard.message(
-                    f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}"
-                )
+                curriculum_net += 1
             elif cmd == "regress_curriculum":
-                old = stage_progress
-                stage_progress = max(0.0, stage_progress - 0.1)
-                dashboard.message(
-                    f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
-                )
+                curriculum_net -= 1
             elif cmd == "rerun_freq_down":
                 old = log_rerun_every
                 log_rerun_every = max(batch_size, log_rerun_every // 2)
@@ -855,6 +888,16 @@ def _train_loop_body(
             elif cmd == "stop":
                 stop_requested = True
                 dashboard.message("Stopping after this batch...")
+
+        # Apply collapsed curriculum adjustment (prevents key-repeat flooding)
+        if curriculum_net != 0:
+            old = stage_progress
+            delta = curriculum_net * 0.1
+            stage_progress = max(0.0, min(1.0, stage_progress + delta))
+            direction = "advanced" if curriculum_net > 0 else "regressed"
+            dashboard.message(
+                f"Curriculum {direction}: {old:.2f} -> {stage_progress:.2f} ({abs(curriculum_net)} steps)"
+            )
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -1269,6 +1312,22 @@ def _train_loop_body(
 
         batch_idx += 1
         batches_this_session += 1
+
+        # Periodic heartbeat: update run_info.json every 10 batches so a
+        # crashed run's metadata tells you where it got to within ~10 batches.
+        if batch_idx % 10 == 0:
+            try:
+                run_info.batch_idx = batch_idx
+                run_info.episode_count = episode_count
+                run_info.curriculum_stage = curriculum_stage
+                save_run_info(run_dir, run_info)
+                rss_mb = resource_mod.getrusage(resource_mod.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+                log.info(
+                    "Heartbeat: batch=%d episodes=%d stage=%d RSS=%.0fMB",
+                    batch_idx, episode_count, curriculum_stage, rss_mb,
+                )
+            except Exception:
+                pass  # Best-effort, don't interrupt training
 
         # Save checkpoints (milestone/final take priority over periodic)
         try:

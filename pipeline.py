@@ -202,7 +202,7 @@ class CommentaryConfig:
 
     enabled: bool = True
     interval_seconds: float = 300.0  # 5 minutes between commentary
-    model: str = "haiku"
+    model: str = "opus"
 
 
 @dataclass

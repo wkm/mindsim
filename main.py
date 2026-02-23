@@ -1188,6 +1188,7 @@ class TrainingDashboard(Screen):
         self._header_parts: list[str] = ["MindSim"]
         self._paused = False
         self._wandb_url: str | None = None
+        self._last_curriculum_cmd: float = 0.0  # monotonic time of last curriculum action
 
     def compose(self) -> ComposeResult:
         yield Static("MindSim", id="header-bar")
@@ -1448,10 +1449,18 @@ class TrainingDashboard(Screen):
         )
 
     def action_advance_curriculum(self) -> None:
+        now = time.monotonic()
+        if now - self._last_curriculum_cmd < 0.3:
+            return  # Debounce: ignore key repeats within 300ms
+        self._last_curriculum_cmd = now
         self.app.send_command("advance_curriculum")
         self.log_message("Advancing curriculum...")
 
     def action_regress_curriculum(self) -> None:
+        now = time.monotonic()
+        if now - self._last_curriculum_cmd < 0.3:
+            return  # Debounce: ignore key repeats within 300ms
+        self._last_curriculum_cmd = now
         self.app.send_command("regress_curriculum")
         self.log_message("Regressing curriculum...")
 
@@ -1893,8 +1902,26 @@ class MindSimApp(App):
                 scene_path=self._scene_path,
                 resume=self._resume,
             )
+        except KeyboardInterrupt:
+            log.warning("Training interrupted by user")
+            try:
+                self.call_from_thread(
+                    self.log_message,
+                    "[bold yellow]Training interrupted by user[/bold yellow]",
+                )
+            except Exception:
+                pass
         except Exception:
             log.exception("Training crashed in TUI worker thread")
+            try:
+                import traceback as _tb
+                err = _tb.format_exc().splitlines()[-1]
+                self.call_from_thread(
+                    self.log_message,
+                    f"[bold red]Training crashed![/bold red] {err}",
+                )
+            except Exception:
+                pass
         finally:
             # Remove TUI log handler to avoid stale references
             if hasattr(self, "_tui_log_handler"):
