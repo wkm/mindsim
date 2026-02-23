@@ -586,7 +586,7 @@ _BOT_DEFAULTS: dict[str, dict] = {
             algorithm="PPO",
             entropy_coeff=0.0,
             ppo_epochs=4,
-            max_grad_norm=1.0,
+            max_grad_norm=5.0,
             log_rerun_every=9999,
         ),
     },

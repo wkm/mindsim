@@ -694,7 +694,7 @@ class TrainingEnv:
             forward_velocity_reward = (
                 self.forward_velocity_reward_scale
                 * max(0.0, forward_vel)
-                * max(0.0, up_z)
+                # No up_z gating — reward any forward movement, even crawling
             )
 
         # 9. Action smoothness penalty (penalize jerky action changes)
@@ -706,17 +706,23 @@ class TrainingEnv:
                 smoothness_penalty = -self.action_smoothness_scale * action_jerk
         self.prev_action = action.copy()
 
-        reward = (
-            distance_reward
-            + exploration_reward
-            + time_cost
-            + upright_reward
-            + alive_reward
-            + energy_cost
-            + contact_penalty
-            + forward_velocity_reward
-            + smoothness_penalty
-        )
+        # Walking stage: pure forward velocity reward only.
+        # No posture, penalty, or distance components — just reward any forward movement.
+        # Navigation stages (2+) use the full multi-component reward.
+        if self.in_walking_stage:
+            reward = forward_velocity_reward
+        else:
+            reward = (
+                distance_reward
+                + exploration_reward
+                + time_cost
+                + upright_reward
+                + alive_reward
+                + energy_cost
+                + contact_penalty
+                + forward_velocity_reward
+                + smoothness_penalty
+            )
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance

@@ -945,8 +945,8 @@ def _train_loop_body(
         timing["collect_batch"] = time.perf_counter() - t_collect_start
         timing["collect"] += timing["collect_batch"]
 
-        # Update observation normalizer for MLPPolicy
-        if cfg.policy.use_mlp:
+        # Update observation normalizer (MLPPolicy and LSTMPolicy with sensors)
+        if hasattr(policy, "update_normalizer"):
             all_sensors = []
             for ep in episode_batch:
                 if "sensor_data" in ep:

@@ -64,8 +64,14 @@ class LSTMPolicy(nn.Module):
             dummy = self.conv2(self.conv1(dummy))
             conv_out_size = dummy.numel()
 
-        # Compress CNN features (+ optional sensor data) to compact vector before LSTM
-        self.fc_embed = nn.Linear(conv_out_size + sensor_input_size, hidden_size)
+        # Two-stream embedding: separate pathways for visual and sensor data
+        if sensor_input_size > 0:
+            visual_size = hidden_size // 2
+            sensor_size = hidden_size - visual_size
+            self.fc_visual = nn.Linear(conv_out_size, visual_size)
+            self.fc_sensor = nn.Linear(sensor_input_size, sensor_size)
+        else:
+            self.fc_visual = nn.Linear(conv_out_size, hidden_size)
 
         # LSTM for temporal memory (operates on compact feature vector)
         self.lstm = nn.LSTM(
@@ -80,6 +86,12 @@ class LSTMPolicy(nn.Module):
         self.log_std = nn.Parameter(torch.ones(num_actions) * np.log(init_std))
         self.max_log_std = max_log_std
 
+        # Running sensor normalizer (Welford's online algorithm)
+        if sensor_input_size > 0:
+            self.register_buffer("obs_mean", torch.zeros(sensor_input_size))
+            self.register_buffer("obs_var", torch.ones(sensor_input_size))
+            self.register_buffer("obs_count", torch.tensor(1e-4))
+
         # Hidden state (will be set during episode)
         self.hidden = None
 
@@ -88,6 +100,32 @@ class LSTMPolicy(nn.Module):
         self.hidden = (
             torch.zeros(1, batch_size, self.hidden_size, device=device),
             torch.zeros(1, batch_size, self.hidden_size, device=device),
+        )
+
+    def update_normalizer(self, sensor_batch):
+        """Update running mean/var from a batch of sensor observations."""
+        if self.sensor_input_size == 0:
+            return
+        batch_mean = sensor_batch.mean(dim=0)
+        batch_var = sensor_batch.var(dim=0)
+        batch_count = sensor_batch.shape[0]
+
+        delta = batch_mean - self.obs_mean
+        total_count = self.obs_count + batch_count
+        new_mean = self.obs_mean + delta * batch_count / total_count
+        m_a = self.obs_var * self.obs_count
+        m_b = batch_var * batch_count
+        m2 = m_a + m_b + delta.pow(2) * self.obs_count * batch_count / total_count
+        new_var = m2 / total_count
+
+        self.obs_mean.copy_(new_mean)
+        self.obs_var.copy_(new_var)
+        self.obs_count.copy_(total_count)
+
+    def _normalize_sensors(self, sensors):
+        """Normalize sensor observations using running stats."""
+        return ((sensors - self.obs_mean) / torch.sqrt(self.obs_var + 1e-8)).clamp(
+            -10, 10
         )
 
     def _backbone(self, x, hidden=None, sensors=None):
@@ -117,13 +155,15 @@ class LSTMPolicy(nn.Module):
         x = torch.relu(self.conv2(x))
         x = x.reshape(x.size(0), -1)
 
-        # Concatenate sensor data with CNN features before embedding
+        # Two-stream embedding: parallel pathways for visual and sensor data
+        visual_features = torch.relu(self.fc_visual(x))
         if sensors is not None and self.sensor_input_size > 0:
             if sensors.dim() == 3:
                 sensors = sensors.reshape(B * T, -1)
-            x = torch.cat([x, sensors], dim=-1)
-
-        x = torch.relu(self.fc_embed(x))
+            sensor_features = torch.relu(self.fc_sensor(self._normalize_sensors(sensors)))
+            x = torch.cat([visual_features, sensor_features], dim=-1)
+        else:
+            x = visual_features
         x = x.reshape(B, T, -1)
 
         if hidden is None:
