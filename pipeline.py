@@ -578,7 +578,7 @@ _BOT_DEFAULTS: dict[str, dict] = {
             hidden_size=256,
             fc_output_size=12,
             sensor_input_size=34,
-            init_std=0.5,
+            init_std=0.2,
         ),
         "training": dict(
             learning_rate=1e-4,
