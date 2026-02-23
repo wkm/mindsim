@@ -346,13 +346,19 @@ def _format_config_summary(cfg) -> str:
 
 
 def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
-    """Generate AI commentary and push to TUI. Blocks the training thread briefly."""
+    """Generate AI commentary and push to TUI + W&B + run.log."""
     try:
         text = commentator.generate_commentary(batch, metrics, elapsed_secs)
-        if text and app is not None:
+        if not text:
+            return
+        # TUI display
+        if app is not None:
             app.call_from_thread(app.ai_commentary, text)
-        elif text:
+        else:
             dashboard.message(f"AI: {text}")
+        # Persist: run.log and W&B
+        log.info("AI commentary (batch %d): %s", batch, text)
+        wandb.log({"ai_commentary": wandb.Html(f"<pre>{text}</pre>")})
     except Exception:
         log.exception("AI commentary error")
 

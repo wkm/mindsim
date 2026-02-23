@@ -196,11 +196,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     # Determine if episode was a success
     if info.get("in_walking_stage"):
-        # Walking stage: success = survived AND moved forward enough
+        # Walking stage: success = moved forward enough (even if fell afterward)
         forward_dist = info.get("forward_distance", 0.0)
-        success = bool(
-            truncated and not done and forward_dist >= env.walking_success_min_forward
-        )
+        success = bool(forward_dist >= env.walking_success_min_forward)
     else:
         # Standard stages: success = reached target
         success = bool(done and info["distance"] < env.success_distance)
