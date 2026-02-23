@@ -53,41 +53,39 @@ kp must be high enough to hold the standing pose, but the resulting movement spe
 
 The child needs ~2x the duck's kp despite similar mass, because the longer lever arms produce higher gravitational torques. **kp scales with torque demands, not just body size.**
 
-## 5. Joint Damping — Limit Speed, Not Just Oscillation
+## 5. Joint Damping — RL-Learnable First, Realistic Later
 
-Damping resists joint velocity. It serves two purposes:
-1. **Prevent oscillation** around the target position
-2. **Limit joint speed** to physically realistic values
+Damping resists joint velocity. For RL training, the critical requirement is that **actions must visibly influence outcomes**. If damping is so high that joints respond sluggishly, the policy can't distinguish good actions from bad ones — the gradient signal drowns in noise.
 
-The terminal angular velocity of a position-actuated joint is:
+### For RL training: use low, uniform damping
+
+Use `damping=2.0` across all joints. This matches PPO-era RL benchmarks:
+
+| Model | Joint damping | Actuator type |
+|-------|--------------|---------------|
+| OpenAI Gym Humanoid | 1-5 | torque |
+| DM Control Walker | 0.1 | torque |
+| Robotis OP3 | 1.08 | position (kp=21) |
+| **Recommended for RL** | **2.0** | **position** |
+
+The resulting tip speeds will be unrealistic (10+ m/s at full deflection), but that's fine — the policy learns not to command wild swings. Every successful RL biped trains this way.
+
+**Failure mode from too-high damping**: Runs 1-3 of the childbiped used per-joint damping of 9-26 (computed from realistic tip speed limits). The policy couldn't learn because actions barely influenced the falling trajectory — different actions produced nearly identical outcomes, so the policy gradient averaged to zero. Entropy stayed at theoretical maximum for 1600+ episodes.
+
+### For deployment/visualization: increase damping later
+
+Once a policy is trained, you can increase damping to get more realistic movement speeds. The terminal angular velocity of a position-actuated joint is:
 
 ```
 terminal_vel = kp * position_error / damping
+tip_speed = terminal_vel * lever_arm
 ```
 
-The **tip speed** at the end of the limb is `terminal_vel * lever_arm`. This is what determines whether movement looks realistic or comically fast.
+Realistic tip speeds: < 3 m/s for walking, < 5 m/s for running. But **don't start here** — train first with low damping, then tune for realism.
 
-**Critical insight**: damping that works for a short-legged robot will produce absurd speeds on a taller one, even with identical kp. A 3x longer leg at the same angular velocity produces 3x the tip speed.
+### Modern alternative: `dampratio` (MuJoCo 3.1.6+)
 
-Practical approach — work backwards from realistic tip speeds:
-
-```
-damping = kp * max_position_error / target_angular_vel
-```
-
-Reference angular velocities for walking:
-- Hip: 4-5 rad/s peak (swing phase)
-- Knee: 6-8 rad/s peak (swing phase)
-- Ankle: 6-8 rad/s peak
-
-| Robot | Hip kp | Hip damping | Hip terminal vel | Leg tip speed |
-|-------|-------:|----------:|----------------:|--------------:|
-| Duck (0.17m legs) | 40 | 3.0 | 13.3 rad/s | 2.3 m/s |
-| Child (0.46m legs) | 90 | 18.0 | 5.0 rad/s | 2.3 m/s |
-
-The duck gets away with low damping because its legs are short. The child biped needs ~6x more damping to achieve the same tip speed.
-
-**Don't use a fixed damping-to-kp ratio.** Instead, compute terminal velocities and verify tip speeds are physically plausible (< 3 m/s for walking, < 5 m/s for running).
+For new projects not constrained to PPO-era techniques, position actuators support `dampratio=1` which auto-computes critical damping from each joint's inertia. Requires `implicitfast` integrator. See Unitree G1 model for reference. This eliminates manual damping tuning entirely.
 
 ## 6. Mass Distribution — Heavy Top, Light Legs
 
@@ -196,9 +194,9 @@ uv run python stability_test.py --scene bots/BOTNAME/scene.xml --verbose
 # 3. Does it look right? (check for interpenetration, floating, comically fast joints)
 uv run mjpython main.py view --bot BOTNAME
 
-# 4. Are joint speeds realistic?
-# Compute terminal_vel = kp * max_error / damping for each joint.
-# Multiply by lever arm to get tip speed. Should be < 3 m/s for walking bots.
+# 4. Are joints responsive enough for RL?
+# With damping=2.0 and kp=90, terminal_vel = 90*1.0/2.0 = 45 rad/s.
+# This is unrealistically fast but necessary for RL. Increase damping after training.
 
 # 5. Does training pipeline work?
 uv run mjpython main.py train --bot BOTNAME --smoketest

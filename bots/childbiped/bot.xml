@@ -24,7 +24,7 @@
   <compiler angle="radian" inertiafromgeom="true" />
 
   <default>
-    <joint limited="true" damping="10.0" armature="0.01" />
+    <joint limited="true" damping="2.0" armature="0.01" />
     <geom contype="1" conaffinity="1" condim="3" density="1000"
           friction="0.8 0.1 0.1" />
     <position ctrlrange="-1 1" kp="80" />
@@ -48,9 +48,9 @@
       <!-- === UPPER BODY (waist: 2 DOF) === -->
       <body name="upper_body" pos="0 0 0.06">
         <joint name="waist_tilt" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-0.3 0.3" damping="10.5" />
+               pos="0 0 0" range="-0.3 0.3" />
         <joint name="waist_twist" type="hinge" axis="0 0 1"
-               pos="0 0 0" range="-0.3 0.3" damping="10.5" />
+               pos="0 0 0" range="-0.3 0.3" />
         <geom name="trunk" type="capsule" fromto="0 0 0 0 0 0.22"
               size="0.055" rgba="0.8 0.7 0.6 1.0" mass="10.0" />
       </body>
@@ -59,25 +59,25 @@
       <!-- Hip at 12cm left of center, 6cm below pelvis center -->
       <body name="left_upper_leg" pos="-0.12 0 -0.06">
         <joint name="left_hip_abd" type="hinge" axis="0 1 0"
-               pos="0 0 0" range="-0.5 0.5" damping="15.0" />
+               pos="0 0 0" range="-0.5 0.5" />
         <joint name="left_hip_flex" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.0 0.8" damping="18.0" />
+               pos="0 0 0" range="-1.0 0.8" />
         <joint name="left_hip_rot" type="hinge" axis="0 0 1"
-               pos="0 0 0" range="-0.4 0.4" damping="12.0" />
+               pos="0 0 0" range="-0.4 0.4" />
         <geom name="left_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.22"
               size="0.04" rgba="0.8 0.7 0.6 1.0" />
 
         <!-- Knee at bottom of thigh (22cm down) -->
         <body name="left_lower_leg" pos="0 0 -0.22">
           <joint name="left_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 2.0" damping="26.0" />
+                 pos="0 0 0" range="0 2.0" />
           <geom name="left_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
                 size="0.033" rgba="0.8 0.7 0.6 1.0" />
 
           <!-- Ankle at bottom of shin (20cm down) -->
           <body name="left_foot" pos="0 0 -0.20">
             <joint name="left_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.5 0.5" damping="9.0" />
+                   pos="0 0 0" range="-0.5 0.5" />
             <!-- Box foot: 7cm wide x 17cm long x 4cm tall
                  pos: 3cm forward (-Y), 2cm below ankle
                  Bottom at ankle_z - 0.02 - 0.02 = 0.04 - 0.04 = 0.00 -->
@@ -93,23 +93,23 @@
       <!-- === RIGHT LEG (mirror of left) === -->
       <body name="right_upper_leg" pos="0.12 0 -0.06">
         <joint name="right_hip_abd" type="hinge" axis="0 1 0"
-               pos="0 0 0" range="-0.5 0.5" damping="15.0" />
+               pos="0 0 0" range="-0.5 0.5" />
         <joint name="right_hip_flex" type="hinge" axis="1 0 0"
-               pos="0 0 0" range="-1.0 0.8" damping="18.0" />
+               pos="0 0 0" range="-1.0 0.8" />
         <joint name="right_hip_rot" type="hinge" axis="0 0 1"
-               pos="0 0 0" range="-0.4 0.4" damping="12.0" />
+               pos="0 0 0" range="-0.4 0.4" />
         <geom name="right_upper_leg" type="capsule" fromto="0 0 0 0 0 -0.22"
               size="0.04" rgba="0.8 0.7 0.6 1.0" />
 
         <body name="right_lower_leg" pos="0 0 -0.22">
           <joint name="right_knee" type="hinge" axis="1 0 0"
-                 pos="0 0 0" range="0 2.0" damping="26.0" />
+                 pos="0 0 0" range="0 2.0" />
           <geom name="right_lower_leg" type="capsule" fromto="0 0 0 0 0 -0.20"
                 size="0.033" rgba="0.8 0.7 0.6 1.0" />
 
           <body name="right_foot" pos="0 0 -0.20">
             <joint name="right_ankle" type="hinge" axis="1 0 0"
-                   pos="0 0 0" range="-0.5 0.5" damping="9.0" />
+                   pos="0 0 0" range="-0.5 0.5" />
             <geom name="right_foot" type="box"
                   size="0.035 0.085 0.02"
                   pos="0 -0.03 -0.02"
