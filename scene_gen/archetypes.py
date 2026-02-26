@@ -223,6 +223,22 @@ ARCHETYPES: dict[str, Archetype] = {
         ),
         fill_range=(3, 6),
     ),
+    "industrial": Archetype(
+        name="Industrial",
+        required=(
+            ConceptSlot("safety_cone", count=2),
+            ConceptSlot("crate", count=2),
+        ),
+        optional=(
+            ConceptSlot("safety_cone", count=4, weight=3.0),
+            ConceptSlot("crate", count=4, weight=3.0),
+            ConceptSlot("bench", count=2, weight=2.0),
+            ConceptSlot("trash_can", count=1, weight=1.5),
+            ConceptSlot("shelf", count=2, weight=1.5),
+            ConceptSlot("lamp", count=1, weight=0.5),
+        ),
+        fill_range=(6, 12),
+    ),
 }
 
 
