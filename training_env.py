@@ -218,8 +218,12 @@ class TrainingEnv:
         self.forward_velocity_axis = np.array(forward_velocity_axis, dtype=np.float64)
         self.walking_success_min_forward = walking_success_min_forward
 
-        # RSL-RL reward hierarchy
-        self.hierarchy = hierarchy
+        # RSL-RL reward hierarchy — only active if hierarchy has RSL-RL components.
+        # Legacy bots (wheeler, simplebiped, walker2d) have hierarchies with
+        # "distance"/"time" components that _compute_rsl_rewards doesn't handle.
+        self.hierarchy = (
+            hierarchy if (hierarchy and "vel_tracking" in hierarchy.components) else None
+        )
         self.only_positive_rewards = only_positive_rewards
         self.vel_tracking_cmd = vel_tracking_cmd
         self.base_height_target = base_height_target

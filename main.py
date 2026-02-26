@@ -1604,8 +1604,8 @@ class TrainingDashboard(Screen):
         _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, ["forward_velocity", "vel_tracking"])
         ri_en = ri.get("energy")
         _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, ["energy", "torques"])
-        ri_ct = ri.get("contact_frac") or ri.get("contact_count")
-        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, ["contact"])
+        ri_ct = ri.get("contact_count")
+        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.2f}" if ri_ct is not None else None, ["contact"])
         ri_jk = ri.get("action_jerk")
         _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, ["smoothness", "action_rate"])
 
