@@ -45,17 +45,20 @@ class Archetype:
         required: Concepts that always appear
         optional: Concepts randomly drawn to fill the room
         fill_range: (min_total, max_total) target object count
+        groupings: Names of groupings to enforce (see scene_gen/groupings.py)
     """
 
     name: str
     required: tuple[ConceptSlot, ...] = ()
     optional: tuple[ConceptSlot, ...] = ()
     fill_range: tuple[int, int] = (4, 8)
+    groupings: tuple[str, ...] = ()
 
     def sample(
         self,
         rng: np.random.Generator,
         max_objects: int = 16,
+        ensure_concepts: tuple[str, ...] = (),
     ) -> list[str]:
         """Sample a list of concept names from this archetype.
 
@@ -68,10 +71,17 @@ class Archetype:
         for slot in self.required:
             picks.extend([slot.concept] * slot.count)
 
+        # Ensure required layout anchors are present
+        for name in ensure_concepts:
+            if name not in picks:
+                picks.append(name)
+
         # Determine how many optional objects to add
         lo, hi = self.fill_range
         target = int(rng.integers(lo, hi + 1))
         target = min(target, max_objects)
+        if target < len(picks):
+            target = len(picks)
         n_optional = max(0, target - len(picks))
 
         if n_optional > 0 and self.optional:
@@ -118,6 +128,7 @@ ARCHETYPES: dict[str, Archetype] = {
     "bedroom": Archetype(
         name="Bedroom",
         required=(ConceptSlot("bed", count=1),),
+        groupings=("bed_setup",),
         optional=(
             ConceptSlot("nightstand", count=2, weight=3.0),
             ConceptSlot("dresser", count=1, weight=2.5),
@@ -136,6 +147,7 @@ ARCHETYPES: dict[str, Archetype] = {
     "living_room": Archetype(
         name="Living Room",
         required=(ConceptSlot("couch", count=1),),
+        groupings=("living_set",),
         optional=(
             ConceptSlot("tv_stand", count=1, weight=3.0),
             ConceptSlot("table", count=1, weight=2.5),  # coffee table
@@ -156,8 +168,8 @@ ARCHETYPES: dict[str, Archetype] = {
         name="Office",
         required=(
             ConceptSlot("desk", count=1),
-            ConceptSlot("chair", count=1),
         ),
+        groupings=("desk_setup",),
         optional=(
             ConceptSlot("bookcase", count=1, weight=3.0),
             ConceptSlot("filing_cabinet", count=2, weight=3.0),
@@ -170,16 +182,13 @@ ARCHETYPES: dict[str, Archetype] = {
             ConceptSlot("painting", count=1, weight=1.0),
             ConceptSlot("rug", count=1, weight=1.0),
         ),
-        fill_range=(4, 8),
+        fill_range=(3, 7),
     ),
     "dining_room": Archetype(
         name="Dining Room",
-        required=(
-            ConceptSlot("table", count=1),
-            ConceptSlot("chair", count=2),
-        ),
+        required=(ConceptSlot("table", count=1),),
+        groupings=("dining_set",),
         optional=(
-            ConceptSlot("chair", count=4, weight=3.0),  # more chairs around table
             ConceptSlot("bookcase", count=1, weight=2.0),  # china cabinet
             ConceptSlot("shelf", count=1, weight=1.5),
             ConceptSlot("lamp", count=1, weight=1.5),
@@ -196,6 +205,7 @@ ARCHETYPES: dict[str, Archetype] = {
             ConceptSlot("kitchen_counter", count=1),
             ConceptSlot("fridge", count=1),
         ),
+        groupings=("kitchen_counter_setup",),
         optional=(
             ConceptSlot("stove", count=1, weight=3.0),
             ConceptSlot("kitchen_counter", count=2, weight=2.5),  # extra counters
@@ -213,6 +223,7 @@ ARCHETYPES: dict[str, Archetype] = {
             ConceptSlot("toilet", count=1),
             ConceptSlot("sink_vanity", count=1),
         ),
+        groupings=("vanity_setup",),
         optional=(
             ConceptSlot("bathtub", count=1, weight=3.0),
             ConceptSlot("mirror", count=1, weight=2.5),

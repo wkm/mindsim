@@ -40,7 +40,7 @@ class Satellite:
     dy: float = 0.0
     d_rotation: float = 0.0
     jitter_pos: float = 0.05
-    jitter_rot: float = np.radians(5.0)
+    jitter_rot: float = np.radians(3.0)
     optional: bool = False  # if True, may be skipped randomly
     probability: float = 0.7  # probability of inclusion when optional
 

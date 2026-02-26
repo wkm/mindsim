@@ -62,8 +62,8 @@ _WALL_OFFSET = 0.15
 _CENTER_FRAC = 0.65
 # Corner offset from arena edge
 _CORNER_OFFSET = 0.4
-# Rotation jitter: ±3° in radians
-_ROT_JITTER = np.radians(3.0)
+# Grid snap size for major object placement
+_GRID = 0.25
 
 # The 4 cardinal rotations (facing into room from N/E/S/W walls)
 # Wall at +Y → face -Y (π), wall at -Y → face +Y (0),
@@ -78,6 +78,13 @@ _WALL_ROTS = {
 
 # Margin to keep furniture from touching walls
 _WALL_MARGIN = 0.05
+
+
+def _snap_to_grid(value: float, grid: float) -> float:
+    """Snap a scalar value to the nearest grid step."""
+    if grid <= 0:
+        return value
+    return float(round(value / grid) * grid)
 
 
 def _build_wall_obbs(
@@ -159,9 +166,9 @@ def _inside_exterior_walls(
 
 
 def _snap_rotation(rng: np.random.Generator) -> float:
-    """Random axis-aligned rotation (0/90/180/270°) + small jitter."""
+    """Axis-aligned rotation (0/90/180/270°)."""
     base = rng.choice([0.0, np.pi / 2, np.pi, -np.pi / 2])
-    return float(base + rng.uniform(-_ROT_JITTER, _ROT_JITTER))
+    return float(base)
 
 
 def _sample_position(
@@ -213,7 +220,7 @@ def _sample_wall_pos(
     else:
         wall = rng.choice(["N", "S", "E", "W"])
 
-    rotation = float(_WALL_ROTS[wall] + rng.uniform(-_ROT_JITTER, _ROT_JITTER))
+    rotation = float(_WALL_ROTS[wall])
 
     # The "depth" extent that faces the wall depends on rotation:
     # for N/S walls the object's local Y faces the wall → use hy
@@ -225,15 +232,23 @@ def _sample_wall_pos(
     if wall == "N":
         cy = float(arena_size - _WALL_OFFSET - depth)
         cx = float(rng.uniform(-slide_extent, slide_extent))
+        cx = _snap_to_grid(cx, _GRID)
+        cx = float(np.clip(cx, -slide_extent, slide_extent))
     elif wall == "S":
         cy = float(-arena_size + _WALL_OFFSET + depth)
         cx = float(rng.uniform(-slide_extent, slide_extent))
+        cx = _snap_to_grid(cx, _GRID)
+        cx = float(np.clip(cx, -slide_extent, slide_extent))
     elif wall == "E":
         cx = float(arena_size - _WALL_OFFSET - depth)
         cy = float(rng.uniform(-slide_extent, slide_extent))
+        cy = _snap_to_grid(cy, _GRID)
+        cy = float(np.clip(cy, -slide_extent, slide_extent))
     else:  # W
         cx = float(-arena_size + _WALL_OFFSET + depth)
         cy = float(rng.uniform(-slide_extent, slide_extent))
+        cy = _snap_to_grid(cy, _GRID)
+        cy = float(np.clip(cy, -slide_extent, slide_extent))
 
     return (cx, cy, rotation)
 
@@ -246,6 +261,10 @@ def _sample_center_pos(
     inner = arena_size * _CENTER_FRAC
     cx = float(rng.uniform(-inner, inner))
     cy = float(rng.uniform(-inner, inner))
+    cx = _snap_to_grid(cx, _GRID)
+    cy = _snap_to_grid(cy, _GRID)
+    cx = float(np.clip(cx, -inner, inner))
+    cy = float(np.clip(cy, -inner, inner))
     rotation = _snap_rotation(rng)
     return (cx, cy, rotation)
 
@@ -267,6 +286,8 @@ def _sample_corner_pos(
     cy = float(sy * corner_base + rng.uniform(-jitter, jitter))
     # Clamp to stay inside arena
     limit = arena_size - max(hx, hy) - 0.05
+    cx = _snap_to_grid(cx, _GRID)
+    cy = _snap_to_grid(cy, _GRID)
     cx = float(np.clip(cx, -limit, limit))
     cy = float(np.clip(cy, -limit, limit))
     rotation = _snap_rotation(rng)
@@ -539,8 +560,19 @@ class SceneComposer:
                 arch = archetype
 
         # Pick concept names — from archetype or uniform random
+        allowed_groupings: set[str] = set()
         if arch is not None:
-            concept_names = arch.sample(rng, max_objects=max_objects)
+            allowed_groupings = set(getattr(arch, "groupings", ()))
+            ensure_concepts: tuple[str, ...] = ()
+            if allowed_groupings:
+                ensure_concepts = tuple(
+                    GROUPINGS[g].anchor for g in allowed_groupings if g in GROUPINGS
+                )
+            concept_names = arch.sample(
+                rng,
+                max_objects=max_objects,
+                ensure_concepts=ensure_concepts,
+            )
         else:
             available = concepts.list_concepts()
             if not available:
@@ -555,8 +587,15 @@ class SceneComposer:
         # Build index: which concepts are anchors for groupings?
         # Only use each grouping once per scene to avoid duplicate clusters.
         _anchor_to_grouping: dict[str, str] = {}
-        for gname, grouping in GROUPINGS.items():
-            _anchor_to_grouping.setdefault(grouping.anchor, gname)
+        if arch is not None and allowed_groupings:
+            for gname in allowed_groupings:
+                grouping = GROUPINGS.get(gname)
+                if grouping is None:
+                    continue
+                _anchor_to_grouping.setdefault(grouping.anchor, gname)
+        else:
+            for gname, grouping in GROUPINGS.items():
+                _anchor_to_grouping.setdefault(grouping.anchor, gname)
         _used_groupings: set[str] = set()
 
         # Resolve each concept name to (name, params, is_ground, placement).
