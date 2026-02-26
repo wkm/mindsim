@@ -111,6 +111,20 @@ class EnvConfig:
     # Gait phase encoding (0.0 = disabled)
     gait_phase_period: float = 0.0  # Period in seconds (e.g. 0.6s for ~1.67Hz stride)
 
+    # RSL-RL style rewards (all 0.0 = disabled, uses old reward path)
+    vel_tracking_scale: float = 0.0      # Gaussian kernel velocity tracking
+    vel_tracking_sigma: float = 0.25     # Sigma for Gaussian kernel
+    vel_tracking_cmd: float = 0.5        # Target forward velocity (m/s)
+    orientation_scale: float = 0.0       # -sum(projected_gravity_xy^2)
+    base_height_scale: float = 0.0       # -(height - target)^2
+    base_height_target: float = 0.34     # Target standing height (m)
+    z_velocity_scale: float = 0.0        # -z_vel^2
+    ang_vel_xy_scale: float = 0.0        # -sum(ang_vel_xy^2)
+    action_rate_scale: float = 0.0       # -sum((a_t - a_{t-1})^2)
+    torques_scale: float = 0.0           # -sum(torques^2)
+    joint_acc_scale: float = 0.0         # -sum(joint_acc^2)
+    only_positive_rewards: bool = False  # Clip total reward to max(0, total)
+
 
 @dataclass
 class CurriculumConfig:
@@ -549,13 +563,6 @@ _BOT_DEFAULTS: dict[str, dict] = {
             failure_distance=10.0,
             min_target_distance=0.8,
             max_target_distance=1.5,
-            alive_bonus=0.5,
-            energy_penalty_scale=0.001,
-            distance_reward_scale=20.0,
-            time_penalty=0.005,
-            upright_reward_scale=0.3,
-            ground_contact_penalty=0.5,
-            forward_velocity_reward_scale=2.0,
             walking_success_min_forward=0.5,
             joint_stagnation_window=375,
             has_walking_stage=True,
@@ -564,8 +571,30 @@ _BOT_DEFAULTS: dict[str, dict] = {
             fall_height_fraction=0.5,
             fall_up_z_threshold=0.50,
             fall_grace_steps=125,
-            action_smoothness_scale=0.01,
             gait_phase_period=0.85,
+            # Old reward scales zeroed out — replaced by RSL-RL terms below
+            distance_reward_scale=0.0,
+            movement_bonus=0.0,
+            time_penalty=0.0,
+            upright_reward_scale=0.0,
+            alive_bonus=0.15,
+            energy_penalty_scale=0.0,
+            ground_contact_penalty=0.0,
+            forward_velocity_reward_scale=0.0,
+            action_smoothness_scale=0.0,
+            # RSL-RL reward structure
+            vel_tracking_scale=1.0,
+            vel_tracking_sigma=0.25,
+            vel_tracking_cmd=0.5,
+            orientation_scale=1.0,
+            base_height_scale=10.0,
+            base_height_target=0.34,
+            z_velocity_scale=2.0,
+            ang_vel_xy_scale=0.05,
+            action_rate_scale=0.01,
+            torques_scale=1e-5,
+            joint_acc_scale=2.5e-7,
+            only_positive_rewards=True,
         ),
         "curriculum": dict(
             num_stages=5,
@@ -586,7 +615,7 @@ _BOT_DEFAULTS: dict[str, dict] = {
             algorithm="PPO",
             entropy_coeff=0.0,
             ppo_epochs=4,
-            max_grad_norm=5.0,
+            max_grad_norm=1.0,
             log_rerun_every=9999,
         ),
     },

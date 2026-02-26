@@ -4,6 +4,32 @@ import mujoco
 import numpy as np
 
 
+def _quat_rotate_inverse(quat, vec):
+    """Rotate vector from world frame to body frame (inverse quaternion rotation).
+
+    Args:
+        quat: [w, x, y, z] body-to-world quaternion (MuJoCo convention)
+        vec: 3D vector in world frame
+
+    Returns:
+        3D vector in body frame
+    """
+    w, x, y, z = quat
+    # Conjugate: [w, -x, -y, -z]
+    x, y, z = -x, -y, -z
+    vx, vy, vz = vec
+    t = np.array([
+        2.0 * (y * vz - z * vy),
+        2.0 * (z * vx - x * vz),
+        2.0 * (x * vy - y * vx),
+    ])
+    return np.array([
+        vx + w * t[0] + (y * t[2] - z * t[1]),
+        vy + w * t[1] + (z * t[0] - x * t[2]),
+        vz + w * t[2] + (x * t[1] - y * t[0]),
+    ])
+
+
 def assemble_sensor_data(base_sensors, gait_step_count, control_dt, gait_phase_period):
     """Assemble sensor vector with optional gait phase encoding.
 
@@ -225,6 +251,40 @@ class SimEnv:
         up_y = 2 * (y * z - w * x)
         up_z = 1 - 2 * (x * x + y * y)
         return np.array([up_x, up_y, up_z])
+
+    def get_base_velocity_z(self):
+        """Get vertical (z) linear velocity of the base body."""
+        return float(self.data.cvel[self.bot_body_id][5])
+
+    def get_angular_velocity(self):
+        """Get angular velocity of the base body (world frame).
+
+        Returns:
+            numpy array [wx, wy, wz] — rotational part of 6D spatial velocity.
+        """
+        return self.data.cvel[self.bot_body_id][:3].copy()
+
+    def get_projected_gravity(self):
+        """Get gravity direction (unit vector) in body frame.
+
+        Returns [0, 0, -1] when perfectly upright. X/Y components indicate tilt.
+        """
+        gravity_world = np.array([0.0, 0.0, -1.0])
+        quat = self.data.xquat[self.bot_body_id]
+        return _quat_rotate_inverse(quat, gravity_world)
+
+    def get_actuator_forces(self):
+        """Get current actuator forces/torques."""
+        return self.data.actuator_force[:self.num_actuators].copy()
+
+    def get_joint_velocities(self):
+        """Get velocities of all actuated joints."""
+        velocities = np.zeros(self.num_actuators, dtype=np.float64)
+        for i in range(self.num_actuators):
+            joint_id = self.model.actuator_trnid[i, 0]
+            dof_adr = self.model.jnt_dofadr[joint_id]
+            velocities[i] = self.data.qvel[dof_adr]
+        return velocities
 
     def get_non_foot_ground_contacts(self):
         """

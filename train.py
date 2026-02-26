@@ -617,7 +617,8 @@ def _train_loop_body(
 
     # Create environment from config
     log_fn("Creating environment...")
-    env = TrainingEnv.from_config(cfg.env)
+    hierarchy = cfg.reward_hierarchy
+    env = TrainingEnv.from_config(cfg.env, hierarchy=hierarchy)
     _verbose(f"  Observation shape: {env.observation_shape}")
     _verbose(f"  Action shape: {env.action_shape}")
     _verbose(f"  Control frequency: {cfg.env.control_frequency_hz} Hz")
@@ -628,7 +629,6 @@ def _train_loop_body(
         verify_forward_direction(env, log_fn=_verbose)
 
     # Validate reward hierarchy (warns if dominance violations found)
-    hierarchy = cfg.reward_hierarchy
     _verbose("Reward hierarchy:")
     for line in hierarchy.summary_table().split("\n"):
         _verbose(line)
@@ -1196,14 +1196,12 @@ def _train_loop_body(
             log_dict[f"rewards/{key}"] = np.mean(vals)
 
         # Raw reward inputs (physical measures, averaged across batch)
-        raw_input_keys = [
-            "distance_to_target", "torso_height", "up_z",
-            "forward_vel", "energy", "contact_frac", "action_jerk",
-            "forward_distance", "lateral_drift", "total_path_length",
-            "avg_speed", "survival_time", "joint_activity",
-        ]
+        # Collect all keys dynamically from episode raw_inputs dicts
+        all_raw_keys = set()
+        for ep in episode_batch:
+            all_raw_keys.update(ep.get("raw_inputs", {}).keys())
         batch_raw_inputs = {}
-        for key in raw_input_keys:
+        for key in sorted(all_raw_keys):
             vals = [ep.get("raw_inputs", {}).get(key, 0.0) for ep in episode_batch]
             avg = float(np.mean(vals))
             batch_raw_inputs[key] = avg

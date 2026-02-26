@@ -1563,8 +1563,14 @@ class TrainingDashboard(Screen):
         scales = m.get("reward_scales", {})
 
         def _ri_row(widget_id, label, value, fmt_str, scale_key=None):
-            """Update a reward-input row. Hidden when scale_key is set and its scale is 0."""
-            show = scale_key is None or scales.get(scale_key, 0) > 0
+            """Update a reward-input row. Hidden when scale_key is set and its scale is 0.
+
+            scale_key can be a string or list of strings — row shows if any key is active.
+            """
+            if isinstance(scale_key, list):
+                show = any(scales.get(k, 0) > 0 for k in scale_key)
+            else:
+                show = scale_key is None or scales.get(scale_key, 0) > 0
             widget = self.query_one(widget_id)
             if show and value is not None:
                 widget.update(f"  {label:<15s}{fmt_str.rjust(8)}")
@@ -1591,17 +1597,17 @@ class TrainingDashboard(Screen):
         ri_lat = ri.get("lateral_drift")
         _ri_row("#ri-lateral", "lateral drift", ri_lat, f"{ri_lat:.2f} m" if ri_lat is not None else None, "has_walking_stage")
 
-        # Reward-component-gated
+        # Reward-component-gated (supports both old and RSL-RL component names)
         ri_up = ri.get("up_z")
-        _ri_row("#ri-uprightness", "uprightness", ri_up, f"{ri_up:.2f}" if ri_up is not None else None, "upright")
+        _ri_row("#ri-uprightness", "uprightness", ri_up, f"{ri_up:.2f}" if ri_up is not None else None, ["upright", "orientation"])
         ri_fv = ri.get("forward_vel")
-        _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, "forward_vel")
+        _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, ["forward_velocity", "vel_tracking"])
         ri_en = ri.get("energy")
-        _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, "energy")
-        ri_ct = ri.get("contact_frac")
-        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, "contact")
+        _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, ["energy", "torques"])
+        ri_ct = ri.get("contact_frac") or ri.get("contact_count")
+        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, ["contact"])
         ri_jk = ri.get("action_jerk")
-        _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, "smoothness")
+        _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, ["smoothness", "action_rate"])
 
         # Fall detection gated
         ri_fell = ri.get("fell_frac")
@@ -2321,8 +2327,6 @@ def _validate_rewards(bot_name: str | None):
 
 def _run_scenario_tests(bot_name: str, hierarchy, cfg):
     """Run scenario tests showing per-step reward in different situations."""
-    from reward_hierarchy import GUARD, STYLE, SURVIVE, TASK
-
     active = hierarchy.active_components()
     if not active:
         print("Scenario tests: no active components")
@@ -2330,72 +2334,63 @@ def _run_scenario_tests(bot_name: str, hierarchy, cfg):
 
     print("Scenario tests:")
 
-    # Scenario 1: "Perfect stand" -- healthy, no movement
-    stand_reward = 0.0
-    for c in active:
-        if c.name == "alive":
-            stand_reward += c.scale * 1.0  # healthy
-        elif c.name == "upright":
-            stand_reward += c.scale * 1.0  # perfectly upright
-        elif c.name == "time":
-            stand_reward += c.scale * (-1.0)  # time penalty always applies
-        # Everything else is 0 (no movement, no contact, etc.)
-    print(f"  Perfect stand  (healthy, no movement):    {stand_reward:+.3f}/step")
+    # Detect RSL-RL mode
+    is_rsl = "vel_tracking" in hierarchy.components
 
-    # Scenario 2: "Diving forward" -- unhealthy, fast forward
-    dive_reward = 0.0
-    for c in active:
-        if c.name == "alive":
-            dive_reward += 0.0  # unhealthy -- no alive bonus
-        elif c.name == "forward_velocity":
-            dive_reward += c.scale * 1.0  # max forward vel, but gated by up_z
-            # If gated by is_healthy, diving doesn't earn this either
-            if c.gated_by and "is_healthy" in c.gated_by:
-                dive_reward -= c.scale * 1.0  # undo: not healthy
-        elif c.name == "distance":
-            dive_reward += c.scale * 0.5  # some distance progress
-        elif c.name == "time":
-            dive_reward += c.scale * (-1.0)
-        elif c.name == "contact":
-            dive_reward += c.scale * (-1.0)  # body on floor
-    print(f"  Diving forward (unhealthy, fast):         {dive_reward:+.3f}/step")
+    def _scenario(label, values):
+        total = 0.0
+        for c in active:
+            raw = values.get(c.name)
+            if raw is not None:
+                total += c.compute(raw)
+        print(f"  {label:<40s} {total:+.4f}/step")
+        return total
 
-    # Scenario 3: "Walking well" -- healthy, moderate forward, upright
-    walk_reward = 0.0
-    for c in active:
-        if c.name == "alive":
-            walk_reward += c.scale * 1.0
-        elif c.name == "forward_velocity":
-            walk_reward += c.scale * 0.5  # moderate speed
-        elif c.name == "distance":
-            walk_reward += c.scale * 0.3  # some progress
-        elif c.name == "upright":
-            walk_reward += c.scale * 0.9  # mostly upright
-        elif c.name == "energy":
-            walk_reward += c.scale * (-3.0)  # moderate energy
-        elif c.name == "smoothness":
-            walk_reward += c.scale * (-1.0)  # some jerk
-        elif c.name == "time":
-            walk_reward += c.scale * (-1.0)
-    print(f"  Walking well   (healthy, forward):        {walk_reward:+.3f}/step")
+    if is_rsl:
+        stand_reward = _scenario("Perfect stand  (healthy, no movement)", {
+            "vel_tracking": 0.5, "alive": 1.0, "orientation": 0.0,
+            "base_height": 0.0, "z_velocity": 0.0, "ang_vel_xy": 0.0,
+            "action_rate": 0.0, "torques": 0.0, "joint_acc": 0.0,
+        })
+        dive_reward = _scenario("Diving forward (unhealthy, fast)", {
+            "vel_tracking": 0.0, "alive": 0.0, "orientation": -1.5,
+            "base_height": -0.1, "z_velocity": -2.0, "ang_vel_xy": -10.0,
+            "action_rate": -5.0, "torques": -1000.0, "joint_acc": -5000.0,
+        })
+        walk_reward = _scenario("Walking well   (healthy, forward)", {
+            "vel_tracking": 0.1, "alive": 1.0, "orientation": -0.05,
+            "base_height": -0.001, "z_velocity": -0.1, "ang_vel_xy": -0.5,
+            "action_rate": -2.0, "torques": -500.0, "joint_acc": -2000.0,
+        })
+    else:
+        stand_reward = _scenario("Perfect stand  (healthy, no movement)", {
+            "alive": 1.0, "upright": 1.0, "time": -1.0,
+        })
+        dive_reward = _scenario("Diving forward (unhealthy, fast)", {
+            "distance": 0.5, "time": -1.0, "contact": -1.0,
+        })
+        walk_reward = _scenario("Walking well   (healthy, forward)", {
+            "alive": 1.0, "forward_velocity": 0.5, "distance": 0.3,
+            "upright": 0.9, "energy": -3.0, "smoothness": -1.0, "time": -1.0,
+        })
 
-    # Check key invariant: standing must beat diving
+    # Check key invariants
     if stand_reward > dive_reward:
-        print(f"\n  Standing ({stand_reward:+.3f}) > Diving ({dive_reward:+.3f}) [ok]")
+        print(f"\n  Standing ({stand_reward:+.4f}) > Diving ({dive_reward:+.4f}) [ok]")
     else:
         print(
-            f"\n  Standing ({stand_reward:+.3f}) <= Diving ({dive_reward:+.3f}) "
+            f"\n  Standing ({stand_reward:+.4f}) <= Diving ({dive_reward:+.4f}) "
             "[!!] -- diving is more rewarding than standing!"
         )
 
     if walk_reward > stand_reward:
         print(
-            f"  Walking ({walk_reward:+.3f}) > Standing ({stand_reward:+.3f}) "
+            f"  Walking ({walk_reward:+.4f}) > Standing ({stand_reward:+.4f}) "
             "[ok] -- walking is the best outcome"
         )
     else:
         print(
-            f"  Walking ({walk_reward:+.3f}) <= Standing ({stand_reward:+.3f}) "
+            f"  Walking ({walk_reward:+.4f}) <= Standing ({stand_reward:+.4f}) "
             "[!!] -- standing is better than walking"
         )
 

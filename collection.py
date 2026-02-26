@@ -55,12 +55,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
     reward_component_keys = hierarchy.reward_component_keys()
     reward_component_sums = {k: 0.0 for k in reward_component_keys}
 
-    # Accumulate raw reward inputs (physical measures)
-    raw_input_keys = [
-        "raw_up_z", "raw_forward_vel", "raw_energy",
-        "raw_contact_count", "raw_action_jerk",
-    ]
-    raw_input_sums = {k: 0.0 for k in raw_input_keys}
+    # Accumulate raw reward inputs (physical measures) — keys discovered dynamically
+    raw_input_sums = {}
 
     # Total path length (sum of per-step distance_moved)
     total_path_length = 0.0
@@ -132,8 +128,9 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         total_reward += reward
         for k in reward_component_keys:
             reward_component_sums[k] += info.get(k, 0.0)
-        for k in raw_input_keys:
-            raw_input_sums[k] += info.get(k, 0.0)
+        for k, v in info.items():
+            if k.startswith("raw_"):
+                raw_input_sums[k] = raw_input_sums.get(k, 0.0) + v
         total_path_length += info.get("distance_moved", 0.0)
         if joint_vel_indices and env.sensor_dim > 0:
             sensor_vals = env.current_sensors
@@ -221,14 +218,12 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
         "forward_distance": info.get("forward_distance", 0.0),
         "reward_components": reward_component_sums,
         "raw_inputs": {
+            # Snapshot values from final step
             "distance_to_target": info["distance"],
             "torso_height": info.get("torso_height", 0.0),
-            "up_z": raw_input_sums["raw_up_z"] / max(steps, 1),
-            "forward_vel": raw_input_sums["raw_forward_vel"] / max(steps, 1),
-            "energy": raw_input_sums["raw_energy"] / max(steps, 1),
-            "contact_frac": raw_input_sums["raw_contact_count"] / max(steps, 1),
-            "action_jerk": raw_input_sums["raw_action_jerk"] / max(steps, 1),
-            # New measures
+            # Dynamic raw averages: raw_X -> X (strips "raw_" prefix)
+            **{k[4:]: v / max(steps, 1) for k, v in raw_input_sums.items()},
+            # Derived measures
             "forward_distance": info.get("forward_distance", 0.0),
             "lateral_drift": info.get("lateral_drift", 0.0),
             "total_path_length": total_path_length,

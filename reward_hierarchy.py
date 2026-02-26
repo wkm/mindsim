@@ -15,6 +15,7 @@ Priority levels:
 
 from __future__ import annotations
 
+import math
 import warnings
 from collections import defaultdict
 from dataclasses import dataclass
@@ -47,6 +48,19 @@ class RewardComponent:
     label: str                       # Human-readable label for dashboard
     unit: str = ""                   # e.g. "m/s", "m", "" (dimensionless)
     gated_by: str | None = None      # Name of gating condition
+    kernel: str = "linear"           # "linear", "gaussian", or "squared"
+    kernel_sigma: float = 0.0        # Sigma for Gaussian kernel
+
+    def compute(self, raw_value: float) -> float:
+        """Apply kernel and scale to a raw value.
+
+        - gaussian: scale * exp(-raw² / sigma²) — raw is tracking error
+        - squared: scale * raw — raw is pre-computed negative squared quantity
+        - linear: scale * raw — direct scaling
+        """
+        if self.kernel == "gaussian" and self.kernel_sigma > 0:
+            return self.scale * math.exp(-(raw_value ** 2) / (self.kernel_sigma ** 2))
+        return self.scale * raw_value
 
     @property
     def max_per_step(self) -> float:
@@ -157,11 +171,19 @@ class RewardHierarchy:
                 gate_str = f"  (gated: {c.gated_by})" if c.gated_by else ""
                 unit_str = f" {c.unit}" if c.unit else ""
 
+                # Kernel annotation
+                if c.kernel == "gaussian":
+                    kernel_str = f"  [gauss σ={c.kernel_sigma}]"
+                elif c.kernel == "squared":
+                    kernel_str = "  [sq]"
+                else:
+                    kernel_str = ""
+
                 if lo == hi:
                     range_str = f"{scaled_lo:+.3f}/step{unit_str}"
                 else:
                     range_str = f"[{scaled_lo:+.3f}, {scaled_hi:+.3f}]/step{unit_str}"
-                lines.append(f"  P{p} {p_name:<8s} {c.label:<22s} {range_str}{gate_str}")
+                lines.append(f"  P{p} {p_name:<8s} {c.label:<22s} {range_str}{gate_str}{kernel_str}")
 
         return "\n".join(lines)
 
@@ -214,6 +236,9 @@ class RewardHierarchy:
             result[f"{prefix}/scale"] = c.scale
             result[f"{prefix}/raw_min"] = c.raw_range[0]
             result[f"{prefix}/raw_max"] = c.raw_range[1]
+            result[f"{prefix}/kernel"] = c.kernel
+            if c.kernel == "gaussian":
+                result[f"{prefix}/kernel_sigma"] = c.kernel_sigma
             if c.gated_by:
                 result[f"{prefix}/gated_by"] = c.gated_by
         for e in self.events.values():
@@ -221,27 +246,22 @@ class RewardHierarchy:
         return result
 
     def reward_scales_for_dashboard(self) -> dict:
-        """Replace the manual reward_scales dict in train.py.
+        """Dict the dashboard uses to show/hide inactive metric rows.
 
-        Returns the dict the dashboard uses to hide inactive metric rows.
+        Keys are component names (e.g. "alive", "orientation") plus
+        convenience flags ("has_walking_stage", "fall_detection").
         """
-        return {
-            "upright": self.components.get("upright", _zero_component).scale,
-            "alive": self.components.get("alive", _zero_component).scale,
-            "energy": self.components.get("energy", _zero_component).scale,
-            "contact": self.components.get("contact", _zero_component).scale,
-            "forward_vel": self.components.get("forward_velocity", _zero_component).scale,
-            "smoothness": self.components.get("smoothness", _zero_component).scale,
-            "has_walking_stage": 1.0 if self.components.get("forward_velocity", _zero_component).scale > 0 else 0.0,
-            "fall_detection": 1.0 if self.components.get("alive", _zero_component).gated_by == "is_healthy" else 0.0,
-        }
-
-
-# Sentinel for missing components
-_zero_component = RewardComponent(
-    name="_zero", priority=GUARD, kind="bonus", scale=0.0,
-    raw_range=(0.0, 0.0), label="",
-)
+        result = {c.name: c.scale for c in self.components.values()}
+        # Convenience flags for dashboard gating
+        result["has_walking_stage"] = float(
+            result.get("forward_velocity", 0) > 0
+            or result.get("vel_tracking", 0) > 0
+        )
+        result["fall_detection"] = float(any(
+            c.gated_by and "is_healthy" in c.gated_by
+            for c in self.components.values()
+        ))
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -250,32 +270,38 @@ _zero_component = RewardComponent(
 
 
 def childbiped_rewards(cfg) -> RewardHierarchy:
-    """Reward hierarchy for the 12-DOF child biped.
+    """RSL-RL style reward hierarchy for the 12-DOF child biped.
+
+    Gaussian kernel velocity tracking + squared regularization penalties.
+    Used with only_positive_rewards clipping.
 
     Args:
         cfg: EnvConfig with the reward scale values.
     """
-    n_actuators = 12
     components = [
+        # --- TASK: velocity tracking (Gaussian kernel) ---
+        RewardComponent("vel_tracking", TASK, "bonus", cfg.vel_tracking_scale,
+                        (0.0, 1.0), "vel tracking", unit="m/s",
+                        kernel="gaussian", kernel_sigma=cfg.vel_tracking_sigma),
+        # --- SURVIVE: stay alive and upright ---
         RewardComponent("alive", SURVIVE, "bonus", cfg.alive_bonus,
-                        (1.0, 1.0), "alive", gated_by="is_healthy"),
-        RewardComponent("distance", TASK, "bonus", cfg.distance_reward_scale,
-                        (-1.0, 1.0), "distance", unit="m"),
-        RewardComponent("forward_velocity", TASK, "bonus", cfg.forward_velocity_reward_scale,
-                        (0.0, 1.0), "forward velocity", unit="m/s",
-                        gated_by="in_walking_stage, is_healthy"),
-        RewardComponent("upright", STYLE, "bonus", cfg.upright_reward_scale,
-                        (0.0, 1.0), "upright"),
-        RewardComponent("energy", STYLE, "penalty", cfg.energy_penalty_scale,
-                        (-float(n_actuators), 0.0), "energy"),
-        RewardComponent("smoothness", STYLE, "penalty", cfg.action_smoothness_scale,
-                        (-4.0 * n_actuators, 0.0), "smoothness"),
-        RewardComponent("exploration", TASK, "bonus", cfg.movement_bonus,
-                        (0.0, 0.1), "exploration", unit="m"),
-        RewardComponent("contact", GUARD, "penalty", cfg.ground_contact_penalty,
-                        (-1.0, 0.0), "contact"),
-        RewardComponent("time", GUARD, "penalty", cfg.time_penalty,
-                        (-1.0, -1.0), "time"),
+                        (0.0, 1.0), "alive"),
+        RewardComponent("orientation", SURVIVE, "penalty", cfg.orientation_scale,
+                        (-2.0, 0.0), "orientation", kernel="squared"),
+        RewardComponent("base_height", SURVIVE, "penalty", cfg.base_height_scale,
+                        (-0.25, 0.0), "base height", unit="m", kernel="squared"),
+        # --- STYLE: smooth, efficient movement ---
+        RewardComponent("z_velocity", STYLE, "penalty", cfg.z_velocity_scale,
+                        (-4.0, 0.0), "z velocity", unit="m/s", kernel="squared"),
+        RewardComponent("ang_vel_xy", STYLE, "penalty", cfg.ang_vel_xy_scale,
+                        (-50.0, 0.0), "ang vel xy", unit="rad/s", kernel="squared"),
+        RewardComponent("action_rate", STYLE, "penalty", cfg.action_rate_scale,
+                        (-48.0, 0.0), "action rate", kernel="squared"),
+        # --- GUARD: small regularization ---
+        RewardComponent("torques", GUARD, "penalty", cfg.torques_scale,
+                        (-1e6, 0.0), "torques", kernel="squared"),
+        RewardComponent("joint_acc", GUARD, "penalty", cfg.joint_acc_scale,
+                        (-1e6, 0.0), "joint acc", kernel="squared"),
     ]
     return RewardHierarchy(components)
 
@@ -405,34 +431,60 @@ if __name__ == "__main__":
         active = h.active_components()
 
         def scenario(label, values):
-            """Sum reward given {component_name: raw_value} overrides."""
+            """Sum reward given {component_name: raw_value} overrides.
+
+            Uses component.compute() so Gaussian kernels are applied correctly.
+            """
             total = 0.0
             for c in active:
                 raw = values.get(c.name)
                 if raw is not None:
-                    total += c.scale * raw
+                    total += c.compute(raw)
                 # else: component contributes 0 (no movement, no contact, etc.)
-            print(f"    {label:<40s} {total:+.3f}/step")
+            print(f"    {label:<40s} {total:+.4f}/step")
             return total
 
-        stand = scenario("Healthy stand (no movement)", {
-            "alive": 1.0, "upright": 1.0, "time": -1.0,
-        })
-        dive = scenario("Diving forward (unhealthy)", {
-            "distance": 0.5, "time": -1.0, "contact": -1.0,
-        })
-        walk = scenario("Walking well (healthy, forward)", {
-            "alive": 1.0, "forward_velocity": 0.5, "distance": 0.3,
-            "upright": 0.9, "energy": -3.0, "smoothness": -1.0, "time": -1.0,
-        })
+        # Detect RSL-RL mode (has vel_tracking component)
+        is_rsl = "vel_tracking" in h.components
+
+        if is_rsl:
+            stand = scenario("Healthy stand (no movement)", {
+                "vel_tracking": 0.5,  # error = 0 - 0.5 = -0.5
+                "alive": 1.0, "orientation": 0.0, "base_height": 0.0,
+                "z_velocity": 0.0, "ang_vel_xy": 0.0, "action_rate": 0.0,
+                "torques": 0.0, "joint_acc": 0.0,
+            })
+            dive = scenario("Diving forward (unhealthy)", {
+                "vel_tracking": 0.0,  # error = 0.5 - 0.5 = 0 (perfect but falling)
+                "alive": 0.0, "orientation": -1.5, "base_height": -0.1,
+                "z_velocity": -2.0, "ang_vel_xy": -10.0, "action_rate": -5.0,
+                "torques": -1000.0, "joint_acc": -5000.0,
+            })
+            walk = scenario("Walking well (healthy, forward)", {
+                "vel_tracking": 0.1,  # error = 0.4 - 0.5 = -0.1
+                "alive": 1.0, "orientation": -0.05, "base_height": -0.001,
+                "z_velocity": -0.1, "ang_vel_xy": -0.5, "action_rate": -2.0,
+                "torques": -500.0, "joint_acc": -2000.0,
+            })
+        else:
+            stand = scenario("Healthy stand (no movement)", {
+                "alive": 1.0, "upright": 1.0, "time": -1.0,
+            })
+            dive = scenario("Diving forward (unhealthy)", {
+                "distance": 0.5, "time": -1.0, "contact": -1.0,
+            })
+            walk = scenario("Walking well (healthy, forward)", {
+                "alive": 1.0, "forward_velocity": 0.5, "distance": 0.3,
+                "upright": 0.9, "energy": -3.0, "smoothness": -1.0, "time": -1.0,
+            })
 
         print()
         if stand > dive:
-            print(f"    Standing > Diving: {stand:+.3f} > {dive:+.3f} [ok]")
+            print(f"    Standing > Diving: {stand:+.4f} > {dive:+.4f} [ok]")
         else:
-            print(f"    Standing <= Diving: {stand:+.3f} <= {dive:+.3f} [!!]")
+            print(f"    Standing <= Diving: {stand:+.4f} <= {dive:+.4f} [!!]")
         if walk > stand:
-            print(f"    Walking > Standing: {walk:+.3f} > {stand:+.3f} [ok]")
+            print(f"    Walking > Standing: {walk:+.4f} > {stand:+.4f} [ok]")
         else:
-            print(f"    Walking <= Standing: {walk:+.3f} <= {stand:+.3f} [!!]")
+            print(f"    Walking <= Standing: {walk:+.4f} <= {stand:+.4f} [!!]")
         print()

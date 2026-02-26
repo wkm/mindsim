@@ -20,6 +20,7 @@ from sim_env import SimEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
     from pipeline import EnvConfig
+    from reward_hierarchy import RewardHierarchy
 
 
 class TrainingEnv:
@@ -34,7 +35,9 @@ class TrainingEnv:
     """
 
     @classmethod
-    def from_config(cls, config: EnvConfig) -> TrainingEnv:
+    def from_config(
+        cls, config: EnvConfig, hierarchy: RewardHierarchy | None = None,
+    ) -> TrainingEnv:
         """Create TrainingEnv from an EnvConfig object."""
         return cls(
             scene_path=config.scene_path,
@@ -79,6 +82,11 @@ class TrainingEnv:
             walking_target_pos=config.walking_target_pos,
             forward_velocity_axis=config.forward_velocity_axis,
             walking_success_min_forward=config.walking_success_min_forward,
+            # RSL-RL rewards
+            hierarchy=hierarchy,
+            only_positive_rewards=config.only_positive_rewards,
+            vel_tracking_cmd=config.vel_tracking_cmd,
+            base_height_target=config.base_height_target,
         )
 
     def __init__(
@@ -132,6 +140,11 @@ class TrainingEnv:
         action_smoothness_scale=0.0,
         # Gait phase (0.0 = disabled)
         gait_phase_period=0.0,
+        # RSL-RL rewards (None = use old reward path)
+        hierarchy=None,
+        only_positive_rewards=False,
+        vel_tracking_cmd=0.5,
+        base_height_target=0.34,
     ):
         self.env = SimEnv(
             scene_path=scene_path,
@@ -204,6 +217,13 @@ class TrainingEnv:
         self.walking_target_pos = walking_target_pos
         self.forward_velocity_axis = np.array(forward_velocity_axis, dtype=np.float64)
         self.walking_success_min_forward = walking_success_min_forward
+
+        # RSL-RL reward hierarchy
+        self.hierarchy = hierarchy
+        self.only_positive_rewards = only_positive_rewards
+        self.vel_tracking_cmd = vel_tracking_cmd
+        self.base_height_target = base_height_target
+        self.prev_joint_vel = None  # For joint acceleration finite-differencing
 
         # Episode tracking
         self.episode_step = 0
@@ -437,6 +457,9 @@ class TrainingEnv:
         # Action smoothness: reset previous action
         self.prev_action = np.zeros(self.num_actuators)
 
+        # RSL-RL: reset previous joint velocities for acceleration computation
+        self.prev_joint_vel = None
+
         # Gait phase: reset step counter and append phase to sensors
         self.gait_step_count = 0
         self.current_sensors = assemble_sensor_data(
@@ -512,6 +535,7 @@ class TrainingEnv:
         self.initial_torso_height = self.prev_position[2]
         self.consecutive_unhealthy = 0
         self.prev_action = np.zeros(self.num_actuators)
+        self.prev_joint_vel = None
         self.gait_step_count = 0
         self.current_sensors = assemble_sensor_data(
             self.env.get_sensor_data(),
@@ -629,36 +653,17 @@ class TrainingEnv:
         current_distance = self.env.get_distance_to_target()
         current_position = self.env.get_bot_position()
 
-        # Calculate reward components:
-        # 1. Distance reward: linear potential-based shaping (standard in literature)
-        distance_reward = self.distance_reward_scale * (
-            self.prev_distance - current_distance
-        )
-
-        # 2. Movement bonus: small reward for exploring (moving at all)
-        distance_moved = np.linalg.norm(current_position - self.prev_position)
-        exploration_reward = self.movement_bonus * distance_moved
-
-        # 3. Time penalty: tiny cost per step to encourage efficiency
-        time_cost = -self.time_penalty
-
-        # 4. Upright reward (biped only, 0 when disabled)
-        #    Also compute up_vec for forward velocity gating and fall detection.
-        upright_reward = 0.0
-        up_z = 1.0  # default for wheeler (no torso orientation)
+        # Health check (shared by both reward paths and fall termination)
+        up_z = 1.0  # default for wheeler
+        is_healthy = True
         if (
             self.upright_reward_scale > 0
             or self.forward_velocity_reward_scale > 0
             or self.fall_up_z_threshold > 0
+            or self.hierarchy is not None
         ):
             up_vec = self.env.get_torso_up_vector()
             up_z = up_vec[2]
-            upright_reward = self.upright_reward_scale * up_z
-
-        # 5. Alive bonus — health-gated (biped only, 0 when disabled)
-        #    Check if the bot is "healthy" (not fallen). When unhealthy,
-        #    alive bonus is zero so lying on the floor earns nothing.
-        is_healthy = True
         if self.fall_height_fraction > 0 and self.initial_torso_height is not None:
             min_height = self.fall_height_fraction * self.initial_torso_height
             if current_position[2] < min_height:
@@ -666,63 +671,99 @@ class TrainingEnv:
         if self.fall_up_z_threshold > 0:
             if up_z < self.fall_up_z_threshold:
                 is_healthy = False
-        alive_reward = self.alive_bonus if is_healthy else 0.0
 
-        # 6. Energy penalty (biped only, 0 when disabled)
-        energy_cost = 0.0
-        if self.energy_penalty_scale > 0:
-            energy_cost = -self.energy_penalty_scale * np.sum(action**2)
-
-        # 7. Ground contact penalty (biped: penalize non-foot body parts touching floor)
-        contact_penalty = 0.0
-        bad_contacts = 0
-        if self.ground_contact_penalty > 0:
-            bad_contacts = self.env.get_non_foot_ground_contacts()
-            if bad_contacts > 0:
-                contact_penalty = -self.ground_contact_penalty
-
-        # 8. Forward velocity reward (walking stage only)
-        #    Uses position-based velocity (like Gymnasium Walker2d) instead of
-        #    MuJoCo cvel, which reports subtree COM velocity and can be misleading
-        #    when legs swing.  Gated on uprightness so falling doesn't count.
-        forward_velocity_reward = 0.0
-        forward_vel = 0.0
-        if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
-            dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
-            vel = (current_position - self.prev_position) / dt
-            forward_vel = float(np.dot(vel, self.forward_velocity_axis))
-            forward_velocity_reward = (
-                self.forward_velocity_reward_scale
-                * max(0.0, forward_vel)
-                # No up_z gating — reward any forward movement, even crawling
+        # --- RSL-RL reward path ---
+        if self.hierarchy is not None:
+            reward, rsl_info = self._compute_rsl_rewards(
+                action, current_position, is_healthy,
             )
+            self.prev_action = action.copy()
 
-        # 9. Action smoothness penalty (penalize jerky action changes)
-        smoothness_penalty = 0.0
-        action_jerk = 0.0
-        if self.prev_action is not None:
-            action_jerk = float(np.sum((action - self.prev_action) ** 2))
-            if self.action_smoothness_scale > 0:
-                smoothness_penalty = -self.action_smoothness_scale * action_jerk
-        self.prev_action = action.copy()
+            # Pull logging values from RSL-RL info
+            forward_vel = rsl_info.get("raw_forward_vel", 0.0)
+            bad_contacts = rsl_info.get("raw_contact_count", 0)
+            action_jerk = rsl_info.get("raw_action_jerk", 0.0)
+            distance_moved = float(np.linalg.norm(current_position - self.prev_position))
 
-        # Walking stage: pure forward velocity reward only.
-        # No posture, penalty, or distance components — just reward any forward movement.
-        # Navigation stages (2+) use the full multi-component reward.
-        if self.in_walking_stage:
-            reward = forward_velocity_reward
+            # These vars are used in the info dict below
+            distance_reward = 0.0
+            exploration_reward = 0.0
+            time_cost = 0.0
+            upright_reward = 0.0
+            alive_reward = rsl_info.get("reward_alive", 0.0)
+            energy_cost = 0.0
+            contact_penalty = 0.0
+            forward_velocity_reward = 0.0
+            smoothness_penalty = 0.0
+
+        # --- Legacy reward path ---
         else:
-            reward = (
-                distance_reward
-                + exploration_reward
-                + time_cost
-                + upright_reward
-                + alive_reward
-                + energy_cost
-                + contact_penalty
-                + forward_velocity_reward
-                + smoothness_penalty
+            # 1. Distance reward: linear potential-based shaping
+            distance_reward = self.distance_reward_scale * (
+                self.prev_distance - current_distance
             )
+
+            # 2. Movement bonus
+            distance_moved = float(np.linalg.norm(current_position - self.prev_position))
+            exploration_reward = self.movement_bonus * distance_moved
+
+            # 3. Time penalty
+            time_cost = -self.time_penalty
+
+            # 4. Upright reward
+            upright_reward = self.upright_reward_scale * up_z
+
+            # 5. Alive bonus
+            alive_reward = self.alive_bonus if is_healthy else 0.0
+
+            # 6. Energy penalty
+            energy_cost = 0.0
+            if self.energy_penalty_scale > 0:
+                energy_cost = -self.energy_penalty_scale * np.sum(action**2)
+
+            # 7. Ground contact penalty
+            contact_penalty = 0.0
+            bad_contacts = 0
+            if self.ground_contact_penalty > 0:
+                bad_contacts = self.env.get_non_foot_ground_contacts()
+                if bad_contacts > 0:
+                    contact_penalty = -self.ground_contact_penalty
+
+            # 8. Forward velocity reward (walking stage only)
+            forward_velocity_reward = 0.0
+            forward_vel = 0.0
+            if self.forward_velocity_reward_scale > 0 and self.in_walking_stage:
+                dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
+                vel = (current_position - self.prev_position) / dt
+                forward_vel = float(np.dot(vel, self.forward_velocity_axis))
+                forward_velocity_reward = (
+                    self.forward_velocity_reward_scale * max(0.0, forward_vel)
+                )
+
+            # 9. Action smoothness penalty
+            smoothness_penalty = 0.0
+            action_jerk = 0.0
+            if self.prev_action is not None:
+                action_jerk = float(np.sum((action - self.prev_action) ** 2))
+                if self.action_smoothness_scale > 0:
+                    smoothness_penalty = -self.action_smoothness_scale * action_jerk
+            self.prev_action = action.copy()
+
+            # Walking stage: pure forward velocity reward only.
+            if self.in_walking_stage:
+                reward = forward_velocity_reward
+            else:
+                reward = (
+                    distance_reward
+                    + exploration_reward
+                    + time_cost
+                    + upright_reward
+                    + alive_reward
+                    + energy_cost
+                    + contact_penalty
+                    + forward_velocity_reward
+                    + smoothness_penalty
+                )
 
         # Track distance delta for patience (before prev_distance is updated)
         distance_delta = self.prev_distance - current_distance
@@ -816,17 +857,6 @@ class TrainingEnv:
             "position": current_position,
             "step": self.episode_step,
             "distance_moved": distance_moved,
-            # Reward components for visualization
-            "reward_distance": distance_reward,
-            "reward_exploration": exploration_reward,
-            "reward_time": time_cost,
-            "reward_upright": upright_reward,
-            "reward_alive": alive_reward,
-            "reward_energy": energy_cost,
-            "reward_contact": contact_penalty,
-            "reward_forward_velocity": forward_velocity_reward,
-            "reward_smoothness": smoothness_penalty,
-            "reward_total": reward,
             # Stability info
             "unstable": has_warnings or has_nan or out_of_bounds,
             "torso_height": bot_z,
@@ -838,12 +868,6 @@ class TrainingEnv:
             "joint_stagnation_truncated": joint_stagnation_truncated,
             # Walking stage flag
             "in_walking_stage": self.in_walking_stage,
-            # Raw reward inputs (physical measures before scaling)
-            "raw_up_z": float(up_z),
-            "raw_forward_vel": forward_vel,
-            "raw_energy": float(np.sum(action ** 2)),
-            "raw_contact_count": int(bad_contacts),
-            "raw_action_jerk": action_jerk,
             # Forward distance from start (projected onto forward axis)
             "forward_distance": float(
                 np.dot(
@@ -868,7 +892,119 @@ class TrainingEnv:
             else 0.0,
         }
 
+        if self.hierarchy is not None:
+            # RSL-RL path: merge all reward_* and raw_* keys from _compute_rsl_rewards
+            info.update(rsl_info)
+        else:
+            # Legacy path: explicit reward component keys
+            info.update({
+                "reward_distance": distance_reward,
+                "reward_exploration": exploration_reward,
+                "reward_time": time_cost,
+                "reward_upright": upright_reward,
+                "reward_alive": alive_reward,
+                "reward_energy": energy_cost,
+                "reward_contact": contact_penalty,
+                "reward_forward_velocity": forward_velocity_reward,
+                "reward_smoothness": smoothness_penalty,
+                "reward_total": reward,
+                "raw_up_z": float(up_z),
+                "raw_forward_vel": forward_vel,
+                "raw_energy": float(np.sum(action ** 2)),
+                "raw_contact_count": int(bad_contacts),
+                "raw_action_jerk": action_jerk,
+            })
+
         return obs, reward, done, truncated, info
+
+    def _compute_rsl_rewards(self, action, current_position, is_healthy):
+        """Compute RSL-RL style rewards using the hierarchy.
+
+        Returns:
+            (total_reward, info_additions) where info_additions contains
+            reward_{name} and raw_* keys for logging.
+        """
+        info = {}
+        dt = self.mujoco_steps_per_action * self.env.model.opt.timestep
+
+        # Position-based forward velocity
+        vel = (current_position - self.prev_position) / dt
+        forward_vel = float(np.dot(vel, self.forward_velocity_axis))
+        info["raw_forward_vel"] = forward_vel
+
+        # Logging-only measures (always computed regardless of which components are active)
+        up_vec = self.env.get_torso_up_vector()
+        info["raw_up_z"] = float(up_vec[2])
+        info["raw_energy"] = float(np.sum(action ** 2))
+        bad_contacts = self.env.get_non_foot_ground_contacts()
+        info["raw_contact_count"] = int(bad_contacts)
+        if self.prev_action is not None:
+            info["raw_action_jerk"] = float(np.sum((action - self.prev_action) ** 2))
+        else:
+            info["raw_action_jerk"] = 0.0
+
+        # Compute each hierarchy component
+        total = 0.0
+        for comp in self.hierarchy.active_components():
+            if comp.name == "vel_tracking":
+                error = forward_vel - self.vel_tracking_cmd
+                reward = comp.compute(error)
+                info["raw_vel_tracking_error"] = abs(error)
+            elif comp.name == "alive":
+                raw = 1.0 if is_healthy else 0.0
+                reward = comp.compute(raw)
+            elif comp.name == "orientation":
+                proj_grav = self.env.get_projected_gravity()
+                raw = -float(proj_grav[0] ** 2 + proj_grav[1] ** 2)
+                reward = comp.compute(raw)
+                info["raw_orientation"] = raw
+            elif comp.name == "base_height":
+                raw = -((current_position[2] - self.base_height_target) ** 2)
+                reward = comp.compute(raw)
+                info["raw_base_height"] = raw
+            elif comp.name == "z_velocity":
+                z_vel = self.env.get_base_velocity_z()
+                raw = -(z_vel ** 2)
+                reward = comp.compute(raw)
+                info["raw_z_velocity"] = raw
+            elif comp.name == "ang_vel_xy":
+                ang_vel = self.env.get_angular_velocity()
+                raw = -float(ang_vel[0] ** 2 + ang_vel[1] ** 2)
+                reward = comp.compute(raw)
+                info["raw_ang_vel_xy"] = raw
+            elif comp.name == "action_rate":
+                if self.prev_action is not None:
+                    raw = -float(np.sum((action - self.prev_action) ** 2))
+                else:
+                    raw = 0.0
+                reward = comp.compute(raw)
+                info["raw_action_rate"] = raw
+            elif comp.name == "torques":
+                torques = self.env.get_actuator_forces()
+                raw = -float(np.sum(torques ** 2))
+                reward = comp.compute(raw)
+                info["raw_torques"] = raw
+            elif comp.name == "joint_acc":
+                joint_vel = self.env.get_joint_velocities()
+                if self.prev_joint_vel is not None:
+                    joint_acc = (joint_vel - self.prev_joint_vel) / dt
+                    raw = -float(np.sum(joint_acc ** 2))
+                else:
+                    raw = 0.0
+                self.prev_joint_vel = joint_vel.copy()
+                reward = comp.compute(raw)
+                info["raw_joint_acc"] = raw
+            else:
+                continue
+
+            total += reward
+            info[f"reward_{comp.name}"] = reward
+
+        if self.only_positive_rewards:
+            total = max(0.0, total)
+
+        info["reward_total"] = total
+        return total, info
 
     def close(self):
         """Clean up resources."""
