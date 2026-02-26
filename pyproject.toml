@@ -46,3 +46,8 @@ select = [
 ignore = [
     "E501",  # line too long (formatter handles what it can)
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
+]

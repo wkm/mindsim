@@ -22,7 +22,7 @@ train:
 	uv run mjpython main.py train
 
 test:
-	uv run pytest tests/ -v
+	uv run pytest tests/ -n auto -v
 
 smoketest:
 	uv run mjpython main.py smoketest
@@ -41,7 +41,7 @@ render-concepts:
 	uv run python -m scene_gen.render_catalog
 
 check: lint
-	uv run pytest tests/ -v
+	uv run pytest tests/ -n auto -v
 	@echo ""
 	@echo "All checks passed."
 
