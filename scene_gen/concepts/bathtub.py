@@ -15,6 +15,8 @@ Parameters:
     foot_radius:  Radius of each foot sphere
     foot_height:  Height the tub is raised on feet
     has_faucet:   Whether to add a faucet cylinder at one end
+    has_drain:    Whether to add a small drain inside the basin
+    has_overflow: Whether to add a small overflow plate on the wall
     shell_color:  RGBA for the outer shell
     basin_color:  RGBA for the inner basin
     accent_color: RGBA for rim/feet/faucet accents
@@ -57,6 +59,8 @@ class Params:
     foot_radius: float = 0.03
     foot_height: float = 0.06
     has_faucet: bool = True
+    has_drain: bool = True
+    has_overflow: bool = True
     shell_color: tuple[float, float, float, float] = PLASTIC_WHITE
     basin_color: tuple[float, float, float, float] = BASIN_INTERIOR
     accent_color: tuple[float, float, float, float] = METAL_CHROME
@@ -64,7 +68,7 @@ class Params:
 
 @lru_cache(maxsize=128)
 def generate(params: Params = Params()) -> tuple[Prim, ...]:
-    """Generate a bathtub (up to 8 prims: shell + basin + rim + faucet + 4 feet)."""
+    """Generate a bathtub (up to 8 prims: shell + basin + rim + faucet + drain + feet)."""
     prims: list[Prim] = []
 
     # Base elevation: raised if tub has feet
@@ -113,6 +117,24 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
             params.accent_color,
         )
         prims.append(faucet)
+
+    # 4b. Drain + overflow plate (skip for clawfoot to stay within prim budget)
+    if params.has_drain and not params.has_feet:
+        drain = Prim(
+            GeomType.CYLINDER,
+            (0.02, 0.008, 0),
+            (0, -0.08, base_z + params.wall_thick + 0.02),
+            params.accent_color,
+        )
+        prims.append(drain)
+        if params.has_overflow:
+            overflow = Prim(
+                GeomType.CYLINDER,
+                (0.018, 0.008, 0),
+                (0, params.depth - 0.08, base_z + params.height * 1.6),
+                params.accent_color,
+            )
+            prims.append(overflow)
 
     # 5-8. Clawfoot feet: 4 spheres at corners
     if params.has_feet:

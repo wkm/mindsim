@@ -166,9 +166,7 @@ ARCHETYPES: dict[str, Archetype] = {
     ),
     "office": Archetype(
         name="Office",
-        required=(
-            ConceptSlot("desk", count=1),
-        ),
+        required=(ConceptSlot("desk", count=1),),
         groupings=("desk_setup",),
         optional=(
             ConceptSlot("bookcase", count=1, weight=3.0),

@@ -114,6 +114,7 @@ def render_scene_grid(
     data: mujoco.MjData,
     composer: SceneComposer,
     archetype: str | None = None,
+    out_name: str = "scenes.png",
 ) -> Path:
     """Render a grid of scenes, one per seed. Returns output path."""
     n = len(seeds)
@@ -164,7 +165,7 @@ def render_scene_grid(
     renderer.close()
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "scenes.png"
+    out_path = out_dir / out_name
     grid.save(out_path)
     return out_path
 
@@ -182,7 +183,36 @@ def main():
         default="random",
         help="Room archetype (default: random = picks randomly each scene)",
     )
+    parser.add_argument(
+        "--all-archetypes",
+        action="store_true",
+        help="Render one grid per archetype (16 scenes each).",
+    )
     args = parser.parse_args()
+
+    out_dir = Path(args.out)
+
+    print("Setting up MuJoCo scene...")
+    model, data, composer = _setup_scene()
+
+    if args.all_archetypes:
+        archetypes = list_archetypes()
+        print(f"Rendering {len(archetypes)} archetype grids...")
+        for arch in archetypes:
+            rng = np.random.default_rng(abs(hash(arch)) % (2**32))
+            seeds = [int(rng.integers(0, 2**32)) for _ in range(args.count)]
+            print(f"  {arch}: {len(seeds)} scenes")
+            path = render_scene_grid(
+                seeds,
+                out_dir,
+                model,
+                data,
+                composer,
+                archetype=arch,
+                out_name=f"{arch}.png",
+            )
+            print(f"    -> {path}")
+        return
 
     if args.seeds:
         seeds = args.seeds
@@ -190,14 +220,18 @@ def main():
         rng = np.random.default_rng()
         seeds = [int(rng.integers(0, 2**32)) for _ in range(args.count)]
 
-    out_dir = Path(args.out)
-
-    print("Setting up MuJoCo scene...")
-    model, data, composer = _setup_scene()
-
     archetype = args.archetype
+    out_name = "scenes.png" if archetype == "random" else f"{archetype}.png"
     print(f"Rendering {len(seeds)} scenes (archetype={archetype})...")
-    path = render_scene_grid(seeds, out_dir, model, data, composer, archetype=archetype)
+    path = render_scene_grid(
+        seeds,
+        out_dir,
+        model,
+        data,
+        composer,
+        archetype=archetype,
+        out_name=out_name,
+    )
     print(f"\n-> {path}")
 
 

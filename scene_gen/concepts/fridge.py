@@ -13,6 +13,9 @@ Parameters:
     has_freezer:   Whether to show a freezer divider line
     freezer_color: RGBA for the freezer divider strip
     freezer_frac:  Vertical fraction where the freezer line sits (from top)
+    has_kickplate: Add a darker base kickplate
+    has_panel:     Add an inset door panel
+    has_top_vent:  Add a top vent strip
 """
 
 from dataclasses import dataclass
@@ -53,11 +56,14 @@ class Params:
     has_freezer: bool = True
     freezer_color: tuple[float, float, float, float] = FREEZER_STRIP
     freezer_frac: float = 0.30  # freezer is top 30%
+    has_kickplate: bool = True
+    has_panel: bool = True
+    has_top_vent: bool = True
 
 
 @lru_cache(maxsize=128)
 def generate(params: Params = Params()) -> tuple[Prim, ...]:
-    """Generate a fridge (body + handle + freezer line = 2-4 prims)."""
+    """Generate a fridge (body + details + handles)."""
     prims: list[Prim] = []
 
     # Body: tall box sitting on floor
@@ -69,6 +75,16 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
     )
     prims.append(body)
 
+    # Inset door panel to add depth
+    if params.has_panel:
+        panel = Prim(
+            GeomType.BOX,
+            (params.width * 0.92, params.depth * 0.90, params.height * 0.92),
+            (0, params.depth * 0.08, params.height * 0.98),
+            params.body_color,
+        )
+        prims.append(panel)
+
     # Freezer divider: thin strip across the front face
     if params.has_freezer:
         divider_z = params.height * 2 * (1.0 - params.freezer_frac)
@@ -79,6 +95,26 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
             params.freezer_color,
         )
         prims.append(divider)
+
+    # Base kickplate
+    if params.has_kickplate:
+        kick = Prim(
+            GeomType.BOX,
+            (params.width * 0.95, 0.02, 0.03),
+            (0, params.depth + 0.02, 0.06),
+            METAL_DARK,
+        )
+        prims.append(kick)
+
+    # Top vent strip
+    if params.has_top_vent:
+        vent = Prim(
+            GeomType.BOX,
+            (params.width * 0.85, 0.008, 0.01),
+            (0, params.depth + 0.01, params.height * 1.92),
+            METAL_DARK,
+        )
+        prims.append(vent)
 
     # Handle: thin vertical bar on the front face
     if params.has_handle:
