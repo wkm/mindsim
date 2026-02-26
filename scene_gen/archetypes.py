@@ -124,8 +124,11 @@ ARCHETYPES: dict[str, Archetype] = {
             ConceptSlot("wardrobe", count=1, weight=2.0),
             ConceptSlot("lamp", count=2, weight=2.0),
             ConceptSlot("rug", count=1, weight=1.5),
+            ConceptSlot("mirror", count=1, weight=1.5),
             ConceptSlot("chair", count=1, weight=1.0),
             ConceptSlot("plant", count=1, weight=1.0),
+            ConceptSlot("painting", count=1, weight=1.0),
+            ConceptSlot("bookstack", count=1, weight=0.5),
             ConceptSlot("crate", count=1, weight=0.5),
         ),
         fill_range=(4, 8),
@@ -136,11 +139,15 @@ ARCHETYPES: dict[str, Archetype] = {
         optional=(
             ConceptSlot("tv_stand", count=1, weight=3.0),
             ConceptSlot("table", count=1, weight=2.5),  # coffee table
+            ConceptSlot("bookcase", count=1, weight=2.0),
             ConceptSlot("chair", count=2, weight=2.0),
-            ConceptSlot("shelf", count=1, weight=1.5),
             ConceptSlot("lamp", count=2, weight=2.0),
             ConceptSlot("rug", count=1, weight=2.0),
+            ConceptSlot("shelf", count=1, weight=1.5),
             ConceptSlot("plant", count=2, weight=1.5),
+            ConceptSlot("painting", count=2, weight=1.5),
+            ConceptSlot("mirror", count=1, weight=1.0),
+            ConceptSlot("bookstack", count=1, weight=0.8),
             ConceptSlot("crate", count=1, weight=0.5),
         ),
         fill_range=(5, 10),
@@ -152,13 +159,16 @@ ARCHETYPES: dict[str, Archetype] = {
             ConceptSlot("chair", count=1),
         ),
         optional=(
-            ConceptSlot("shelf", count=2, weight=3.0),
+            ConceptSlot("bookcase", count=1, weight=3.0),
+            ConceptSlot("filing_cabinet", count=2, weight=3.0),
+            ConceptSlot("shelf", count=2, weight=2.5),
             ConceptSlot("lamp", count=1, weight=2.0),
+            ConceptSlot("trash_can", count=1, weight=2.0),
             ConceptSlot("crate", count=2, weight=1.5),
             ConceptSlot("plant", count=1, weight=1.5),
+            ConceptSlot("bookstack", count=2, weight=1.5),
+            ConceptSlot("painting", count=1, weight=1.0),
             ConceptSlot("rug", count=1, weight=1.0),
-            ConceptSlot("table", count=1, weight=1.0),
-            ConceptSlot("dresser", count=1, weight=0.8),  # filing cabinet stand-in
         ),
         fill_range=(4, 8),
     ),
@@ -170,13 +180,48 @@ ARCHETYPES: dict[str, Archetype] = {
         ),
         optional=(
             ConceptSlot("chair", count=4, weight=3.0),  # more chairs around table
-            ConceptSlot("shelf", count=1, weight=2.0),  # china cabinet
+            ConceptSlot("bookcase", count=1, weight=2.0),  # china cabinet
+            ConceptSlot("shelf", count=1, weight=1.5),
             ConceptSlot("lamp", count=1, weight=1.5),
             ConceptSlot("rug", count=1, weight=1.5),
+            ConceptSlot("painting", count=2, weight=1.5),
             ConceptSlot("plant", count=1, weight=1.0),
             ConceptSlot("dresser", count=1, weight=1.0),  # sideboard / buffet
         ),
         fill_range=(5, 10),
+    ),
+    "kitchen": Archetype(
+        name="Kitchen",
+        required=(
+            ConceptSlot("kitchen_counter", count=1),
+            ConceptSlot("fridge", count=1),
+        ),
+        optional=(
+            ConceptSlot("stove", count=1, weight=3.0),
+            ConceptSlot("kitchen_counter", count=2, weight=2.5),  # extra counters
+            ConceptSlot("table", count=1, weight=2.0),  # small kitchen table
+            ConceptSlot("chair", count=2, weight=2.0),
+            ConceptSlot("trash_can", count=1, weight=2.0),
+            ConceptSlot("shelf", count=1, weight=1.5),
+            ConceptSlot("plant", count=1, weight=1.0),
+        ),
+        fill_range=(4, 8),
+    ),
+    "bathroom": Archetype(
+        name="Bathroom",
+        required=(
+            ConceptSlot("toilet", count=1),
+            ConceptSlot("sink_vanity", count=1),
+        ),
+        optional=(
+            ConceptSlot("bathtub", count=1, weight=3.0),
+            ConceptSlot("mirror", count=1, weight=2.5),
+            ConceptSlot("trash_can", count=1, weight=2.0),
+            ConceptSlot("shelf", count=1, weight=1.5),
+            ConceptSlot("rug", count=1, weight=1.5),
+            ConceptSlot("plant", count=1, weight=1.0),
+        ),
+        fill_range=(3, 6),
     ),
 }
 

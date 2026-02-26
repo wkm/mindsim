@@ -18,6 +18,7 @@ from scene_gen.archetypes import ARCHETYPES, list_archetypes
 from scene_gen.composer import describe_scene
 from scene_gen.groupings import GROUPINGS
 from scene_gen.primitives import GeomType, Prim, footprint
+from scene_gen.room import InteriorWall, RoomConfig, random_room_config
 
 DOCS_CONCEPTS_DIR = Path(__file__).resolve().parent.parent / "docs" / "concepts"
 
@@ -249,3 +250,83 @@ class TestGroupings:
                 assert sat.concept in available, (
                     f"Grouping '{gname}' satellite '{sat.concept}' not a concept"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Room layout (walls + variable size)
+# ---------------------------------------------------------------------------
+
+
+class TestRoom:
+    """Variable room size and interior walls."""
+
+    @pytest.fixture(scope="class")
+    def composer(self):
+        spec = mujoco.MjSpec.from_file("worlds/room.xml")
+        SceneComposer.prepare_spec(spec)
+        model = spec.compile()
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        return SceneComposer(model, data)
+
+    def test_wall_slots_discovered(self, composer):
+        """Room wall slots should be found in the compiled model."""
+        assert composer._room.has_slots
+
+    def test_random_room_config(self):
+        """random_room_config should produce valid configs."""
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        config = random_room_config(rng)
+        assert 2.5 <= config.half_extent <= 4.0
+        for wall in config.interior_walls:
+            assert wall.axis in ("x", "y")
+            assert wall.door_width > 0
+
+    def test_scene_with_room_config(self, composer):
+        """Scenes with explicit room config should work."""
+        config = RoomConfig(half_extent=3.0)
+        scene = composer.random_scene(seed=42, room_config=config)
+        composer.apply(scene)
+        assert len(scene) >= 1
+
+    def test_scene_with_interior_wall(self, composer):
+        """Scenes with an interior wall + doorway should work."""
+        config = RoomConfig(
+            half_extent=3.5,
+            interior_walls=(
+                InteriorWall(axis="x", offset=0.5, door_pos=0.0, door_width=1.2),
+            ),
+        )
+        scene = composer.random_scene(seed=42, room_config=config)
+        composer.apply(scene)
+        assert len(scene) >= 1
+
+    def test_variable_room_size_auto(self, composer):
+        """When no room_config is passed, random_scene auto-generates one."""
+        scene = composer.random_scene(seed=99)
+        # The last room config should have been stored
+        assert composer._last_room_config is not None
+        assert composer._last_room_config.half_extent > 0
+        composer.apply(scene)
+
+    def test_small_room_fewer_objects(self, composer):
+        """A small room should still produce a valid scene."""
+        config = RoomConfig(half_extent=2.5)
+        scene = composer.random_scene(seed=42, room_config=config)
+        composer.apply(scene)
+        assert len(scene) >= 1
+
+    def test_walls_survive_mj_step(self, composer):
+        """Wall positions must persist after mj_step (same as furniture)."""
+        import numpy as np
+
+        config = RoomConfig(half_extent=3.0)
+        scene = composer.random_scene(seed=42, room_config=config)
+        composer.apply(scene)
+
+        model, data = composer.model, composer.data
+        pre_xpos = data.geom_xpos.copy()
+        mujoco.mj_step(model, data)
+        assert np.allclose(data.geom_xpos, pre_xpos, atol=1e-6)

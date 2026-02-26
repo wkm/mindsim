@@ -44,6 +44,7 @@ from scene_gen import concepts
 from scene_gen.archetypes import Archetype
 from scene_gen.groupings import GROUPINGS
 from scene_gen.primitives import Placement, Prim, euler_to_quat, footprint, obb_overlaps
+from scene_gen.room import Room, RoomConfig, prepare_room, random_room_config
 
 # ---------------------------------------------------------------------------
 # Placement sampling helpers
@@ -242,6 +243,8 @@ class SceneComposer:
         self.model = model
         self.data = data
         self._slots: list[_ObjectSlot] = []
+        self._room = Room(model, data)
+        self._last_room_config: RoomConfig | None = None
         self._discover_slots()
 
     @staticmethod
@@ -249,15 +252,22 @@ class SceneComposer:
         spec,
         max_objects: int = DEFAULT_MAX_OBJECTS,
         geoms_per_object: int = DEFAULT_GEOMS_PER_OBJECT,
+        walls: bool = True,
     ):
-        """Add obstacle slots to an MjSpec before compilation.
+        """Add obstacle slots (and optionally wall slots) to an MjSpec.
 
         Creates one body per geom (not one body per object). This ensures
         mj_kinematics correctly computes geom world positions from
         model.body_pos, which it reliably reads at runtime. The alternative
         (one body + N child geoms with modified model.geom_pos) breaks in
         the passive viewer because mj_step overwrites data.geom_xpos.
+
+        When walls=True (default), also injects room wall slots for
+        variable-size rooms and interior walls.
         """
+        if walls:
+            prepare_room(spec)
+
         for i in range(max_objects):
             for j in range(geoms_per_object):
                 body = spec.worldbody.add_body()
@@ -308,18 +318,34 @@ class SceneComposer:
     # Public API
     # -------------------------------------------------------------------
 
-    def apply(self, placed_objects: list[PlacedObject]):
+    def apply(
+        self,
+        placed_objects: list[PlacedObject],
+        room_config: RoomConfig | None = None,
+    ):
         """Write placed objects into model slots, then run forward kinematics.
 
         This is the single code path for scene application. After this call,
         the model is ready for rendering (viewer or offscreen). No manual
         geom_xpos patching needed — each geom has its own body, so
         mj_kinematics correctly computes world positions from body_pos.
+
+        Args:
+            placed_objects: Objects to place in the scene.
+            room_config: Optional room layout (walls + size). When provided,
+                walls are positioned before furniture. When None, walls are
+                hidden (backward compatible with callers that don't use rooms).
         """
         if len(placed_objects) > self.max_objects:
             raise ValueError(
                 f"Too many objects ({len(placed_objects)}) for {self.max_objects} slots"
             )
+
+        # Position room walls: use explicit config, or fall back to what
+        # random_scene() stored, so callers don't need to pass it twice.
+        effective_room = room_config or self._last_room_config
+        if effective_room is not None:
+            self._room.apply(effective_room)
 
         for i, slot in enumerate(self._slots):
             if i < len(placed_objects):
@@ -343,10 +369,11 @@ class SceneComposer:
         min_objects: int = 1,
         max_objects: int | None = None,
         archetype: str | Archetype | None = None,
-        arena_size: float = 3.5,
+        arena_size: float | None = None,
         margin: float = 0.1,
         seed: int | None = None,
         rng: np.random.Generator | None = None,
+        room_config: RoomConfig | None = None,
     ) -> list[PlacedObject]:
         """Sample a random scene layout with placement-aware positioning.
 
@@ -375,14 +402,29 @@ class SceneComposer:
                 concepts are drawn from the archetype's pool instead of uniform
                 random. A random archetype is chosen if set to "random".
             arena_size: Half-extent of placement area (meters from origin).
+                When None, derived from room_config or defaults to 3.5.
             margin: Extra padding (meters) added to each bounding box edge.
             seed: Integer seed for reproducibility. Overrides rng if both given.
             rng: Numpy random generator (for reproducibility).
+            room_config: Room layout (walls + size). When provided, arena_size
+                is derived from the config. Stored on the returned scene for
+                apply() to use.
         """
         if seed is not None:
             rng = np.random.default_rng(seed)
         elif rng is None:
             rng = np.random.default_rng()
+
+        # Generate room config if not provided (variable room size)
+        if room_config is None and self._room.has_slots:
+            room_config = random_room_config(rng)
+
+        # Derive arena_size from room config (leave margin inside walls)
+        if arena_size is None:
+            if room_config is not None:
+                arena_size = room_config.half_extent - 0.15
+            else:
+                arena_size = 3.5
 
         if max_objects is None:
             max_objects = self.max_objects
@@ -601,6 +643,9 @@ class SceneComposer:
                         overlap_margin=0.02,
                     )
 
+        # Store room config so apply() can use it without explicit passing
+        self._last_room_config = room_config
+
         return placed
 
     # -------------------------------------------------------------------
@@ -732,9 +777,10 @@ def describe_scene(
     # Header
     if seed is not None:
         sid = scene_id(seed)
-        lines.append(f"Scene #{sid} (seed={seed})  {len(placed_objects)} objects")
+        header = f"Scene #{sid} (seed={seed})  {len(placed_objects)} objects"
     else:
-        lines.append(f"Scene  {len(placed_objects)} objects")
+        header = f"Scene  {len(placed_objects)} objects"
+    lines.append(header)
 
     # Each object
     for i, obj in enumerate(placed_objects):

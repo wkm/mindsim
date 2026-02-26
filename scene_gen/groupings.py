@@ -171,6 +171,38 @@ GROUPINGS: dict[str, Grouping] = {
             ),
         ),
     ),
+    "kitchen_counter_setup": Grouping(
+        name="Kitchen Counter + Stove",
+        anchor="kitchen_counter",
+        satellites=(
+            # Stove next to counter along the wall
+            Satellite(
+                "stove",
+                dx=0.85,
+                dy=0.0,
+                d_rotation=0.0,
+                jitter_pos=0.03,
+                optional=True,
+                probability=0.7,
+            ),
+        ),
+    ),
+    "vanity_setup": Grouping(
+        name="Sink Vanity + Mirror",
+        anchor="sink_vanity",
+        satellites=(
+            # Mirror on wall above the vanity (same position, wall-mounted)
+            Satellite(
+                "mirror",
+                dx=0.0,
+                dy=0.0,
+                d_rotation=0.0,
+                jitter_pos=0.02,
+                optional=True,
+                probability=0.8,
+            ),
+        ),
+    ),
 }
 
 
