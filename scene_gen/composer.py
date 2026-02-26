@@ -44,7 +44,13 @@ from scene_gen import concepts
 from scene_gen.archetypes import Archetype
 from scene_gen.groupings import GROUPINGS
 from scene_gen.primitives import Placement, Prim, euler_to_quat, footprint, obb_overlaps
-from scene_gen.room import Room, RoomConfig, prepare_room, random_room_config
+from scene_gen.room import (
+    WALL_THICKNESS,
+    Room,
+    RoomConfig,
+    prepare_room,
+    random_room_config,
+)
 
 # ---------------------------------------------------------------------------
 # Placement sampling helpers
@@ -68,6 +74,88 @@ _WALL_ROTS = {
     "E": np.pi / 2,  # back against +X wall
     "W": -np.pi / 2,  # back against -X wall
 }
+
+
+# Margin to keep furniture from touching walls
+_WALL_MARGIN = 0.05
+
+
+def _build_wall_obbs(
+    room_config: RoomConfig,
+) -> list[tuple[float, float, float, float, float]]:
+    """Build a list of wall segment OBBs from a room config.
+
+    Each OBB is (cx, cy, hx, hy, rotation). These are used for
+    collision checking against placed objects via obb_overlaps().
+
+    Interior walls are split into two segments around the doorway gap.
+    Only the solid wall segments are returned (not the doorway).
+    """
+    obbs: list[tuple[float, float, float, float, float]] = []
+    he = room_config.half_extent
+
+    for iwall in room_config.interior_walls:
+        door_half = iwall.door_width / 2
+
+        if iwall.axis == "x":
+            # Wall runs along X axis at y = offset
+            # Segment 1: from -he to (door_pos - door_half)
+            seg1_start = -he
+            seg1_end = iwall.door_pos - door_half
+            if seg1_end > seg1_start + 0.05:
+                seg1_hx = (seg1_end - seg1_start) / 2
+                seg1_cx = (seg1_start + seg1_end) / 2
+                obbs.append((seg1_cx, iwall.offset, seg1_hx, WALL_THICKNESS, 0.0))
+
+            # Segment 2: from (door_pos + door_half) to +he
+            seg2_start = iwall.door_pos + door_half
+            seg2_end = he
+            if seg2_end > seg2_start + 0.05:
+                seg2_hx = (seg2_end - seg2_start) / 2
+                seg2_cx = (seg2_start + seg2_end) / 2
+                obbs.append((seg2_cx, iwall.offset, seg2_hx, WALL_THICKNESS, 0.0))
+
+        else:  # axis == "y"
+            # Wall runs along Y axis at x = offset
+            seg1_start = -he
+            seg1_end = iwall.door_pos - door_half
+            if seg1_end > seg1_start + 0.05:
+                seg1_hy = (seg1_end - seg1_start) / 2
+                seg1_cy = (seg1_start + seg1_end) / 2
+                obbs.append((iwall.offset, seg1_cy, WALL_THICKNESS, seg1_hy, 0.0))
+
+            seg2_start = iwall.door_pos + door_half
+            seg2_end = he
+            if seg2_end > seg2_start + 0.05:
+                seg2_hy = (seg2_end - seg2_start) / 2
+                seg2_cy = (seg2_start + seg2_end) / 2
+                obbs.append((iwall.offset, seg2_cy, WALL_THICKNESS, seg2_hy, 0.0))
+
+    return obbs
+
+
+def _inside_exterior_walls(
+    cx: float,
+    cy: float,
+    hx: float,
+    hy: float,
+    rot: float,
+    half_extent: float,
+) -> bool:
+    """Check that a rotated bounding box is fully inside the exterior walls.
+
+    The max reach of a rotated box along each axis:
+        reach_x = hx * |cos(rot)| + hy * |sin(rot)|
+        reach_y = hx * |sin(rot)| + hy * |cos(rot)|
+
+    The object must stay inside half_extent - WALL_THICKNESS - margin.
+    """
+    limit = half_extent - WALL_THICKNESS - _WALL_MARGIN
+    cos_r = abs(np.cos(rot))
+    sin_r = abs(np.sin(rot))
+    reach_x = hx * cos_r + hy * sin_r
+    reach_y = hx * sin_r + hy * cos_r
+    return (abs(cx) + reach_x) < limit and (abs(cy) + reach_y) < limit
 
 
 def _snap_rotation(rng: np.random.Generator) -> float:
@@ -426,6 +514,13 @@ class SceneComposer:
             else:
                 arena_size = 3.5
 
+        # Build wall OBBs for collision checking
+        _wall_obbs: list[tuple[float, float, float, float, float]] = []
+        _room_half_extent: float | None = None
+        if room_config is not None:
+            _wall_obbs = _build_wall_obbs(room_config)
+            _room_half_extent = room_config.half_extent
+
         if max_objects is None:
             max_objects = self.max_objects
         max_objects = min(max_objects, self.max_objects)
@@ -518,12 +613,9 @@ class SceneComposer:
             c_prims = c_mod.generate(c_params)
             c_hx, c_hy = footprint(c_prims)
 
-            if fixed_pos is not None:
-                # Place at a specific position (for satellites)
-                cx, cy = fixed_pos
-                rot = fixed_rot if fixed_rot is not None else 0.0
-                # Still check for overlaps
-                ok = True
+            def _check_candidate(cx: float, cy: float, rot: float) -> bool:
+                """Check a candidate position against objects and walls."""
+                # Object-vs-object overlap (same layer only)
                 for j in range(len(placed)):
                     if _ground[j] != c_ground:
                         continue
@@ -540,13 +632,44 @@ class SceneComposer:
                         _rot[j],
                         margin=m_eff,
                     ):
-                        ok = False
-                        break
-                # Also check arena bounds
-                limit = arena_size - max(c_hx, c_hy) - 0.05
-                if abs(cx) > limit or abs(cy) > limit:
-                    ok = False
-                if not ok:
+                        return False
+
+                # Exterior wall check: rotated bbox must be inside walls
+                if _room_half_extent is not None:
+                    if not _inside_exterior_walls(
+                        cx, cy, c_hx, c_hy, rot, _room_half_extent
+                    ):
+                        return False
+                else:
+                    # Fallback: simple arena bounds check
+                    limit = arena_size - max(c_hx, c_hy) - 0.05
+                    if abs(cx) > limit or abs(cy) > limit:
+                        return False
+
+                # Interior wall segment checks
+                for wcx, wcy, whx, why, wrot in _wall_obbs:
+                    if obb_overlaps(
+                        cx,
+                        cy,
+                        c_hx,
+                        c_hy,
+                        rot,
+                        wcx,
+                        wcy,
+                        whx,
+                        why,
+                        wrot,
+                        margin=_WALL_MARGIN,
+                    ):
+                        return False
+
+                return True
+
+            if fixed_pos is not None:
+                # Place at a specific position (for satellites)
+                cx, cy = fixed_pos
+                rot = fixed_rot if fixed_rot is not None else 0.0
+                if not _check_candidate(cx, cy, rot):
                     return False
                 pos = (cx, cy)
                 rotation = rot
@@ -562,26 +685,7 @@ class SceneComposer:
                         c_hy,
                         wall_counts=_wall_counts,
                     )
-                    ok = True
-                    for j in range(len(placed)):
-                        if _ground[j] != c_ground:
-                            continue
-                        if obb_overlaps(
-                            cx,
-                            cy,
-                            c_hx,
-                            c_hy,
-                            rotation,
-                            _cx[j],
-                            _cy[j],
-                            _hx[j],
-                            _hy[j],
-                            _rot[j],
-                            margin=m_eff,
-                        ):
-                            ok = False
-                            break
-                    if ok:
+                    if _check_candidate(cx, cy, rotation):
                         pos = (cx, cy)
                         break
                 if pos is None:

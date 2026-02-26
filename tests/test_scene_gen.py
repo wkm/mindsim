@@ -17,8 +17,8 @@ from scene_gen import SceneComposer, concepts
 from scene_gen.archetypes import ARCHETYPES, list_archetypes
 from scene_gen.composer import describe_scene
 from scene_gen.groupings import GROUPINGS
-from scene_gen.primitives import GeomType, Prim, footprint
-from scene_gen.room import InteriorWall, RoomConfig, random_room_config
+from scene_gen.primitives import GeomType, Prim, footprint, obb_overlaps
+from scene_gen.room import WALL_THICKNESS, InteriorWall, RoomConfig, random_room_config
 
 DOCS_CONCEPTS_DIR = Path(__file__).resolve().parent.parent / "docs" / "concepts"
 
@@ -330,3 +330,157 @@ class TestRoom:
         pre_xpos = data.geom_xpos.copy()
         mujoco.mj_step(model, data)
         assert np.allclose(data.geom_xpos, pre_xpos, atol=1e-6)
+
+    def test_objects_inside_exterior_walls(self, composer):
+        """Every placed object's rotated bbox must be fully inside walls.
+
+        Generates many scenes with various room sizes and verifies that no
+        object's bounding box extends past the exterior walls.
+        """
+        import numpy as np
+
+        room_sizes = [2.5, 3.0, 3.5, 4.0]
+        seeds = range(50)
+
+        for he in room_sizes:
+            config = RoomConfig(half_extent=he)
+            limit = he - WALL_THICKNESS
+            for seed in seeds:
+                scene = composer.random_scene(seed=seed, room_config=config)
+                for obj in scene:
+                    concept_mod = concepts.get(obj.concept)
+                    prims = concept_mod.generate(obj.params)
+                    hx, hy = footprint(prims)
+                    cx, cy = obj.pos
+                    rot = obj.rotation
+
+                    # Compute rotated extent along each axis
+                    cos_r = abs(np.cos(rot))
+                    sin_r = abs(np.sin(rot))
+                    reach_x = hx * cos_r + hy * sin_r
+                    reach_y = hx * sin_r + hy * cos_r
+
+                    assert abs(cx) + reach_x < limit, (
+                        f"Object {obj.concept} at ({cx:.2f}, {cy:.2f}) "
+                        f"rot={np.degrees(rot):.0f} extends past X wall "
+                        f"(reach={reach_x:.2f}, limit={limit:.2f}, "
+                        f"he={he}, seed={seed})"
+                    )
+                    assert abs(cy) + reach_y < limit, (
+                        f"Object {obj.concept} at ({cx:.2f}, {cy:.2f}) "
+                        f"rot={np.degrees(rot):.0f} extends past Y wall "
+                        f"(reach={reach_y:.2f}, limit={limit:.2f}, "
+                        f"he={he}, seed={seed})"
+                    )
+
+    def test_objects_clear_of_interior_walls(self, composer):
+        """No placed object should overlap with interior wall segments.
+
+        Objects CAN be placed in the doorway area — only the solid wall
+        segments should block placement.
+        """
+
+        # Test with both axis orientations and various configs
+        configs = [
+            RoomConfig(
+                half_extent=3.5,
+                interior_walls=(
+                    InteriorWall(axis="x", offset=0.5, door_pos=0.0, door_width=1.2),
+                ),
+            ),
+            RoomConfig(
+                half_extent=3.0,
+                interior_walls=(
+                    InteriorWall(axis="y", offset=-0.3, door_pos=0.5, door_width=1.0),
+                ),
+            ),
+            RoomConfig(
+                half_extent=2.5,
+                interior_walls=(
+                    InteriorWall(axis="x", offset=0.0, door_pos=-0.5, door_width=0.8),
+                ),
+            ),
+        ]
+
+        for config in configs:
+            he = config.half_extent
+            # Build wall segment OBBs (same logic as composer)
+            wall_obbs = []
+            for iwall in config.interior_walls:
+                door_half = iwall.door_width / 2
+                if iwall.axis == "x":
+                    seg1_s, seg1_e = -he, iwall.door_pos - door_half
+                    seg2_s, seg2_e = iwall.door_pos + door_half, he
+                    if seg1_e > seg1_s + 0.05:
+                        seg1_hx = (seg1_e - seg1_s) / 2
+                        seg1_cx = (seg1_s + seg1_e) / 2
+                        wall_obbs.append(
+                            (seg1_cx, iwall.offset, seg1_hx, WALL_THICKNESS, 0.0)
+                        )
+                    if seg2_e > seg2_s + 0.05:
+                        seg2_hx = (seg2_e - seg2_s) / 2
+                        seg2_cx = (seg2_s + seg2_e) / 2
+                        wall_obbs.append(
+                            (seg2_cx, iwall.offset, seg2_hx, WALL_THICKNESS, 0.0)
+                        )
+                else:  # axis == "y"
+                    seg1_s, seg1_e = -he, iwall.door_pos - door_half
+                    seg2_s, seg2_e = iwall.door_pos + door_half, he
+                    if seg1_e > seg1_s + 0.05:
+                        seg1_hy = (seg1_e - seg1_s) / 2
+                        seg1_cy = (seg1_s + seg1_e) / 2
+                        wall_obbs.append(
+                            (iwall.offset, seg1_cy, WALL_THICKNESS, seg1_hy, 0.0)
+                        )
+                    if seg2_e > seg2_s + 0.05:
+                        seg2_hy = (seg2_e - seg2_s) / 2
+                        seg2_cy = (seg2_s + seg2_e) / 2
+                        wall_obbs.append(
+                            (iwall.offset, seg2_cy, WALL_THICKNESS, seg2_hy, 0.0)
+                        )
+
+            for seed in range(50):
+                scene = composer.random_scene(seed=seed, room_config=config)
+                for obj in scene:
+                    concept_mod = concepts.get(obj.concept)
+                    prims = concept_mod.generate(obj.params)
+                    hx, hy = footprint(prims)
+                    cx, cy = obj.pos
+                    rot = obj.rotation
+
+                    for wcx, wcy, whx, why, wrot in wall_obbs:
+                        assert not obb_overlaps(
+                            cx,
+                            cy,
+                            hx,
+                            hy,
+                            rot,
+                            wcx,
+                            wcy,
+                            whx,
+                            why,
+                            wrot,
+                            margin=0.0,
+                        ), (
+                            f"Object {obj.concept} at ({cx:.2f}, {cy:.2f}) "
+                            f"overlaps interior wall segment at "
+                            f"({wcx:.2f}, {wcy:.2f}), "
+                            f"he={he}, seed={seed}"
+                        )
+
+    def test_small_room_wall_clearance(self, composer):
+        """Stress test: small room with interior wall still places objects."""
+        config = RoomConfig(
+            half_extent=2.5,
+            interior_walls=(
+                InteriorWall(axis="x", offset=0.0, door_pos=0.0, door_width=1.0),
+            ),
+        )
+        # Should still produce at least 1 object across multiple seeds
+        placed_any = False
+        for seed in range(20):
+            scene = composer.random_scene(seed=seed, room_config=config)
+            if len(scene) >= 1:
+                placed_any = True
+                break
+        assert placed_any, "Small room with interior wall couldn't place any objects"
