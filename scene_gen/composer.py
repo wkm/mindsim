@@ -22,16 +22,14 @@ Usage:
 
     # Option A: random scene
     scene = composer.random_scene(n_objects=3)
-    composer.apply(scene)
+    composer.apply(scene)  # writes slots + mj_forward + geom sync
 
     # Option B: explicit placement
     from scene_gen.concepts import table
     scene = [
         PlacedObject("table", table.Params(width=1.2), pos=(1, 0), rotation=0.3),
     ]
-    composer.apply(scene)
-
-    mujoco.mj_forward(model, data)  # caller must run forward kinematics
+    composer.apply(scene)  # ready for rendering after this call
 """
 
 from __future__ import annotations
@@ -43,6 +41,8 @@ import mujoco
 import numpy as np
 
 from scene_gen import concepts
+from scene_gen.archetypes import Archetype
+from scene_gen.groupings import GROUPINGS
 from scene_gen.primitives import Placement, Prim, euler_to_quat, footprint, obb_overlaps
 
 # ---------------------------------------------------------------------------
@@ -62,10 +62,10 @@ _ROT_JITTER = np.radians(3.0)
 # Wall at +Y → face -Y (π), wall at -Y → face +Y (0),
 # wall at +X → face -X (π/2), wall at -X → face +X (-π/2)
 _WALL_ROTS = {
-    "N": np.pi,        # back against +Y wall, face into room
-    "S": 0.0,          # back against -Y wall
-    "E": np.pi / 2,    # back against +X wall
-    "W": -np.pi / 2,   # back against -X wall
+    "N": np.pi,  # back against +Y wall, face into room
+    "S": 0.0,  # back against -Y wall
+    "E": np.pi / 2,  # back against +X wall
+    "W": -np.pi / 2,  # back against -X wall
 }
 
 
@@ -81,6 +81,7 @@ def _sample_position(
     arena_size: float,
     hx: float,
     hy: float,
+    wall_counts: dict[str, int] | None = None,
 ) -> tuple[float, float, float]:
     """Sample (cx, cy, rotation) according to placement type.
 
@@ -89,12 +90,13 @@ def _sample_position(
         placement: WALL, CENTER, or CORNER
         arena_size: Half-extent of the arena
         hx, hy: Object half-extents (used to keep objects inside arena)
+        wall_counts: Track wall usage for even distribution (WALL only)
 
     Returns:
         (cx, cy, rotation) tuple
     """
     if placement == Placement.WALL:
-        return _sample_wall_pos(rng, arena_size, hx, hy)
+        return _sample_wall_pos(rng, arena_size, hx, hy, wall_counts)
     elif placement == Placement.CORNER:
         return _sample_corner_pos(rng, arena_size, hx, hy)
     else:  # CENTER
@@ -106,9 +108,22 @@ def _sample_wall_pos(
     arena_size: float,
     hx: float,
     hy: float,
+    wall_counts: dict[str, int] | None = None,
 ) -> tuple[float, float, float]:
-    """Place against a random wall, back facing wall, slide along wall."""
-    wall = rng.choice(["N", "S", "E", "W"])
+    """Place against a wall, back facing wall, slide along wall.
+
+    When wall_counts is provided, prefers the least-used wall to
+    distribute furniture around the perimeter evenly.
+    """
+    if wall_counts is not None:
+        # Pick the least-used wall(s), break ties randomly
+        min_count = min(wall_counts.values())
+        candidates = [w for w, c in wall_counts.items() if c == min_count]
+        wall = candidates[rng.integers(len(candidates))]
+        wall_counts[wall] += 1
+    else:
+        wall = rng.choice(["N", "S", "E", "W"])
+
     rotation = float(_WALL_ROTS[wall] + rng.uniform(-_ROT_JITTER, _ROT_JITTER))
 
     # The "depth" extent that faces the wall depends on rotation:
@@ -173,7 +188,7 @@ def _sample_corner_pos(
 # Defaults for obstacle slot allocation
 # ---------------------------------------------------------------------------
 
-DEFAULT_MAX_OBJECTS = 8
+DEFAULT_MAX_OBJECTS = 16
 DEFAULT_GEOMS_PER_OBJECT = 8
 
 # ---------------------------------------------------------------------------
@@ -199,11 +214,20 @@ class PlacedObject:
 
 
 @dataclass
-class _ObjectSlot:
-    """Internal: a pre-allocated body + its child geoms in the model."""
+class _GeomSlot:
+    """A single body+geom pair. One body per geom eliminates the need for
+    manual geom_xpos patching — mj_kinematics reliably propagates
+    model.body_pos → data.xpos → data.geom_xpos."""
 
     body_id: int
-    geom_ids: list[int] = field(default_factory=list)
+    geom_id: int
+
+
+@dataclass
+class _ObjectSlot:
+    """A logical object: a group of geom slots that form one piece of furniture."""
+
+    geom_slots: list[_GeomSlot] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -226,16 +250,19 @@ class SceneComposer:
         max_objects: int = DEFAULT_MAX_OBJECTS,
         geoms_per_object: int = DEFAULT_GEOMS_PER_OBJECT,
     ):
-        """Add obstacle body+geom slots to an MjSpec before compilation.
+        """Add obstacle slots to an MjSpec before compilation.
 
-        Call this once before spec.compile(). The compiled model will contain
-        the same named bodies/geoms that SceneComposer discovers at runtime.
+        Creates one body per geom (not one body per object). This ensures
+        mj_kinematics correctly computes geom world positions from
+        model.body_pos, which it reliably reads at runtime. The alternative
+        (one body + N child geoms with modified model.geom_pos) breaks in
+        the passive viewer because mj_step overwrites data.geom_xpos.
         """
         for i in range(max_objects):
-            body = spec.worldbody.add_body()
-            body.name = f"obstacle_{i}"
-            body.pos = [0, 0, 0]
             for j in range(geoms_per_object):
+                body = spec.worldbody.add_body()
+                body.name = f"obs_{i}_g{j}"
+                body.pos = [0, 0, 0]
                 geom = body.add_geom()
                 geom.name = f"obs_{i}_g{j}"
                 geom.type = mujoco.mjtGeom.mjGEOM_BOX
@@ -252,30 +279,29 @@ class SceneComposer:
     def max_geoms_per_object(self) -> int:
         if not self._slots:
             return 0
-        return len(self._slots[0].geom_ids)
+        return len(self._slots[0].geom_slots)
 
     def _discover_slots(self):
-        """Find obstacle_N bodies and their obs_N_gM child geoms."""
+        """Find obs_N_gM body+geom pairs and group them into object slots."""
         i = 0
         while True:
-            body_name = f"obstacle_{i}"
-            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
-            if body_id < 0:
+            # Probe for the first geom slot of object i
+            probe = f"obs_{i}_g0"
+            if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, probe) < 0:
                 break
 
-            geom_ids = []
+            geom_slots = []
             j = 0
             while True:
-                geom_name = f"obs_{i}_g{j}"
-                geom_id = mujoco.mj_name2id(
-                    self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_name
-                )
-                if geom_id < 0:
+                name = f"obs_{i}_g{j}"
+                body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, name)
+                if body_id < 0:
                     break
-                geom_ids.append(geom_id)
+                geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, name)
+                geom_slots.append(_GeomSlot(body_id, geom_id))
                 j += 1
 
-            self._slots.append(_ObjectSlot(body_id, geom_ids))
+            self._slots.append(_ObjectSlot(geom_slots))
             i += 1
 
     # -------------------------------------------------------------------
@@ -283,9 +309,12 @@ class SceneComposer:
     # -------------------------------------------------------------------
 
     def apply(self, placed_objects: list[PlacedObject]):
-        """Write placed objects into model slots. Hide unused slots.
+        """Write placed objects into model slots, then run forward kinematics.
 
-        Call mj_forward() after this to update kinematics.
+        This is the single code path for scene application. After this call,
+        the model is ready for rendering (viewer or offscreen). No manual
+        geom_xpos patching needed — each geom has its own body, so
+        mj_kinematics correctly computes world positions from body_pos.
         """
         if len(placed_objects) > self.max_objects:
             raise ValueError(
@@ -301,6 +330,8 @@ class SceneComposer:
             else:
                 self._hide_object(slot)
 
+        mujoco.mj_forward(self.model, self.data)
+
     def clear(self):
         """Hide all obstacle slots."""
         for slot in self._slots:
@@ -311,6 +342,7 @@ class SceneComposer:
         n_objects: int | None = None,
         min_objects: int = 1,
         max_objects: int | None = None,
+        archetype: str | Archetype | None = None,
         arena_size: float = 3.5,
         margin: float = 0.1,
         seed: int | None = None,
@@ -339,6 +371,9 @@ class SceneComposer:
             n_objects: Exact count (overrides min/max). None = random.
             min_objects: Minimum object count when n_objects is None.
             max_objects: Maximum object count (defaults to self.max_objects).
+            archetype: Room archetype (name or Archetype instance). When given,
+                concepts are drawn from the archetype's pool instead of uniform
+                random. A random archetype is chosen if set to "random".
             arena_size: Half-extent of placement area (meters from origin).
             margin: Extra padding (meters) added to each bounding box edge.
             seed: Integer seed for reproducibility. Overrides rng if both given.
@@ -353,20 +388,51 @@ class SceneComposer:
             max_objects = self.max_objects
         max_objects = min(max_objects, self.max_objects)
 
-        if n_objects is None:
-            n_objects = rng.integers(min_objects, max_objects + 1)
-        n_objects = min(n_objects, max_objects)
+        # Resolve archetype
+        arch: Archetype | None = None
+        if archetype is not None:
+            from scene_gen.archetypes import ARCHETYPES
 
-        available = concepts.list_concepts()
-        if not available:
-            return []
+            if isinstance(archetype, str):
+                if archetype == "random":
+                    names = list(ARCHETYPES.keys())
+                    archetype = names[rng.integers(len(names))]
+                arch = ARCHETYPES[archetype]
+            else:
+                arch = archetype
 
-        # Pick concepts first, then sort by placement priority
+        # Pick concept names — from archetype or uniform random
+        if arch is not None:
+            concept_names = arch.sample(rng, max_objects=max_objects)
+        else:
+            available = concepts.list_concepts()
+            if not available:
+                return []
+            if n_objects is None:
+                n_objects = int(rng.integers(min_objects, max_objects + 1))
+            n_objects = min(n_objects, max_objects)
+            concept_names = [
+                available[rng.integers(len(available))] for _ in range(n_objects)
+            ]
+
+        # Build index: which concepts are anchors for groupings?
+        # Only use each grouping once per scene to avoid duplicate clusters.
+        _anchor_to_grouping: dict[str, str] = {}
+        for gname, grouping in GROUPINGS.items():
+            _anchor_to_grouping.setdefault(grouping.anchor, gname)
+        _used_groupings: set[str] = set()
+
+        # Resolve each concept name to (name, params, is_ground, placement).
+        # When a concept has VARIATIONS, randomly pick one for visual diversity.
         picks: list[tuple[str, object, bool, Placement]] = []
-        for _ in range(n_objects):
-            concept_name = available[rng.integers(len(available))]
+        for concept_name in concept_names:
             concept_mod = concepts.get(concept_name)
-            params = concept_mod.Params()
+            variations = getattr(concept_mod, "VARIATIONS", None)
+            if variations:
+                var_list = list(variations.values())
+                params = var_list[rng.integers(len(var_list))]
+            else:
+                params = concept_mod.Params()
             is_ground = getattr(concept_mod, "GROUND_COVER", False)
             placement = getattr(concept_mod, "PLACEMENT", Placement.CENTER)
             picks.append((concept_name, params, is_ground, placement))
@@ -383,55 +449,157 @@ class SceneComposer:
         _hy: list[float] = []  # half-extent y
         _rot: list[float] = []  # rotation
         _ground: list[bool] = []  # is ground-cover layer?
+        # Track wall usage for even distribution
+        _wall_counts: dict[str, int] = {"N": 0, "S": 0, "E": 0, "W": 0}
 
-        for concept_name, params, is_ground, placement in picks:
-            concept_mod = concepts.get(concept_name)
+        def _try_place(
+            c_name: str,
+            c_params: object,
+            c_ground: bool,
+            c_placement: Placement,
+            fixed_pos: tuple[float, float] | None = None,
+            fixed_rot: float | None = None,
+            overlap_margin: float | None = None,
+        ) -> bool:
+            """Try to place one object. Returns True if placed successfully.
 
-            # Compute footprint from generated prims
-            prims = concept_mod.generate(params)
-            hx, hy = footprint(prims)
+            overlap_margin overrides the default margin for collision checks.
+            Satellites use a smaller margin since they're meant to sit close
+            to their anchor.
+            """
+            if len(placed) >= max_objects:
+                return False
 
-            # Rejection-sample a position with OBB overlap check
-            pos = None
-            for _attempt in range(50):
-                cx, cy, rotation = _sample_position(
-                    rng, placement, arena_size, hx, hy,
-                )
+            m_eff = overlap_margin if overlap_margin is not None else margin
 
-                # Only check against objects on the same layer
+            c_mod = concepts.get(c_name)
+            c_prims = c_mod.generate(c_params)
+            c_hx, c_hy = footprint(c_prims)
+
+            if fixed_pos is not None:
+                # Place at a specific position (for satellites)
+                cx, cy = fixed_pos
+                rot = fixed_rot if fixed_rot is not None else 0.0
+                # Still check for overlaps
                 ok = True
                 for j in range(len(placed)):
-                    if _ground[j] != is_ground:
-                        continue  # different layers — skip
+                    if _ground[j] != c_ground:
+                        continue
                     if obb_overlaps(
-                        cx, cy, hx, hy, rotation,
-                        _cx[j], _cy[j], _hx[j], _hy[j], _rot[j],
-                        margin=margin,
+                        cx,
+                        cy,
+                        c_hx,
+                        c_hy,
+                        rot,
+                        _cx[j],
+                        _cy[j],
+                        _hx[j],
+                        _hy[j],
+                        _rot[j],
+                        margin=m_eff,
                     ):
                         ok = False
                         break
-
-                if ok:
-                    pos = (cx, cy)
-                    break
-
-            if pos is None:
-                continue  # couldn't place — skip, try next object
+                # Also check arena bounds
+                limit = arena_size - max(c_hx, c_hy) - 0.05
+                if abs(cx) > limit or abs(cy) > limit:
+                    ok = False
+                if not ok:
+                    return False
+                pos = (cx, cy)
+                rotation = rot
+            else:
+                # Rejection-sample a position
+                pos = None
+                for _attempt in range(50):
+                    cx, cy, rotation = _sample_position(
+                        rng,
+                        c_placement,
+                        arena_size,
+                        c_hx,
+                        c_hy,
+                        wall_counts=_wall_counts,
+                    )
+                    ok = True
+                    for j in range(len(placed)):
+                        if _ground[j] != c_ground:
+                            continue
+                        if obb_overlaps(
+                            cx,
+                            cy,
+                            c_hx,
+                            c_hy,
+                            rotation,
+                            _cx[j],
+                            _cy[j],
+                            _hx[j],
+                            _hy[j],
+                            _rot[j],
+                            margin=m_eff,
+                        ):
+                            ok = False
+                            break
+                    if ok:
+                        pos = (cx, cy)
+                        break
+                if pos is None:
+                    return False
 
             _cx.append(pos[0])
             _cy.append(pos[1])
-            _hx.append(hx)
-            _hy.append(hy)
+            _hx.append(c_hx)
+            _hy.append(c_hy)
             _rot.append(rotation)
-            _ground.append(is_ground)
+            _ground.append(c_ground)
             placed.append(
                 PlacedObject(
-                    concept=concept_name,
-                    params=params,
+                    concept=c_name,
+                    params=c_params,
                     pos=pos,
                     rotation=rotation,
                 )
             )
+            return True
+
+        for concept_name, params, is_ground, placement in picks:
+            if not _try_place(concept_name, params, is_ground, placement):
+                continue
+
+            # If this concept is a grouping anchor, try to place satellites
+            gname = _anchor_to_grouping.get(concept_name)
+            if gname and gname not in _used_groupings and arch is not None:
+                _used_groupings.add(gname)
+                grouping = GROUPINGS[gname]
+                anchor = placed[-1]
+                anchor_cx, anchor_cy = anchor.pos
+                anchor_rot = anchor.rotation
+                cos_r, sin_r = np.cos(anchor_rot), np.sin(anchor_rot)
+
+                for sat_name, dx, dy, drot in grouping.resolve(rng):
+                    # Transform local offset to world coordinates
+                    wx = anchor_cx + dx * cos_r - dy * sin_r
+                    wy = anchor_cy + dx * sin_r + dy * cos_r
+                    wrot = anchor_rot + drot
+
+                    sat_mod = concepts.get(sat_name)
+                    sat_variations = getattr(sat_mod, "VARIATIONS", None)
+                    if sat_variations:
+                        var_list = list(sat_variations.values())
+                        sat_params = var_list[rng.integers(len(var_list))]
+                    else:
+                        sat_params = sat_mod.Params()
+                    sat_ground = getattr(sat_mod, "GROUND_COVER", False)
+                    sat_placement = getattr(sat_mod, "PLACEMENT", Placement.CENTER)
+
+                    _try_place(
+                        sat_name,
+                        sat_params,
+                        sat_ground,
+                        sat_placement,
+                        fixed_pos=(wx, wy),
+                        fixed_rot=wrot,
+                        overlap_margin=0.02,
+                    )
 
         return placed
 
@@ -446,55 +614,65 @@ class SceneComposer:
         rotation: float,
         prims: tuple[Prim, ...],
     ):
-        """Write concept primitives into a slot's geoms."""
-        if len(prims) > len(slot.geom_ids):
+        """Write concept primitives into a slot's geom bodies."""
+        if len(prims) > len(slot.geom_slots):
             raise ValueError(
                 f"Concept has {len(prims)} prims but slot only has "
-                f"{len(slot.geom_ids)} geom slots"
+                f"{len(slot.geom_slots)} geom slots"
             )
 
-        # Position the body at (x, y, 0)
-        self.model.body_pos[slot.body_id] = [pos[0], pos[1], 0.0]
+        # Precompute rotation matrix for the object
+        cos_r = np.cos(rotation)
+        sin_r = np.sin(rotation)
 
-        # Rotation around Z — set body quaternion
-        if rotation != 0.0:
-            self.model.body_quat[slot.body_id] = euler_to_quat(0, 0, rotation)
-        else:
-            self.model.body_quat[slot.body_id] = [1, 0, 0, 0]
-
-        # Write each primitive to a geom slot
-        for j, geom_id in enumerate(slot.geom_ids):
+        for j, gs in enumerate(slot.geom_slots):
             if j < len(prims):
                 prim = prims[j]
-                self.model.geom_type[geom_id] = int(prim.geom_type)
-                self.model.geom_size[geom_id] = prim.size
-                self.model.geom_pos[geom_id] = prim.pos
-                self.model.geom_rgba[geom_id] = prim.rgba
-                self.model.geom_contype[geom_id] = 1
-                self.model.geom_conaffinity[geom_id] = 1
 
-                # Geom-local rotation
+                # Compute world position: object origin + rotated prim offset
+                px, py, pz = prim.pos
+                wx = pos[0] + cos_r * px - sin_r * py
+                wy = pos[1] + sin_r * px + cos_r * py
+                wz = pz
+
+                self.model.body_pos[gs.body_id] = [wx, wy, wz]
+
+                # Body quat = object rotation (Z) composed with prim rotation
                 if prim.euler != (0.0, 0.0, 0.0):
-                    self.model.geom_quat[geom_id] = euler_to_quat(*prim.euler)
+                    obj_quat = euler_to_quat(0, 0, rotation)
+                    prim_quat = euler_to_quat(*prim.euler)
+                    combined = np.zeros(4)
+                    mujoco.mju_mulQuat(combined, obj_quat, prim_quat)
+                    self.model.body_quat[gs.body_id] = combined
+                elif rotation != 0.0:
+                    self.model.body_quat[gs.body_id] = euler_to_quat(0, 0, rotation)
                 else:
-                    self.model.geom_quat[geom_id] = [1, 0, 0, 0]
+                    self.model.body_quat[gs.body_id] = [1, 0, 0, 0]
+
+                # Geom stays at body origin — body_pos IS the world position
+                self.model.geom_type[gs.geom_id] = int(prim.geom_type)
+                self.model.geom_size[gs.geom_id] = prim.size
+                self.model.geom_pos[gs.geom_id] = [0, 0, 0]
+                self.model.geom_quat[gs.geom_id] = [1, 0, 0, 0]
+                self.model.geom_rgba[gs.geom_id] = prim.rgba
+                self.model.geom_contype[gs.geom_id] = 1
+                self.model.geom_conaffinity[gs.geom_id] = 1
             else:
-                # Hide unused geom slots
-                self._hide_geom(geom_id)
+                self._hide_geom_slot(gs)
 
     def _hide_object(self, slot: _ObjectSlot):
-        """Hide all geoms in an object slot."""
-        self.model.body_pos[slot.body_id] = [0, 0, 0]
-        self.model.body_quat[slot.body_id] = [1, 0, 0, 0]
-        for geom_id in slot.geom_ids:
-            self._hide_geom(geom_id)
+        """Hide all geom slots in an object slot."""
+        for gs in slot.geom_slots:
+            self._hide_geom_slot(gs)
 
-    def _hide_geom(self, geom_id: int):
-        """Make a geom invisible and non-colliding."""
-        self.model.geom_size[geom_id] = [0.001, 0.001, 0.001]
-        self.model.geom_rgba[geom_id] = [0, 0, 0, 0]
-        self.model.geom_contype[geom_id] = 0
-        self.model.geom_conaffinity[geom_id] = 0
+    def _hide_geom_slot(self, gs: _GeomSlot):
+        """Make a geom slot invisible and non-colliding."""
+        self.model.body_pos[gs.body_id] = [0, 0, 0]
+        self.model.body_quat[gs.body_id] = [1, 0, 0, 0]
+        self.model.geom_size[gs.geom_id] = [0.001, 0.001, 0.001]
+        self.model.geom_rgba[gs.geom_id] = [0, 0, 0, 0]
+        self.model.geom_contype[gs.geom_id] = 0
+        self.model.geom_conaffinity[gs.geom_id] = 0
 
 
 # ---------------------------------------------------------------------------

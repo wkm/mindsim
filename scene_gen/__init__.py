@@ -9,8 +9,7 @@ Usage:
 
     composer = SceneComposer(model, data)
     scene = composer.random_scene()    # random furniture layout
-    composer.apply(scene)              # write to MuJoCo model
-    mujoco.mj_forward(model, data)     # update kinematics
+    composer.apply(scene)              # write to model + kinematics + geom sync
 """
 
 from scene_gen.composer import PlacedObject, SceneComposer, describe_scene, scene_id

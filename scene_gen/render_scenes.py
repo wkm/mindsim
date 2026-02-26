@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from scene_gen import SceneComposer
+from scene_gen.archetypes import list_archetypes
 from scene_gen.composer import describe_scene, scene_id
 
 ROOM_XML = str(Path(__file__).resolve().parent.parent / "worlds" / "room.xml")
@@ -30,9 +31,6 @@ BG_COLOR = (40, 42, 48)
 LABEL_BG = (30, 32, 36)
 LABEL_FG = (220, 220, 220)
 
-DEFAULT_MAX_OBJECTS = 8
-DEFAULT_GEOMS_PER_OBJECT = 8
-
 
 def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     """Load room.xml with full obstacle slots for scene generation."""
@@ -40,11 +38,7 @@ def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     # Increase offscreen framebuffer for high-res renders
     spec.visual.global_.offwidth = max(spec.visual.global_.offwidth, CELL_W)
     spec.visual.global_.offheight = max(spec.visual.global_.offheight, CELL_H)
-    SceneComposer.prepare_spec(
-        spec,
-        max_objects=DEFAULT_MAX_OBJECTS,
-        geoms_per_object=DEFAULT_GEOMS_PER_OBJECT,
-    )
+    SceneComposer.prepare_spec(spec)
     model = spec.compile()
     data = mujoco.MjData(model)
 
@@ -62,25 +56,6 @@ def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     mujoco.mj_forward(model, data)
     composer = SceneComposer(model, data)
     return model, data, composer
-
-
-def _sync_geom_xpos(
-    model: mujoco.MjModel, data: mujoco.MjData, composer: SceneComposer
-):
-    """Manually recompute geom_xpos/xmat for obstacle slot geoms.
-
-    mj_kinematics ignores runtime modifications to model.geom_pos.
-    The offscreen Renderer uses data.geom_xpos, so we patch it.
-    """
-    for slot in composer._slots:
-        bid = slot.body_id
-        body_pos = data.xpos[bid]
-        body_mat = data.xmat[bid].reshape(3, 3)
-        for gid in slot.geom_ids:
-            data.geom_xpos[gid] = body_pos + body_mat @ model.geom_pos[gid]
-            geom_mat = np.zeros(9)
-            mujoco.mju_quat2Mat(geom_mat, model.geom_quat[gid])
-            data.geom_xmat[gid] = (body_mat @ geom_mat.reshape(3, 3)).ravel()
 
 
 def _make_topdown_camera() -> mujoco.MjvCamera:
@@ -102,12 +77,11 @@ def _render_scene(
     renderer: mujoco.Renderer,
     cam: mujoco.MjvCamera,
     seed: int,
+    archetype: str | None = None,
 ) -> tuple[np.ndarray, str]:
     """Generate and render a random scene. Returns (pixels, description)."""
-    scene = composer.random_scene(seed=seed)
+    scene = composer.random_scene(seed=seed, archetype=archetype)
     composer.apply(scene)
-    mujoco.mj_forward(model, data)
-    _sync_geom_xpos(model, data, composer)
 
     renderer.update_scene(data, cam)
     pixels = renderer.render().copy()
@@ -139,6 +113,7 @@ def render_scene_grid(
     model: mujoco.MjModel,
     data: mujoco.MjData,
     composer: SceneComposer,
+    archetype: str | None = None,
 ) -> Path:
     """Render a grid of scenes, one per seed. Returns output path."""
     n = len(seeds)
@@ -157,7 +132,9 @@ def render_scene_grid(
     cam = _make_topdown_camera()
 
     for idx, seed in enumerate(seeds):
-        pixels, desc = _render_scene(model, data, composer, renderer, cam, seed)
+        pixels, desc = _render_scene(
+            model, data, composer, renderer, cam, seed, archetype
+        )
 
         cell_img = Image.fromarray(pixels)
         col = idx % cols
@@ -199,6 +176,12 @@ def main():
         "--count", type=int, default=16, help="Number of random scenes (default: 16)"
     )
     parser.add_argument("--out", default="docs/scenes", help="Output directory")
+    parser.add_argument(
+        "--archetype",
+        choices=[*list_archetypes(), "random"],
+        default="random",
+        help="Room archetype (default: random = picks randomly each scene)",
+    )
     args = parser.parse_args()
 
     if args.seeds:
@@ -212,8 +195,9 @@ def main():
     print("Setting up MuJoCo scene...")
     model, data, composer = _setup_scene()
 
-    print(f"Rendering {len(seeds)} scenes...")
-    path = render_scene_grid(seeds, out_dir, model, data, composer)
+    archetype = args.archetype
+    print(f"Rendering {len(seeds)} scenes (archetype={archetype})...")
+    path = render_scene_grid(seeds, out_dir, model, data, composer, archetype=archetype)
     print(f"\n-> {path}")
 
 

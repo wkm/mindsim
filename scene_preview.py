@@ -6,6 +6,7 @@ Each scene gets a deterministic seed so it can be recreated.
 Controls:
     Space:      Generate next random scene
     Backspace:  Regenerate current scene (verify reproducibility)
+    Tab:        Cycle room archetype (random → bedroom → living_room → ...)
     Arrow keys: Move the target cube
     Q/Escape:   Quit (handled by MuJoCo viewer)
 """
@@ -18,10 +19,12 @@ import mujoco.viewer
 import numpy as np
 
 from scene_gen import SceneComposer
+from scene_gen.archetypes import list_archetypes
 from scene_gen.composer import describe_scene
 
 # GLFW key codes
 KEY_SPACE = 32
+KEY_TAB = 258
 KEY_BACKSPACE = 259
 KEY_RIGHT = 262
 KEY_LEFT = 263
@@ -42,7 +45,9 @@ def run_scene_preview():
     scenes. Each scene's seed and description are printed to the terminal.
     """
     print(f"Loading {ROOM_XML}...")
-    print("Controls: Space=next scene, Backspace=regenerate, Arrows=move target")
+    print(
+        "Controls: Space=next, Backspace=regenerate, Tab=cycle archetype, Arrows=target"
+    )
     print()
 
     spec = mujoco.MjSpec.from_file(ROOM_XML)
@@ -63,6 +68,10 @@ def run_scene_preview():
     target_geom_id = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "target_cube")
     floor_z = float(m.geom_size[target_geom_id][2])
 
+    # Archetype cycling: None (pure random) → bedroom → living_room → ...
+    archetype_options = [None, *list_archetypes()]
+    archetype_idx = 0
+
     # Scene state
     current_seed = None
     scene_count = 0
@@ -74,22 +83,29 @@ def run_scene_preview():
         current_seed = seed
         scene_count += 1
 
-        scene = composer.random_scene(seed=seed)
+        arch = archetype_options[archetype_idx]
+        scene = composer.random_scene(archetype=arch, seed=seed)
         composer.apply(scene)
-        mujoco.mj_forward(m, d)
 
+        arch_label = arch if arch else "random"
         desc = describe_scene(scene, seed=seed)
         print(f"{'=' * 55}")
-        print(f"  Scene {scene_count}")
+        print(f"  Scene {scene_count}  [{arch_label}]")
         print(f"  {desc.replace(chr(10), chr(10) + '  ')}")
         print(f"{'=' * 55}")
         print()
 
     def on_key(keycode):
+        nonlocal archetype_idx
         if keycode == KEY_SPACE:
             _generate()
         elif keycode == KEY_BACKSPACE:
             _generate(seed=current_seed)
+        elif keycode == KEY_TAB:
+            archetype_idx = (archetype_idx + 1) % len(archetype_options)
+            arch = archetype_options[archetype_idx]
+            print(f"  Archetype: {arch if arch else 'random'}")
+            _generate()
         elif keycode == KEY_UP:
             d.mocap_pos[target_mocap_id][1] += ARROW_STEP
         elif keycode == KEY_DOWN:

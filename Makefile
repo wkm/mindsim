@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play wt-new wt-ls wt-rm setup lint
+.PHONY: tui train quick-sim test smoketest view play wt-new wt-ls wt-rm setup lint check render-concepts
 
 tui:
 	uv run mjpython main.py
@@ -37,9 +37,17 @@ lint:
 	uv run ruff check --fix .
 	uv run ruff format .
 
+render-concepts:
+	uv run python -m scene_gen.render_catalog
+
+check: lint
+	uv run pytest tests/ -v
+	@echo ""
+	@echo "All checks passed."
+
 setup:
 	git config core.hooksPath .githooks
-	@echo "Git hooks configured (pre-commit: ruff lint + format)"
+	@echo "Git hooks configured (pre-commit: make check)"
 
 # --- Worktree management ---
 # TYPE=infra -> infra/<name> branch (no date prefix)

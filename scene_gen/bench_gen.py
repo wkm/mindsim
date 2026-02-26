@@ -45,7 +45,6 @@ def bench(n_scenes: int, n_objects: int | None, apply: bool) -> dict:
         if apply:
             t2 = time.perf_counter()
             composer.apply(scene)
-            mujoco.mj_forward(model, data)
             t3 = time.perf_counter()
             apply_times.append(t3 - t2)
 
@@ -76,7 +75,9 @@ def bench(n_scenes: int, n_objects: int | None, apply: bool) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Benchmark scene generation")
     parser.add_argument("--count", type=int, default=1000, help="Number of scenes")
-    parser.add_argument("--objects", type=int, default=None, help="Force N objects per scene")
+    parser.add_argument(
+        "--objects", type=int, default=None, help="Force N objects per scene"
+    )
     parser.add_argument(
         "--no-apply", action="store_true", help="Skip apply+mj_forward (gen only)"
     )
@@ -86,7 +87,9 @@ def main():
     stats = bench(args.count, args.objects, apply=not args.no_apply)
 
     print(f"\n  scenes:          {stats['n_scenes']}")
-    print(f"  objects/scene:   {stats['objects_mean']:.1f} avg, {stats['objects_max']} max")
+    print(
+        f"  objects/scene:   {stats['objects_mean']:.1f} avg, {stats['objects_max']} max"
+    )
     print(f"  gen mean:        {stats['gen_mean_ms']:.3f} ms")
     print(f"  gen median:      {stats['gen_median_ms']:.3f} ms")
     print(f"  gen p95:         {stats['gen_p95_ms']:.3f} ms")
@@ -96,7 +99,9 @@ def main():
 
     if "apply_mean_ms" in stats:
         print(f"  apply mean:      {stats['apply_mean_ms']:.3f} ms")
-        print(f"  total mean:      {stats['total_mean_ms']:.3f} ms  (gen + apply + fwd)")
+        print(
+            f"  total mean:      {stats['total_mean_ms']:.3f} ms  (gen + apply + fwd)"
+        )
 
 
 if __name__ == "__main__":

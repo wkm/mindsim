@@ -84,29 +84,6 @@ def _camera_for_prims(prims: tuple[Prim, ...]) -> mujoco.MjvCamera:
     return cam
 
 
-def _sync_geom_xpos(
-    model: mujoco.MjModel, data: mujoco.MjData, composer: SceneComposer
-):
-    """Manually recompute geom_xpos/xmat for obstacle slot geoms.
-
-    mj_kinematics uses compile-time geom_pos offsets, ignoring runtime
-    modifications to model.geom_pos. The interactive viewer reads model
-    data directly, but the offscreen Renderer uses data.geom_xpos from
-    mjv_updateScene. So we must patch data.geom_xpos ourselves.
-    """
-    for slot in composer._slots:
-        bid = slot.body_id
-        body_pos = data.xpos[bid]
-        body_mat = data.xmat[bid].reshape(3, 3)
-        for gid in slot.geom_ids:
-            # geom_xpos = body_xpos + body_xmat @ geom_pos
-            data.geom_xpos[gid] = body_pos + body_mat @ model.geom_pos[gid]
-            # geom_xmat = body_xmat @ quat2mat(geom_quat)
-            geom_mat = np.zeros(9)
-            mujoco.mju_quat2Mat(geom_mat, model.geom_quat[gid])
-            data.geom_xmat[gid] = (body_mat @ geom_mat.reshape(3, 3)).ravel()
-
-
 def _render_variation(
     model: mujoco.MjModel,
     data: mujoco.MjData,
@@ -123,8 +100,6 @@ def _render_variation(
         concept=concept_name, params=params, pos=(0.0, 0.0), rotation=0.0
     )
     composer.apply([obj])
-    mujoco.mj_forward(model, data)
-    _sync_geom_xpos(model, data, composer)
 
     cam = _camera_for_prims(prims)
     renderer.update_scene(data, cam)

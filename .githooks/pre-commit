@@ -1,25 +1,8 @@
 #!/usr/bin/env bash
-# Pre-commit hook: run ruff on staged Python files
+# Pre-commit hook: run the full build check
+#
+# This runs lint + tests via `make check`.
+# To skip (emergency only): git commit --no-verify
 
-# Get staged .py files (excluding deleted files)
-STAGED_PY=$(git diff --cached --name-only --diff-filter=d -- '*.py')
-
-if [ -z "$STAGED_PY" ]; then
-    exit 0
-fi
-
-# Run ruff check (lint)
-echo "ruff check..."
-uv run ruff check $STAGED_PY
-if [ $? -ne 0 ]; then
-    echo "ruff check failed. Fix issues or run: uv run ruff check --fix ."
-    exit 1
-fi
-
-# Run ruff format check
-echo "ruff format..."
-uv run ruff format --check $STAGED_PY
-if [ $? -ne 0 ]; then
-    echo "ruff format failed. Run: uv run ruff format ."
-    exit 1
-fi
+echo "Running pre-commit checks..."
+make check
