@@ -215,7 +215,7 @@ class CommentaryConfig:
     """AI commentary configuration for training dashboard."""
 
     enabled: bool = True
-    interval_seconds: float = 300.0  # 5 minutes between commentary
+    interval_seconds: float = 1800.0  # 30 minutes between commentary
     model: str = "opus"
 
 
