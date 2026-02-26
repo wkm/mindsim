@@ -4,7 +4,7 @@ Usage:
     uv run python -m scene_gen.render_scenes                    # 16 random seeds
     uv run python -m scene_gen.render_scenes --seeds 42 43 44   # specific seeds
     uv run python -m scene_gen.render_scenes --count 25         # 25 random scenes
-    uv run python -m scene_gen.render_scenes --out docs/scenes  # custom output dir
+    uv run python -m scene_gen.render_scenes --out docs/rooms   # custom output dir
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ def render_scene_grid(
 ) -> Path:
     """Render a grid of scenes, one per seed. Returns output path."""
     n = len(seeds)
-    cols = min(4, n)
+    cols = 4
     rows = math.ceil(n / cols)
 
     cell_total_h = CELL_H + LABEL_H
@@ -174,9 +174,9 @@ def main():
     parser = argparse.ArgumentParser(description="Render random scene grids")
     parser.add_argument("--seeds", nargs="*", type=int, help="Specific seeds to render")
     parser.add_argument(
-        "--count", type=int, default=16, help="Number of random scenes (default: 16)"
+        "--count", type=int, default=8, help="Number of random scenes (default: 8)"
     )
-    parser.add_argument("--out", default="docs/scenes", help="Output directory")
+    parser.add_argument("--out", default="docs/rooms", help="Output directory")
     parser.add_argument(
         "--archetype",
         choices=[*list_archetypes(), "random"],
