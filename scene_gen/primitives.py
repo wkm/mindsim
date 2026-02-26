@@ -91,6 +91,18 @@ RUG_BURGUNDY = (0.55, 0.12, 0.15, 1.0)
 RUG_NAVY = (0.12, 0.15, 0.30, 1.0)
 RUG_SAGE = (0.55, 0.62, 0.50, 1.0)
 RUG_TAN = (0.72, 0.65, 0.52, 1.0)
+RUG_ROSE = (0.78, 0.35, 0.40, 1.0)
+RUG_TEAL = (0.18, 0.52, 0.50, 1.0)
+RUG_GOLD = (0.80, 0.68, 0.25, 1.0)
+RUG_PLUM = (0.48, 0.18, 0.42, 1.0)
+
+# Sims 1-style saturated upholstery
+FABRIC_YELLOW = (0.90, 0.78, 0.20, 1.0)
+FABRIC_TEAL = (0.15, 0.55, 0.52, 1.0)
+FABRIC_PINK = (0.82, 0.40, 0.50, 1.0)
+FABRIC_PURPLE = (0.45, 0.22, 0.55, 1.0)
+FABRIC_ORANGE = (0.85, 0.50, 0.18, 1.0)
+FABRIC_NAVY = (0.15, 0.18, 0.42, 1.0)
 
 LAMP_WARM = (0.95, 0.90, 0.70, 0.9)
 LAMP_WHITE = (0.95, 0.95, 0.90, 0.85)
