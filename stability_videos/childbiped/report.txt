@@ -1,0 +1,22 @@
+============================================================
+STABILITY REPORT: bots/childbiped/scene.xml
+============================================================
+
+  1. Passive Standing:    PASS (survived 10s)
+     Initial height:      0.5192m
+     Min height:          0.5189m
+     Min uprightness:     0.9990
+     Stability margin:    0.0445m
+
+  2. Perturbation Resistance:
+     Max lateral impulse: 8.0 N*s
+     Max forward impulse: 3.0 N*s
+     Max joint perturb:   0.00 rad
+
+  3. Mobility-Stability Tradeoff:
+     Max stable gait amp: 0.00
+     Best forward dist:   0.000m
+
+  OVERALL SCORE: 0.64 / 1.00
+    (standing=1.00 * 0.4 + impulse=0.80 * 0.3 + mobility=0.00 * 0.3)
+============================================================

@@ -7,16 +7,75 @@ Runs three tests to quantify a biped's inherent stability:
 3. Mobility-Stability Tradeoff — how much leg movement is possible while staying upright?
 
 Usage:
-    uv run python stability_test.py [--scene PATH] [--verbose]
+    uv run python stability_test.py [--scene PATH] [--verbose] [--video]
 """
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import mujoco
 import numpy as np
+
+# --- Video recording ---
+
+VIDEO_WIDTH = 640
+VIDEO_HEIGHT = 480
+VIDEO_FPS = 30
+
+
+class VideoRecorder:
+    """Records MuJoCo simulation frames to MP4 via mediapy."""
+
+    def __init__(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        output_path: str | Path,
+        fps: int = VIDEO_FPS,
+        width: int = VIDEO_WIDTH,
+        height: int = VIDEO_HEIGHT,
+    ):
+        self.data = data
+        self.output_path = str(output_path)
+        self.fps = fps
+        self.renderer = mujoco.Renderer(model, height=height, width=width)
+        self.frames: list[np.ndarray] = []
+
+        # Configure a side-view free camera
+        self.camera = mujoco.MjvCamera()
+        self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
+        self.camera.lookat[:] = [0.0, 0.0, 0.4]  # hip height
+        self.camera.distance = 2.5
+        self.camera.azimuth = 135  # 3/4 view (front-left)
+        self.camera.elevation = -20
+
+    def capture(self):
+        """Capture one frame from the current simulation state."""
+        self.renderer.update_scene(self.data, camera=self.camera)
+        self.frames.append(self.renderer.render().copy())
+
+    def save(self):
+        """Write collected frames to MP4."""
+        if not self.frames:
+            return
+        import mediapy
+
+        os.makedirs(os.path.dirname(self.output_path) or ".", exist_ok=True)
+        mediapy.write_video(self.output_path, self.frames, fps=self.fps)
+        print(f"  Video: {self.output_path} ({len(self.frames)} frames, {len(self.frames)/self.fps:.1f}s)")
+
+    def close(self):
+        self.renderer.close()
+
+
+def _frame_interval(dt: float, fps: int) -> int:
+    """Physics steps per video frame."""
+    return max(1, int(1.0 / (fps * dt)))
+
 
 # --- Fall detection helpers ---
 
@@ -145,6 +204,7 @@ def test_passive_standing(
     fall_height_frac: float = 0.5,
     fall_up_z: float = 0.3,
     verbose: bool = False,
+    video: VideoRecorder | None = None,
 ) -> PassiveStandingResult:
     """
     Test 1: Can the biped stand with zero motor input?
@@ -156,11 +216,14 @@ def test_passive_standing(
     """
     reset_to_standing(model, data)
     dt = model.opt.timestep
+    frame_every = _frame_interval(dt, VIDEO_FPS)
 
     # Let the robot settle (drop onto floor, absorb impact)
     settle_steps = int(settle_time / dt)
-    for _ in range(settle_steps):
+    for s in range(settle_steps):
         mujoco.mj_step(model, data)
+        if video and s % frame_every == 0:
+            video.capture()
 
     # Measure from settled state
     initial_height = get_torso_height(data, ids["body"])
@@ -174,6 +237,8 @@ def test_passive_standing(
 
     # Already fallen during settling?
     if has_fallen(data, ids["body"], fall_height, fall_up_z):
+        if video:
+            video.save()
         return PassiveStandingResult(
             time_to_fall=0.0,
             survived=False,
@@ -196,6 +261,9 @@ def test_passive_standing(
         t += dt
         step += 1
 
+        if video and step % frame_every == 0:
+            video.capture()
+
         up_z = get_torso_up_z(data, ids["body"])
         height = get_torso_height(data, ids["body"])
         min_up_z = min(min_up_z, up_z)
@@ -209,7 +277,15 @@ def test_passive_standing(
 
         if has_fallen(data, ids["body"], fall_height, fall_up_z):
             time_to_fall = t
+            # Capture a few more frames of the fall
+            if video:
+                for _ in range(VIDEO_FPS):  # ~1s of post-fall
+                    mujoco.mj_step(model, data)
+                    video.capture()
             break
+
+    if video:
+        video.save()
 
     if verbose:
         status = (
@@ -259,19 +335,25 @@ def _test_impulse(
     recovery_time: float = 3.0,
     fall_height_frac: float = 0.5,
     fall_up_z: float = 0.3,
+    video: VideoRecorder | None = None,
 ) -> bool:
     """Apply an impulse to the torso and check if the biped recovers."""
     reset_to_standing(model, data)
     dt = model.opt.timestep
+    frame_every = _frame_interval(dt, VIDEO_FPS)
 
     initial_height = get_torso_height(data, ids["body"])
     fall_height = initial_height * fall_height_frac
 
     # Let it settle first (0.5s)
     settle_steps = int(0.5 / dt)
-    for _ in range(settle_steps):
+    for s in range(settle_steps):
         mujoco.mj_step(model, data)
+        if video and s % frame_every == 0:
+            video.capture()
         if has_fallen(data, ids["body"], fall_height, fall_up_z):
+            if video:
+                video.save()
             return False  # Can't even stand
 
     # Apply impulse as a brief force over a few timesteps
@@ -279,18 +361,32 @@ def _test_impulse(
     impulse_steps = max(1, int(impulse_duration / dt))
     force = force_direction * (impulse_magnitude / impulse_duration)
 
-    for _ in range(impulse_steps):
+    for s in range(impulse_steps):
         data.xfrc_applied[ids["body"], :3] = force
         mujoco.mj_step(model, data)
+        if video:
+            video.capture()
     data.xfrc_applied[ids["body"], :3] = 0  # Remove force
 
     # Check if it recovers over recovery_time
     recovery_steps = int(recovery_time / dt)
-    for _ in range(recovery_steps):
+    step = 0
+    for s in range(recovery_steps):
         mujoco.mj_step(model, data)
+        step += 1
+        if video and step % frame_every == 0:
+            video.capture()
         if has_fallen(data, ids["body"], fall_height, fall_up_z):
+            # Capture post-fall
+            if video:
+                for _ in range(VIDEO_FPS):
+                    mujoco.mj_step(model, data)
+                    video.capture()
+                video.save()
             return False
 
+    if video:
+        video.save()
     return True
 
 
@@ -334,13 +430,18 @@ def _test_joint_perturbation(
 
 
 def test_perturbation_resistance(
-    model: mujoco.MjModel, data: mujoco.MjData, ids: dict, verbose: bool = False
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    verbose: bool = False,
+    video_dir: str | None = None,
 ) -> PerturbationResult:
     """
     Test 2: How much perturbation before falling?
 
     Tests lateral and forward impulses at increasing magnitudes,
     and sinusoidal joint perturbations at increasing amplitudes.
+    When video_dir is set, records the boundary cases (last-pass, first-fail).
     """
     # Lateral impulses (in X direction)
     lateral_magnitudes = [0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 18.0, 25.0]
@@ -359,6 +460,18 @@ def test_perturbation_resistance(
         if not survived:
             break
 
+    # Record boundary videos for lateral
+    if video_dir:
+        if max_lateral > 0:
+            rec = VideoRecorder(model, data, f"{video_dir}/02_perturbation_lateral_{max_lateral:.1f}Ns_pass.mp4")
+            _test_impulse(model, data, ids, lateral_dir, max_lateral, video=rec)
+            rec.close()
+        fail_mag = lateral_magnitudes[len(lateral_survived) - 1] if not lateral_survived[-1] else None
+        if fail_mag is not None:
+            rec = VideoRecorder(model, data, f"{video_dir}/02_perturbation_lateral_{fail_mag:.1f}Ns_fail.mp4")
+            _test_impulse(model, data, ids, lateral_dir, fail_mag, video=rec)
+            rec.close()
+
     # Forward impulses (in -Y direction, biped faces -Y)
     forward_magnitudes = [0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0, 18.0, 25.0]
     forward_dir = np.array([0.0, -1.0, 0.0])
@@ -376,7 +489,19 @@ def test_perturbation_resistance(
         if not survived:
             break
 
-    # Joint perturbation (sinusoidal)
+    # Record boundary videos for forward
+    if video_dir:
+        if max_forward > 0:
+            rec = VideoRecorder(model, data, f"{video_dir}/02_perturbation_forward_{max_forward:.1f}Ns_pass.mp4")
+            _test_impulse(model, data, ids, forward_dir, max_forward, video=rec)
+            rec.close()
+        fail_mag = forward_magnitudes[len(forward_survived) - 1] if not forward_survived[-1] else None
+        if fail_mag is not None:
+            rec = VideoRecorder(model, data, f"{video_dir}/02_perturbation_forward_{fail_mag:.1f}Ns_fail.mp4")
+            _test_impulse(model, data, ids, forward_dir, fail_mag, video=rec)
+            rec.close()
+
+    # Joint perturbation (sinusoidal) — no video, these are long
     joint_amplitudes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0]
     max_joint = 0.0
 
@@ -415,6 +540,79 @@ class MobilityResult:
     best_forward_distance: float  # max forward distance while staying upright
 
 
+def _run_gait_trial(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    ids: dict,
+    amp: float,
+    duration: float,
+    gait_frequency: float,
+    fall_height_frac: float,
+    fall_up_z: float,
+    video: VideoRecorder | None = None,
+) -> tuple[float, float, bool]:
+    """Run a single gait trial. Returns (survival_time, forward_distance, fell)."""
+    reset_to_standing(model, data)
+    dt = model.opt.timestep
+    frame_every = _frame_interval(dt, VIDEO_FPS)
+
+    initial_height = get_torso_height(data, ids["body"])
+    fall_height = initial_height * fall_height_frac
+
+    # Settle
+    settle_steps = int(0.3 / dt)
+    for s in range(settle_steps):
+        mujoco.mj_step(model, data)
+        if video and s % frame_every == 0:
+            video.capture()
+
+    start_pos = data.xpos[ids["body"]].copy()
+    t = 0.0
+    fell = False
+    step = 0
+
+    while t < duration:
+        phase = 2 * np.pi * gait_frequency * t
+        for i in range(model.nu):
+            motor_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+            if motor_name is None:
+                continue
+
+            is_left = "left" in motor_name
+            leg_phase = phase if is_left else phase + np.pi
+
+            if "hip_abd" in motor_name:
+                data.ctrl[i] = amp * 0.2 * np.sin(leg_phase)
+            elif "hip" in motor_name:
+                data.ctrl[i] = amp * np.sin(leg_phase)
+            elif "knee" in motor_name:
+                data.ctrl[i] = amp * 0.5 * max(0, np.sin(leg_phase - 0.5))
+            elif "ankle" in motor_name:
+                data.ctrl[i] = amp * 0.3 * np.sin(leg_phase + 0.3)
+
+        mujoco.mj_step(model, data)
+        t += dt
+        step += 1
+
+        if video and step % frame_every == 0:
+            video.capture()
+
+        if has_fallen(data, ids["body"], fall_height, fall_up_z):
+            fell = True
+            if video:
+                for _ in range(VIDEO_FPS):
+                    mujoco.mj_step(model, data)
+                    video.capture()
+            break
+
+    if video:
+        video.save()
+
+    end_pos = data.xpos[ids["body"]].copy()
+    forward_dist = -(end_pos[1] - start_pos[1])  # -Y is forward
+    return t, forward_dist, fell
+
+
 def test_mobility_tradeoff(
     model: mujoco.MjModel,
     data: mujoco.MjData,
@@ -424,71 +622,31 @@ def test_mobility_tradeoff(
     fall_height_frac: float = 0.5,
     fall_up_z: float = 0.3,
     verbose: bool = False,
+    video_dir: str | None = None,
 ) -> MobilityResult:
     """
     Test 3: Mobility-stability tradeoff.
 
     Applies a simple alternating gait pattern (sinusoidal hip + knee control)
     at increasing amplitudes. Measures how long the robot survives and how
-    far forward it travels. The Pareto frontier of these two metrics
-    characterizes the tradeoff between stability and mobility.
+    far forward it travels.
     """
     amplitudes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0]
-    survival_times = []
-    forward_distances = []
+    survival_times: list[float] = []
+    forward_distances: list[float] = []
     max_stable_amp = 0.0
     best_forward = 0.0
 
-    dt = model.opt.timestep
+    # Record which amplitudes to video: lowest, boundary, and a high-amp fall
+    video_amps: set[float] = set()
+    if video_dir:
+        video_amps.add(amplitudes[0])  # baseline
 
     for amp in amplitudes:
-        reset_to_standing(model, data)
-
-        initial_height = get_torso_height(data, ids["body"])
-        fall_height = initial_height * fall_height_frac
-
-        # Settle
-        for _ in range(int(0.3 / dt)):
-            mujoco.mj_step(model, data)
-
-        start_pos = data.xpos[ids["body"]].copy()
-        t = 0.0
-        fell = False
-
-        while t < duration:
-            # Simple alternating gait pattern:
-            # Left hip and right hip are out of phase
-            # Knee follows hip with a phase offset
-            phase = 2 * np.pi * gait_frequency * t
-            for i in range(model.nu):
-                motor_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
-                if motor_name is None:
-                    continue
-
-                is_left = "left" in motor_name
-                leg_phase = phase if is_left else phase + np.pi
-
-                if "hip_abd" in motor_name:
-                    # Small abduction oscillation for lateral balance
-                    data.ctrl[i] = amp * 0.2 * np.sin(leg_phase)
-                elif "hip" in motor_name:
-                    data.ctrl[i] = amp * np.sin(leg_phase)
-                elif "knee" in motor_name:
-                    # Knee bends during swing phase
-                    data.ctrl[i] = amp * 0.5 * max(0, np.sin(leg_phase - 0.5))
-                elif "ankle" in motor_name:
-                    # Ankle provides push-off
-                    data.ctrl[i] = amp * 0.3 * np.sin(leg_phase + 0.3)
-
-            mujoco.mj_step(model, data)
-            t += dt
-
-            if has_fallen(data, ids["body"], fall_height, fall_up_z):
-                fell = True
-                break
-
-        end_pos = data.xpos[ids["body"]].copy()
-        forward_dist = -(end_pos[1] - start_pos[1])  # -Y is forward
+        t, forward_dist, fell = _run_gait_trial(
+            model, data, ids, amp, duration, gait_frequency,
+            fall_height_frac, fall_up_z,
+        )
 
         survival_times.append(t)
         forward_distances.append(forward_dist)
@@ -503,6 +661,44 @@ def test_mobility_tradeoff(
             print(
                 f"  Gait amplitude {amp:.2f}: {status}, forward: {forward_dist:+.3f}m"
             )
+
+        # First failure: record this and the previous (last pass)
+        if fell and video_dir and amp not in video_amps:
+            video_amps.add(amp)
+            # Previous amplitude was last pass (if it exists and survived)
+            idx = amplitudes.index(amp)
+            if idx > 0 and not survival_times[idx - 1] < duration:
+                pass  # already fell at previous too
+            elif idx > 0:
+                video_amps.add(amplitudes[idx - 1])
+            break  # stop after first fail for video selection
+
+    # Continue remaining amplitudes (without video consideration)
+    remaining_start = len(survival_times)
+    for amp in amplitudes[remaining_start:]:
+        t, forward_dist, fell = _run_gait_trial(
+            model, data, ids, amp, duration, gait_frequency,
+            fall_height_frac, fall_up_z,
+        )
+        survival_times.append(t)
+        forward_distances.append(forward_dist)
+        if not fell:
+            max_stable_amp = amp
+        if forward_dist > best_forward and (not fell or t > 2.0):
+            best_forward = forward_dist
+        if verbose:
+            status = f"survived {duration:.1f}s" if not fell else f"fell at {t:.2f}s"
+            print(f"  Gait amplitude {amp:.2f}: {status}, forward: {forward_dist:+.3f}m")
+
+    # Now record the selected video amplitudes
+    if video_dir and video_amps:
+        for amp in sorted(video_amps):
+            rec = VideoRecorder(model, data, f"{video_dir}/03_mobility_amp_{amp:.2f}.mp4")
+            _run_gait_trial(
+                model, data, ids, amp, duration, gait_frequency,
+                fall_height_frac, fall_up_z, video=rec,
+            )
+            rec.close()
 
     return MobilityResult(
         amplitudes=amplitudes,
@@ -523,34 +719,35 @@ class StabilityReport:
     perturbation: PerturbationResult
     mobility: MobilityResult
 
-    def print_summary(self):
-        print("\n" + "=" * 60)
-        print(f"STABILITY REPORT: {self.scene_path}")
-        print("=" * 60)
+    def format_summary(self) -> str:
+        lines: list[str] = []
+        lines.append("=" * 60)
+        lines.append(f"STABILITY REPORT: {self.scene_path}")
+        lines.append("=" * 60)
 
         # Passive standing
         p = self.passive
         if p.survived:
-            print("\n  1. Passive Standing:    PASS (survived 10s)")
+            lines.append("\n  1. Passive Standing:    PASS (survived 10s)")
         else:
-            print(f"\n  1. Passive Standing:    FAIL (fell at {p.time_to_fall:.3f}s)")
-        print(f"     Initial height:      {p.initial_height:.4f}m")
-        print(f"     Min height:          {p.min_height:.4f}m")
-        print(f"     Min uprightness:     {p.min_up_z:.4f}")
-        print(f"     Stability margin:    {p.avg_stability_margin:.4f}m")
+            lines.append(f"\n  1. Passive Standing:    FAIL (fell at {p.time_to_fall:.3f}s)")
+        lines.append(f"     Initial height:      {p.initial_height:.4f}m")
+        lines.append(f"     Min height:          {p.min_height:.4f}m")
+        lines.append(f"     Min uprightness:     {p.min_up_z:.4f}")
+        lines.append(f"     Stability margin:    {p.avg_stability_margin:.4f}m")
 
         # Perturbation resistance
         r = self.perturbation
-        print("\n  2. Perturbation Resistance:")
-        print(f"     Max lateral impulse: {r.max_lateral_impulse:.1f} N*s")
-        print(f"     Max forward impulse: {r.max_forward_impulse:.1f} N*s")
-        print(f"     Max joint perturb:   {r.max_joint_perturbation:.2f} rad")
+        lines.append("\n  2. Perturbation Resistance:")
+        lines.append(f"     Max lateral impulse: {r.max_lateral_impulse:.1f} N*s")
+        lines.append(f"     Max forward impulse: {r.max_forward_impulse:.1f} N*s")
+        lines.append(f"     Max joint perturb:   {r.max_joint_perturbation:.2f} rad")
 
         # Mobility
         m = self.mobility
-        print("\n  3. Mobility-Stability Tradeoff:")
-        print(f"     Max stable gait amp: {m.max_stable_amplitude:.2f}")
-        print(f"     Best forward dist:   {m.best_forward_distance:.3f}m")
+        lines.append("\n  3. Mobility-Stability Tradeoff:")
+        lines.append(f"     Max stable gait amp: {m.max_stable_amplitude:.2f}")
+        lines.append(f"     Best forward dist:   {m.best_forward_distance:.3f}m")
 
         # Overall score (composite metric for quick comparison)
         standing_score = 1.0 if p.survived else p.time_to_fall / 10.0
@@ -558,16 +755,22 @@ class StabilityReport:
         mobility_score = min(1.0, m.max_stable_amplitude / 0.5)
         overall = standing_score * 0.4 + impulse_score * 0.3 + mobility_score * 0.3
 
-        print(f"\n  OVERALL SCORE: {overall:.2f} / 1.00")
-        print(
+        lines.append(f"\n  OVERALL SCORE: {overall:.2f} / 1.00")
+        lines.append(
             f"    (standing={standing_score:.2f} * 0.4 + "
             f"impulse={impulse_score:.2f} * 0.3 + "
             f"mobility={mobility_score:.2f} * 0.3)"
         )
-        print("=" * 60)
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def print_summary(self):
+        print("\n" + self.format_summary())
 
 
-def run_stability_tests(scene_path: str, verbose: bool = False) -> StabilityReport:
+def run_stability_tests(
+    scene_path: str, verbose: bool = False, video: bool = False
+) -> StabilityReport:
     """Run all stability tests on the given scene."""
     print(f"\nLoading model: {scene_path}")
     model, data, ids = load_model(scene_path)
@@ -582,14 +785,31 @@ def run_stability_tests(scene_path: str, verbose: bool = False) -> StabilityRepo
         f"  Total mass: {total_mass:.2f} kg (torso: {torso_mass:.2f} kg, {torso_mass / total_mass * 100:.0f}%)"
     )
 
+    # Set up video output directory
+    video_dir: str | None = None
+    if video:
+        bot_name = Path(scene_path).parent.name
+        video_dir = f"stability_videos/{bot_name}"
+        os.makedirs(video_dir, exist_ok=True)
+        print(f"  Video output: {video_dir}/")
+
     print("\n--- Test 1: Passive Standing ---")
-    passive = test_passive_standing(model, data, ids, verbose=verbose)
+    if video:
+        rec = VideoRecorder(model, data, f"{video_dir}/01_passive_standing.mp4")
+        passive = test_passive_standing(model, data, ids, verbose=verbose, video=rec)
+        rec.close()
+    else:
+        passive = test_passive_standing(model, data, ids, verbose=verbose)
 
     print("\n--- Test 2: Perturbation Resistance ---")
-    perturbation = test_perturbation_resistance(model, data, ids, verbose=verbose)
+    perturbation = test_perturbation_resistance(
+        model, data, ids, verbose=verbose, video_dir=video_dir
+    )
 
     print("\n--- Test 3: Mobility-Stability Tradeoff ---")
-    mobility = test_mobility_tradeoff(model, data, ids, verbose=verbose)
+    mobility = test_mobility_tradeoff(
+        model, data, ids, verbose=verbose, video_dir=video_dir
+    )
 
     report = StabilityReport(
         scene_path=scene_path,
@@ -598,6 +818,14 @@ def run_stability_tests(scene_path: str, verbose: bool = False) -> StabilityRepo
         mobility=mobility,
     )
     report.print_summary()
+
+    # Write report to file alongside videos
+    if video_dir:
+        report_path = f"{video_dir}/report.txt"
+        with open(report_path, "w") as f:
+            f.write(report.format_summary())
+        print(f"\n  Report saved: {report_path}")
+
     return report
 
 
@@ -611,9 +839,12 @@ def main():
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show detailed per-test output"
     )
+    parser.add_argument(
+        "--video", action="store_true", help="Render MP4 videos of each test"
+    )
     args = parser.parse_args()
 
-    run_stability_tests(args.scene, verbose=args.verbose)
+    run_stability_tests(args.scene, verbose=args.verbose, video=args.video)
 
 
 if __name__ == "__main__":
