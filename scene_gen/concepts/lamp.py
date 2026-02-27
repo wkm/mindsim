@@ -87,12 +87,12 @@ def _gen_floor_lamp(p: Params) -> tuple[Prim, ...]:
         p.base_color,
     )
 
-    # Shade: wider cylinder at top of pole
+    # Shade: conical frustum (wider at bottom, narrower at top)
     shade_half = p.shade_height / 2
     shade_z = 0.036 + p.pole_height - shade_half
     shade = Prim(
-        GeomType.CYLINDER,
-        (p.shade_radius, shade_half, 0),
+        GeomType.CONE,
+        (p.shade_radius, shade_half, p.shade_radius * 0.55),
         (0, 0, shade_z),
         p.shade_color,
     )
@@ -128,12 +128,12 @@ def _gen_table_lamp(p: Params) -> tuple[Prim, ...]:
         p.base_color,
     )
 
-    # Broad shade (wider than floor lamp proportionally)
+    # Broad conical shade (wider at bottom, narrower at top)
     shade_half = p.shade_height / 2
-    shade_z = 0.05 + body_h
+    shade_z = 0.05 + body_h + shade_half
     shade = Prim(
-        GeomType.CYLINDER,
-        (p.shade_radius * 1.2, shade_half, 0),
+        GeomType.CONE,
+        (p.shade_radius * 1.2, shade_half, p.shade_radius * 0.65),
         (0, 0, shade_z),
         p.shade_color,
     )
@@ -179,15 +179,15 @@ def _gen_desk_lamp(p: Params) -> tuple[Prim, ...]:
         euler=(0.5, 0.0, 0.0),  # tilt forward
     )
 
-    # Small shade at end of upper arm
+    # Conical shade at end of upper arm
     shade_half = p.shade_height * 0.6 / 2
     shade_z = arm_top_z + arm_upper_h * 0.65
     shade = Prim(
-        GeomType.CYLINDER,
-        (p.shade_radius * 0.65, shade_half, 0),
+        GeomType.CONE,
+        (p.shade_radius * 0.65, shade_half, p.shade_radius * 0.35),
         (0, p.base_radius * 0.9, shade_z),
         p.shade_color,
-        euler=(0.35, 0.0, 0.0),  # tilt to match arm
+        euler=(0.35, 0.0, 0.0),
     )
 
     return (base, arm_lower, arm_upper, shade)
@@ -254,11 +254,11 @@ def _gen_sconce(p: Params) -> tuple[Prim, ...]:
         euler=(pi / 2, 0.0, 0.0),  # horizontal, pointing outward
     )
 
-    # Small upward-facing shade
+    # Small upward-facing conical shade
     shade_half = p.shade_height * 0.40 / 2
     shade = Prim(
-        GeomType.CYLINDER,
-        (p.shade_radius * 0.50, shade_half, 0),
+        GeomType.CONE,
+        (p.shade_radius * 0.50, shade_half, p.shade_radius * 0.30),
         (0, 0.12, mount_z + 0.03),
         p.shade_color,
     )

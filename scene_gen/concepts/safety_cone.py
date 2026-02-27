@@ -35,10 +35,10 @@ REFLECTIVE_WHITE = (0.95, 0.95, 0.98, 1.0)
 
 @dataclass(frozen=True)
 class Params:
-    base_width: float = 0.25
+    base_width: float = 0.33
     base_height: float = 0.02
-    cone_radius: float = 0.10
-    cone_height: float = 0.45
+    cone_radius: float = 0.14
+    cone_height: float = 0.71
     has_stripe: bool = True
     has_cap: bool = True
     has_base_ring: bool = True
@@ -73,14 +73,13 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
         )
         prims.append(ring)
 
-    # 2. Tapered cone (using GeomType.CYLINDER with 3 size parameters)
-    # MuJoCo tapered CYLINDER: (bottom_radius, half_height, top_radius)
+    # 2. Cone body: frustum from wide base to narrow tip
     cone_h = params.cone_height - params.base_height
     hch = cone_h / 2
-    top_r = params.cone_radius * 0.1  # small top radius for a "pointy" look
+    top_r = params.cone_radius * 0.08  # near-pointy top
     prims.append(
         Prim(
-            GeomType.CYLINDER,
+            GeomType.CONE,
             (params.cone_radius, hch, top_r),
             (0, 0, params.base_height + hch),
             params.color,
@@ -90,9 +89,11 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
     # 3. Reflective stripes (thin cylinder bands)
     if params.has_stripe:
         stripe_h = 0.05
-        stripe_r = params.cone_radius * 0.55 + 0.005
         for frac in (0.35, 0.65):
             stripe_z = params.base_height + cone_h * frac
+            # Interpolate radius at this height
+            t = frac
+            stripe_r = params.cone_radius * (1 - t) + top_r * t + 0.005
             prims.append(
                 Prim(
                     GeomType.CYLINDER,
@@ -123,26 +124,23 @@ VARIATIONS: dict[str, Params] = {
     "standard orange": Params(),
     "caution yellow": Params(
         color=SAFETY_YELLOW,
-        stripe_color=PLASTIC_BLACK,  # yellow cones often have black stripes
+        stripe_color=PLASTIC_BLACK,
     ),
     "tall pylon": Params(
-        base_width=0.35,
-        cone_radius=0.14,
-        cone_height=0.75,
-        color=SAFETY_ORANGE,
+        base_width=0.38,
+        cone_radius=0.16,
+        cone_height=0.90,
     ),
     "small marker": Params(
-        base_width=0.15,
-        cone_radius=0.06,
-        cone_height=0.20,
+        base_width=0.20,
+        cone_radius=0.08,
+        cone_height=0.30,
         has_stripe=False,
     ),
     "traffic barrel": Params(
-        base_width=0.45,
-        base_height=0.05,
-        cone_radius=0.25,
-        cone_height=0.90,
-        color=SAFETY_ORANGE,
-        stripe_color=REFLECTIVE_WHITE,
+        base_width=0.40,
+        base_height=0.04,
+        cone_radius=0.18,
+        cone_height=0.85,
     ),
 }

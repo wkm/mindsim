@@ -71,8 +71,8 @@ def _potted(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot body
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot body: tapered (narrower at bottom, classic terracotta shape)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Pot rim: wider, thin disc on top of the pot
     rim_r = pr * 1.2
@@ -111,8 +111,8 @@ def _ficus(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot: tapered (narrower at bottom)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Trunk: from pot top upward
     trunk_r = _s(0.035, s)
@@ -163,8 +163,8 @@ def _bush(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot body
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot body: tapered (narrower at bottom, classic terracotta shape)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Pot rim
     rim_r = pr * 1.15
@@ -211,8 +211,8 @@ def _cactus(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot body
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot body: tapered (narrower at bottom, classic terracotta shape)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Pot rim
     rim_r = pr * 1.15
@@ -255,8 +255,8 @@ def _fern(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot body
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot body: tapered (narrower at bottom, classic terracotta shape)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Pot rim
     rim_r = pr * 1.2
@@ -306,8 +306,8 @@ def _palm(p: Params) -> tuple[Prim, ...]:
     ph = _s(p.pot_height, s)
     ph2 = ph / 2
 
-    # Pot
-    pot = Prim(GeomType.CYLINDER, (pr, ph2, 0), (0, 0, ph2), p.pot_color)
+    # Pot: tapered (narrower at bottom)
+    pot = Prim(GeomType.CONE, (pr * 0.72, ph2, pr), (0, 0, ph2), p.pot_color)
 
     # Tall trunk
     trunk_r = _s(0.03, s)

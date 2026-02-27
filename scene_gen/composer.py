@@ -42,8 +42,16 @@ import numpy as np
 
 from scene_gen import concepts
 from scene_gen.archetypes import Archetype
+from scene_gen.cone_mesh import FACE_INDICES, make_normals, make_verts
 from scene_gen.groupings import GROUPINGS
-from scene_gen.primitives import Placement, Prim, euler_to_quat, footprint, obb_overlaps
+from scene_gen.primitives import (
+    GeomType,
+    Placement,
+    Prim,
+    euler_to_quat,
+    footprint,
+    obb_overlaps,
+)
 from scene_gen.room import (
     WALL_THICKNESS,
     Room,
@@ -327,10 +335,14 @@ class PlacedObject:
 class _GeomSlot:
     """A single body+geom pair. One body per geom eliminates the need for
     manual geom_xpos patching — mj_kinematics reliably propagates
-    model.body_pos → data.xpos → data.geom_xpos."""
+    model.body_pos → data.xpos → data.geom_xpos.
+
+    Each slot also has a companion cone mesh asset for rendering frustum
+    shapes (lamp shades, safety cones, flower pots, etc.)."""
 
     body_id: int
     geom_id: int
+    mesh_id: int = -1  # companion cone mesh (-1 if not found)
 
 
 @dataclass
@@ -354,6 +366,7 @@ class SceneComposer:
         self._slots: list[_ObjectSlot] = []
         self._room = Room(model, data)
         self._last_room_config: RoomConfig | None = None
+        self._dirty_mesh_ids: list[int] = []
         self._discover_slots()
 
     @staticmethod
@@ -377,6 +390,9 @@ class SceneComposer:
         if walls:
             prepare_room(spec)
 
+        # Placeholder cone mesh vertices (tiny, invisible)
+        _placeholder_verts = make_verts(0.001, 0.001, 0.001).flatten().tolist()
+
         for i in range(max_objects):
             for j in range(geoms_per_object):
                 body = spec.worldbody.add_body()
@@ -389,6 +405,13 @@ class SceneComposer:
                 geom.rgba = [0, 0, 0, 0]
                 geom.contype = 0
                 geom.conaffinity = 0
+
+                # Companion cone mesh for this slot (used when prim is CONE)
+                mesh = spec.add_mesh()
+                mesh.name = f"obs_{i}_g{j}_cone"
+                mesh.uservert = _placeholder_verts
+                mesh.userface = FACE_INDICES
+                mesh.smoothnormal = True
 
     @property
     def max_objects(self) -> int:
@@ -417,7 +440,10 @@ class SceneComposer:
                 if body_id < 0:
                     break
                 geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, name)
-                geom_slots.append(_GeomSlot(body_id, geom_id))
+                mesh_id = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_MESH, f"{name}_cone"
+                )
+                geom_slots.append(_GeomSlot(body_id, geom_id, mesh_id))
                 j += 1
 
             self._slots.append(_ObjectSlot(geom_slots))
@@ -450,6 +476,8 @@ class SceneComposer:
                 f"Too many objects ({len(placed_objects)}) for {self.max_objects} slots"
             )
 
+        self._dirty_mesh_ids = []
+
         # Position room walls: use explicit config, or fall back to what
         # random_scene() stored, so callers don't need to pass it twice.
         effective_room = room_config or self._last_room_config
@@ -471,6 +499,25 @@ class SceneComposer:
         """Hide all obstacle slots."""
         for slot in self._slots:
             self._hide_object(slot)
+
+    @property
+    def dirty_mesh_ids(self) -> list[int]:
+        """Mesh IDs modified during the last apply().
+
+        MuJoCo's renderer uploads mesh vertex data to the GPU only at
+        context creation time. After apply() writes new cone vertices
+        into model.mesh_vert, callers must re-upload to the GPU:
+
+          - Offscreen Renderer: ``mjr_uploadMesh(model, ctx, mesh_id)``
+          - Passive viewer: ``simulate.update_mesh(mesh_id)``
+        """
+        return self._dirty_mesh_ids
+
+    def upload_meshes(self, renderer) -> None:
+        """Upload modified cone meshes to an offscreen Renderer's GPU context."""
+        ctx = renderer._mjr_context
+        for mesh_id in self._dirty_mesh_ids:
+            mujoco.mjr_uploadMesh(self.model, ctx, mesh_id)
 
     def random_scene(
         self,
@@ -838,13 +885,35 @@ class SceneComposer:
                     self.model.body_quat[gs.body_id] = [1, 0, 0, 0]
 
                 # Geom stays at body origin — body_pos IS the world position
-                self.model.geom_type[gs.geom_id] = int(prim.geom_type)
-                self.model.geom_size[gs.geom_id] = prim.size
                 self.model.geom_pos[gs.geom_id] = [0, 0, 0]
                 self.model.geom_quat[gs.geom_id] = [1, 0, 0, 0]
                 self.model.geom_rgba[gs.geom_id] = prim.rgba
-                self.model.geom_contype[gs.geom_id] = 1
-                self.model.geom_conaffinity[gs.geom_id] = 1
+
+                if prim.geom_type == GeomType.CONE and gs.mesh_id >= 0:
+                    # Write frustum mesh data into the slot's companion mesh
+                    bottom_r, half_h, top_r = prim.size
+                    va = self.model.mesh_vertadr[gs.mesh_id]
+                    vn = self.model.mesh_vertnum[gs.mesh_id]
+                    self.model.mesh_vert[va : va + vn] = make_verts(
+                        bottom_r, half_h, top_r
+                    )
+                    na = self.model.mesh_normaladr[gs.mesh_id]
+                    nn = self.model.mesh_normalnum[gs.mesh_id]
+                    self.model.mesh_normal[na : na + nn] = make_normals(
+                        bottom_r, half_h, top_r
+                    )
+                    self.model.geom_type[gs.geom_id] = int(mujoco.mjtGeom.mjGEOM_MESH)
+                    self.model.geom_dataid[gs.geom_id] = gs.mesh_id
+                    self.model.geom_size[gs.geom_id] = [0, 0, 0]
+                    # Disable collision (convex hull is stale after vertex update)
+                    self.model.geom_contype[gs.geom_id] = 0
+                    self.model.geom_conaffinity[gs.geom_id] = 0
+                    self._dirty_mesh_ids.append(gs.mesh_id)
+                else:
+                    self.model.geom_type[gs.geom_id] = int(prim.geom_type)
+                    self.model.geom_size[gs.geom_id] = prim.size
+                    self.model.geom_contype[gs.geom_id] = 1
+                    self.model.geom_conaffinity[gs.geom_id] = 1
             else:
                 self._hide_geom_slot(gs)
 

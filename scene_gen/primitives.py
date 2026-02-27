@@ -40,6 +40,9 @@ class GeomType(IntEnum):
     SPHERE = mujoco.mjtGeom.mjGEOM_SPHERE
     CAPSULE = mujoco.mjtGeom.mjGEOM_CAPSULE
     ELLIPSOID = mujoco.mjtGeom.mjGEOM_ELLIPSOID
+    # Virtual type: rendered as a mesh frustum by the composer.
+    # Size convention: (bottom_radius, half_height, top_radius).
+    CONE = 100
 
 
 @dataclass(frozen=True)
@@ -173,6 +176,9 @@ def footprint(prims: tuple[Prim, ...]) -> tuple[float, float]:
             hx, hy = p.size[0], p.size[1]
         elif p.geom_type in (GeomType.CYLINDER, GeomType.CAPSULE, GeomType.SPHERE):
             hx = hy = p.size[0]  # radius
+        elif p.geom_type == GeomType.CONE:
+            # Frustum: footprint is the wider of bottom/top radius
+            hx = hy = max(p.size[0], p.size[2])
         elif p.geom_type == GeomType.ELLIPSOID:
             hx, hy = p.size[0], p.size[1]
         else:

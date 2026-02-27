@@ -75,6 +75,7 @@ def run_scene_preview():
     # Scene state
     current_seed = None
     scene_count = 0
+    viewer_handle = None
 
     def _generate(seed=None):
         nonlocal current_seed, scene_count
@@ -86,6 +87,13 @@ def run_scene_preview():
         arch = archetype_options[archetype_idx]
         scene = composer.random_scene(archetype=arch, seed=seed)
         composer.apply(scene)
+
+        # Upload modified cone meshes to the viewer's GPU context
+        if viewer_handle is not None:
+            sim = viewer_handle._sim()
+            if sim is not None:
+                for mesh_id in composer.dirty_mesh_ids:
+                    sim.update_mesh(mesh_id)
 
         arch_label = arch if arch else "random"
         desc = describe_scene(scene, seed=seed)
@@ -120,6 +128,7 @@ def run_scene_preview():
     _generate()
 
     with mujoco.viewer.launch_passive(m, d, key_callback=on_key) as viewer:
+        viewer_handle = viewer
         while viewer.is_running():
             step_start = time.time()
             mujoco.mj_step(m, d)

@@ -58,10 +58,10 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
     half_h = params.height / 2
     prims: list[Prim] = []
 
-    # 1. Body cylinder
+    # 1. Body: slight outward taper (narrower at bottom)
     body = Prim(
-        GeomType.CYLINDER,
-        (params.radius, half_h, 0),
+        GeomType.CONE,
+        (params.radius * 0.88, half_h, params.radius),
         (0, 0, half_h),
         params.body_color,
     )
