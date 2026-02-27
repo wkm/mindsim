@@ -1,25 +1,24 @@
 """Bathtub -- chunky Sims 1-style bathroom tub.
 
 Distinct silhouettes for standard built-in, clawfoot (with visible feet),
-corner tub, and modern freestanding oval. The outer shell + inner basin
-create the illusion of a hollow vessel; extra prims add feet, rims, or faucets.
+corner tub, and modern freestanding oval. The outer shell + a contrasting
+basin slab on top create the illusion of a hollow vessel; a rim lip, faucet
+cylinder, and optional feet complete the silhouette.
 
 Parameters:
     width:        Half-extent X (across the tub)
     depth:        Half-extent Y (length of the tub)
     height:       Half-extent Z (wall height)
-    wall_thick:   Wall thickness (outer minus inner half-extents)
-    has_rim:      Whether to add a visible rim along the top edge
-    rim_thick:    Half-height of the rim
+    wall_thick:   Wall thickness -- inset of the basin from the shell edge
+    has_rim:      Whether to add a visible rim/lip along the top edge
+    rim_thick:    Half-height of the rim slab
     has_feet:     Whether to add 4 clawfoot-style feet
     foot_radius:  Radius of each foot sphere
     foot_height:  Height the tub is raised on feet
     has_faucet:   Whether to add a faucet cylinder at one end
-    has_drain:    Whether to add a small drain inside the basin
-    has_overflow: Whether to add a small overflow plate on the wall
     shell_color:  RGBA for the outer shell
-    basin_color:  RGBA for the inner basin
-    accent_color: RGBA for rim/feet/faucet accents
+    basin_color:  RGBA for the inner basin (contrasting darker tone)
+    accent_color: RGBA for feet/faucet accents
 """
 
 from dataclasses import dataclass
@@ -52,15 +51,13 @@ class Params:
     width: float = 0.40
     depth: float = 0.80
     height: float = 0.30
-    wall_thick: float = 0.04
-    has_rim: bool = False
+    wall_thick: float = 0.05
+    has_rim: bool = True
     rim_thick: float = 0.012
     has_feet: bool = False
-    foot_radius: float = 0.03
-    foot_height: float = 0.06
+    foot_radius: float = 0.035
+    foot_height: float = 0.07
     has_faucet: bool = True
-    has_drain: bool = True
-    has_overflow: bool = True
     shell_color: tuple[float, float, float, float] = PLASTIC_WHITE
     basin_color: tuple[float, float, float, float] = BASIN_INTERIOR
     accent_color: tuple[float, float, float, float] = METAL_CHROME
@@ -68,13 +65,24 @@ class Params:
 
 @lru_cache(maxsize=128)
 def generate(params: Params = Params()) -> tuple[Prim, ...]:
-    """Generate a bathtub (up to 8 prims: shell + basin + rim + faucet + drain + feet)."""
+    """Generate a bathtub (up to 8 prims: shell + basin + rim + faucet + feet).
+
+    Strategy for a readable silhouette with solid prims:
+    - Shell: the full outer body of the tub
+    - Basin: a dark-colored slab sitting *on top* of the shell, inset from the
+      edges, so the color contrast reads as "inside" from above / at an angle
+    - Rim: a slightly wider+longer thin slab on top, overhanging the shell to
+      create a visible lip that breaks the rectangular outline
+    - Faucet: a chunky cylinder poking up at one end
+    - Feet: 4 spheres under the shell for clawfoot variants
+    """
     prims: list[Prim] = []
 
     # Base elevation: raised if tub has feet
     base_z = params.foot_height if params.has_feet else 0.0
+    wt = params.wall_thick
 
-    # 1. Outer shell: box sitting on floor (or on feet)
+    # 1. Outer shell: the main tub body
     shell = Prim(
         GeomType.BOX,
         (params.width, params.depth, params.height),
@@ -83,63 +91,54 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
     )
     prims.append(shell)
 
-    # 2. Inner basin: slightly smaller box for hollow look
-    inner_w = params.width - params.wall_thick
-    inner_d = params.depth - params.wall_thick
-    inner_h = params.height - params.wall_thick
-    basin_z = base_z + params.wall_thick + inner_h
+    # 2. Basin interior: a dark slab sitting on top of the shell, inset by
+    #    wall_thick on each side. This makes the tub walls visible as a
+    #    contrasting frame around the darker basin when viewed from above.
+    basin_w = params.width - wt
+    basin_d = params.depth - wt
+    basin_half_h = 0.012  # thin slab
+    basin_z = base_z + params.height * 2 - basin_half_h
     basin = Prim(
         GeomType.BOX,
-        (inner_w, inner_d, inner_h),
+        (basin_w, basin_d, basin_half_h),
         (0, 0, basin_z),
         params.basin_color,
     )
     prims.append(basin)
 
-    # 3. Rim: thin box around the top edge for a visible lip
+    # 3. Rim: wider + longer than the shell, thin slab on top edge.
+    #    The overhang creates a visible lip / silhouette break.
     if params.has_rim:
+        rim_overhang = 0.015
         rim_z = base_z + params.height * 2 + params.rim_thick
         rim = Prim(
             GeomType.BOX,
-            (params.width + 0.01, params.depth + 0.01, params.rim_thick),
+            (
+                params.width + rim_overhang,
+                params.depth + rim_overhang,
+                params.rim_thick,
+            ),
             (0, 0, rim_z),
-            params.accent_color,
+            params.shell_color,
         )
         prims.append(rim)
 
-    # 4. Faucet: small cylinder at one end of the tub
+    # 4. Faucet: chunky cylinder sticking up at one end (negative Y = back)
     if params.has_faucet:
-        faucet_z = base_z + params.height * 2 + 0.04
+        faucet_h = 0.05  # half-height of faucet cylinder
+        faucet_z = base_z + params.height * 2 + faucet_h
         faucet = Prim(
             GeomType.CYLINDER,
-            (0.015, 0.04, 0),
-            (0, -(params.depth - 0.06), faucet_z),
+            (0.02, faucet_h, 0),
+            (0, -(params.depth - wt * 2), faucet_z),
             params.accent_color,
         )
         prims.append(faucet)
 
-    # 4b. Drain + overflow plate (skip for clawfoot to stay within prim budget)
-    if params.has_drain and not params.has_feet:
-        drain = Prim(
-            GeomType.CYLINDER,
-            (0.02, 0.008, 0),
-            (0, -0.08, base_z + params.wall_thick + 0.02),
-            params.accent_color,
-        )
-        prims.append(drain)
-        if params.has_overflow:
-            overflow = Prim(
-                GeomType.CYLINDER,
-                (0.018, 0.008, 0),
-                (0, params.depth - 0.08, base_z + params.height * 1.6),
-                params.accent_color,
-            )
-            prims.append(overflow)
-
-    # 5-8. Clawfoot feet: 4 spheres at corners
+    # 5-8. Clawfoot feet: 4 spheres at corners, sitting on the floor.
     if params.has_feet:
-        fx = params.width - 0.04
-        fy = params.depth - 0.06
+        fx = params.width * 0.75
+        fy = params.depth * 0.80
         for sx, sy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
             foot = Prim(
                 GeomType.SPHERE,
@@ -162,12 +161,13 @@ VARIATIONS: dict[str, Params] = {
         width=0.38,
         depth=0.82,
         height=0.35,
-        wall_thick=0.03,
+        wall_thick=0.05,
         has_rim=True,
         rim_thick=0.015,
         has_feet=True,
-        foot_radius=0.035,
-        foot_height=0.07,
+        foot_radius=0.04,
+        foot_height=0.08,
+        has_faucet=False,
         shell_color=CLAWFOOT_CREAM,
         accent_color=BRASS_GOLD,
     ),
@@ -175,12 +175,13 @@ VARIATIONS: dict[str, Params] = {
         width=0.38,
         depth=0.85,
         height=0.38,
-        wall_thick=0.035,
+        wall_thick=0.05,
         has_rim=True,
         rim_thick=0.012,
         has_feet=True,
-        foot_radius=0.03,
-        foot_height=0.06,
+        foot_radius=0.035,
+        foot_height=0.07,
+        has_faucet=False,
         shell_color=CAST_IRON,
         basin_color=BASIN_INTERIOR,
         accent_color=METAL_CHROME,
@@ -189,16 +190,16 @@ VARIATIONS: dict[str, Params] = {
         width=0.60,
         depth=0.60,
         height=0.30,
-        wall_thick=0.05,
+        wall_thick=0.06,
         has_rim=True,
-        rim_thick=0.012,
+        rim_thick=0.014,
         has_faucet=True,
     ),
     "modern freestanding": Params(
         width=0.36,
         depth=0.78,
         height=0.34,
-        wall_thick=0.035,
+        wall_thick=0.05,
         has_rim=True,
         rim_thick=0.01,
         has_feet=False,
@@ -209,7 +210,7 @@ VARIATIONS: dict[str, Params] = {
         width=0.35,
         depth=0.70,
         height=0.42,
-        wall_thick=0.04,
+        wall_thick=0.05,
         has_rim=True,
         rim_thick=0.015,
     ),
@@ -217,7 +218,7 @@ VARIATIONS: dict[str, Params] = {
         width=0.40,
         depth=0.80,
         height=0.32,
-        wall_thick=0.04,
+        wall_thick=0.05,
         has_rim=True,
         rim_thick=0.012,
         shell_color=RETRO_GREEN,
@@ -228,7 +229,7 @@ VARIATIONS: dict[str, Params] = {
         width=0.36,
         depth=0.72,
         height=0.28,
-        wall_thick=0.04,
+        wall_thick=0.05,
         has_rim=False,
         has_faucet=True,
     ),

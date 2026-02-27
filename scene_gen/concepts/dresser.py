@@ -59,34 +59,29 @@ class Params:
 
 @lru_cache(maxsize=128)
 def generate(params: Params = Params()) -> tuple[Prim, ...]:
-    """Generate a dresser (top + 2 sides + back + drawer fronts + opt mirror).
+    """Generate a dresser (solid body + drawer fronts + handles + opt mirror).
 
-    Stays within 8 geoms:
-    - Without mirror: top + 2 sides + back + up to 4 drawer fronts = 8
-    - With mirror: top + 2 sides + mirror + up to 4 drawer fronts = 8
-      (drops back panel to make room for mirror)
+    Uses a single solid body box for efficiency, with contrasting drawer
+    fronts on the front face and small protruding handle boxes for detail.
+
+    Prim budget (max 8):
+    - Without mirror: 1 body + N drawers + N handles  (N <= 3 → 7 prims)
+    - With mirror:    1 body + 1 mirror + N drawers + handles for remaining
     """
     hw = params.width / 2
     hd = params.depth / 2
-    t = params.panel_thickness
-    ht = t / 2
+    hh = params.height / 2
     bc = params.body_color
     dc = params.drawer_color
+    ac = params.accent_color
 
     prims: list[Prim] = []
 
-    # Top panel
-    prims.append(Prim(GeomType.BOX, (hw, hd, ht), (0, 0, params.height - ht), bc))
+    # Solid body box — the entire dresser carcass
+    prims.append(Prim(GeomType.BOX, (hw, hd, hh), (0, 0, hh), bc))
 
-    # Left side panel
-    side_h = (params.height - t) / 2
-    prims.append(Prim(GeomType.BOX, (ht, hd, side_h), (-hw + ht, 0, side_h), bc))
-
-    # Right side panel
-    prims.append(Prim(GeomType.BOX, (ht, hd, side_h), (hw - ht, 0, side_h), bc))
-
+    # Optional vanity mirror on top
     if params.has_mirror:
-        # Vanity mirror — tall thin panel centered on top
         mirror_w = params.width * 0.5
         mirror_h = params.height * 0.5
         mirror_t = 0.02
@@ -95,37 +90,53 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
                 GeomType.BOX,
                 (mirror_w / 2, mirror_t / 2, mirror_h / 2),
                 (0, hd * 0.3, params.height + mirror_h / 2),
-                params.accent_color,
-            )
-        )
-    else:
-        # Back panel (thin)
-        back_t = 0.012
-        prims.append(
-            Prim(
-                GeomType.BOX,
-                (hw - t, back_t / 2, side_h),
-                (0, hd - back_t / 2, side_h),
-                bc,
+                ac,
             )
         )
 
-    # Drawer fronts — evenly spaced vertically, with thin accent lines
-    n = min(params.n_drawers, 4)  # cap at 4 to stay within 8 geoms total
-    usable_h = params.height - t  # below the top
-    drawer_h = (usable_h - (n + 1) * params.drawer_gap) / n
-    drawer_hh = drawer_h / 2
-    drawer_hw = hw - t - params.drawer_gap
-    drawer_front_t = 0.015
+    # Drawer fronts — contrasting-color panels on the front face
+    remaining = 8 - len(prims)
+    # Each drawer needs a front + a handle = 2 prims per drawer
+    n = min(params.n_drawers, remaining // 2)
+
+    drawer_inset = params.panel_thickness  # inset from edges
+    drawer_hw = hw - drawer_inset
+    drawer_front_t = 0.012  # half-extent Y for drawer front
+
+    # Place drawer fronts just proud of the body face
+    drawer_y = -(hd + drawer_front_t)
+
+    total_gap = params.drawer_gap * (n + 1)
+    drawer_height = (params.height - total_gap) / n if n > 0 else 0
+    drawer_hh = drawer_height / 2
+
+    # Handle dimensions — chunky Sims 1 style knobs
+    handle_hw = hw * 0.18  # wide, chunky handle bar
+    handle_hh = 0.008
+    handle_depth = 0.008  # how far handle protrudes
+    handle_y = drawer_y - drawer_front_t - handle_depth
 
     for i in range(n):
-        z = params.drawer_gap + i * (drawer_h + params.drawer_gap) + drawer_hh
+        z_bottom = params.drawer_gap * (i + 1) + drawer_height * i
+        z_center = z_bottom + drawer_hh
+
+        # Drawer front panel
         prims.append(
             Prim(
                 GeomType.BOX,
-                (drawer_hw, drawer_front_t / 2, drawer_hh),
-                (0, -hd + drawer_front_t / 2, z),
+                (drawer_hw, drawer_front_t, drawer_hh),
+                (0, drawer_y, z_center),
                 dc,
+            )
+        )
+
+        # Drawer handle — small protruding box centered on drawer face
+        prims.append(
+            Prim(
+                GeomType.BOX,
+                (handle_hw, handle_depth, handle_hh),
+                (0, handle_y, z_center),
+                ac,
             )
         )
 
