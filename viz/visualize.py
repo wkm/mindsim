@@ -7,8 +7,8 @@ import time
 import numpy as np
 import rerun as rr
 
-import rerun_logger
-from sim_env import SimEnv
+from sim.env import SimEnv
+from viz import rerun_logger
 
 CAMERA_WIDTH = 128
 CAMERA_HEIGHT = 128

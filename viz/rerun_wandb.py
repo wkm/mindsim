@@ -13,8 +13,8 @@ import os
 import rerun as rr
 import wandb
 
-import rerun_logger
-from training_blueprint import create_training_blueprint
+from viz import rerun_logger
+from viz.blueprint import create_training_blueprint
 
 
 class RerunWandbLogger:

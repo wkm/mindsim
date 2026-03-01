@@ -12,10 +12,15 @@ import pytest
 import torch
 import wandb
 
-from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
-from pipeline import pipeline_for_bot
-from reward_hierarchy import build_reward_hierarchy
-from train import (
+from training.checkpoint import (
+    load_checkpoint,
+    save_checkpoint,
+    validate_checkpoint_config,
+)
+from training.env import TrainingEnv
+from training.pipeline import pipeline_for_bot
+from training.rewards import build_reward_hierarchy
+from training.train import (
     LSTMPolicy,
     TinyPolicy,
     collect_episode,
@@ -23,7 +28,6 @@ from train import (
     train_step_batched,
     train_step_ppo,
 )
-from training_env import TrainingEnv
 
 
 def _smoketest_config():
@@ -217,7 +221,7 @@ class TestParallelCollection:
         cfg = _smoketest_config()
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
 
-        from parallel import ParallelCollector
+        from training.parallel import ParallelCollector
 
         collector = ParallelCollector(
             bot_name=cfg.bot_name,
@@ -246,7 +250,7 @@ class TestParallelCollection:
         cfg = _smoketest_config()
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
 
-        from parallel import ParallelCollector
+        from training.parallel import ParallelCollector
 
         collector = ParallelCollector(
             bot_name=cfg.bot_name,
@@ -276,7 +280,7 @@ class TestParallelCollection:
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
 
-        from parallel import ParallelCollector
+        from training.parallel import ParallelCollector
 
         collector = ParallelCollector(
             bot_name=cfg.bot_name,

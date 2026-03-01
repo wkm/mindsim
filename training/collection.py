@@ -9,10 +9,12 @@ import numpy as np
 import rerun as rr
 import torch
 
-import rerun_logger
+from viz import rerun_logger
 
 
-def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=False, *, hierarchy):
+def collect_episode(
+    env, policy, device="cpu", log_rerun=False, deterministic=False, *, hierarchy
+):
     """
     Run one episode and collect data.
 
@@ -57,8 +59,11 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
 
     # Accumulate raw reward inputs (physical measures)
     raw_input_keys = [
-        "raw_up_z", "raw_forward_vel", "raw_energy",
-        "raw_contact_count", "raw_action_jerk",
+        "raw_up_z",
+        "raw_forward_vel",
+        "raw_energy",
+        "raw_contact_count",
+        "raw_action_jerk",
     ]
     raw_input_sums = {k: 0.0 for k in raw_input_keys}
 
@@ -234,7 +239,8 @@ def collect_episode(env, policy, device="cpu", log_rerun=False, deterministic=Fa
             "forward_distance": info.get("forward_distance", 0.0),
             "lateral_drift": info.get("lateral_drift", 0.0),
             "total_path_length": total_path_length,
-            "avg_speed": total_path_length / (episode_time if episode_time > 0 else 1.0),
+            "avg_speed": total_path_length
+            / (episode_time if episode_time > 0 else 1.0),
             "survival_time": episode_time,
             "joint_activity": joint_vel_sum / max(steps, 1),
         },

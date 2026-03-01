@@ -38,39 +38,85 @@ make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
 
 ```txt
 mindsim/
-├── main.py                   # Single entry point for all modes
-├── run_manager.py            # Run directory lifecycle & W&B init
+├── main.py                      # Entry point + TUI app (MindSimApp)
+│
+├── training/                    # RL training loop
+│   ├── train.py                 # Main training orchestration
+│   ├── env.py                   # TrainingEnv (wraps SimEnv with rewards)
+│   ├── pipeline.py              # Per-bot training config
+│   ├── algorithms.py            # PPO/REINFORCE
+│   ├── collection.py            # Episode collection
+│   ├── parallel.py              # Multiprocessing collection
+│   ├── policies.py              # Neural networks (LSTM, Tiny)
+│   ├── rewards.py               # Reward hierarchy
+│   ├── checkpoint.py            # Save/load checkpoints
+│   ├── dashboard.py             # Metrics display helpers
+│   ├── tweaks.py                # Live config (tweaks.json)
+│   ├── run_manager.py           # Run lifecycle, naming, W&B init
+│   └── git_utils.py             # Git helpers
+│
+├── sim/                         # Physical simulation
+│   ├── env.py                   # SimEnv (MuJoCo wrapper)
+│   └── scene_preview.py         # Scene gen preview viewer
+│
+├── viz/                         # Visualization & replay
+│   ├── replay.py                # Download/regenerate recordings
+│   ├── rerun_logger.py          # Rerun logging
+│   ├── rerun_wandb.py           # W&B integration
+│   ├── visualize.py             # One-shot visualization
+│   └── blueprint.py             # Rerun layout
+│
+├── tools/                       # Standalone tools
+│   ├── play.py                  # Interactive play
+│   ├── view.py                  # MuJoCo viewer
+│   ├── quick_sim.py             # Debug viz
+│   ├── stability_test.py        # Stability testing
+│   ├── remote_train.py          # GCP runner
+│   └── ai_commentary.py         # AI analysis
+│
+├── tui/                         # TUI screens
+│   └── screens/
+│       ├── main_menu.py         # Top-level menu
+│       ├── run_browser.py       # Browse training runs
+│       ├── run_action.py        # Actions for a selected run
+│       ├── gcp_instances.py     # GCP instance management
+│       ├── bot_selector.py      # Bot picker
+│       ├── dirty_tree.py        # Uncommitted changes warning
+│       ├── checkpoint_picker.py # Checkpoint selection
+│       └── training_dashboard.py # Live training metrics
+│
+├── scene_gen/                   # Procedural scene generation
+│   ├── primitives.py            # Prim types, GeomType, materials
+│   ├── composer.py              # SceneComposer, placement
+│   └── concepts/                # Parametric furniture (auto-discovered)
+│
+├── bots/                        # Bot definitions
+│   └── simple2wheeler/
+│       ├── bot.xml              # Robot: bodies, joints, cameras, meshes
+│       ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
+│       └── meshes/*.stl         # Visual geometry
+│
 ├── worlds/
-│   └── room.xml             # Standalone arena (floor, curbs, target, distractors)
-├── bots/simple2wheeler/
-│   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
-│   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
-│   └── meshes/*.stl         # Visual geometry (scaled in XML)
-├── sim_env.py               # Environment API (SimEnv)
-├── train.py                 # Training loop & policy networks
-├── checkpoint.py            # Checkpoint save/load/resolve
-├── view.py                  # MuJoCo viewer
-├── play.py                  # Interactive play mode
-├── scene_preview.py          # Scene gen preview (loads room.xml directly)
-├── scene_gen/                # Procedural scene generation
-│   ├── primitives.py        # Prim types, GeomType, material colors
-│   ├── composer.py          # SceneComposer, placement, descriptions
-│   └── concepts/            # Parametric furniture (auto-discovered)
-│       ├── table.py         # Table (top + 4 legs)
-│       ├── chair.py         # Chair (seat + back + 4 legs)
-│       └── shelf.py         # Shelf (2 sides + N boards)
-├── visualize.py             # Rerun visualization
-└── runs/                    # Per-run directories (gitignored)
-    └── s2w-lstm-0218-1045/
-        ├── run_info.json    # Run metadata
-        ├── checkpoints/     # Model checkpoints
-        └── recordings/      # Rerun .rrd files
+│   └── room.xml                 # Standalone arena (floor, curbs, target)
+│
+├── tests/                       # Test suite
+│   ├── test_smoketest.py        # 39 training/env tests
+│   ├── test_tui_snapshots.py    # 4 TUI snapshot tests
+│   └── snapshot_drivers/        # Minimal apps for snapshot tests
+│
+└── runs/                        # ALL runtime output (gitignored)
+    ├── <run_name>/              # Training runs
+    │   ├── run_info.json
+    │   ├── checkpoints/
+    │   └── recordings/
+    └── replays/                 # Downloaded recordings
+        └── <run_name>/
 ```
 
 ## Environment API
 
 ```python
-from sim_env import SimEnv
+from sim.env import SimEnv
 
 env = SimEnv(render_width=128, render_height=128)
 
@@ -157,21 +203,21 @@ Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next sce
 
 ## Key Files
 
-- **main.py** - Single entry point for all modes (TUI, view, play, train, etc.)
-- **run_manager.py** - Run directory lifecycle, run naming, W&B init, run discovery
-- **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
-- **config.py** - Centralized training configuration (all hyperparameters)
-- **bot.xml** - Robot structure (motors, sensors, camera, meshes)
-- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors)
-- **scene.xml** - Thin wrapper: timestep + bot.xml + room.xml include
-- **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
-- **view.py** - MuJoCo viewer (called via `main.py view`)
-- **play.py** - Interactive play mode (called via `main.py play`)
-- **scene_preview.py** - Scene gen preview in MuJoCo viewer (called via `main.py scene`)
+- **main.py** - Entry point + MindSimApp TUI application
+- **training/train.py** - Training loop orchestration
+- **training/pipeline.py** - Per-bot training config (hyperparameters, rewards)
+- **training/run_manager.py** - Run lifecycle, naming, W&B init, run discovery
+- **training/checkpoint.py** - Checkpoint save/load/resolve
+- **training/policies.py** - Neural networks (LSTMPolicy, TinyPolicy)
+- **training/rewards.py** - Reward hierarchy system
+- **sim/env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
+- **sim/scene_preview.py** - Scene gen preview in MuJoCo viewer
+- **viz/replay.py** - Download/regenerate Rerun recordings
+- **viz/visualize.py** - One-shot Rerun visualization
+- **tools/play.py** - Interactive play mode
+- **tools/view.py** - MuJoCo viewer
 - **scene_gen/** - Procedural scene generation (concepts, composer, primitives)
-- **train.py** - Training loop and policy networks (called via `main.py train`)
-- **rerun_wandb.py** - Rerun-W&B integration for eval episode recordings
-- **visualize.py** - Rerun visualization (called via `main.py visualize`)
+- **tui/screens/** - All TUI screens (8 screens extracted from main.py)
 
 ## Run Management
 

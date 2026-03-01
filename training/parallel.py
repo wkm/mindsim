@@ -19,7 +19,9 @@ _worker_policy = None
 _worker_hierarchy = None
 
 
-def _init_worker(env_config_dict, policy_class_name, policy_kwargs, bot_name, env_vars=None):
+def _init_worker(
+    env_config_dict, policy_class_name, policy_kwargs, bot_name, env_vars=None
+):
     """Initialize a persistent environment and policy in the worker process."""
     global _worker_env, _worker_policy, _worker_hierarchy
 
@@ -27,12 +29,13 @@ def _init_worker(env_config_dict, policy_class_name, policy_kwargs, bot_name, en
     if env_vars:
         os.environ.update(env_vars)
 
-    from pipeline import EnvConfig
-    from reward_hierarchy import build_reward_hierarchy
-    from train import LSTMPolicy, MLPPolicy, TinyPolicy
-    from training_env import TrainingEnv
-
     import warnings
+
+    from training.env import TrainingEnv
+    from training.pipeline import EnvConfig
+    from training.rewards import build_reward_hierarchy
+    from training.train import LSTMPolicy, MLPPolicy, TinyPolicy
+
     env_config = EnvConfig(**env_config_dict)
     _worker_env = TrainingEnv.from_config(env_config)
     with warnings.catch_warnings():
@@ -54,7 +57,7 @@ def _collect_one(args):
 
     state_dict_np, curriculum_stage, stage_progress, num_stages, deterministic = args
 
-    from train import collect_episode
+    from training.train import collect_episode
 
     # Convert numpy arrays back to torch tensors
     state_dict = {k: torch.from_numpy(v) for k, v in state_dict_np.items()}

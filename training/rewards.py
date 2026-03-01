@@ -23,10 +23,12 @@ from enum import IntEnum
 
 class Priority(IntEnum):
     """Reward priority levels. Higher-priority (lower value) should dominate."""
+
     SURVIVE = 0  # Standing > everything
-    TASK = 1     # Moving toward goal
-    STYLE = 2    # Quality of movement
-    GUARD = 3    # Small penalties for bad habits
+    TASK = 1  # Moving toward goal
+    STYLE = 2  # Quality of movement
+    GUARD = 3  # Small penalties for bad habits
+
 
 # Module-level aliases for convenience
 SURVIVE = Priority.SURVIVE
@@ -39,14 +41,14 @@ GUARD = Priority.GUARD
 class RewardComponent:
     """A single per-step reward component with metadata."""
 
-    name: str                        # e.g. "alive", "forward_velocity"
-    priority: int                    # 0=SURVIVE, 1=TASK, 2=STYLE, 3=GUARD
-    kind: str                        # "bonus" or "penalty"
-    scale: float                     # Multiplier applied to raw value
-    raw_range: tuple[float, float]   # (min, max) of raw value per step
-    label: str                       # Human-readable label for dashboard
-    unit: str = ""                   # e.g. "m/s", "m", "" (dimensionless)
-    gated_by: str | None = None      # Name of gating condition
+    name: str  # e.g. "alive", "forward_velocity"
+    priority: int  # 0=SURVIVE, 1=TASK, 2=STYLE, 3=GUARD
+    kind: str  # "bonus" or "penalty"
+    scale: float  # Multiplier applied to raw value
+    raw_range: tuple[float, float]  # (min, max) of raw value per step
+    label: str  # Human-readable label for dashboard
+    unit: str = ""  # e.g. "m/s", "m", "" (dimensionless)
+    gated_by: str | None = None  # Name of gating condition
 
     @property
     def max_per_step(self) -> float:
@@ -70,14 +72,16 @@ class BonusEvent:
     """One-time reward event (success, failure, instability)."""
 
     name: str
-    value: float      # Positive or negative
+    value: float  # Positive or negative
     label: str
 
 
 class RewardHierarchy:
     """Declarative reward structure with dominance validation."""
 
-    def __init__(self, components: list[RewardComponent], events: list[BonusEvent] | None = None):
+    def __init__(
+        self, components: list[RewardComponent], events: list[BonusEvent] | None = None
+    ):
         self.components = {c.name: c for c in components}
         self.events = {e.name: e for e in (events or [])}
         self._validation_warnings: list[str] = []
@@ -110,7 +114,7 @@ class RewardHierarchy:
 
             # Maximum contribution from all lower priority levels
             lower_max = 0.0
-            for q in priorities[i + 1:]:
+            for q in priorities[i + 1 :]:
                 for c in by_priority[q]:
                     lower_max += c.max_per_step
 
@@ -161,7 +165,9 @@ class RewardHierarchy:
                     range_str = f"{scaled_lo:+.3f}/step{unit_str}"
                 else:
                     range_str = f"[{scaled_lo:+.3f}, {scaled_hi:+.3f}]/step{unit_str}"
-                lines.append(f"  P{p} {p_name:<8s} {c.label:<22s} {range_str}{gate_str}")
+                lines.append(
+                    f"  P{p} {p_name:<8s} {c.label:<22s} {range_str}{gate_str}"
+                )
 
         return "\n".join(lines)
 
@@ -189,7 +195,7 @@ class RewardHierarchy:
                     higher_min += c.scale * hi
 
             lower_max = 0.0
-            for q in priorities[i + 1:]:
+            for q in priorities[i + 1 :]:
                 for c in by_priority[q]:
                     lower_max += c.max_per_step
 
@@ -230,17 +236,27 @@ class RewardHierarchy:
             "alive": self.components.get("alive", _zero_component).scale,
             "energy": self.components.get("energy", _zero_component).scale,
             "contact": self.components.get("contact", _zero_component).scale,
-            "forward_vel": self.components.get("forward_velocity", _zero_component).scale,
+            "forward_vel": self.components.get(
+                "forward_velocity", _zero_component
+            ).scale,
             "smoothness": self.components.get("smoothness", _zero_component).scale,
-            "has_walking_stage": 1.0 if self.components.get("forward_velocity", _zero_component).scale > 0 else 0.0,
-            "fall_detection": 1.0 if self.components.get("alive", _zero_component).gated_by == "is_healthy" else 0.0,
+            "has_walking_stage": 1.0
+            if self.components.get("forward_velocity", _zero_component).scale > 0
+            else 0.0,
+            "fall_detection": 1.0
+            if self.components.get("alive", _zero_component).gated_by == "is_healthy"
+            else 0.0,
         }
 
 
 # Sentinel for missing components
 _zero_component = RewardComponent(
-    name="_zero", priority=GUARD, kind="bonus", scale=0.0,
-    raw_range=(0.0, 0.0), label="",
+    name="_zero",
+    priority=GUARD,
+    kind="bonus",
+    scale=0.0,
+    raw_range=(0.0, 0.0),
+    label="",
 )
 
 
@@ -257,25 +273,73 @@ def childbiped_rewards(cfg) -> RewardHierarchy:
     """
     n_actuators = 12
     components = [
-        RewardComponent("alive", SURVIVE, "bonus", cfg.alive_bonus,
-                        (1.0, 1.0), "alive", gated_by="is_healthy"),
-        RewardComponent("distance", TASK, "bonus", cfg.distance_reward_scale,
-                        (-1.0, 1.0), "distance", unit="m"),
-        RewardComponent("forward_velocity", TASK, "bonus", cfg.forward_velocity_reward_scale,
-                        (0.0, 1.0), "forward velocity", unit="m/s",
-                        gated_by="in_walking_stage, is_healthy"),
-        RewardComponent("upright", STYLE, "bonus", cfg.upright_reward_scale,
-                        (0.0, 1.0), "upright"),
-        RewardComponent("energy", STYLE, "penalty", cfg.energy_penalty_scale,
-                        (-float(n_actuators), 0.0), "energy"),
-        RewardComponent("smoothness", STYLE, "penalty", cfg.action_smoothness_scale,
-                        (-4.0 * n_actuators, 0.0), "smoothness"),
-        RewardComponent("exploration", TASK, "bonus", cfg.movement_bonus,
-                        (0.0, 0.1), "exploration", unit="m"),
-        RewardComponent("contact", GUARD, "penalty", cfg.ground_contact_penalty,
-                        (-1.0, 0.0), "contact"),
-        RewardComponent("time", GUARD, "penalty", cfg.time_penalty,
-                        (-1.0, -1.0), "time"),
+        RewardComponent(
+            "alive",
+            SURVIVE,
+            "bonus",
+            cfg.alive_bonus,
+            (1.0, 1.0),
+            "alive",
+            gated_by="is_healthy",
+        ),
+        RewardComponent(
+            "distance",
+            TASK,
+            "bonus",
+            cfg.distance_reward_scale,
+            (-1.0, 1.0),
+            "distance",
+            unit="m",
+        ),
+        RewardComponent(
+            "forward_velocity",
+            TASK,
+            "bonus",
+            cfg.forward_velocity_reward_scale,
+            (0.0, 1.0),
+            "forward velocity",
+            unit="m/s",
+            gated_by="in_walking_stage, is_healthy",
+        ),
+        RewardComponent(
+            "upright", STYLE, "bonus", cfg.upright_reward_scale, (0.0, 1.0), "upright"
+        ),
+        RewardComponent(
+            "energy",
+            STYLE,
+            "penalty",
+            cfg.energy_penalty_scale,
+            (-float(n_actuators), 0.0),
+            "energy",
+        ),
+        RewardComponent(
+            "smoothness",
+            STYLE,
+            "penalty",
+            cfg.action_smoothness_scale,
+            (-4.0 * n_actuators, 0.0),
+            "smoothness",
+        ),
+        RewardComponent(
+            "exploration",
+            TASK,
+            "bonus",
+            cfg.movement_bonus,
+            (0.0, 0.1),
+            "exploration",
+            unit="m",
+        ),
+        RewardComponent(
+            "contact",
+            GUARD,
+            "penalty",
+            cfg.ground_contact_penalty,
+            (-1.0, 0.0),
+            "contact",
+        ),
+        RewardComponent(
+            "time", GUARD, "penalty", cfg.time_penalty, (-1.0, -1.0), "time"
+        ),
     ]
     return RewardHierarchy(components)
 
@@ -284,25 +348,73 @@ def biped_rewards(cfg) -> RewardHierarchy:
     """Reward hierarchy for the 8-joint duck biped."""
     n_actuators = 8
     components = [
-        RewardComponent("alive", SURVIVE, "bonus", cfg.alive_bonus,
-                        (1.0, 1.0), "alive", gated_by="is_healthy"),
-        RewardComponent("distance", TASK, "bonus", cfg.distance_reward_scale,
-                        (-1.0, 1.0), "distance", unit="m"),
-        RewardComponent("forward_velocity", TASK, "bonus", cfg.forward_velocity_reward_scale,
-                        (0.0, 1.0), "forward velocity", unit="m/s",
-                        gated_by="in_walking_stage, is_healthy"),
-        RewardComponent("upright", STYLE, "bonus", cfg.upright_reward_scale,
-                        (0.0, 1.0), "upright"),
-        RewardComponent("energy", STYLE, "penalty", cfg.energy_penalty_scale,
-                        (-float(n_actuators), 0.0), "energy"),
-        RewardComponent("smoothness", STYLE, "penalty", cfg.action_smoothness_scale,
-                        (-4.0 * n_actuators, 0.0), "smoothness"),
-        RewardComponent("exploration", TASK, "bonus", cfg.movement_bonus,
-                        (0.0, 0.1), "exploration", unit="m"),
-        RewardComponent("contact", GUARD, "penalty", cfg.ground_contact_penalty,
-                        (-1.0, 0.0), "contact"),
-        RewardComponent("time", GUARD, "penalty", cfg.time_penalty,
-                        (-1.0, -1.0), "time"),
+        RewardComponent(
+            "alive",
+            SURVIVE,
+            "bonus",
+            cfg.alive_bonus,
+            (1.0, 1.0),
+            "alive",
+            gated_by="is_healthy",
+        ),
+        RewardComponent(
+            "distance",
+            TASK,
+            "bonus",
+            cfg.distance_reward_scale,
+            (-1.0, 1.0),
+            "distance",
+            unit="m",
+        ),
+        RewardComponent(
+            "forward_velocity",
+            TASK,
+            "bonus",
+            cfg.forward_velocity_reward_scale,
+            (0.0, 1.0),
+            "forward velocity",
+            unit="m/s",
+            gated_by="in_walking_stage, is_healthy",
+        ),
+        RewardComponent(
+            "upright", STYLE, "bonus", cfg.upright_reward_scale, (0.0, 1.0), "upright"
+        ),
+        RewardComponent(
+            "energy",
+            STYLE,
+            "penalty",
+            cfg.energy_penalty_scale,
+            (-float(n_actuators), 0.0),
+            "energy",
+        ),
+        RewardComponent(
+            "smoothness",
+            STYLE,
+            "penalty",
+            cfg.action_smoothness_scale,
+            (-4.0 * n_actuators, 0.0),
+            "smoothness",
+        ),
+        RewardComponent(
+            "exploration",
+            TASK,
+            "bonus",
+            cfg.movement_bonus,
+            (0.0, 0.1),
+            "exploration",
+            unit="m",
+        ),
+        RewardComponent(
+            "contact",
+            GUARD,
+            "penalty",
+            cfg.ground_contact_penalty,
+            (-1.0, 0.0),
+            "contact",
+        ),
+        RewardComponent(
+            "time", GUARD, "penalty", cfg.time_penalty, (-1.0, -1.0), "time"
+        ),
     ]
     return RewardHierarchy(components)
 
@@ -310,12 +422,27 @@ def biped_rewards(cfg) -> RewardHierarchy:
 def wheeler_rewards(cfg) -> RewardHierarchy:
     """Reward hierarchy for the 2-wheel robot (simple2wheeler)."""
     components = [
-        RewardComponent("distance", TASK, "bonus", cfg.distance_reward_scale,
-                        (-1.0, 1.0), "distance", unit="m"),
-        RewardComponent("exploration", TASK, "bonus", cfg.movement_bonus,
-                        (0.0, 0.1), "exploration", unit="m"),
-        RewardComponent("time", GUARD, "penalty", cfg.time_penalty,
-                        (-1.0, -1.0), "time"),
+        RewardComponent(
+            "distance",
+            TASK,
+            "bonus",
+            cfg.distance_reward_scale,
+            (-1.0, 1.0),
+            "distance",
+            unit="m",
+        ),
+        RewardComponent(
+            "exploration",
+            TASK,
+            "bonus",
+            cfg.movement_bonus,
+            (0.0, 0.1),
+            "exploration",
+            unit="m",
+        ),
+        RewardComponent(
+            "time", GUARD, "penalty", cfg.time_penalty, (-1.0, -1.0), "time"
+        ),
     ]
     return RewardHierarchy(components)
 
@@ -324,23 +451,65 @@ def walker2d_rewards(cfg) -> RewardHierarchy:
     """Reward hierarchy for Walker2d Gymnasium-style walker."""
     n_actuators = 6
     components = [
-        RewardComponent("alive", SURVIVE, "bonus", cfg.alive_bonus,
-                        (1.0, 1.0), "alive", gated_by="is_healthy"),
-        RewardComponent("distance", TASK, "bonus", cfg.distance_reward_scale,
-                        (-1.0, 1.0), "distance", unit="m"),
-        RewardComponent("forward_velocity", TASK, "bonus", cfg.forward_velocity_reward_scale,
-                        (0.0, 1.0), "forward velocity", unit="m/s",
-                        gated_by="in_walking_stage, is_healthy"),
-        RewardComponent("upright", STYLE, "bonus", cfg.upright_reward_scale,
-                        (0.0, 1.0), "upright"),
-        RewardComponent("energy", STYLE, "penalty", cfg.energy_penalty_scale,
-                        (-float(n_actuators), 0.0), "energy"),
-        RewardComponent("exploration", TASK, "bonus", cfg.movement_bonus,
-                        (0.0, 0.1), "exploration", unit="m"),
-        RewardComponent("contact", GUARD, "penalty", cfg.ground_contact_penalty,
-                        (-1.0, 0.0), "contact"),
-        RewardComponent("time", GUARD, "penalty", cfg.time_penalty,
-                        (-1.0, -1.0), "time"),
+        RewardComponent(
+            "alive",
+            SURVIVE,
+            "bonus",
+            cfg.alive_bonus,
+            (1.0, 1.0),
+            "alive",
+            gated_by="is_healthy",
+        ),
+        RewardComponent(
+            "distance",
+            TASK,
+            "bonus",
+            cfg.distance_reward_scale,
+            (-1.0, 1.0),
+            "distance",
+            unit="m",
+        ),
+        RewardComponent(
+            "forward_velocity",
+            TASK,
+            "bonus",
+            cfg.forward_velocity_reward_scale,
+            (0.0, 1.0),
+            "forward velocity",
+            unit="m/s",
+            gated_by="in_walking_stage, is_healthy",
+        ),
+        RewardComponent(
+            "upright", STYLE, "bonus", cfg.upright_reward_scale, (0.0, 1.0), "upright"
+        ),
+        RewardComponent(
+            "energy",
+            STYLE,
+            "penalty",
+            cfg.energy_penalty_scale,
+            (-float(n_actuators), 0.0),
+            "energy",
+        ),
+        RewardComponent(
+            "exploration",
+            TASK,
+            "bonus",
+            cfg.movement_bonus,
+            (0.0, 0.1),
+            "exploration",
+            unit="m",
+        ),
+        RewardComponent(
+            "contact",
+            GUARD,
+            "penalty",
+            cfg.ground_contact_penalty,
+            (-1.0, 0.0),
+            "contact",
+        ),
+        RewardComponent(
+            "time", GUARD, "penalty", cfg.time_penalty, (-1.0, -1.0), "time"
+        ),
     ]
     return RewardHierarchy(components)
 
@@ -374,7 +543,8 @@ if __name__ == "__main__":
         uv run python reward_hierarchy.py childbiped   # one bot
     """
     import sys
-    from pipeline import pipeline_for_bot
+
+    from training.pipeline import pipeline_for_bot
 
     all_bots = ["childbiped", "simplebiped", "simple2wheeler", "walker2d"]
 
@@ -387,6 +557,7 @@ if __name__ == "__main__":
             continue
 
         import warnings
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             cfg = pipeline_for_bot(name)
@@ -401,7 +572,7 @@ if __name__ == "__main__":
         print(h.dominance_check())
 
         # --- View 2: Scenarios (concrete values) ---
-        print(f"\n  Scenarios (per-step reward):")
+        print("\n  Scenarios (per-step reward):")
         active = h.active_components()
 
         def scenario(label, values):
@@ -415,16 +586,34 @@ if __name__ == "__main__":
             print(f"    {label:<40s} {total:+.3f}/step")
             return total
 
-        stand = scenario("Healthy stand (no movement)", {
-            "alive": 1.0, "upright": 1.0, "time": -1.0,
-        })
-        dive = scenario("Diving forward (unhealthy)", {
-            "distance": 0.5, "time": -1.0, "contact": -1.0,
-        })
-        walk = scenario("Walking well (healthy, forward)", {
-            "alive": 1.0, "forward_velocity": 0.5, "distance": 0.3,
-            "upright": 0.9, "energy": -3.0, "smoothness": -1.0, "time": -1.0,
-        })
+        stand = scenario(
+            "Healthy stand (no movement)",
+            {
+                "alive": 1.0,
+                "upright": 1.0,
+                "time": -1.0,
+            },
+        )
+        dive = scenario(
+            "Diving forward (unhealthy)",
+            {
+                "distance": 0.5,
+                "time": -1.0,
+                "contact": -1.0,
+            },
+        )
+        walk = scenario(
+            "Walking well (healthy, forward)",
+            {
+                "alive": 1.0,
+                "forward_velocity": 0.5,
+                "distance": 0.3,
+                "upright": 0.9,
+                "energy": -3.0,
+                "smoothness": -1.0,
+                "time": -1.0,
+            },
+        )
 
         print()
         if stand > dive:
