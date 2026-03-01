@@ -23,3 +23,11 @@ if [ $? -ne 0 ]; then
     echo "ruff format failed. Run: uv run ruff format ."
     exit 1
 fi
+
+# Run tests
+echo "pytest..."
+uv run pytest tests/ -v
+if [ $? -ne 0 ]; then
+    echo "Tests failed. Fix failing tests before committing."
+    exit 1
+fi
