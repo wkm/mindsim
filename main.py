@@ -32,13 +32,13 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+from rich.markdown import Markdown as RichMarkdown
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import (
-    Button,
     DataTable,
     Footer,
     OptionList,
@@ -50,12 +50,13 @@ from textual.widgets import (
     TabPane,
 )
 
-from rich.markdown import Markdown as RichMarkdown
-
 from dashboard import _fmt_int, _fmt_pct, _fmt_time
 from run_manager import (
+    BOT_DISPLAY_NAMES,
+    RunInfo,
     bot_display_name,
     discover_local_runs,
+    discover_wandb_runs,
 )
 from train import CommandChannel
 
@@ -215,7 +216,9 @@ def _git_is_clean() -> tuple[bool, str]:
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         output = result.stdout.strip()
         return (output == "", output)
@@ -234,9 +237,11 @@ def _run_claude_commit() -> bool:
     try:
         subprocess.run(
             [
-                "claude", "-p",
+                "claude",
+                "-p",
                 "Run git status and git diff to see current changes, then commit all changes with a descriptive commit message.",
-                "--allowedTools", "Bash Read Grep Glob",
+                "--allowedTools",
+                "Bash Read Grep Glob",
             ],
             timeout=120,
         )
@@ -301,7 +306,9 @@ class GCPInstancesScreen(Screen):
         yield Static("Loading...", id="gcp-status")
         table = DataTable(id="gcp-table")
         table.cursor_type = "row"
-        table.add_columns("Name", "Status", "Run", "Branch", "Args", "Created", "Zone", "Machine Type")
+        table.add_columns(
+            "Name", "Status", "Run", "Branch", "Args", "Created", "Zone", "Machine Type"
+        )
         yield table
         yield Footer()
 
@@ -382,7 +389,10 @@ class GCPInstancesScreen(Screen):
         try:
             result = subprocess.run(
                 [
-                    "gcloud", "compute", "instances", "list",
+                    "gcloud",
+                    "compute",
+                    "instances",
+                    "list",
                     "--filter=labels.mindsim=true",
                     "--format=json(name,zone.basename(),status,machineType.basename(),labels,creationTimestamp)",
                 ],
@@ -397,9 +407,7 @@ class GCPInstancesScreen(Screen):
                 return
             instances = json.loads(result.stdout)
         except FileNotFoundError:
-            self.app.call_from_thread(
-                self._set_status, "gcloud CLI not found"
-            )
+            self.app.call_from_thread(self._set_status, "gcloud CLI not found")
             return
         except Exception as e:
             self.app.call_from_thread(self._set_status, f"Error: {e}")
@@ -438,7 +446,9 @@ class GCPInstancesScreen(Screen):
             else:
                 status_display = status
 
-            table.add_row(name, status_display, run, branch, args, created, zone, machine)
+            table.add_row(
+                name, status_display, run, branch, args, created, zone, machine
+            )
 
         count = len(instances)
         self.query_one("#gcp-status", Static).update(
@@ -450,8 +460,13 @@ class GCPInstancesScreen(Screen):
         try:
             result = subprocess.run(
                 [
-                    "gcloud", "compute", "instances", "delete",
-                    name, f"--zone={zone}", "--quiet",
+                    "gcloud",
+                    "compute",
+                    "instances",
+                    "delete",
+                    name,
+                    f"--zone={zone}",
+                    "--quiet",
                 ],
                 capture_output=True,
                 text=True,
@@ -475,8 +490,13 @@ class GCPInstancesScreen(Screen):
         try:
             result = subprocess.run(
                 [
-                    "gcloud", "compute", "instances", "stop",
-                    name, f"--zone={zone}", "--quiet",
+                    "gcloud",
+                    "compute",
+                    "instances",
+                    "stop",
+                    name,
+                    f"--zone={zone}",
+                    "--quiet",
                 ],
                 capture_output=True,
                 text=True,
@@ -772,7 +792,7 @@ class DirtyTreeScreen(Screen):
 
 
 class RunBrowserScreen(Screen):
-    """Browse local runs."""
+    """Browse local and W&B runs."""
 
     BINDINGS = [
         Binding("escape", "go_back", "Back", priority=True),
@@ -811,25 +831,74 @@ class RunBrowserScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._runs = discover_local_runs()
         self._items: list[dict] = []  # maps list index -> run info
+
+    def _build_items(self) -> list[str]:
+        """Merge local and W&B runs into a single list, deduped by W&B id."""
+        labels = []
+
+        # Local runs first — track their W&B ids so we can dedup
+        local_wandb_ids: set[str] = set()
+        for run_dir, info in discover_local_runs():
+            date_str = info.created_at[:10] if info.created_at else "?"
+            display_name = bot_display_name(info.bot_name)
+            status_icon = {"running": "*", "completed": "+", "failed": "!"}.get(
+                info.status, "?"
+            )
+            batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
+            label = f"LOCAL  [{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
+            labels.append(label)
+            self._items.append({"type": "local", "dir": run_dir, "info": info})
+            if info.wandb_id:
+                local_wandb_ids.add(info.wandb_id)
+
+        # W&B runs — skip any already shown as local
+        for wr in discover_wandb_runs(limit=50):
+            if wr["id"] in local_wandb_ids:
+                continue
+            date_str = wr["created_at"][:10] if wr.get("created_at") else "?"
+            state_icon = {
+                "running": "*",
+                "finished": "+",
+                "failed": "!",
+                "crashed": "!",
+            }.get(wr.get("state", ""), "?")
+            tags_str = " ".join(wr.get("tags", []))
+            label = f"CLOUD  [{state_icon}] {wr['name']}  {tags_str}  {date_str}"
+            labels.append(label)
+            # Build a minimal RunInfo for cloud runs
+            bot_name = ""
+            policy_type = ""
+            tags = wr.get("tags", [])
+            for t in tags:
+                if t in BOT_DISPLAY_NAMES:
+                    bot_name = t
+                elif t in ("lstm", "mlp", "cnn"):
+                    policy_type = t
+            cloud_info = RunInfo(
+                name=wr["name"],
+                bot_name=bot_name,
+                policy_type=policy_type,
+                algorithm=next(
+                    (t for t in tags if t not in (bot_name, policy_type)), ""
+                ),
+                scene_path=f"bots/{bot_name}/scene.xml" if bot_name else "",
+                status=wr.get("state", "unknown"),
+                wandb_id=wr["id"],
+                wandb_url=wr.get("url"),
+                created_at=wr.get("created_at"),
+                tags=tags,
+            )
+            self._items.append({"type": "cloud", "info": cloud_info})
+
+        return labels
 
     def compose(self) -> ComposeResult:
         with Vertical(id="browser-box"):
             yield Static("Browse Runs", id="browser-title")
-            items = []
-            for run_dir, info in self._runs:
-                date_str = info.created_at[:10] if info.created_at else "?"
-                display_name = bot_display_name(info.bot_name)
-                status_icon = {"running": "*", "completed": "+", "failed": "!"}.get(
-                    info.status, "?"
-                )
-                batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
-                label = f"[{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
-                items.append(label)
-                self._items.append({"type": "run", "dir": run_dir, "info": info})
-            if items:
-                yield OptionList(*items, id="run-list")
+            labels = self._build_items()
+            if labels:
+                yield OptionList(*labels, id="run-list")
             else:
                 yield Static("  No runs found.", id="no-runs")
         yield Footer()
@@ -843,10 +912,14 @@ class RunBrowserScreen(Screen):
             idx = run_list.highlighted
             if idx is not None and 0 <= idx < len(self._items):
                 item = self._items[idx]
-                if item["type"] == "run":
-                    self.app.push_screen(
-                        RunActionScreen(run_dir=item["dir"], run_info=item["info"])
+                run_dir = item.get("dir")
+                self.app.push_screen(
+                    RunActionScreen(
+                        run_dir=run_dir,
+                        run_info=item["info"],
+                        cloud_only=run_dir is None,
                     )
+                )
         except (IndexError, ValueError):
             pass
 
@@ -911,31 +984,42 @@ class RunActionScreen(Screen):
     }
     """
 
-    def __init__(self, run_dir: Path, run_info, **kwargs):
+    def __init__(
+        self, run_dir: Path | None, run_info, cloud_only: bool = False, **kwargs
+    ):
         super().__init__(**kwargs)
         self._run_dir = run_dir
         self._info = run_info
+        self._cloud_only = cloud_only
 
     def compose(self) -> ComposeResult:
         info = self._info
-        display_name = bot_display_name(info.bot_name)
+        display_name = bot_display_name(info.bot_name) if info.bot_name else "?"
+        source = "CLOUD" if self._cloud_only else "LOCAL"
         with Vertical(id="action-box"):
-            yield Static(f"Run: {info.name}", id="action-title")
+            yield Static(f"Run: {info.name}  ({source})", id="action-title")
             meta_lines = [
                 f"  Bot: {display_name} ({info.bot_name})",
                 f"  Algorithm: {info.algorithm}  |  Policy: {info.policy_type}",
-                f"  Status: {info.status}  |  Batches: {info.batch_idx}  |  Episodes: {info.episode_count}",
-                f"  Stage: {info.curriculum_stage}  |  Created: {info.created_at or '?'}",
+                f"  Status: {info.status}  |  Created: {info.created_at or '?'}",
             ]
+            if not self._cloud_only:
+                meta_lines.insert(
+                    2,
+                    f"  Batches: {info.batch_idx}  |  Episodes: {info.episode_count}  |  Stage: {info.curriculum_stage}",
+                )
             if info.wandb_url:
                 meta_lines.append(f"  W&B: {info.wandb_url}")
             yield Static("\n".join(meta_lines), id="run-metadata")
-            options = [
-                "[p] Play checkpoint",
-                "[r] Resume training",
-                "[v] View in MuJoCo",
-            ]
-            self._action_map = ["play_run", "resume_run", "view_run"]
+            options = []
+            self._action_map = []
+            if not self._cloud_only:
+                options += [
+                    "[p] Play checkpoint",
+                    "[r] Resume training",
+                    "[v] View in MuJoCo",
+                ]
+                self._action_map += ["play_run", "resume_run", "view_run"]
             if info.wandb_url:
                 options.append("[w] Open W&B")
                 self._action_map.append("open_wandb")
@@ -948,14 +1032,22 @@ class RunActionScreen(Screen):
         self.app.pop_screen()
 
     def action_play_run(self) -> None:
-        self.app.push_screen(CheckpointPickerScreen(
-            run_dir=self._run_dir, run_info=self._info, mode="play",
-        ))
+        self.app.push_screen(
+            CheckpointPickerScreen(
+                run_dir=self._run_dir,
+                run_info=self._info,
+                mode="play",
+            )
+        )
 
     def action_resume_run(self) -> None:
-        self.app.push_screen(CheckpointPickerScreen(
-            run_dir=self._run_dir, run_info=self._info, mode="resume",
-        ))
+        self.app.push_screen(
+            CheckpointPickerScreen(
+                run_dir=self._run_dir,
+                run_info=self._info,
+                mode="resume",
+            )
+        )
 
     def action_view_run(self) -> None:
         self.app.start_viewing(scene_path=self._info.scene_path)
@@ -1027,6 +1119,7 @@ class CheckpointPickerScreen(Screen):
         self._info = run_info
         self._mode = mode
         from checkpoint import list_checkpoints
+
         self._checkpoints = list_checkpoints(run_dir)
 
     def compose(self) -> ComposeResult:
@@ -1036,8 +1129,12 @@ class CheckpointPickerScreen(Screen):
             if self._checkpoints:
                 items = []
                 for i, ckpt in enumerate(self._checkpoints):
-                    stage = f"Stage {ckpt['stage']}" if ckpt["stage"] is not None else "?"
-                    batch = f"Batch {ckpt['batch']}" if ckpt["batch"] is not None else "?"
+                    stage = (
+                        f"Stage {ckpt['stage']}" if ckpt["stage"] is not None else "?"
+                    )
+                    batch = (
+                        f"Batch {ckpt['batch']}" if ckpt["batch"] is not None else "?"
+                    )
                     tag = "  (latest)" if i == 0 else ""
                     items.append(f"{stage}  {batch}{tag}")
                 yield OptionList(*items, id="checkpoint-list")
@@ -1568,35 +1665,101 @@ class TrainingDashboard(Screen):
 
         # Always shown
         ri_dist = ri.get("distance_to_target")
-        _ri_row("#ri-distance", "distance", ri_dist, f"{ri_dist:.2f} m" if ri_dist is not None else None)
+        _ri_row(
+            "#ri-distance",
+            "distance",
+            ri_dist,
+            f"{ri_dist:.2f} m" if ri_dist is not None else None,
+        )
         ri_h = ri.get("torso_height")
-        _ri_row("#ri-height", "height", ri_h, f"{ri_h:.2f} m" if ri_h is not None else None)
+        _ri_row(
+            "#ri-height", "height", ri_h, f"{ri_h:.2f} m" if ri_h is not None else None
+        )
         ri_surv = ri.get("survival_time")
-        _ri_row("#ri-survival", "survival", ri_surv, f"{ri_surv:.1f} s" if ri_surv is not None else None)
+        _ri_row(
+            "#ri-survival",
+            "survival",
+            ri_surv,
+            f"{ri_surv:.1f} s" if ri_surv is not None else None,
+        )
 
         # Walking stage measures (biped only)
         ri_fd = ri.get("forward_distance")
-        _ri_row("#ri-fwd-dist", "fwd distance", ri_fd, f"{ri_fd:+.2f} m" if ri_fd is not None else None, "has_walking_stage")
+        _ri_row(
+            "#ri-fwd-dist",
+            "fwd distance",
+            ri_fd,
+            f"{ri_fd:+.2f} m" if ri_fd is not None else None,
+            "has_walking_stage",
+        )
         ri_spd = ri.get("avg_speed")
-        _ri_row("#ri-speed", "speed", ri_spd, f"{ri_spd:.2f} m/s" if ri_spd is not None else None, "has_walking_stage")
+        _ri_row(
+            "#ri-speed",
+            "speed",
+            ri_spd,
+            f"{ri_spd:.2f} m/s" if ri_spd is not None else None,
+            "has_walking_stage",
+        )
         ri_lat = ri.get("lateral_drift")
-        _ri_row("#ri-lateral", "lateral drift", ri_lat, f"{ri_lat:.2f} m" if ri_lat is not None else None, "has_walking_stage")
+        _ri_row(
+            "#ri-lateral",
+            "lateral drift",
+            ri_lat,
+            f"{ri_lat:.2f} m" if ri_lat is not None else None,
+            "has_walking_stage",
+        )
 
         # Reward-component-gated
         ri_up = ri.get("up_z")
-        _ri_row("#ri-uprightness", "uprightness", ri_up, f"{ri_up:.2f}" if ri_up is not None else None, "upright")
+        _ri_row(
+            "#ri-uprightness",
+            "uprightness",
+            ri_up,
+            f"{ri_up:.2f}" if ri_up is not None else None,
+            "upright",
+        )
         ri_fv = ri.get("forward_vel")
-        _ri_row("#ri-fwd-vel", "fwd velocity", ri_fv, f"{ri_fv:+.2f} m/s" if ri_fv is not None else None, "forward_vel")
+        _ri_row(
+            "#ri-fwd-vel",
+            "fwd velocity",
+            ri_fv,
+            f"{ri_fv:+.2f} m/s" if ri_fv is not None else None,
+            "forward_vel",
+        )
         ri_en = ri.get("energy")
-        _ri_row("#ri-energy", "energy", ri_en, f"{ri_en:.3f}" if ri_en is not None else None, "energy")
+        _ri_row(
+            "#ri-energy",
+            "energy",
+            ri_en,
+            f"{ri_en:.3f}" if ri_en is not None else None,
+            "energy",
+        )
         ri_ct = ri.get("contact_frac")
-        _ri_row("#ri-contact", "contact", ri_ct, f"{ri_ct:.1%}" if ri_ct is not None else None, "contact")
+        _ri_row(
+            "#ri-contact",
+            "contact",
+            ri_ct,
+            f"{ri_ct:.1%}" if ri_ct is not None else None,
+            "contact",
+        )
         ri_jk = ri.get("action_jerk")
-        _ri_row("#ri-jerk", "action jerk", ri_jk, f"{ri_jk:.3f}" if ri_jk is not None else None, "smoothness")
+        _ri_row(
+            "#ri-jerk",
+            "action jerk",
+            ri_jk,
+            f"{ri_jk:.3f}" if ri_jk is not None else None,
+            "smoothness",
+        )
 
         # Fall detection gated
         ri_fell = ri.get("fell_frac")
-        _ri_row("#ri-fell", "fell", ri_fell, f"{ri_fell:.0%}" if ri_fell is not None else None, "fall_detection")
+        _ri_row(
+            "#ri-fell",
+            "fell",
+            ri_fell,
+            f"{ri_fell:.0%}" if ri_fell is not None else None,
+            "fall_detection",
+        )
 
         # Joint activity (shown when sensors exist, i.e. value > 0 or biped)
         ri_ja = ri.get("joint_activity")
@@ -1605,7 +1768,9 @@ class TrainingDashboard(Screen):
         if has_sensors:
             widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
             widget.display = True
-        elif ri_ja is not None and any(scales.get(k, 0) > 0 for k in ("upright", "energy", "contact")):
+        elif ri_ja is not None and any(
+            scales.get(k, 0) > 0 for k in ("upright", "energy", "contact")
+        ):
             # Biped with no joint movement yet
             widget.update(f"  {'joint activity':<15s}{f'{ri_ja:.1f} rad/s'.rjust(8)}")
             widget.display = True
@@ -1642,31 +1807,43 @@ class TrainingDashboard(Screen):
                 f"  value loss       {_fmt(m.get('value_loss'), precision=4)}"
             )
             # Clip fraction: green 0.05-0.30, yellow <0.05 or 0.30-0.50, red >0.50
-            cf_val = m.get('clip_fraction')
+            cf_val = m.get("clip_fraction")
             cf_str = _fmt(cf_val, precision=2)
-            cf_str = _color_val(cf_str, cf_val, {
-                "green": lambda v: 0.05 <= v <= 0.30,
-                "yellow": lambda v: v < 0.05 or 0.30 < v <= 0.50,
-                "red": lambda v: v > 0.50,
-            })
+            cf_str = _color_val(
+                cf_str,
+                cf_val,
+                {
+                    "green": lambda v: 0.05 <= v <= 0.30,
+                    "yellow": lambda v: v < 0.05 or 0.30 < v <= 0.50,
+                    "red": lambda v: v > 0.50,
+                },
+            )
             self.query_one("#m-clip-fraction").update(f"  clip fraction    {cf_str}")
             # Approx KL: green 0.005-0.05, yellow <0.005 or 0.05-0.1, red >0.1
-            kl_val = m.get('approx_kl')
+            kl_val = m.get("approx_kl")
             kl_str = _fmt(kl_val, precision=4)
-            kl_str = _color_val(kl_str, kl_val, {
-                "green": lambda v: 0.005 <= v <= 0.05,
-                "yellow": lambda v: v < 0.005 or 0.05 < v <= 0.1,
-                "red": lambda v: v > 0.1,
-            })
+            kl_str = _color_val(
+                kl_str,
+                kl_val,
+                {
+                    "green": lambda v: 0.005 <= v <= 0.05,
+                    "yellow": lambda v: v < 0.005 or 0.05 < v <= 0.1,
+                    "red": lambda v: v > 0.1,
+                },
+            )
             self.query_one("#m-approx-kl").update(f"  approx KL        {kl_str}")
             # Explained variance: green >0.5, yellow 0.0-0.5, red <0.0
-            ev_val = m.get('explained_variance')
+            ev_val = m.get("explained_variance")
             ev_str = _fmt(ev_val, precision=3)
-            ev_str = _color_val(ev_str, ev_val, {
-                "green": lambda v: v > 0.5,
-                "yellow": lambda v: 0.0 <= v <= 0.5,
-                "red": lambda v: v < 0.0,
-            })
+            ev_str = _color_val(
+                ev_str,
+                ev_val,
+                {
+                    "green": lambda v: v > 0.5,
+                    "yellow": lambda v: 0.0 <= v <= 0.5,
+                    "red": lambda v: v < 0.0,
+                },
+            )
             self.query_one("#m-explained-var").update(f"  explained var    {ev_str}")
         else:
             self.query_one("#m-policy-loss").update(
@@ -1677,8 +1854,8 @@ class TrainingDashboard(Screen):
             self.query_one("#m-approx-kl").update("  approx KL        ---")
             self.query_one("#m-explained-var").update("  explained var    ---")
         # Grad norm: colored relative to max_grad_norm config
-        gn_val = m.get('grad_norm')
-        max_gn = m.get('max_grad_norm', 0.5)
+        gn_val = m.get("grad_norm")
+        max_gn = m.get("max_grad_norm", 0.5)
         gn_str = _fmt(gn_val, precision=3)
         if gn_val is not None and max_gn > 0:
             ratio = gn_val / max_gn
@@ -1848,22 +2025,32 @@ class MindSimApp(App):
 
         # Smoketests skip the dirty-tree check
         if smoketest:
-            self._do_start_training(smoketest=True, scene_path=scene_path, resume=resume)
+            self._do_start_training(
+                smoketest=True, scene_path=scene_path, resume=resume
+            )
             return
 
         clean, status = _git_is_clean()
         if clean:
-            self._do_start_training(smoketest=False, scene_path=scene_path, resume=resume)
+            self._do_start_training(
+                smoketest=False, scene_path=scene_path, resume=resume
+            )
         else:
-            self.push_screen(DirtyTreeScreen(
-                status_lines=status,
-                smoketest=False,
-                scene_path=scene_path,
-                resume=resume,
-            ))
+            self.push_screen(
+                DirtyTreeScreen(
+                    status_lines=status,
+                    smoketest=False,
+                    scene_path=scene_path,
+                    resume=resume,
+                )
+            )
 
-    def _do_start_training(self, smoketest: bool = False, scene_path: str | None = None,
-                           resume: str | None = None):
+    def _do_start_training(
+        self,
+        smoketest: bool = False,
+        scene_path: str | None = None,
+        resume: str | None = None,
+    ):
         """Actually start training (push dashboard and kick off worker)."""
         dashboard = TrainingDashboard()
         self._dashboard = dashboard
@@ -2183,7 +2370,11 @@ def main():
                 print(status)
                 print()
                 while True:
-                    choice = input("[c] Commit with Claude  [s] Start anyway  [q] Quit: ").strip().lower()
+                    choice = (
+                        input("[c] Commit with Claude  [s] Start anyway  [q] Quit: ")
+                        .strip()
+                        .lower()
+                    )
                     if choice == "q":
                         sys.exit(0)
                     elif choice == "s":
@@ -2294,7 +2485,6 @@ def _validate_rewards(bot_name: str | None):
 
 def _run_scenario_tests(bot_name: str, hierarchy, cfg):
     """Run scenario tests showing per-step reward in different situations."""
-    from reward_hierarchy import GUARD, STYLE, SURVIVE, TASK
 
     active = hierarchy.active_components()
     if not active:
