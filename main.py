@@ -834,10 +834,14 @@ class RunBrowserScreen(Screen):
         self._items: list[dict] = []  # maps list index -> run info
 
     def _build_items(self) -> list[str]:
-        """Merge local and W&B runs into a single list, deduped by W&B id."""
-        labels = []
+        """Merge local and W&B runs into a single list, deduped by W&B id.
 
-        # Local runs first — track their W&B ids so we can dedup
+        Returns labels sorted by created_at descending (newest first).
+        """
+        # Collect all entries as (sort_key, label, item_dict) then sort
+        entries: list[tuple[str, str, dict]] = []
+
+        # Local runs — track W&B ids for dedup
         local_wandb_ids: set[str] = set()
         for run_dir, info in discover_local_runs():
             date_str = info.created_at[:10] if info.created_at else "?"
@@ -847,8 +851,10 @@ class RunBrowserScreen(Screen):
             )
             batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
             label = f"LOCAL  {status_str}  {info.name}  {display_name}  {date_str}  {batch_str}"
-            labels.append(label)
-            self._items.append({"type": "local", "dir": run_dir, "info": info})
+            sort_key = info.created_at or ""
+            entries.append(
+                (sort_key, label, {"type": "local", "dir": run_dir, "info": info})
+            )
             if info.wandb_id:
                 local_wandb_ids.add(info.wandb_id)
 
@@ -865,8 +871,6 @@ class RunBrowserScreen(Screen):
             }.get(wr.get("state", ""), "???")
             tags_str = " ".join(wr.get("tags", []))
             label = f"CLOUD  {state_str}  {wr['name']}  {tags_str}  {date_str}"
-            labels.append(label)
-            # Build a minimal RunInfo for cloud runs
             bot_name = ""
             policy_type = ""
             tags = wr.get("tags", [])
@@ -889,8 +893,16 @@ class RunBrowserScreen(Screen):
                 created_at=wr.get("created_at"),
                 tags=tags,
             )
-            self._items.append({"type": "cloud", "info": cloud_info})
+            sort_key = wr.get("created_at", "")
+            entries.append((sort_key, label, {"type": "cloud", "info": cloud_info}))
 
+        # Sort newest first
+        entries.sort(key=lambda e: e[0], reverse=True)
+
+        labels = []
+        for _, label, item in entries:
+            labels.append(label)
+            self._items.append(item)
         return labels
 
     def compose(self) -> ComposeResult:
