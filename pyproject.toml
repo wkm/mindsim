@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "brax>=0.14.0",
+    "build123d>=0.10.0",
     "mediapy>=1.2.5",
     "mujoco>=3.4.0",
     "mujoco-mjx>=3.4.0",

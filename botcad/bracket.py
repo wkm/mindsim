@@ -1,0 +1,211 @@
+"""Parametric servo bracket geometry.
+
+Generates a build123d Solid for a 3D-printed bracket that holds a servo
+motor inside a parent body segment. The bracket provides:
+
+- A pocket for the servo body (with FDM tolerance clearance)
+- A circular shaft opening on the +Z face for the horn
+- Ear ledge shelves at mounting ear Z positions
+- M3 through-holes from the -Z face for screw mounting
+- A cable exit slot on the -X/-Z corner for the PA2.0 connector
+
+All dimensions are in meters (SI), matching the rest of botcad.
+
+Servo local frame convention (same as servo.py):
+    X = long axis, Y = width, Z = shaft axis
+    Origin = servo body center
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from botcad.component import ServoSpec
+
+
+@dataclass(frozen=True)
+class BracketSpec:
+    """Parameters controlling bracket geometry around a servo."""
+
+    wall: float = 0.0025  # 2.5mm wall thickness
+    tolerance: float = 0.0003  # 0.3mm clearance per side for FDM
+    shaft_clearance: float = 0.001  # 1mm extra radius around horn
+    cable_slot_width: float = 0.010  # 10mm wide cable exit
+    cable_slot_height: float = 0.006  # 6mm tall cable exit
+
+
+def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a bracket solid in servo local frame.
+
+    The bracket is an outer shell with the servo pocket, shaft clearance,
+    screw holes, and cable exit already subtracted. The caller just needs
+    to union it into the parent body.
+
+    Returns a build123d Solid centered on the servo body origin.
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    if spec is None:
+        spec = BracketSpec()
+
+    # Use body_dimensions if available, otherwise fall back to overall dims
+    bd = servo.body_dimensions
+    if bd[0] == 0.0:
+        bd = servo.dimensions
+
+    body_x, body_y, body_z = bd
+    tol = spec.tolerance
+    wall = spec.wall
+
+    # --- Ear geometry ---
+    # Find the lowest ear Z position to determine bracket bottom extent
+    ear_bottom_z = -body_z / 2  # default: flush with body bottom
+    if servo.mounting_ears:
+        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
+        # Bracket extends to below the lowest ear hole
+        # Ear hole diameter / 2 + wall gives clearance below hole center
+        max_hole_d = max(ear.hole_diameter for ear in servo.mounting_ears)
+        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+
+    # --- Outer box dimensions ---
+    outer_x = body_x + 2 * (tol + wall)
+    outer_y = body_y + 2 * (tol + wall)
+    # Top: flush with body top (+Z face)
+    # Bottom: extends down to cover ears
+    outer_top_z = body_z / 2 + wall  # small cap above body for shaft face
+    outer_bottom_z = ear_bottom_z
+    outer_z = outer_top_z - outer_bottom_z
+
+    # Outer box center is offset in Z (not centered on servo origin)
+    outer_center_z = (outer_top_z + outer_bottom_z) / 2
+
+    outer = Box(
+        outer_x,
+        outer_y,
+        outer_z,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    outer = outer.locate(Location((0, 0, outer_center_z)))
+
+    # --- Servo body pocket (open on +Z for insertion) ---
+    pocket_x = body_x + 2 * tol
+    pocket_y = body_y + 2 * tol
+    # Pocket goes from body bottom up through the top face (open top)
+    pocket_z = body_z + tol + wall + 0.001  # extends past top for clean cut
+    pocket_center_z = -body_z / 2 + pocket_z / 2 - tol
+
+    pocket = Box(
+        pocket_x,
+        pocket_y,
+        pocket_z,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    pocket = pocket.locate(Location((0, 0, pocket_center_z)))
+
+    shell = outer - pocket
+
+    # --- Shaft clearance hole (circular, through +Z face) ---
+    # Horn diameter: approximate from horn mounting points spread
+    horn_radius = 0.011  # ~22mm diameter default for STS3215 horn
+    if servo.horn_mounting_points:
+        # Find max radial distance from shaft center
+        sx, sy, sz = servo.shaft_offset
+        max_r = 0.0
+        for mp in servo.horn_mounting_points:
+            dx = mp.pos[0] - sx
+            dy = mp.pos[1] - sy
+            r = (dx * dx + dy * dy) ** 0.5 + mp.diameter / 2
+            if r > max_r:
+                max_r = r
+        horn_radius = max_r + spec.shaft_clearance
+
+    shaft_hole = Cylinder(
+        horn_radius,
+        wall + 0.002,  # through the top cap
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+    shaft_hole = shaft_hole.locate(
+        Location((servo.shaft_offset[0], servo.shaft_offset[1], body_z / 2 - 0.001))
+    )
+    shell = shell - shaft_hole
+
+    # --- Ear ledge shelves ---
+    # The pocket cuts away the body area; we need thin shelves at the ear
+    # positions to support the servo flanges. The shelves span the full
+    # bracket width at the ear Z height.
+    if servo.mounting_ears:
+        # Ears are in two Y-rows (±Y). Build one shelf per Y-side.
+        ear_y_groups: dict[str, list] = {}
+        for ear in servo.mounting_ears:
+            y_key = "pos" if ear.pos[1] > 0 else "neg"
+            ear_y_groups.setdefault(y_key, []).append(ear)
+
+        for _side, ears in ear_y_groups.items():
+            # Shelf spans from body bottom to just below the ear holes
+            shelf_top = -body_z / 2  # body bottom face
+            shelf_bottom = ear_bottom_z
+            shelf_z = shelf_top - shelf_bottom
+
+            if shelf_z <= 0:
+                continue
+
+            # Shelf spans full X width, narrow in Y (just the ear overhang)
+            ear_y = abs(ears[0].pos[1])
+            shelf_y_inner = body_y / 2  # inner edge = body side
+            shelf_y_outer = ear_y + ears[0].hole_diameter / 2 + wall
+            shelf_width_y = shelf_y_outer - shelf_y_inner
+
+            if shelf_width_y <= 0:
+                continue
+
+            shelf_center_y = (shelf_y_inner + shelf_y_outer) / 2
+            if ears[0].pos[1] < 0:
+                shelf_center_y = -shelf_center_y
+
+            shelf_center_z = (shelf_top + shelf_bottom) / 2
+
+            shelf = Box(
+                outer_x,
+                shelf_width_y,
+                shelf_z,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            shelf = shelf.locate(Location((0, shelf_center_y, shelf_center_z)))
+            # This shelf area is already part of the outer box below the
+            # pocket, so it exists naturally. No union needed.
+
+    # --- M3 through-holes at each ear position ---
+    for ear in servo.mounting_ears:
+        hole_r = ear.hole_diameter / 2
+        # Hole goes from bracket bottom through to above ear position
+        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+        hole = Cylinder(
+            hole_r,
+            hole_depth,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+        shell = shell - hole
+
+    # --- Cable exit slot ---
+    # Slot on the -X, -Z corner for the PA2.0 connector + cable
+    if servo.connector_pos is not None:
+        cx, cy, cz = servo.connector_pos
+        slot_w = spec.cable_slot_width
+        slot_h = spec.cable_slot_height
+        # Slot goes from connector position through the bracket wall on -X face
+        slot_depth = wall + tol + 0.002  # through the wall
+        slot = Box(
+            slot_depth,
+            slot_w,
+            slot_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        # Position: at the -X wall, centered on connector Y, at connector Z
+        slot_x = -outer_x / 2 + slot_depth / 2 - 0.001
+        slot = slot.locate(Location((slot_x, cy, cz)))
+        shell = shell - slot
+
+    return shell
