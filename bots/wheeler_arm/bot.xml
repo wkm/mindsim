@@ -19,6 +19,14 @@
       <inertial pos="0.000000 0.000000 0.003290" mass="0.275818" fullinertia="1.550015e-04 5.977567e-04 4.769207e-04 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
+      <geom name="wire_servo_bus_0" type="capsule" fromto="-0.010000 0.013000 0.002500 -0.060000 0.000000 0.000000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_1" type="capsule" fromto="-0.060000 0.000000 0.000000 0.060000 0.000000 0.000000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_2" type="capsule" fromto="0.060000 0.000000 0.000000 0.000000 0.000000 0.040000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_3" type="capsule" fromto="0.000000 0.000000 0.040000 0.000000 0.000000 0.060000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_4" type="capsule" fromto="0.000000 0.000000 0.060000 0.000000 0.000000 0.180000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_5" type="capsule" fromto="0.000000 0.000000 0.180000 0.000000 0.000000 0.280000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_camera_csi_0" type="capsule" fromto="0.000000 0.008000 0.280000 0.000000 0.000000 0.000000" size="0.003" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_power_0" type="capsule" fromto="0.000000 0.000000 -0.023500 0.000000 0.000000 0.000000" size="0.002" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="left_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <geom name="right_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <geom name="shoulder_yaw_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.012500 0.000000 0.024100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
