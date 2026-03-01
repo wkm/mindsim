@@ -1,25 +1,23 @@
-#!/usr/bin/env python3
-"""Render orthographic views of servo components for visual debugging.
+"""Validation renders for servo component inspection.
 
-Generates a single PNG with top/front/right/three-quarter views of each
-servo spec, showing the body box, shaft position, mounting ears, horn
-mounting holes, and connector.
+Generates per-servo-spec PNGs with orthographic views showing body box,
+shaft position, mounting ears, horn mounting holes, and connector.
 
-Usage:
-    PYTHONPATH=. uv run python botcad/debug_render_servo.py
+Called as part of Bot.emit() pipeline, or standalone:
+    PYTHONPATH=. uv run python -m botcad.emit.servo_renders [bot_dir]
 """
 
 from __future__ import annotations
 
 import math
 import struct
+import sys
+import time
 from pathlib import Path
 
 import mujoco
 import numpy as np
 from PIL import Image, ImageDraw
-
-from botcad.components.servo import STS3215
 
 # ── Rendering config ──
 
@@ -333,22 +331,66 @@ def render_servo_views(servo, name: str) -> Image.Image:
     return canvas
 
 
-def main():
+# ── Pipeline entry point ──
+
+
+def emit_servo_renders(bot, output_dir: Path) -> None:
+    """Generate per-servo-spec validation renders.
+
+    Renders each unique ServoSpec used in the bot (deduplicated by name).
+    Both position and continuous variants are rendered for each servo.
+    """
+    import dataclasses
+
+    t0 = time.perf_counter()
+
+    # Collect unique servo specs by name
+    seen = {}
+    for joint in bot.all_joints:
+        servo = joint.servo
+        if servo.name not in seen:
+            seen[servo.name] = servo
+
+    if not seen:
+        print("  servo renders: no servos found, skipping")
+        return
+
+    print("Servo renders:")
+    for name, servo in seen.items():
+        safe_name = name.lower().replace(" ", "_")
+
+        # Render both position and continuous variants
+        for mode in (False, True):
+            mode_name = "continuous" if mode else "position"
+            variant = dataclasses.replace(servo, continuous=mode)
+            display_name = f"{name} ({mode_name})"
+            filename = f"test_servo_{safe_name}_{mode_name}.png"
+
+            img = render_servo_views(variant, display_name)
+            out_path = output_dir / filename
+            img.save(out_path)
+            print(f"  {out_path}")
+
+    print(f"  servo renders done ({time.perf_counter() - t0:.1f}s)")
+
+
+# ── Standalone ──
+
+
+if __name__ == "__main__":
+    from botcad.components.servo import STS3215
+
+    bot_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("bots/wheeler_arm")
+    bot_dir.mkdir(parents=True, exist_ok=True)
+
     servos = [
         ("STS3215 (position)", STS3215(continuous=False)),
         ("STS3215 (continuous)", STS3215(continuous=True)),
     ]
 
-    output_dir = Path("bots/wheeler_arm")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     for name, servo in servos:
         img = render_servo_views(servo, name)
         safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        out_path = output_dir / f"debug_servo_{safe_name}.png"
+        out_path = bot_dir / f"test_servo_{safe_name}.png"
         img.save(out_path)
         print(f"Saved: {out_path}")
-
-
-if __name__ == "__main__":
-    main()

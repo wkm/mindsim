@@ -1,16 +1,12 @@
-#!/usr/bin/env python3
-"""Render debug visualizations of an assembled bot for inspecting servo
-placement, joint geometry, and range-of-motion.
+"""Validation renders for assembled bot inspection.
 
-Produces three PNGs in the bot directory:
-  - debug_bot_overview.png   — 2x2 grid, full bot from 4 angles
-  - debug_bot_closeups.png   — per-joint zoomed views of each servo area
-  - debug_bot_sweep.png      — per-joint filmstrip across range of motion
+Generates three PNGs in the bot output directory:
+  - test_overview.png   — 2x2 grid, full bot from 4 angles
+  - test_closeups.png   — per-joint zoomed views of each servo area
+  - test_sweep.png      — per-joint filmstrip across range of motion
 
-Usage:
-    PYTHONPATH=. uv run python botcad/debug_render_bot.py [bot_dir]
-
-Default bot_dir: bots/wheeler_arm
+Called as part of Bot.emit() pipeline, or standalone:
+    PYTHONPATH=. uv run python -m botcad.emit.renders [bot_dir]
 """
 
 from __future__ import annotations
@@ -135,7 +131,9 @@ def _child_body_id(model: mujoco.MjModel, jid: int) -> int:
 # ── Step 1: Assembled overview ──
 
 
-def render_overview(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -> Path:
+def render_overview(
+    model: mujoco.MjModel, data: mujoco.MjData, output_dir: Path
+) -> Path:
     """Render 4-view overview of the full bot."""
     t0 = time.perf_counter()
     renderer = mujoco.Renderer(model, VIEW_W, VIEW_H)
@@ -174,7 +172,7 @@ def render_overview(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
 
     canvas = Image.new("RGB", (cw, ch), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Bot overview — {bot_dir.name}", fill=(0, 0, 0))
+    draw.text((margin, margin), f"Bot overview — {output_dir.name}", fill=(0, 0, 0))
 
     for idx, (img, label) in enumerate(zip(images, labels)):
         col = idx % cols
@@ -184,7 +182,7 @@ def render_overview(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
         draw.text((x, y), label, fill=(80, 80, 80))
         canvas.paste(img, (x, y + label_h))
 
-    out = bot_dir / "debug_bot_overview.png"
+    out = output_dir / "test_overview.png"
     canvas.save(out)
     print(f"  overview: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
@@ -193,7 +191,9 @@ def render_overview(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
 # ── Step 2: Servo closeups ──
 
 
-def render_closeups(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -> Path:
+def render_closeups(
+    model: mujoco.MjModel, data: mujoco.MjData, output_dir: Path
+) -> Path:
     """Render per-joint zoomed views of each servo area."""
     t0 = time.perf_counter()
     renderer = mujoco.Renderer(model, VIEW_W, VIEW_H)
@@ -246,7 +246,7 @@ def render_closeups(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
 
     if not sections:
         print("  closeups: no sweepable joints found, skipping")
-        return bot_dir / "debug_bot_closeups.png"
+        return output_dir / "test_closeups.png"
 
     # Composite: vertical stack of sections, each with header + 2x2 grid
     margin = 8
@@ -262,7 +262,7 @@ def render_closeups(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Servo closeups — {bot_dir.name}", fill=(0, 0, 0))
+    draw.text((margin, margin), f"Servo closeups — {output_dir.name}", fill=(0, 0, 0))
 
     for sec_idx, (jname, imgs, lbls) in enumerate(sections):
         sec_y = title_h + sec_idx * section_h
@@ -276,7 +276,7 @@ def render_closeups(model: mujoco.MjModel, data: mujoco.MjData, bot_dir: Path) -
             draw.text((x, y), label, fill=(80, 80, 80))
             canvas.paste(img, (x, y + label_h))
 
-    out = bot_dir / "debug_bot_closeups.png"
+    out = output_dir / "test_closeups.png"
     canvas.save(out)
     print(f"  closeups: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
@@ -334,7 +334,7 @@ def _add_collision_geoms_recursive(body):
         _add_collision_geoms_recursive(child_body)
 
 
-def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, bot_dir: Path) -> Path:
+def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -> Path:
     """Render per-joint filmstrip across range of motion with collision detection."""
     t0 = time.perf_counter()
 
@@ -347,7 +347,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, bot_dir: Path) -> P
     if not sweep_joints:
         renderer.close()
         print("  sweeps: no sweepable joints found, skipping")
-        return bot_dir / "debug_bot_sweep.png"
+        return output_dir / "test_sweep.png"
 
     strips: list[tuple[str, list[Image.Image], list[str], list[bool]]] = []
 
@@ -416,7 +416,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, bot_dir: Path) -> P
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Joint sweeps — {bot_dir.name}", fill=(0, 0, 0))
+    draw.text((margin, margin), f"Joint sweeps — {output_dir.name}", fill=(0, 0, 0))
 
     for strip_idx, (jname, frames, frame_labels, collisions) in enumerate(strips):
         lo, hi = model.jnt_range[sweep_joints[strip_idx]]
@@ -451,16 +451,42 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, bot_dir: Path) -> P
             color = (220, 40, 40) if has_col else (80, 80, 80)
             draw.text((x, y + SWEEP_H + 2), label, fill=color)
 
-    out = bot_dir / "debug_bot_sweep.png"
+    out = output_dir / "test_sweep.png"
     canvas.save(out)
     print(f"  sweeps: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 
 
-# ── Main ──
+# ── Pipeline entry point ──
 
 
-def main():
+def emit_renders(bot, output_dir: Path) -> None:
+    """Generate validation renders for a bot.
+
+    Loads bot.xml from output_dir (already generated by the MuJoCo emitter),
+    runs the three render passes, and saves PNGs.
+    """
+    bot_xml = output_dir / "bot.xml"
+    if not bot_xml.exists():
+        print(f"  renders: skipping — {bot_xml} not found")
+        return
+
+    print("Renders:")
+    t0 = time.perf_counter()
+
+    model, data = _load_model(bot_xml)
+
+    render_overview(model, data, output_dir)
+    render_closeups(model, data, output_dir)
+    render_sweeps(bot_xml, model, output_dir)
+
+    print(f"  renders done ({time.perf_counter() - t0:.1f}s total)")
+
+
+# ── Standalone ──
+
+
+if __name__ == "__main__":
     bot_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("bots/wheeler_arm")
     bot_xml = bot_dir / "bot.xml"
 
@@ -468,10 +494,9 @@ def main():
         print(f"Error: {bot_xml} not found")
         sys.exit(1)
 
-    print(f"Debug render: {bot_xml}")
+    print(f"Validation renders: {bot_xml}")
     t0 = time.perf_counter()
 
-    # Load base model (for overview + closeups)
     model, data = _load_model(bot_xml)
 
     render_overview(model, data, bot_dir)
@@ -479,7 +504,3 @@ def main():
     render_sweeps(bot_xml, model, bot_dir)
 
     print(f"Done ({time.perf_counter() - t0:.1f}s total)")
-
-
-if __name__ == "__main__":
-    main()
