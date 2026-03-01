@@ -26,6 +26,7 @@ BOT_ABBREVIATIONS: dict[str, str] = {
     "simplebiped": "biped",
     "walker2d": "w2d",
     "childbiped": "child",
+    "wheeler_arm": "wa",
 }
 
 # Display names for bots
@@ -34,6 +35,7 @@ BOT_DISPLAY_NAMES: dict[str, str] = {
     "simplebiped": "Biped",
     "walker2d": "Walker2d",
     "childbiped": "Child Biped",
+    "wheeler_arm": "Wheeler + Arm",
 }
 
 
