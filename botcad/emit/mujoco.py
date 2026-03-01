@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from botcad.component import Vec3 as Vec3Type
+from botcad.geometry import servo_placement
+
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
@@ -237,6 +240,26 @@ def _emit_body_tree(
             name="imu",
             pos="0 0 0",
             size="0.005",
+        )
+
+    # Servo visualization geoms — green boxes at each joint location
+    for joint in body.joints:
+        servo = joint.servo
+        center, quat = servo_placement(
+            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+        )
+        SubElement(
+            body_el,
+            "geom",
+            name=f"{joint.name}_servo",
+            type="box",
+            size=_half_dims(servo.dimensions),
+            pos=_fmt_vec3(center),
+            quat=_fmt_quat(quat),
+            rgba="0.2 0.8 0.2 0.8",
+            contype="0",
+            conaffinity="0",
+            group="1",
         )
 
     # Recurse: each child joint creates a child body
@@ -572,6 +595,16 @@ def _body_color(body: Body) -> str:
     if body.shape == "tube":
         return "0.7 0.7 0.7 1.0"  # light gray for structural tubes
     return "0.9 0.9 0.9 1.0"  # off-white default
+
+
+def _fmt_quat(q: tuple[float, float, float, float]) -> str:
+    """Format quaternion (w, x, y, z) for MuJoCo XML."""
+    return f"{q[0]:.6f} {q[1]:.6f} {q[2]:.6f} {q[3]:.6f}"
+
+
+def _half_dims(dims: Vec3Type) -> str:
+    """Convert full dimensions to MuJoCo box half-extents string."""
+    return f"{dims[0] / 2:.6f} {dims[1] / 2:.6f} {dims[2] / 2:.6f}"
 
 
 def _fmt_vec3(v: tuple[float, float, float]) -> str:

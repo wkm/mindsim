@@ -11,10 +11,14 @@ Creates:
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from botcad.geometry import rotate_vec, servo_placement
+
 if TYPE_CHECKING:
+    from botcad.geometry import Quat
     from botcad.skeleton import Body, Bot
 
 
@@ -113,4 +117,80 @@ def _make_body_solid(body: Body):
         pocket = pocket.locate(Location(mount.resolved_pos))
         shell = shell - pocket
 
+    # Cut servo pockets + add mounting standoffs at each joint
+    tolerance = 0.001  # 1mm clearance around servo
+    standoff_wall = 0.001  # 1mm wall around screw hole
+    standoff_height = 0.003  # 3mm tall standoffs
+
+    for joint in body.joints:
+        servo = joint.servo
+        center, quat = servo_placement(
+            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+        )
+        euler = _quat_to_euler(quat)
+        sd = servo.dimensions
+
+        # Cut servo pocket (servo dims + tolerance)
+        pocket = Box(
+            sd[0] + tolerance,
+            sd[1] + tolerance,
+            sd[2] + tolerance,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        pocket = pocket.locate(Location(center, euler))
+        shell = shell - pocket
+
+        # Add mounting standoffs at each screw hole
+        for mp in servo.mounting_points:
+            # Rotate mounting point position into parent body frame
+            rotated_mp = rotate_vec(quat, mp.pos)
+            standoff_pos = (
+                center[0] + rotated_mp[0],
+                center[1] + rotated_mp[1],
+                center[2] + rotated_mp[2],
+            )
+
+            standoff_od = mp.diameter + standoff_wall * 2
+            standoff = Cylinder(
+                standoff_od / 2,
+                standoff_height,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            standoff = standoff.locate(Location(standoff_pos, euler))
+            shell = shell + standoff
+
+            # Cut through-hole for screw
+            hole = Cylinder(
+                mp.diameter / 2,
+                standoff_height + 0.002,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            hole = hole.locate(Location(standoff_pos, euler))
+            shell = shell - hole
+
     return shell
+
+
+def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
+    """Convert quaternion (w, x, y, z) to Euler angles (rx, ry, rz) in degrees.
+
+    Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
+    """
+    w, x, y, z = q
+
+    # Roll (X)
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    rx = math.atan2(sinr_cosp, cosr_cosp)
+
+    # Pitch (Y)
+    sinp = 2.0 * (w * y - z * x)
+    sinp = max(-1.0, min(1.0, sinp))
+    ry = math.asin(sinp)
+
+    # Yaw (Z)
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    rz = math.atan2(siny_cosp, cosy_cosp)
+
+    return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
