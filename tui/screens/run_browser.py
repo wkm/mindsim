@@ -5,6 +5,7 @@ from __future__ import annotations
 import webbrowser
 from pathlib import Path
 
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -36,15 +37,16 @@ class RunBrowserScreen(Screen):
 
     CSS = """
     RunBrowserScreen {
-        align: center middle;
+        layout: vertical;
     }
 
     #browser-box {
-        width: 80;
-        height: auto;
-        max-height: 30;
+        width: 1fr;
+        max-width: 120;
+        height: 1fr;
         border: ascii $accent;
         padding: 1 2;
+        margin: 1 2;
     }
 
     #browser-title {
@@ -53,8 +55,11 @@ class RunBrowserScreen(Screen):
     }
 
     #run-list {
-        height: auto;
-        max-height: 24;
+        height: 1fr;
+    }
+
+    #loading-status {
+        color: $text-muted;
     }
 
     #no-runs {
@@ -179,12 +184,41 @@ class RunBrowserScreen(Screen):
     def compose(self) -> ComposeResult:
         with Vertical(id="browser-box"):
             yield Static("Browse Runs", id="browser-title")
-            labels = self._build_items()
-            if labels:
-                yield OptionList(*labels, id="run-list")
+            if self._provided_runs is not None:
+                # Sync path: injected data (used by tests)
+                labels = self._build_items()
+                if labels:
+                    yield OptionList(*labels, id="run-list")
+                else:
+                    yield Static("  No runs found.", id="no-runs")
             else:
-                yield Static("  No runs found.", id="no-runs")
+                # Async path: show loading placeholder, discover in worker
+                yield Static("  Loading...", id="loading-status")
         yield Footer()
+
+    def on_mount(self) -> None:
+        if self._provided_runs is None:
+            self._load_runs()
+
+    @work(thread=True)
+    def _load_runs(self) -> None:
+        labels = self._build_items()
+        self.app.call_from_thread(self._populate_list, labels)
+
+    def _populate_list(self, labels: list[str]) -> None:
+        """Replace loading placeholder with the run list (called on main thread)."""
+        # Remove loading indicator
+        try:
+            loading = self.query_one("#loading-status", Static)
+            loading.remove()
+        except Exception:
+            pass
+
+        box = self.query_one("#browser-box", Vertical)
+        if labels:
+            box.mount(OptionList(*labels, id="run-list"))
+        else:
+            box.mount(Static("  No runs found.", id="no-runs"))
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
