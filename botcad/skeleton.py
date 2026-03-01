@@ -249,6 +249,10 @@ class Bot:
 
         self._collect_tree()
 
+        from botcad.emit.cad import emit_cad
+
+        emit_cad(self, output_dir_path)
+
         from botcad.emit.mujoco import emit_mujoco
 
         emit_mujoco(self, output_dir_path)
@@ -260,13 +264,6 @@ class Bot:
         from botcad.emit.readme import emit_assembly_guide
 
         emit_assembly_guide(self, output_dir_path)
-
-        try:
-            from botcad.emit.cad import emit_cad
-
-            emit_cad(self, output_dir_path)
-        except ImportError:
-            print("build123d not installed — skipping CAD export")
 
 
 def _parse_axis(axis: str | Vec3) -> Vec3:

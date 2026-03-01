@@ -23,11 +23,15 @@ from botcad.component import MountingEar, MountPoint, ServoSpec, WirePort
 # STEP model body spans (mm):
 #   X: -22.7 to +22.7 (45.4mm, long axis)
 #   Y: -12.4 to +12.4 (24.8mm, width)
-#   Z: -15.9 to +15.9 (31.8mm, body only — ears add ~3.5mm below)
+#   Z: -15.9 to +15.9 (31.8mm, body only)
+#
+# Mounting flanges extend 3.2mm below body bottom (35.0 - 31.8 = 3.2mm)
+#   Flange bottom at Z = -19.1mm, screw holes at Z ≈ -17.5mm
+#   6x M3 clearance holes (ø4.2mm from STEP) at X: +4.2, -16.5, -20.3mm
 #
 # Output shaft center at X=+12.5, Y=0, Z=+15.9 (body top face)
-# Rear (blind) shaft at same XY, extends in -Z
-# Connector (PA2.0 4-pin) on bottom face near X=-1.5
+# Rear (blind) shaft at same XY, support bearing in -Z
+# Connector (PA2.0 4-pin) on bottom face, toward -X (back) end
 
 # Overall envelope (with ears, per datasheet)
 _STS3215_DIMS = (0.0452, 0.0247, 0.035)
@@ -62,30 +66,22 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         dimensions=_STS3215_DIMS,
         mass=_STS3215_MASS,
         wire_ports=(
-            # Connector on bottom face, near X=-1.5mm from center
-            # PA2.0 4-pin + 5264/2.54 3P terminal, 15cm cable
+            # PA2.0 4-pin connector on bottom face, toward back (-X) end
+            # Also has 5264/2.54 3P terminal nearby; 15cm cable
             WirePort(
                 "uart_bus",
-                pos=(-0.0016, 0.0, -0.0159),
+                pos=(-0.0080, 0.0, -0.0159),
                 bus_type="uart_half_duplex",
             ),
         ),
         mounting_points=(
             # Horn mounting holes — 4x M2.5 (ø2.5mm) on the output face
-            # Pattern centered on shaft at X=+12.5, Y=0, Z=+18.7mm
-            # Spacing: 9.9mm x 9.9mm
-            MountPoint(
-                "horn_1", pos=(+0.00755 - 0.0125, +0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "horn_2", pos=(+0.01745 - 0.0125, +0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "horn_3", pos=(+0.00755 - 0.0125, -0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "horn_4", pos=(+0.01745 - 0.0125, -0.00495, +0.0187), diameter=0.0025
-            ),
+            # Pattern centered on shaft at X=+12.5mm, Y=0, Z=+18.7mm
+            # Spacing: 9.9mm x 9.9mm; positions in body-center coords
+            MountPoint("horn_1", pos=(+0.00755, +0.00495, +0.0187), diameter=0.0025),
+            MountPoint("horn_2", pos=(+0.01745, +0.00495, +0.0187), diameter=0.0025),
+            MountPoint("horn_3", pos=(+0.00755, -0.00495, +0.0187), diameter=0.0025),
+            MountPoint("horn_4", pos=(+0.01745, -0.00495, +0.0187), diameter=0.0025),
         ),
         color=(0.15, 0.15, 0.15, 1.0),
         stall_torque=_STS3215_STALL_TORQUE,
@@ -100,59 +96,46 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
         mounting_ears=(
-            # 4 ears with ø4.2mm clearance holes for M3 screws
-            # Located at the Y faces (both sides), at two X positions
-            # Near shaft end (X=+4.2mm) and far end (X=-16.5mm or -20.3mm)
-            # From STEP: holes at Y=±10.25, Z=±15.9
+            # 6x M3 clearance holes (ø4.2mm) in mounting flanges below body
+            # Flanges extend 3.2mm below body bottom (Z=-15.9mm)
+            # Screw hole centers at Z=-17.5mm (midpoint of flange)
+            # Y=±10.25mm (inside body width), 3 X positions per side
             MountingEar(
-                "ear_1", pos=(+0.0042, -0.01025, -0.0159), hole_diameter=0.0042
+                "ear_1", pos=(+0.0042, -0.01025, -0.0175), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_2", pos=(-0.0165, -0.01025, -0.0159), hole_diameter=0.0042
+                "ear_2", pos=(-0.0165, -0.01025, -0.0175), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_3", pos=(+0.0042, +0.01025, -0.0159), hole_diameter=0.0042
+                "ear_3", pos=(+0.0042, +0.01025, -0.0175), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_4", pos=(-0.0165, +0.01025, -0.0159), hole_diameter=0.0042
+                "ear_4", pos=(-0.0165, +0.01025, -0.0175), hole_diameter=0.0042
             ),
-            # Additional pair at far end (X=-20.3mm)
+            # Additional pair at far back end (X=-20.3mm)
             MountingEar(
-                "ear_5", pos=(-0.0203, -0.01025, -0.0159), hole_diameter=0.0042
+                "ear_5", pos=(-0.0203, -0.01025, -0.0175), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_6", pos=(-0.0203, +0.01025, -0.0159), hole_diameter=0.0042
+                "ear_6", pos=(-0.0203, +0.01025, -0.0175), hole_diameter=0.0042
             ),
         ),
         horn_mounting_points=(
             # Same as mounting_points above (4x M2.5 on output side)
-            MountPoint(
-                "out_1", pos=(+0.00755 - 0.0125, +0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "out_2", pos=(+0.01745 - 0.0125, +0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "out_3", pos=(+0.00755 - 0.0125, -0.00495, +0.0187), diameter=0.0025
-            ),
-            MountPoint(
-                "out_4", pos=(+0.01745 - 0.0125, -0.00495, +0.0187), diameter=0.0025
-            ),
+            # Positions in body-center coords, centered on shaft at X=+12.5mm
+            MountPoint("out_1", pos=(+0.00755, +0.00495, +0.0187), diameter=0.0025),
+            MountPoint("out_2", pos=(+0.01745, +0.00495, +0.0187), diameter=0.0025),
+            MountPoint("out_3", pos=(+0.00755, -0.00495, +0.0187), diameter=0.0025),
+            MountPoint("out_4", pos=(+0.01745, -0.00495, +0.0187), diameter=0.0025),
         ),
         rear_horn_mounting_points=(
-            # 4x M2.5 on blind/rear side, same XY pattern at Z=-15.6 to -17.7mm
-            MountPoint(
-                "rear_1", pos=(+0.00755 - 0.0125, +0.00495, -0.0156), diameter=0.0025
-            ),
-            MountPoint(
-                "rear_2", pos=(+0.01745 - 0.0125, +0.00495, -0.0156), diameter=0.0025
-            ),
-            MountPoint(
-                "rear_3", pos=(+0.00755 - 0.0125, -0.00495, -0.0156), diameter=0.0025
-            ),
-            MountPoint(
-                "rear_4", pos=(+0.01745 - 0.0125, -0.00495, -0.0156), diameter=0.0025
-            ),
+            # 4x M2.5 on blind/rear side, same XY pattern as front horn
+            # At Z=-19.0mm (below body bottom, where rear support bracket attaches)
+            MountPoint("rear_1", pos=(+0.00755, +0.00495, -0.0190), diameter=0.0025),
+            MountPoint("rear_2", pos=(+0.01745, +0.00495, -0.0190), diameter=0.0025),
+            MountPoint("rear_3", pos=(+0.00755, -0.00495, -0.0190), diameter=0.0025),
+            MountPoint("rear_4", pos=(+0.01745, -0.00495, -0.0190), diameter=0.0025),
         ),
-        connector_pos=(-0.0016, 0.0, -0.0159),
+        # PA2.0 connector on bottom face, toward back (-X) end
+        connector_pos=(-0.0080, 0.0, -0.0159),
     )
