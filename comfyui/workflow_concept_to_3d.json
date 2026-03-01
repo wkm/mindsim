@@ -1,0 +1,180 @@
+{
+  "_comment": "ComfyUI API workflow: FLUX text-to-image → TRELLIS2 image-to-3D → GLB export. Requires: ComfyUI-TRELLIS2, FLUX.1-dev model. Replace PROMPT_PLACEHOLDER with your concept description.",
+
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux1-dev-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": { "title": "Load FLUX Model" }
+  },
+
+  "2": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp16.safetensors",
+      "type": "flux"
+    },
+    "_meta": { "title": "Load CLIP (FLUX dual)" }
+  },
+
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A 3D rendering of a simple wooden dining table on a plain white background. The table has a rectangular top (1.0m wide, 0.6m deep) with four chunky square legs. Medium brown wood material. Clean product shot, centered, studio lighting, no shadows on background. Sims-like proportions, slightly chunky and toylike. Isometric 3/4 view from above.",
+      "clip": ["2", 0]
+    },
+    "_meta": { "title": "Text Prompt (concept description)" }
+  },
+
+  "4": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": { "title": "Empty Latent (1024x1024)" }
+  },
+
+  "5": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 42
+    },
+    "_meta": { "title": "Random Noise" }
+  },
+
+  "6": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": ["1", 0],
+      "conditioning": ["3", 0]
+    },
+    "_meta": { "title": "CFG Guider" }
+  },
+
+  "7": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": ["1", 0],
+      "scheduler": "simple",
+      "steps": 30,
+      "denoise": 1.0
+    },
+    "_meta": { "title": "Scheduler" }
+  },
+
+  "8": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "_meta": { "title": "Sampler Select (euler)" }
+  },
+
+  "9": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": ["5", 0],
+      "guider": ["6", 0],
+      "sampler": ["8", 0],
+      "sigmas": ["7", 0],
+      "latent_image": ["4", 0]
+    },
+    "_meta": { "title": "Sample (FLUX)" }
+  },
+
+  "10": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "_meta": { "title": "Load FLUX VAE" }
+  },
+
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["10", 0]
+    },
+    "_meta": { "title": "Decode Latent → Image" }
+  },
+
+  "12": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["11", 0],
+      "filename_prefix": "concept_render"
+    },
+    "_meta": { "title": "Save Rendered Image" }
+  },
+
+  "20": {
+    "class_type": "Trellis2RemoveBackground",
+    "inputs": {
+      "image": ["11", 0],
+      "low_vram": true
+    },
+    "_meta": { "title": "Remove Background" }
+  },
+
+  "21": {
+    "class_type": "LoadTrellis2Models",
+    "inputs": {
+      "resolution": "512"
+    },
+    "_meta": { "title": "Load TRELLIS2 Models" }
+  },
+
+  "24": {
+    "class_type": "Trellis2GetConditioning",
+    "inputs": {
+      "model_config": ["21", 0],
+      "image": ["20", 0],
+      "mask": ["20", 1]
+    },
+    "_meta": { "title": "TRELLIS2 Conditioning" }
+  },
+
+  "25": {
+    "class_type": "Trellis2ImageToShape",
+    "inputs": {
+      "model_config": ["21", 0],
+      "conditioning": ["24", 0],
+      "seed": 42,
+      "ss_guidance_strength": 7.5,
+      "ss_sampling_steps": 12,
+      "shape_guidance_strength": 7.5,
+      "shape_sampling_steps": 12
+    },
+    "_meta": { "title": "Image → Shape" }
+  },
+
+  "26": {
+    "class_type": "Trellis2ShapeToTexturedMesh",
+    "inputs": {
+      "model_config": ["21", 0],
+      "conditioning": ["24", 0],
+      "shape_result": ["25", 0],
+      "seed": 42,
+      "tex_guidance_strength": 7.5,
+      "tex_sampling_steps": 12
+    },
+    "_meta": { "title": "Shape → Textured Mesh" }
+  },
+
+  "27": {
+    "class_type": "Trellis2ExportGLB",
+    "inputs": {
+      "voxelgrid_path": ["26", 1],
+      "decimation_target": 5000,
+      "texture_size": 1024,
+      "filename_prefix": "concept_3d"
+    },
+    "_meta": { "title": "Export GLB" }
+  }
+}

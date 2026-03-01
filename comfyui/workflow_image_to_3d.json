@@ -1,0 +1,77 @@
+{
+  "_comment": "ComfyUI API workflow: Image → TRELLIS2 → GLB. Use this when you already have a rendered image. Requires: ComfyUI-TRELLIS2 custom nodes.",
+
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "concept_render_00001_.png",
+      "upload": "image"
+    },
+    "_meta": { "title": "Load Concept Image" }
+  },
+
+  "10": {
+    "class_type": "Trellis2RemoveBackground",
+    "inputs": {
+      "image": ["1", 0],
+      "low_vram": true
+    },
+    "_meta": { "title": "Remove Background" }
+  },
+
+  "11": {
+    "class_type": "LoadTrellis2Models",
+    "inputs": {
+      "resolution": "512"
+    },
+    "_meta": { "title": "Load TRELLIS2 Models" }
+  },
+
+  "14": {
+    "class_type": "Trellis2GetConditioning",
+    "inputs": {
+      "model_config": ["11", 0],
+      "image": ["10", 0],
+      "mask": ["10", 1]
+    },
+    "_meta": { "title": "TRELLIS2 Conditioning" }
+  },
+
+  "15": {
+    "class_type": "Trellis2ImageToShape",
+    "inputs": {
+      "model_config": ["11", 0],
+      "conditioning": ["14", 0],
+      "seed": 42,
+      "ss_guidance_strength": 7.5,
+      "ss_sampling_steps": 12,
+      "shape_guidance_strength": 7.5,
+      "shape_sampling_steps": 12
+    },
+    "_meta": { "title": "Image → Shape" }
+  },
+
+  "16": {
+    "class_type": "Trellis2ShapeToTexturedMesh",
+    "inputs": {
+      "model_config": ["11", 0],
+      "conditioning": ["14", 0],
+      "shape_result": ["15", 0],
+      "seed": 42,
+      "tex_guidance_strength": 7.5,
+      "tex_sampling_steps": 12
+    },
+    "_meta": { "title": "Shape → Textured Mesh" }
+  },
+
+  "17": {
+    "class_type": "Trellis2ExportGLB",
+    "inputs": {
+      "voxelgrid_path": ["16", 1],
+      "decimation_target": 5000,
+      "texture_size": 1024,
+      "filename_prefix": "concept_3d"
+    },
+    "_meta": { "title": "Export GLB" }
+  }
+}

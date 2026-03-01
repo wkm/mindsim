@@ -4,7 +4,7 @@ Usage:
     uv run python -m scene_gen.render_scenes                    # 16 random seeds
     uv run python -m scene_gen.render_scenes --seeds 42 43 44   # specific seeds
     uv run python -m scene_gen.render_scenes --count 25         # 25 random scenes
-    uv run python -m scene_gen.render_scenes --out docs/scenes  # custom output dir
+    uv run python -m scene_gen.render_scenes --out docs/rooms   # custom output dir
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from scene_gen import SceneComposer
+from scene_gen.archetypes import list_archetypes
 from scene_gen.composer import describe_scene, scene_id
 
 ROOM_XML = str(Path(__file__).resolve().parent.parent / "worlds" / "room.xml")
@@ -30,9 +31,6 @@ BG_COLOR = (40, 42, 48)
 LABEL_BG = (30, 32, 36)
 LABEL_FG = (220, 220, 220)
 
-DEFAULT_MAX_OBJECTS = 8
-DEFAULT_GEOMS_PER_OBJECT = 8
-
 
 def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     """Load room.xml with full obstacle slots for scene generation."""
@@ -40,11 +38,7 @@ def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     # Increase offscreen framebuffer for high-res renders
     spec.visual.global_.offwidth = max(spec.visual.global_.offwidth, CELL_W)
     spec.visual.global_.offheight = max(spec.visual.global_.offheight, CELL_H)
-    SceneComposer.prepare_spec(
-        spec,
-        max_objects=DEFAULT_MAX_OBJECTS,
-        geoms_per_object=DEFAULT_GEOMS_PER_OBJECT,
-    )
+    SceneComposer.prepare_spec(spec)
     model = spec.compile()
     data = mujoco.MjData(model)
 
@@ -62,25 +56,6 @@ def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     mujoco.mj_forward(model, data)
     composer = SceneComposer(model, data)
     return model, data, composer
-
-
-def _sync_geom_xpos(
-    model: mujoco.MjModel, data: mujoco.MjData, composer: SceneComposer
-):
-    """Manually recompute geom_xpos/xmat for obstacle slot geoms.
-
-    mj_kinematics ignores runtime modifications to model.geom_pos.
-    The offscreen Renderer uses data.geom_xpos, so we patch it.
-    """
-    for slot in composer._slots:
-        bid = slot.body_id
-        body_pos = data.xpos[bid]
-        body_mat = data.xmat[bid].reshape(3, 3)
-        for gid in slot.geom_ids:
-            data.geom_xpos[gid] = body_pos + body_mat @ model.geom_pos[gid]
-            geom_mat = np.zeros(9)
-            mujoco.mju_quat2Mat(geom_mat, model.geom_quat[gid])
-            data.geom_xmat[gid] = (body_mat @ geom_mat.reshape(3, 3)).ravel()
 
 
 def _make_topdown_camera() -> mujoco.MjvCamera:
@@ -102,12 +77,11 @@ def _render_scene(
     renderer: mujoco.Renderer,
     cam: mujoco.MjvCamera,
     seed: int,
+    archetype: str | None = None,
 ) -> tuple[np.ndarray, str]:
     """Generate and render a random scene. Returns (pixels, description)."""
-    scene = composer.random_scene(seed=seed)
+    scene = composer.random_scene(seed=seed, archetype=archetype)
     composer.apply(scene)
-    mujoco.mj_forward(model, data)
-    _sync_geom_xpos(model, data, composer)
 
     renderer.update_scene(data, cam)
     pixels = renderer.render().copy()
@@ -139,10 +113,12 @@ def render_scene_grid(
     model: mujoco.MjModel,
     data: mujoco.MjData,
     composer: SceneComposer,
+    archetype: str | None = None,
+    out_name: str = "scenes.png",
 ) -> Path:
     """Render a grid of scenes, one per seed. Returns output path."""
     n = len(seeds)
-    cols = min(4, n)
+    cols = 4
     rows = math.ceil(n / cols)
 
     cell_total_h = CELL_H + LABEL_H
@@ -157,7 +133,9 @@ def render_scene_grid(
     cam = _make_topdown_camera()
 
     for idx, seed in enumerate(seeds):
-        pixels, desc = _render_scene(model, data, composer, renderer, cam, seed)
+        pixels, desc = _render_scene(
+            model, data, composer, renderer, cam, seed, archetype
+        )
 
         cell_img = Image.fromarray(pixels)
         col = idx % cols
@@ -187,7 +165,7 @@ def render_scene_grid(
     renderer.close()
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "scenes.png"
+    out_path = out_dir / out_name
     grid.save(out_path)
     return out_path
 
@@ -196,10 +174,45 @@ def main():
     parser = argparse.ArgumentParser(description="Render random scene grids")
     parser.add_argument("--seeds", nargs="*", type=int, help="Specific seeds to render")
     parser.add_argument(
-        "--count", type=int, default=16, help="Number of random scenes (default: 16)"
+        "--count", type=int, default=8, help="Number of random scenes (default: 8)"
     )
-    parser.add_argument("--out", default="docs/scenes", help="Output directory")
+    parser.add_argument("--out", default="docs/rooms", help="Output directory")
+    parser.add_argument(
+        "--archetype",
+        choices=[*list_archetypes(), "random"],
+        default="random",
+        help="Room archetype (default: random = picks randomly each scene)",
+    )
+    parser.add_argument(
+        "--all-archetypes",
+        action="store_true",
+        help="Render one grid per archetype (16 scenes each).",
+    )
     args = parser.parse_args()
+
+    out_dir = Path(args.out)
+
+    print("Setting up MuJoCo scene...")
+    model, data, composer = _setup_scene()
+
+    if args.all_archetypes:
+        archetypes = list_archetypes()
+        print(f"Rendering {len(archetypes)} archetype grids...")
+        for arch in archetypes:
+            rng = np.random.default_rng(abs(hash(arch)) % (2**32))
+            seeds = [int(rng.integers(0, 2**32)) for _ in range(args.count)]
+            print(f"  {arch}: {len(seeds)} scenes")
+            path = render_scene_grid(
+                seeds,
+                out_dir,
+                model,
+                data,
+                composer,
+                archetype=arch,
+                out_name=f"{arch}.png",
+            )
+            print(f"    -> {path}")
+        return
 
     if args.seeds:
         seeds = args.seeds
@@ -207,13 +220,18 @@ def main():
         rng = np.random.default_rng()
         seeds = [int(rng.integers(0, 2**32)) for _ in range(args.count)]
 
-    out_dir = Path(args.out)
-
-    print("Setting up MuJoCo scene...")
-    model, data, composer = _setup_scene()
-
-    print(f"Rendering {len(seeds)} scenes...")
-    path = render_scene_grid(seeds, out_dir, model, data, composer)
+    archetype = args.archetype
+    out_name = "scenes.png" if archetype == "random" else f"{archetype}.png"
+    print(f"Rendering {len(seeds)} scenes (archetype={archetype})...")
+    path = render_scene_grid(
+        seeds,
+        out_dir,
+        model,
+        data,
+        composer,
+        archetype=archetype,
+        out_name=out_name,
+    )
     print(f"\n-> {path}")
 
 
