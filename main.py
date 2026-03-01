@@ -964,6 +964,7 @@ class RunActionScreen(Screen):
         Binding("p", "play_run", "Play", priority=True),
         Binding("r", "resume_run", "Resume", priority=True),
         Binding("v", "view_run", "View", priority=True),
+        Binding("d", "download_recordings", "Recordings", priority=True),
         Binding("w", "open_wandb", "W&B", priority=True),
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
@@ -1032,6 +1033,8 @@ class RunActionScreen(Screen):
                     "[v] View in MuJoCo",
                 ]
                 self._action_map += ["play_run", "resume_run", "view_run"]
+            options.append("[d] Download recordings")
+            self._action_map.append("download_recordings")
             if info.wandb_url:
                 options.append("[w] Open W&B")
                 self._action_map.append("open_wandb")
@@ -1070,6 +1073,13 @@ class RunActionScreen(Screen):
             import webbrowser
 
             webbrowser.open(url)
+
+    def action_download_recordings(self) -> None:
+        from replay import run_download
+
+        run_name = self._info.name
+        self.app.exit()
+        run_download(run_name, last_n=3)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
