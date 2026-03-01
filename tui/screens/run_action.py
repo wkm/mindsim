@@ -5,6 +5,7 @@ from __future__ import annotations
 import webbrowser
 from pathlib import Path
 
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -52,6 +53,11 @@ class RunActionScreen(Screen):
     #action-list {
         height: auto;
     }
+
+    #download-status {
+        margin-top: 1;
+        color: $text-muted;
+    }
     """
 
     def __init__(
@@ -61,6 +67,7 @@ class RunActionScreen(Screen):
         self._run_dir = run_dir
         self._info = run_info
         self._cloud_only = cloud_only
+        self._downloading = False
 
     def compose(self) -> ComposeResult:
         info = self._info
@@ -101,7 +108,8 @@ class RunActionScreen(Screen):
         yield Footer()
 
     def action_go_back(self) -> None:
-        self.app.pop_screen()
+        if not self._downloading:
+            self.app.pop_screen()
 
     def action_play_run(self) -> None:
         from main import CheckpointPickerScreen
@@ -134,11 +142,112 @@ class RunActionScreen(Screen):
             webbrowser.open(url)
 
     def action_download_recordings(self) -> None:
-        from replay import run_download
+        if self._downloading:
+            return
+        self._downloading = True
+        self._start_download()
+
+    @work(thread=True)
+    def _start_download(self) -> None:
+        from replay import _open_in_rerun, discover_recordings
 
         run_name = self._info.name
-        self.app.exit()
-        run_download(run_name, last_n=3)
+
+        self.app.call_from_thread(
+            self._show_download_status, "Discovering recordings..."
+        )
+
+        try:
+            available = discover_recordings(run_name)
+        except Exception as e:
+            self.app.call_from_thread(
+                self._show_download_status, f"Error discovering recordings: {e}"
+            )
+            self.app.call_from_thread(self._finish_download)
+            return
+
+        if not available:
+            self.app.call_from_thread(
+                self._show_download_status,
+                f"No recordings found for '{run_name}'.",
+            )
+            self.app.call_from_thread(self._finish_download)
+            return
+
+        # Take last 3 recordings
+        selected = available[-3:]
+
+        self.app.call_from_thread(
+            self._show_download_status,
+            f"Found {len(available)} recordings. Downloading {len(selected)}...",
+        )
+
+        output_dir = Path(f"replay_{run_name}")
+        output_dir.mkdir(exist_ok=True)
+
+        rrd_paths = []
+        for i, rec in enumerate(selected):
+            label = (
+                f"batch {rec.batch_idx}"
+                if rec.batch_idx is not None
+                else f"episode {rec.episode}"
+            )
+            self.app.call_from_thread(
+                self._show_download_status,
+                f"[{i + 1}/{len(selected)}] Downloading {label}...",
+            )
+            try:
+                # Download artifact from W&B if needed
+                if rec.artifact is not None:
+                    artifact_dir = rec.artifact.download()
+                    rrd_files = list(Path(artifact_dir).glob("*.rrd"))
+                    if not rrd_files:
+                        raise FileNotFoundError(f"No .rrd in artifact for {label}")
+                    src = rrd_files[0]
+                    if rec.batch_idx is not None:
+                        dest = output_dir / f"batch_{rec.batch_idx}.rrd"
+                    else:
+                        dest = output_dir / f"episode_{rec.episode}.rrd"
+                    # Remove stale symlinks before creating new ones
+                    if dest.is_symlink():
+                        dest.unlink()
+                    if not dest.exists():
+                        dest.symlink_to(src.resolve())
+                    rrd_paths.append(str(dest))
+                elif rec.path and Path(rec.path).exists():
+                    rrd_paths.append(rec.path)
+                else:
+                    raise FileNotFoundError(f"No artifact or local path for {label}")
+            except Exception as e:
+                self.app.call_from_thread(
+                    self._show_download_status,
+                    f"[{i + 1}/{len(selected)}] {label} — error: {e}",
+                )
+
+        if rrd_paths:
+            self.app.call_from_thread(
+                self._show_download_status,
+                f"Done — {len(rrd_paths)} recordings in {output_dir}/. Opening Rerun...",
+            )
+            _open_in_rerun(rrd_paths)
+        else:
+            self.app.call_from_thread(
+                self._show_download_status, "No recordings downloaded."
+            )
+
+        self.app.call_from_thread(self._finish_download)
+
+    def _show_download_status(self, text: str) -> None:
+        """Update or create the download status widget."""
+        try:
+            status = self.query_one("#download-status", Static)
+            status.update(text)
+        except Exception:
+            box = self.query_one("#action-box", Vertical)
+            box.mount(Static(text, id="download-status"))
+
+    def _finish_download(self) -> None:
+        self._downloading = False
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         idx = event.option_index
