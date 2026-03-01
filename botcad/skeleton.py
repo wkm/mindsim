@@ -265,6 +265,14 @@ class Bot:
 
         emit_assembly_guide(self, output_dir_path)
 
+        from botcad.emit.renders import emit_renders
+
+        emit_renders(self, output_dir_path)
+
+        from botcad.emit.servo_renders import emit_servo_renders
+
+        emit_servo_renders(self, output_dir_path)
+
 
 def _parse_axis(axis: str | Vec3) -> Vec3:
     """Convert axis shorthand to a 3-tuple."""
