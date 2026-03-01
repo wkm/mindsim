@@ -19,9 +19,9 @@
       <inertial pos="0.000000 0.000000 0.003290" mass="0.275818" fullinertia="1.550015e-04 5.977567e-04 4.769207e-04 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
-      <geom name="left_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.042500 -0.012000 -0.000000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="right_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="0.042500 -0.012000 -0.000000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="shoulder_yaw_servo" type="box" size="0.022600 0.012350 0.017500" pos="0.000000 -0.012000 0.022500" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="right_wheel_servo" type="box" size="0.022600 0.012350 0.017500" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="shoulder_yaw_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.012500 0.000000 0.024100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <body name="left_rim" pos="-0.060000 0.000000 0.000000">
         <inertial pos="0.000000 0.000000 0.000000" mass="0.038400" fullinertia="3.488000e-05 3.488000e-05 6.400000e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
         <joint name="left_wheel" type="hinge" pos="0 0 0" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>
@@ -38,17 +38,17 @@
         <inertial pos="0.000000 0.000000 0.018543" mass="0.059320" fullinertia="9.188139e-06 1.627169e-05 1.311531e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
         <joint name="shoulder_yaw" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6246" range="-1.5000 1.5000"/>
         <geom type="mesh" mesh="turntable_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
-        <geom name="shoulder_pitch_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.017500 -0.012000 0.020000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+        <geom name="shoulder_pitch_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.015900 0.000000 0.032500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
         <body name="upper_arm" pos="0.000000 0.000000 0.020000">
           <inertial pos="0.000000 0.000000 0.095763" mass="0.068920" fullinertia="4.284776e-05 5.107767e-05 1.523781e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
           <joint name="shoulder_pitch" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6246" range="-1.5000 1.5000"/>
           <geom type="mesh" mesh="upper_arm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
-          <geom name="elbow_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.017500 -0.012000 0.120000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+          <geom name="elbow_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.015900 0.000000 0.132500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
           <body name="forearm" pos="0.000000 0.000000 0.120000">
             <inertial pos="0.000000 0.000000 0.082090" mass="0.067000" fullinertia="2.788905e-05 3.588968e-05 1.481331e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
             <joint name="elbow" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6246" range="-2.0000 0.0000"/>
             <geom type="mesh" mesh="forearm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
-            <geom name="wrist_servo" type="box" size="0.022600 0.012350 0.017500" pos="0.000000 -0.012000 0.082500" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+            <geom name="wrist_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.012500 0.000000 0.084100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
             <body name="hand" pos="0.000000 0.000000 0.100000">
               <inertial pos="0.000000 0.001905 0.000000" mass="0.012600" fullinertia="8.013058e-07 7.413000e-07 1.372506e-06 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
               <joint name="wrist" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6246" range="-1.5000 1.5000"/>

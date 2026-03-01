@@ -6,7 +6,7 @@ batteries, cameras) and the system generates MuJoCo XML, CAD assemblies, BOMs,
 and assembly guides automatically.
 """
 
-from botcad.component import Component, MountPoint, ServoSpec, WirePort
+from botcad.component import Component, MountingEar, MountPoint, ServoSpec, WirePort
 from botcad.skeleton import Body, Bot, Joint
 
 __all__ = [
@@ -17,4 +17,5 @@ __all__ = [
     "ServoSpec",
     "WirePort",
     "MountPoint",
+    "MountingEar",
 ]

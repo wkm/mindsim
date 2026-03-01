@@ -31,6 +31,19 @@ class MountPoint:
 
 
 @dataclass(frozen=True)
+class MountingEar:
+    """A mounting tab/flange on a servo with a through-hole for bracket attachment.
+
+    Servo mounting ears are tabs that extend beyond the main body and have
+    screw holes for attaching the servo to a 3D-printed bracket.
+    """
+
+    label: str
+    pos: Vec3  # hole center relative to component origin (meters)
+    hole_diameter: float  # clearance hole diameter (meters)
+
+
+@dataclass(frozen=True)
 class Component:
     """Base class for all physical components."""
 
@@ -44,7 +57,17 @@ class Component:
 
 @dataclass(frozen=True)
 class ServoSpec(Component):
-    """A servo motor with mechanical and electrical specs."""
+    """A servo motor with mechanical and electrical specs.
+
+    Servo local frame convention (matching the STS3215 STEP model):
+        X = long axis (length, 45.2mm for STS3215)
+        Y = width axis (24.7mm)
+        Z = shaft axis (height, shaft protrudes in +Z)
+
+    The servo is NOT symmetric: the output shaft is offset along X from
+    the body center.  ``shaft_offset`` encodes this displacement so that
+    ``servo_placement()`` can position the body correctly at a joint.
+    """
 
     stall_torque: float = 0.0  # N-m
     no_load_speed: float = 0.0  # rad/s
@@ -55,6 +78,13 @@ class ServoSpec(Component):
     range_rad: tuple[float, float] = (-3.14159, 3.14159)  # angular range
     gear_ratio: float = 1.0
     continuous: bool = False  # continuous rotation mode (wheels)
+
+    # Extended geometry (optional, for detailed CAD / visualization)
+    body_dimensions: Vec3 = (0.0, 0.0, 0.0)  # main body only (no ears/horn)
+    mounting_ears: tuple[MountingEar, ...] = ()  # bracket attachment tabs
+    horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on output horn
+    rear_horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on blind side
+    connector_pos: Vec3 | None = None  # wire connector center position
 
     @property
     def kp(self) -> float:
