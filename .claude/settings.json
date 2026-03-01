@@ -2,11 +2,11 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|NotebookEdit",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "uv run ruff check --fix \"$CLAUDE_FILE_PATH\" && uv run ruff format \"$CLAUDE_FILE_PATH\"",
+            "command": "bash -c 'F=$(cat | jq -r .tool_input.file_path); [[ \"$F\" == *.py ]] && uv run ruff check --fix \"$F\" && uv run ruff format \"$F\" || true'",
             "timeout": 10000
           }
         ]

@@ -6,7 +6,6 @@ and curriculum all work together. Runs in seconds.
 """
 
 import os
-import warnings
 
 import numpy as np
 import pytest
@@ -15,6 +14,7 @@ import wandb
 
 from checkpoint import load_checkpoint, save_checkpoint, validate_checkpoint_config
 from pipeline import pipeline_for_bot
+from reward_hierarchy import build_reward_hierarchy
 from train import (
     LSTMPolicy,
     TinyPolicy,
@@ -36,6 +36,10 @@ def _biped_smoketest_config():
 
 def _make_env(cfg):
     return TrainingEnv.from_config(cfg.env)
+
+
+def _make_hierarchy(cfg):
+    return build_reward_hierarchy(cfg.bot_name, cfg.env)
 
 
 class TestEnvironment:
@@ -129,8 +133,9 @@ class TestEpisodeCollection:
         cfg = _smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        hierarchy = _make_hierarchy(cfg)
 
-        data = collect_episode(env, policy, deterministic=False)
+        data = collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
         assert len(data["observations"]) > 0
         assert len(data["actions"]) == len(data["observations"])
         assert len(data["rewards"]) == len(data["observations"])
@@ -143,8 +148,9 @@ class TestEpisodeCollection:
         cfg = _smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        hierarchy = _make_hierarchy(cfg)
 
-        data = collect_episode(env, policy, deterministic=True)
+        data = collect_episode(env, policy, deterministic=True, hierarchy=hierarchy)
         assert "log_probs" not in data
         assert len(data["observations"]) > 0
         env.close()
@@ -158,11 +164,14 @@ class TestTrainingStep:
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        hierarchy = _make_hierarchy(cfg)
 
         # Collect a small batch
         batch = []
         for _ in range(2):
-            batch.append(collect_episode(env, policy, deterministic=False))
+            batch.append(
+                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            )
 
         loss, grad_norm, policy_std, entropy = train_step_batched(
             policy, optimizer, batch
@@ -179,11 +188,15 @@ class TestTrainingStep:
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        hierarchy = _make_hierarchy(cfg)
 
         # Snapshot params before
         params_before = {name: p.clone() for name, p in policy.named_parameters()}
 
-        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
         train_step_batched(policy, optimizer, batch)
 
         # At least some params should have changed
@@ -207,7 +220,10 @@ class TestParallelCollection:
         from parallel import ParallelCollector
 
         collector = ParallelCollector(
-            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+            bot_name=cfg.bot_name,
+            num_workers=2,
+            env_config=cfg.env,
+            policy_config=cfg.policy,
         )
 
         episodes = collector.collect_batch(
@@ -233,7 +249,10 @@ class TestParallelCollection:
         from parallel import ParallelCollector
 
         collector = ParallelCollector(
-            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+            bot_name=cfg.bot_name,
+            num_workers=2,
+            env_config=cfg.env,
+            policy_config=cfg.policy,
         )
 
         episodes = collector.collect_batch(
@@ -260,7 +279,10 @@ class TestParallelCollection:
         from parallel import ParallelCollector
 
         collector = ParallelCollector(
-            num_workers=2, env_config=cfg.env, policy_config=cfg.policy
+            bot_name=cfg.bot_name,
+            num_workers=2,
+            env_config=cfg.env,
+            policy_config=cfg.policy,
         )
 
         batch = collector.collect_batch(
@@ -288,6 +310,7 @@ class TestEndToEnd:
             hidden_size=cfg.policy.hidden_size,
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+        hierarchy = _make_hierarchy(cfg)
 
         # Disable wandb
         wandb.init(mode="disabled")
@@ -298,7 +321,11 @@ class TestEndToEnd:
             # Collect batch
             batch = []
             for _ in range(cfg.training.batch_size):
-                batch.append(collect_episode(env, policy, deterministic=False))
+                batch.append(
+                    collect_episode(
+                        env, policy, deterministic=False, hierarchy=hierarchy
+                    )
+                )
 
             # Train
             loss, grad_norm, policy_std, entropy = train_step_batched(
@@ -307,7 +334,9 @@ class TestEndToEnd:
             assert not np.isnan(loss)
 
             # Eval
-            eval_data = collect_episode(env, policy, deterministic=True)
+            eval_data = collect_episode(
+                env, policy, deterministic=True, hierarchy=hierarchy
+            )
             assert isinstance(eval_data["success"], bool)
 
         wandb.finish()
@@ -411,8 +440,9 @@ class TestBipedEpisodeCollection:
         policy = LSTMPolicy(
             image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
+        hierarchy = _make_hierarchy(cfg)
 
-        data = collect_episode(env, policy, deterministic=False)
+        data = collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
         assert len(data["observations"]) > 0
         assert len(data["actions"]) == len(data["observations"])
         # Each action should be 8-dimensional
@@ -431,8 +461,12 @@ class TestBipedTrainingStep:
             image_height=64, image_width=64, hidden_size=32, num_actions=8
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        hierarchy = _make_hierarchy(cfg)
 
-        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
         loss, grad_norm, policy_std, entropy = train_step_batched(
             policy, optimizer, batch
         )
@@ -500,8 +534,12 @@ class TestPPO:
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        hierarchy = _make_hierarchy(cfg)
 
-        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
         (
             policy_loss,
             value_loss,
@@ -534,9 +572,13 @@ class TestPPO:
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
         optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        hierarchy = _make_hierarchy(cfg)
 
         params_before = {name: p.clone() for name, p in policy.named_parameters()}
-        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
         train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
 
         any_changed = False
@@ -557,13 +599,14 @@ class TestPPO:
             hidden_size=cfg.policy.hidden_size,
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+        hierarchy = _make_hierarchy(cfg)
 
         wandb.init(mode="disabled")
 
         for batch_idx in range(2):
             env.set_curriculum_stage(1, min(1.0, batch_idx * 0.5))
             batch = [
-                collect_episode(env, policy, deterministic=False)
+                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
                 for _ in range(cfg.training.batch_size)
             ]
 
@@ -584,7 +627,9 @@ class TestPPO:
             assert not np.isnan(policy_loss)
             assert not np.isnan(value_loss)
 
-            eval_data = collect_episode(env, policy, deterministic=True)
+            eval_data = collect_episode(
+                env, policy, deterministic=True, hierarchy=hierarchy
+            )
             assert isinstance(eval_data["success"], bool)
 
         wandb.finish()
@@ -595,8 +640,9 @@ class TestPPO:
         cfg = _smoketest_config()
         env = _make_env(cfg)
         policy = LSTMPolicy(image_height=64, image_width=64, hidden_size=32)
+        hierarchy = _make_hierarchy(cfg)
 
-        data = collect_episode(env, policy, deterministic=False)
+        data = collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
         assert "done" in data
         assert "truncated" in data
         assert isinstance(data["done"], bool)
@@ -617,11 +663,15 @@ class TestCheckpoint:
             hidden_size=cfg.policy.hidden_size,
         )
         optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.training.learning_rate)
+        hierarchy = _make_hierarchy(cfg)
 
         wandb.init(mode="disabled")
 
         # Do a training step so optimizer has state
-        batch = [collect_episode(env, policy, deterministic=False) for _ in range(2)]
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
         train_step_ppo(policy, optimizer, batch, ppo_epochs=2)
 
         # Save checkpoint
@@ -722,8 +772,8 @@ class TestCheckpoint:
         with pytest.raises(ValueError, match="Architecture mismatch"):
             validate_checkpoint_config(ckpt_config, current_config)
 
-    def test_training_param_change_warns(self):
-        """Changing training params should warn but not error."""
+    def test_training_param_change_warns(self, capsys):
+        """Changing training params should print a notice but not error."""
         ckpt_config = {
             "policy": {
                 "policy_type": "LSTMPolicy",
@@ -746,11 +796,9 @@ class TestCheckpoint:
             "curriculum": {},
             "env": {},
         }
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            validate_checkpoint_config(ckpt_config, current_config)
-            assert len(w) == 1
-            assert "learning_rate" in str(w[0].message)
+        validate_checkpoint_config(ckpt_config, current_config)
+        captured = capsys.readouterr()
+        assert "learning_rate" in captured.out
 
     def test_save_checkpoint_creates_file(self, tmp_path):
         """save_checkpoint should create a local .pt file."""
