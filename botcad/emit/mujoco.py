@@ -239,6 +239,10 @@ def _emit_body_tree(
             size="0.005",
         )
 
+    # Wire route visualization — colored capsules along cable paths
+    if is_root:
+        _emit_wire_routes(body_el, bot)
+
     # Servo visualization geoms — green boxes at each joint location
     for joint in body.joints:
         servo = joint.servo
@@ -283,6 +287,46 @@ def _emit_camera(parent_el: Element, body: Body) -> None:
                 euler=f"0 {math.pi} 0",
             )
             return
+
+
+_WIRE_COLORS = {
+    "uart_half_duplex": "0.2 0.4 1.0 0.9",  # blue — servo daisy-chain
+    "csi": "1.0 0.8 0.0 0.9",  # yellow — camera ribbon
+    "power": "0.9 0.2 0.2 0.9",  # red — power
+}
+_WIRE_RADIUS = {
+    "uart_half_duplex": "0.0015",  # 1.5mm — typical servo cable
+    "csi": "0.003",  # 3mm — CSI ribbon width approximation
+    "power": "0.002",  # 2mm — power cable
+}
+
+
+def _emit_wire_routes(parent_el: Element, bot: Bot) -> None:
+    """Emit wire route visualization as capsule geoms on the root body.
+
+    Positions are in root-body-local frame (matching the world-frame
+    waypoints from the routing solver). Static — doesn't track joint
+    motion, but shows correct paths at rest pose.
+    """
+    for route in bot.wire_routes:
+        color = _WIRE_COLORS.get(route.bus_type, "0.5 0.5 0.5 0.9")
+        radius = _WIRE_RADIUS.get(route.bus_type, "0.0015")
+        for i, seg in enumerate(route.segments):
+            SubElement(
+                parent_el,
+                "geom",
+                name=f"wire_{route.label}_{i}",
+                type="capsule",
+                fromto=(
+                    f"{seg.start[0]:.6f} {seg.start[1]:.6f} {seg.start[2]:.6f} "
+                    f"{seg.end[0]:.6f} {seg.end[1]:.6f} {seg.end[2]:.6f}"
+                ),
+                size=radius,
+                rgba=color,
+                contype="0",
+                conaffinity="0",
+                group="2",
+            )
 
 
 def _add_imu_sensors(sensor_el: Element, bot: Bot) -> None:
