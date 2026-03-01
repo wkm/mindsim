@@ -330,7 +330,6 @@ class Pipeline:
         Not a round-trip format. For serialization use to_wandb_config().
         """
         import warnings
-        from pathlib import Path
 
         lines = []
         bot = self.bot_name
@@ -590,11 +589,19 @@ _BOT_DEFAULTS: dict[str, dict] = {
             log_rerun_every=9999,
         ),
     },
+    "wheeler_arm": {
+        "env": dict(
+            scene_path="bots/wheeler_arm/scene.xml",
+        ),
+        "policy": dict(
+            sensor_input_size=12,  # 6 joints x (pos + vel)
+        ),
+    },
 }
 
 # Smoketest overrides applied uniformly on top of any bot's pipeline
 _SMOKETEST_OVERRIDES = {
-"env": dict(
+    "env": dict(
         render_width=64,
         render_height=64,
         max_episode_steps=10,
