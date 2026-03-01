@@ -842,11 +842,11 @@ class RunBrowserScreen(Screen):
         for run_dir, info in discover_local_runs():
             date_str = info.created_at[:10] if info.created_at else "?"
             display_name = bot_display_name(info.bot_name)
-            status_icon = {"running": "*", "completed": "+", "failed": "!"}.get(
-                info.status, "?"
+            status_str = {"running": "RUN", "completed": "OK ", "failed": "ERR"}.get(
+                info.status, "???"
             )
             batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
-            label = f"LOCAL  [{status_icon}] {info.name}  {display_name}  {date_str}  {batch_str}"
+            label = f"LOCAL  {status_str}  {info.name}  {display_name}  {date_str}  {batch_str}"
             labels.append(label)
             self._items.append({"type": "local", "dir": run_dir, "info": info})
             if info.wandb_id:
@@ -857,14 +857,14 @@ class RunBrowserScreen(Screen):
             if wr["id"] in local_wandb_ids:
                 continue
             date_str = wr["created_at"][:10] if wr.get("created_at") else "?"
-            state_icon = {
-                "running": "*",
-                "finished": "+",
-                "failed": "!",
-                "crashed": "!",
-            }.get(wr.get("state", ""), "?")
+            state_str = {
+                "running": "RUN",
+                "finished": "OK ",
+                "failed": "ERR",
+                "crashed": "ERR",
+            }.get(wr.get("state", ""), "???")
             tags_str = " ".join(wr.get("tags", []))
-            label = f"CLOUD  [{state_icon}] {wr['name']}  {tags_str}  {date_str}"
+            label = f"CLOUD  {state_str}  {wr['name']}  {tags_str}  {date_str}"
             labels.append(label)
             # Build a minimal RunInfo for cloud runs
             bot_name = ""
