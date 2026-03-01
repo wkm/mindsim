@@ -4,7 +4,7 @@ from pathlib import Path
 
 from textual.app import App
 
-from run_manager import RunInfo
+from training.run_manager import RunInfo
 from tui.screens.run_browser import RunBrowserScreen
 
 MOCK_RUNS = [

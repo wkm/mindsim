@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
-    from reward_hierarchy import RewardHierarchy
+    from training.rewards import RewardHierarchy
 
 
 @dataclass
@@ -228,7 +228,7 @@ class Pipeline:
         # Cache to avoid duplicate validation warnings
         cache_attr = "_reward_hierarchy_cache"
         if not hasattr(self, cache_attr):
-            from reward_hierarchy import build_reward_hierarchy
+            from training.rewards import build_reward_hierarchy
 
             object.__setattr__(
                 self, cache_attr, build_reward_hierarchy(self.bot_name, self.env)
@@ -279,7 +279,7 @@ class Pipeline:
         """
         import torch
 
-        from policies import LSTMPolicy, MLPPolicy, TinyPolicy
+        from training.policies import LSTMPolicy, MLPPolicy, TinyPolicy
 
         cfg = self.policy
         if isinstance(device, str):

@@ -70,8 +70,12 @@ class SimEnv:
         ]
 
         # Cache ctrlrange for remapping NN outputs [-1,1] -> [lo, hi]
-        self.ctrl_range_lo = self.model.actuator_ctrlrange[:self.num_actuators, 0].copy()
-        self.ctrl_range_hi = self.model.actuator_ctrlrange[:self.num_actuators, 1].copy()
+        self.ctrl_range_lo = self.model.actuator_ctrlrange[
+            : self.num_actuators, 0
+        ].copy()
+        self.ctrl_range_hi = self.model.actuator_ctrlrange[
+            : self.num_actuators, 1
+        ].copy()
 
         # Standard body/camera IDs (convention: all bots use these names)
         self.bot_body_id = mujoco.mj_name2id(

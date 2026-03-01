@@ -7,8 +7,8 @@ moving target, full angle randomization) and saves a Rerun recording.
 
 import rerun as rr
 
-import rerun_logger
-from training_env import TrainingEnv
+from training.env import TrainingEnv
+from viz import rerun_logger
 
 OUTPUT_FILE = "quick_sim.rrd"
 

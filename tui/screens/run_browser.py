@@ -12,7 +12,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 
-from run_manager import (
+from training.run_manager import (
     BOT_DISPLAY_NAMES,
     RunInfo,
     bot_display_name,

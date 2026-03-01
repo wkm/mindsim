@@ -61,7 +61,9 @@ US_ZONES = [
 REGISTRY_LOCATION = "us"
 
 
-def run(cmd: list[str], *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
+def run(
+    cmd: list[str], *, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess:
     """Run a subprocess command."""
     if capture:
         return subprocess.run(cmd, check=check, capture_output=True, text=True)
@@ -74,7 +76,9 @@ def sanitize_label(s: str) -> str:
 
 
 def get_gcp_project() -> str:
-    result = run(["gcloud", "config", "get-value", "project"], capture=True, check=False)
+    result = run(
+        ["gcloud", "config", "get-value", "project"], capture=True, check=False
+    )
     return result.stdout.strip()
 
 
@@ -82,7 +86,9 @@ def get_git_branch(project_dir: Path) -> str:
     try:
         result = subprocess.run(
             ["git", "-C", str(project_dir), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError:
@@ -166,7 +172,11 @@ def try_create_instance(
     """Try to create a spot VM in the given zone. Returns (success, reason)."""
     result = subprocess.run(
         [
-            "gcloud", "compute", "instances", "create", instance,
+            "gcloud",
+            "compute",
+            "instances",
+            "create",
+            instance,
             f"--machine-type={machine_type}",
             "--provisioning-model=SPOT",
             "--instance-termination-action=STOP",
@@ -179,7 +189,8 @@ def try_create_instance(
             f"--metadata-from-file=startup-script={startup_file}",
             "--quiet",
         ],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
     if result.returncode == 0:
@@ -238,7 +249,10 @@ def main():
         sys.exit(1)
 
     if not os.environ.get("WANDB_API_KEY"):
-        print("Warning: WANDB_API_KEY not set. W&B logging will be disabled.", file=sys.stderr)
+        print(
+            "Warning: WANDB_API_KEY not set. W&B logging will be disabled.",
+            file=sys.stderr,
+        )
 
     train_args = sys.argv[1:]
     if not train_args:
@@ -251,29 +265,57 @@ def main():
         sys.exit(1)
 
     repo_name = "mindsim"
-    image = f"{REGISTRY_LOCATION}-docker.pkg.dev/{gcp_project}/{repo_name}/mindsim-train"
+    image = (
+        f"{REGISTRY_LOCATION}-docker.pkg.dev/{gcp_project}/{repo_name}/mindsim-train"
+    )
 
     # -------------------------------------------------------------------------
     # Phase 1: Infrastructure (idempotent)
     # -------------------------------------------------------------------------
     print("==> Ensuring Artifact Registry repo exists...")
     result = run(
-        ["gcloud", "artifacts", "repositories", "describe", repo_name,
-         "--location", REGISTRY_LOCATION, "--format", "value(name)"],
-        check=False, capture=True,
+        [
+            "gcloud",
+            "artifacts",
+            "repositories",
+            "describe",
+            repo_name,
+            "--location",
+            REGISTRY_LOCATION,
+            "--format",
+            "value(name)",
+        ],
+        check=False,
+        capture=True,
     )
     if result.returncode != 0:
-        run([
-            "gcloud", "artifacts", "repositories", "create", repo_name,
-            "--repository-format=docker", f"--location={REGISTRY_LOCATION}",
-            "--description=MindSim training images", "--quiet",
-        ])
+        run(
+            [
+                "gcloud",
+                "artifacts",
+                "repositories",
+                "create",
+                repo_name,
+                "--repository-format=docker",
+                f"--location={REGISTRY_LOCATION}",
+                "--description=MindSim training images",
+                "--quiet",
+            ]
+        )
         print(f"    Created repo: {repo_name}")
     else:
         print(f"    Repo exists: {repo_name}")
 
     print("==> Configuring Docker auth for Artifact Registry...")
-    run(["gcloud", "auth", "configure-docker", f"{REGISTRY_LOCATION}-docker.pkg.dev", "--quiet"])
+    run(
+        [
+            "gcloud",
+            "auth",
+            "configure-docker",
+            f"{REGISTRY_LOCATION}-docker.pkg.dev",
+            "--quiet",
+        ]
+    )
 
     # -------------------------------------------------------------------------
     # Phase 2: Build & push Docker image
@@ -282,7 +324,17 @@ def main():
         print("==> Skipping Docker build (SKIP_BUILD=1)")
     else:
         print("==> Building Docker image...")
-        run(["docker", "build", "--platform", "linux/amd64", "-t", f"{image}:latest", str(project_dir)])
+        run(
+            [
+                "docker",
+                "build",
+                "--platform",
+                "linux/amd64",
+                "-t",
+                f"{image}:latest",
+                str(project_dir),
+            ]
+        )
         print("==> Pushing Docker image...")
         run(["docker", "push", f"{image}:latest"])
 
@@ -323,7 +375,11 @@ def main():
         for zone in zones:
             print(f"    {zone}... ", end="", flush=True)
             success, reason = try_create_instance(
-                instance, machine_type, zone, labels, startup_file,
+                instance,
+                machine_type,
+                zone,
+                labels,
+                startup_file,
             )
             if success:
                 print("OK")
@@ -353,7 +409,7 @@ def main():
   Run:   {instance}
   Zone:  {created_zone}
   Image: {image}:latest
-  Args:  {' '.join(train_args)}
+  Args:  {" ".join(train_args)}
 
   SSH into VM:
     gcloud compute ssh {instance} --zone={created_zone}

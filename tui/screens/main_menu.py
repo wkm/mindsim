@@ -63,25 +63,26 @@ class MainMenuScreen(Screen):
         yield Footer()
 
     def action_select(self, choice: str) -> None:
-        # Import here to avoid circular deps — these screens live in main.py
         if choice == "smoketest":
             self.app.start_training(smoketest=True)
         elif choice == "new":
-            from main import BotSelectorScreen
+            from main import _discover_bots
+            from tui.screens.bot_selector import BotSelectorScreen
 
-            self.app.push_screen(BotSelectorScreen(mode="train"))
+            self.app.push_screen(BotSelectorScreen(bots=_discover_bots(), mode="train"))
         elif choice == "scene":
             self.app.start_scene_preview()
         elif choice == "view":
-            from main import BotSelectorScreen
+            from main import _discover_bots
+            from tui.screens.bot_selector import BotSelectorScreen
 
-            self.app.push_screen(BotSelectorScreen(mode="view"))
+            self.app.push_screen(BotSelectorScreen(bots=_discover_bots(), mode="view"))
         elif choice == "browse":
             from tui.screens.run_browser import RunBrowserScreen
 
             self.app.push_screen(RunBrowserScreen())
         elif choice == "gcp":
-            from main import GCPInstancesScreen
+            from tui.screens.gcp_instances import GCPInstancesScreen
 
             self.app.push_screen(GCPInstancesScreen())
         elif choice == "quit":

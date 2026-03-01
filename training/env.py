@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING
 import mujoco
 import numpy as np
 
-from sim_env import SimEnv, assemble_sensor_data
+from sim.env import SimEnv, assemble_sensor_data
 
 if TYPE_CHECKING:
-    from pipeline import EnvConfig
+    from training.pipeline import EnvConfig
 
 
 class TrainingEnv:
@@ -835,7 +835,7 @@ class TrainingEnv:
             # Raw reward inputs (physical measures before scaling)
             "raw_up_z": float(up_z),
             "raw_forward_vel": forward_vel,
-            "raw_energy": float(np.sum(action ** 2)),
+            "raw_energy": float(np.sum(action**2)),
             "raw_contact_count": int(bad_contacts),
             "raw_action_jerk": action_jerk,
             # Forward distance from start (projected onto forward axis)

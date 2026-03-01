@@ -16,24 +16,30 @@ from queue import Empty, Queue
 
 import numpy as np
 import torch
-import torch.optim as optim
 import wandb
 
-from algorithms import train_step_batched, train_step_ppo  # noqa: F401 — re-export
-from checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
-from collection import (  # noqa: F401 — re-export
+from training.algorithms import (  # noqa: F401 — re-export
+    train_step_batched,
+    train_step_ppo,
+)
+from training.checkpoint import load_checkpoint, resolve_resume_ref, save_checkpoint
+from training.collection import (  # noqa: F401 — re-export
     collect_episode,
     compute_gae,
     compute_reward_to_go,
     log_episode_value_trace,
 )
-from pipeline import Pipeline, pipeline_for_bot
-from dashboard import LogDashboard, TuiDashboard
-from git_utils import get_git_branch, get_git_sha
-from parallel import ParallelCollector, resolve_num_workers
-from policies import LSTMPolicy, MLPPolicy, TinyPolicy  # noqa: F401 — re-export
-from rerun_wandb import RerunWandbLogger
-from run_manager import (
+from training.dashboard import LogDashboard, TuiDashboard
+from training.env import TrainingEnv
+from training.git_utils import get_git_branch, get_git_sha
+from training.parallel import ParallelCollector, resolve_num_workers
+from training.pipeline import pipeline_for_bot
+from training.policies import (  # noqa: F401 — re-export
+    LSTMPolicy,
+    MLPPolicy,
+    TinyPolicy,
+)
+from training.run_manager import (
     RunInfo,
     bot_display_name,
     bot_name_from_scene_path,
@@ -42,8 +48,8 @@ from run_manager import (
     init_wandb_for_run,
     save_run_info,
 )
-from training_env import TrainingEnv
-from tweaks import apply_tweaks, load_tweaks
+from training.tweaks import apply_tweaks, load_tweaks
+from viz.rerun_wandb import RerunWandbLogger
 
 log = logging.getLogger(__name__)
 
@@ -470,22 +476,37 @@ def _train_loop(
     # Generate run name and create run directory
     # RUN_NAME env var allows remote_train.sh to pre-assign a name that
     # matches the GCP instance label for easy cross-referencing.
-    run_name = os.environ.get("RUN_NAME") or generate_run_name(bot_name, cfg.policy.policy_type)
+    run_name = os.environ.get("RUN_NAME") or generate_run_name(
+        bot_name, cfg.policy.policy_type
+    )
     run_dir = create_run_dir(run_name)
 
     # Attach a per-run file handler so all log output lands in run.log
     run_log_handler = logging.FileHandler(run_dir / "run.log")
-    run_log_handler.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    run_log_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     logging.getLogger().addHandler(run_log_handler)
 
     try:
         _train_loop_body(
-            cfg, dashboard, smoketest, resume, num_workers_override,
-            commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
-            is_tui, _verbose,
+            cfg,
+            dashboard,
+            smoketest,
+            resume,
+            num_workers_override,
+            commands,
+            app,
+            log_fn,
+            run_name,
+            run_dir,
+            bot_name,
+            robot_name,
+            is_tui,
+            _verbose,
         )
     except Exception:
         log.exception("Training run %s crashed", run_name)
@@ -496,9 +517,20 @@ def _train_loop(
 
 
 def _train_loop_body(
-    cfg, dashboard, smoketest, resume, num_workers_override,
-    commands, app, log_fn, run_name, run_dir, bot_name, robot_name,
-    is_tui, _verbose,
+    cfg,
+    dashboard,
+    smoketest,
+    resume,
+    num_workers_override,
+    commands,
+    app,
+    log_fn,
+    run_name,
+    run_dir,
+    bot_name,
+    robot_name,
+    is_tui,
+    _verbose,
 ):
     """Inner body of the training loop, called with run log handler active."""
     log_fn(f"Run: {run_name}")
@@ -520,7 +552,9 @@ def _train_loop_body(
 
     # Log reward hierarchy metadata to W&B
     if wandb.run:
-        wandb.config.update(cfg.reward_hierarchy.to_wandb_config(), allow_val_change=True)
+        wandb.config.update(
+            cfg.reward_hierarchy.to_wandb_config(), allow_val_change=True
+        )
 
     wandb_url = None
     if not smoketest and wandb.run:
@@ -606,12 +640,14 @@ def _train_loop_body(
     # Set up AI commentary (skip in smoketest or when disabled)
     # Placed after env/hierarchy/mj_model so all context is available
     if not smoketest and cfg.commentary.enabled and app is not None:
-        from ai_commentary import AICommentator, RunContext
+        from tools.ai_commentary import AICommentator, RunContext
 
         try:
             _git_log = subprocess.run(
                 ["git", "log", "--oneline", "-10"],
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.strip()
         except Exception:
             _git_log = ""
@@ -619,7 +655,9 @@ def _train_loop_body(
         _wandb_run_path = ""
         if wandb.run and not wandb.run.disabled:
             try:
-                _wandb_run_path = f"{wandb.run.entity}/{wandb.run.project}/{wandb.run.id}"
+                _wandb_run_path = (
+                    f"{wandb.run.entity}/{wandb.run.project}/{wandb.run.id}"
+                )
             except Exception:
                 pass
 
@@ -987,7 +1025,11 @@ def _train_loop_body(
                         log_this_eval = False
 
                 eval_data = collect_episode(
-                    env, policy, device, log_rerun=log_this_eval, deterministic=True,
+                    env,
+                    policy,
+                    device,
+                    log_rerun=log_this_eval,
+                    deterministic=True,
                     hierarchy=hierarchy,
                 )
                 eval_successes.append(eval_data["success"])
@@ -1143,10 +1185,19 @@ def _train_loop_body(
 
         # Raw reward inputs (physical measures, averaged across batch)
         raw_input_keys = [
-            "distance_to_target", "torso_height", "up_z",
-            "forward_vel", "energy", "contact_frac", "action_jerk",
-            "forward_distance", "lateral_drift", "total_path_length",
-            "avg_speed", "survival_time", "joint_activity",
+            "distance_to_target",
+            "torso_height",
+            "up_z",
+            "forward_vel",
+            "energy",
+            "contact_frac",
+            "action_jerk",
+            "forward_distance",
+            "lateral_drift",
+            "total_path_length",
+            "avg_speed",
+            "survival_time",
+            "joint_activity",
         ]
         batch_raw_inputs = {}
         for key in raw_input_keys:
@@ -1155,9 +1206,9 @@ def _train_loop_body(
             batch_raw_inputs[key] = avg
             log_dict[f"raw/{key}"] = avg
         # Fell fraction (from episode-level flag, not raw_inputs)
-        batch_raw_inputs["fell_frac"] = float(np.mean(
-            [ep.get("fell", False) for ep in episode_batch]
-        ))
+        batch_raw_inputs["fell_frac"] = float(
+            np.mean([ep.get("fell", False) for ep in episode_batch])
+        )
         log_dict["raw/fell_frac"] = batch_raw_inputs["fell_frac"]
 
         # PPO-specific metrics

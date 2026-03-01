@@ -12,7 +12,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 
-from run_manager import bot_display_name
+from training.run_manager import bot_display_name
 
 
 class RunActionScreen(Screen):
@@ -112,7 +112,7 @@ class RunActionScreen(Screen):
             self.app.pop_screen()
 
     def action_play_run(self) -> None:
-        from main import CheckpointPickerScreen
+        from tui.screens.checkpoint_picker import CheckpointPickerScreen
 
         self.app.push_screen(
             CheckpointPickerScreen(
@@ -123,7 +123,7 @@ class RunActionScreen(Screen):
         )
 
     def action_resume_run(self) -> None:
-        from main import CheckpointPickerScreen
+        from tui.screens.checkpoint_picker import CheckpointPickerScreen
 
         self.app.push_screen(
             CheckpointPickerScreen(
@@ -149,7 +149,7 @@ class RunActionScreen(Screen):
 
     @work(thread=True)
     def _start_download(self) -> None:
-        from replay import _open_in_rerun, discover_recordings
+        from viz.replay import _open_in_rerun, discover_recordings
 
         run_name = self._info.name
 
@@ -182,8 +182,8 @@ class RunActionScreen(Screen):
             f"Found {len(available)} recordings. Downloading {len(selected)}...",
         )
 
-        output_dir = Path(f"replay_{run_name}")
-        output_dir.mkdir(exist_ok=True)
+        output_dir = Path("runs/replays") / run_name
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         rrd_paths = []
         for i, rec in enumerate(selected):

@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from collection import compute_gae, compute_reward_to_go
+from training.collection import compute_gae, compute_reward_to_go
 
 
 def train_step_batched(

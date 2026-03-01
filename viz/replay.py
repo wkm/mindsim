@@ -24,12 +24,12 @@ import numpy as np
 import rerun as rr
 import torch
 
-import rerun_logger
-from checkpoint import build_policy
-from collection import collect_episode, log_episode_value_trace
-from pipeline import EnvConfig
-from training_blueprint import create_training_blueprint
-from training_env import TrainingEnv
+from training.checkpoint import build_policy
+from training.collection import collect_episode, log_episode_value_trace
+from training.env import TrainingEnv
+from training.pipeline import EnvConfig
+from viz import rerun_logger
+from viz.blueprint import create_training_blueprint
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -296,8 +296,8 @@ def run_download(
         print(f"\nDownloading all {len(selected)} recordings...")
 
     # Create output dir and download
-    output_dir = Path(f"replay_{run_ref}")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("runs/replays") / run_ref
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     rrd_paths = []
     for i, rec in enumerate(selected):
@@ -589,8 +589,8 @@ def run_regenerate(run_ref: str, batches: list[int], seed: int = 42) -> None:
             print(f"-> {Path(ckpt.path).name}")
 
     # Create output directory
-    output_dir = Path(f"replay_{run_ref}")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("runs/replays") / run_ref
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Record episodes
     print(f"\nRecording episodes (seed={seed})...")

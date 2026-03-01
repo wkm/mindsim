@@ -12,9 +12,9 @@ import mujoco.viewer
 import numpy as np
 import torch
 
-from checkpoint import resolve_resume_ref
-from pipeline import Pipeline
-from sim_env import SimEnv, assemble_sensor_data
+from sim.env import SimEnv, assemble_sensor_data
+from training.checkpoint import resolve_resume_ref
+from training.pipeline import Pipeline
 
 # GLFW key constants (avoid importing glfw directly)
 KEY_UP = 265
@@ -46,8 +46,7 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
     policy.load_state_dict(ckpt["policy_state_dict"])
     policy.eval()
     print(
-        f"Policy: {pipeline.policy.policy_type} "
-        f"(hidden={pipeline.policy.hidden_size})"
+        f"Policy: {pipeline.policy.policy_type} (hidden={pipeline.policy.hidden_size})"
     )
 
     # Create environment (raw env, no training wrapper)

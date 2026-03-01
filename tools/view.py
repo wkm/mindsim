@@ -76,7 +76,7 @@ def _run_view_raw(scene_path: str):
 
 def _run_view_with_curriculum(scene_path: str, stage: int):
     """Viewer with curriculum stage setup — targets and distractors animate."""
-    from training_env import TrainingEnv
+    from training.env import TrainingEnv
 
     print(f"Loading {scene_path} with curriculum stage {stage}...")
 

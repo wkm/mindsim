@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 import wandb
 
-from git_utils import get_git_sha
+from training.git_utils import get_git_sha
 
 
 def build_policy(ckpt_config):
@@ -22,7 +22,7 @@ def build_policy(ckpt_config):
     Delegates to Pipeline.from_wandb_dict() + Pipeline.build_policy() so there
     is a single source of truth for policy construction.
     """
-    from pipeline import Pipeline
+    from training.pipeline import Pipeline
 
     pipeline = Pipeline.from_wandb_dict(ckpt_config)
     return pipeline.build_policy(device="cpu")
@@ -91,13 +91,15 @@ def list_checkpoints(run_dir: str | Path) -> list[dict]:
     results = []
     for pt in ckpt_dir.glob("*.pt"):
         m = pattern.search(pt.name)
-        results.append({
-            "path": str(pt),
-            "filename": pt.name,
-            "stage": int(m.group(1)) if m else None,
-            "batch": int(m.group(2)) if m else None,
-            "mtime": os.path.getmtime(pt),
-        })
+        results.append(
+            {
+                "path": str(pt),
+                "filename": pt.name,
+                "stage": int(m.group(1)) if m else None,
+                "batch": int(m.group(2)) if m else None,
+                "mtime": os.path.getmtime(pt),
+            }
+        )
 
     results.sort(key=lambda x: x["mtime"], reverse=True)
     return results
