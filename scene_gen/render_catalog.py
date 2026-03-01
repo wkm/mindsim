@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from scene_gen import SceneComposer, concepts
 from scene_gen.composer import PlacedObject
-from scene_gen.primitives import Prim
+from scene_gen.primitives import GeomType, Prim
 
 ROOM_XML = str(Path(__file__).resolve().parent.parent / "worlds" / "room.xml")
 
@@ -56,55 +56,79 @@ def _setup_scene() -> tuple[mujoco.MjModel, mujoco.MjData, SceneComposer]:
     return model, data, composer
 
 
+def _prim_bounds(
+    p: Prim,
+) -> tuple[float, float, float, float, float, float]:
+    """Compute axis-aligned bounding box for a single prim.
+
+    Returns (x_min, x_max, y_min, y_max, z_min, z_max).
+    """
+    px, py, pz = p.pos
+
+    if p.geom_type == GeomType.BOX:
+        hx, hy, hz = p.size
+    elif p.geom_type in (GeomType.CYLINDER, GeomType.CAPSULE):
+        # (radius, half_height, 0)
+        r, hh = p.size[0], p.size[1]
+        hx = hy = r
+        hz = hh
+    elif p.geom_type == GeomType.SPHERE:
+        r = p.size[0]
+        hx = hy = hz = r
+    elif p.geom_type == GeomType.ELLIPSOID:
+        hx, hy, hz = p.size
+    elif p.geom_type == GeomType.CONE:
+        # (bottom_r, half_h, top_r)
+        br, hh, tr = p.size
+        hx = hy = max(br, tr)
+        hz = hh
+    else:
+        hx, hy, hz = p.size
+
+    return (px - hx, px + hx, py - hy, py + hy, pz - hz, pz + hz)
+
+
 def _camera_for_prims(prims: tuple[Prim, ...]) -> mujoco.MjvCamera:
     """Compute a camera that frames the given prims nicely.
 
     Uses a fixed 3/4 overhead angle (good for all furniture) and adapts
     only the lookat height and distance based on the bounding box.
+
+    For tall narrow objects (like floor lamps — long pole with a shade on top),
+    the camera zooms in on the wider upper portion rather than fitting the
+    entire height, which would make the interesting parts tiny.
     """
-    z_min = float("inf")
-    z_max = float("-inf")
-    xy_max = 0.0
+    x_min = y_min = z_min = float("inf")
+    x_max = y_max = z_max = float("-inf")
     for p in prims:
-        px, py, pz = p.pos
-        sx, sy, sz = p.size
-        z_min = min(z_min, pz - sz)
-        z_max = max(z_max, pz + sz)
-        xy_max = max(xy_max, abs(px) + sx, abs(py) + sy)
+        bx0, bx1, by0, by1, bz0, bz1 = _prim_bounds(p)
+        x_min = min(x_min, bx0)
+        x_max = max(x_max, bx1)
+        y_min = min(y_min, by0)
+        y_max = max(y_max, by1)
+        z_min = min(z_min, bz0)
+        z_max = max(z_max, bz1)
 
     obj_height = z_max - z_min
-    obj_width = xy_max * 2
-    extent = max(obj_height, obj_width, 0.3)
+    obj_width = max(x_max - x_min, y_max - y_min)
+
+    aspect = obj_height / max(obj_width, 0.01)
+    if aspect > 2.0:
+        # Tall & narrow (e.g. floor lamp): zoom into the wider upper portion
+        # where the interesting detail (shade, etc.) lives, rather than
+        # fitting the entire height which makes the detail a tiny speck.
+        extent = max(obj_width * 1.8, 0.3)
+        look_z = z_max - extent * 0.5
+    else:
+        extent = max(obj_height, obj_width, 0.3)
+        look_z = (z_min + z_max) / 2
 
     cam = mujoco.MjvCamera()
-    cam.lookat[:] = [0, 0, (z_min + z_max) / 2]
+    cam.lookat[:] = [0, 0, look_z]
     cam.azimuth = 145
     cam.elevation = -25
     cam.distance = extent * 2.0
     return cam
-
-
-def _sync_geom_xpos(
-    model: mujoco.MjModel, data: mujoco.MjData, composer: SceneComposer
-):
-    """Manually recompute geom_xpos/xmat for obstacle slot geoms.
-
-    mj_kinematics uses compile-time geom_pos offsets, ignoring runtime
-    modifications to model.geom_pos. The interactive viewer reads model
-    data directly, but the offscreen Renderer uses data.geom_xpos from
-    mjv_updateScene. So we must patch data.geom_xpos ourselves.
-    """
-    for slot in composer._slots:
-        bid = slot.body_id
-        body_pos = data.xpos[bid]
-        body_mat = data.xmat[bid].reshape(3, 3)
-        for gid in slot.geom_ids:
-            # geom_xpos = body_xpos + body_xmat @ geom_pos
-            data.geom_xpos[gid] = body_pos + body_mat @ model.geom_pos[gid]
-            # geom_xmat = body_xmat @ quat2mat(geom_quat)
-            geom_mat = np.zeros(9)
-            mujoco.mju_quat2Mat(geom_mat, model.geom_quat[gid])
-            data.geom_xmat[gid] = (body_mat @ geom_mat.reshape(3, 3)).ravel()
 
 
 def _render_variation(
@@ -123,8 +147,7 @@ def _render_variation(
         concept=concept_name, params=params, pos=(0.0, 0.0), rotation=0.0
     )
     composer.apply([obj])
-    mujoco.mj_forward(model, data)
-    _sync_geom_xpos(model, data, composer)
+    composer.upload_meshes(renderer)
 
     cam = _camera_for_prims(prims)
     renderer.update_scene(data, cam)

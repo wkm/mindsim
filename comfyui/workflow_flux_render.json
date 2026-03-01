@@ -1,0 +1,115 @@
+{
+  "_comment": "ComfyUI API workflow: FLUX text-to-image only. Generates a concept render and saves it. Used as pass 1 of the two-pass pipeline (FLUX render → TRELLIS2 3D).",
+
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux1-dev-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": { "title": "Load FLUX Model" }
+  },
+
+  "2": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp16.safetensors",
+      "type": "flux"
+    },
+    "_meta": { "title": "Load CLIP (FLUX dual)" }
+  },
+
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "PROMPT_PLACEHOLDER",
+      "clip": ["2", 0]
+    },
+    "_meta": { "title": "Text Prompt" }
+  },
+
+  "4": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "_meta": { "title": "Empty Latent (1024x1024)" }
+  },
+
+  "5": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 42
+    },
+    "_meta": { "title": "Random Noise" }
+  },
+
+  "6": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": ["1", 0],
+      "conditioning": ["3", 0]
+    },
+    "_meta": { "title": "CFG Guider" }
+  },
+
+  "7": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": ["1", 0],
+      "scheduler": "simple",
+      "steps": 30,
+      "denoise": 1.0
+    },
+    "_meta": { "title": "Scheduler" }
+  },
+
+  "8": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "_meta": { "title": "Sampler Select (euler)" }
+  },
+
+  "9": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": ["5", 0],
+      "guider": ["6", 0],
+      "sampler": ["8", 0],
+      "sigmas": ["7", 0],
+      "latent_image": ["4", 0]
+    },
+    "_meta": { "title": "Sample (FLUX)" }
+  },
+
+  "10": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "_meta": { "title": "Load FLUX VAE" }
+  },
+
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["10", 0]
+    },
+    "_meta": { "title": "Decode Latent → Image" }
+  },
+
+  "12": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["11", 0],
+      "filename_prefix": "concept_render"
+    },
+    "_meta": { "title": "Save Rendered Image" }
+  }
+}

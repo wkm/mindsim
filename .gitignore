@@ -31,6 +31,9 @@ checkpoints/
 # Run directories
 runs/
 
+# ComfyUI generated assets
+comfyui/output/
+
 # Claude Code (track settings.json, ignore everything else)
 .claude/*
 !.claude/settings.json
