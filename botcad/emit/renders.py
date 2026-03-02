@@ -79,7 +79,11 @@ def _render(
     cam.azimuth = azimuth
     cam.elevation = elevation
     renderer.update_scene(data, camera=cam)
-    return renderer.render().copy()
+    img = renderer.render().copy()
+    # White background — replace black pixels
+    mask = np.all(img == 0, axis=2)
+    img[mask] = 255
+    return img
 
 
 def _set_mesh_alpha(model: mujoco.MjModel, alpha: float) -> np.ndarray:
@@ -180,7 +184,13 @@ def render_overview(
         x = margin + col * (VIEW_W + margin)
         y = title_h + margin + row * (VIEW_H + label_h + margin)
         draw.text((x, y), label, fill=(80, 80, 80))
-        canvas.paste(img, (x, y + label_h))
+        img_y = y + label_h
+        draw.rectangle(
+            [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
+            outline=(0, 0, 0),
+            width=1,
+        )
+        canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_overview.png"
     canvas.save(out)
@@ -274,7 +284,13 @@ def render_closeups(
             x = margin + col * (VIEW_W + margin)
             y = sec_y + header_h + margin + row * (VIEW_H + label_h + margin)
             draw.text((x, y), label, fill=(80, 80, 80))
-            canvas.paste(img, (x, y + label_h))
+            img_y = y + label_h
+            draw.rectangle(
+                [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
+                outline=(0, 0, 0),
+                width=1,
+            )
+            canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_closeups.png"
     canvas.save(out)
@@ -433,8 +449,8 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
             x = margin + fi * (SWEEP_W + margin)
             y = sy + header_h
 
-            # Draw red border if collision detected
             if has_col:
+                # Red border for collision frames
                 draw.rectangle(
                     [
                         x - border_w,
@@ -443,6 +459,13 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
                         y + SWEEP_H + border_w,
                     ],
                     fill=(220, 40, 40),
+                )
+            else:
+                # Black border for normal frames
+                draw.rectangle(
+                    [x - 1, y - 1, x + SWEEP_W, y + SWEEP_H],
+                    outline=(0, 0, 0),
+                    width=1,
                 )
 
             canvas.paste(frame, (x, y))
