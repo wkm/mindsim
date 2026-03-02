@@ -269,9 +269,9 @@ class Bot:
 
         emit_renders(self, output_dir_path)
 
-        from botcad.emit.servo_renders import emit_servo_renders
+        from botcad.emit.component_renders import emit_component_renders
 
-        emit_servo_renders(self, output_dir_path)
+        emit_component_renders(self, output_dir_path)
 
 
 def _parse_axis(axis: str | Vec3) -> Vec3:
