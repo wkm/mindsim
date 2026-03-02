@@ -1,9 +1,11 @@
-"""
-Parametric bot CAD system.
+"""Parametric bot CAD system — design to sim to fabrication.
 
-Component-driven robot design: select real components (servos, compute boards,
-batteries, cameras) and the system generates MuJoCo XML, CAD assemblies, BOMs,
-and assembly guides automatically.
+Define a robot as a kinematic tree of bodies, joints, and real components.
+The system generates everything needed to simulate and build the physical bot:
+STEP assemblies, per-body STL meshes, MuJoCo XML, BOMs, and assembly guides.
+
+The CAD geometry IS the sim geometry — MuJoCo references the same STL files
+you'd send to a slicer. No separate "sim mesh" that can diverge from reality.
 """
 
 from botcad.component import Component, MountingEar, MountPoint, ServoSpec, WirePort

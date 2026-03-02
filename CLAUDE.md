@@ -1,6 +1,34 @@
-# MindSim - 2-Wheeler Robot Simulation
+# MindSim - Parametric Robot Design → Sim → Fabrication
 
-Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
+Design robots from real components, train them in simulation, then build the physical thing.
+
+## Pipeline Philosophy
+
+The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments. The goal is a tight loop: design a bot, validate it in sim, train a neural network to control it, 3D print the structure, assemble purchased components, and deploy.
+
+```
+Skeleton DSL (design.py)
+    │
+    ├─→ CAD assembly (the real, physical bot)
+    │     ├─→ printable structural parts (STLs for slicing)
+    │     ├─→ sim meshes (same STLs, referenced by MuJoCo XML)
+    │     └─→ assembly guide (mount servos here, Pi here, route wires X→Y)
+    │
+    ├─→ MuJoCo XML (physics: joints, actuators, contacts, sensors)
+    │     └── references CAD meshes (not separate "sim geometry")
+    │
+    ├─→ validation renders (visual sanity checks before printing)
+    │
+    └─→ training pipeline (PPO, reward shaping, scene gen, etc.)
+```
+
+**Key principles:**
+
+- **CAD geometry = sim geometry.** MuJoCo references the same STL meshes you'd send to a slicer. No divergence between "sim version" and "real version" — they're the same files.
+- **Rigid sub-chains become single printed parts.** Everything between servo joints gets unioned into one solid — that's what you physically print. Servos are the mechanical separation points.
+- **Purchased components get pockets, not models.** The CAD cuts mounting holes and clearance volumes for servos, compute boards, cameras, batteries. The assembly guide tells you what to insert where.
+- **Validation catches mistakes before printing.** Joint clearances, servo fit, mass distribution, wire routing feasibility — all checkable from the skeleton before any physical work.
+- **Sim fidelity matters.** The simulation should be close enough to reality that policies trained in sim transfer to the physical bot. We intentionally ignore some details (wiring, fasteners) but geometry, mass, and actuation should match.
 
 ## Quick Start
 
@@ -40,12 +68,30 @@ make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
 mindsim/
 ├── main.py                   # Single entry point for all modes
 ├── run_manager.py            # Run directory lifecycle & W&B init
+├── botcad/                   # Parametric bot CAD system
+│   ├── skeleton.py           # Kinematic tree DSL (Bot, Body, Joint)
+│   ├── component.py          # Component base classes (ServoSpec, etc.)
+│   ├── components/           # Real component catalog (STS3215, RPi, etc.)
+│   ├── bracket.py            # Parametric servo bracket geometry
+│   ├── geometry.py           # Servo placement, quaternion math
+│   ├── packing.py            # Body dimension solver (fit components)
+│   ├── routing.py            # Wire route solver
+│   └── emit/                 # Output generators
+│       ├── cad.py            # STEP assembly + per-body STLs (build123d)
+│       ├── mujoco.py         # MuJoCo XML (bot.xml + scene.xml)
+│       ├── bom.py            # Bill of materials
+│       ├── readme.py         # Assembly guide
+│       ├── renders.py        # Validation render pipeline
+│       └── servo_renders.py  # Servo bracket detail renders
+├── bots/                     # Generated bot output directories
+│   └── wheeler_arm/
+│       ├── design.py         # Bot definition script (the source of truth)
+│       ├── bot.xml           # Generated MuJoCo robot definition
+│       ├── scene.xml         # Generated scene wrapper
+│       ├── assembly.step     # Generated full CAD assembly
+│       └── meshes/*.stl      # Generated per-body mesh files
 ├── worlds/
 │   └── room.xml             # Standalone arena (floor, curbs, target, distractors)
-├── bots/simple2wheeler/
-│   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
-│   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
-│   └── meshes/*.stl         # Visual geometry (scaled in XML)
 ├── sim_env.py               # Environment API (SimEnv)
 ├── train.py                 # Training loop & policy networks
 ├── checkpoint.py            # Checkpoint save/load/resolve
@@ -66,6 +112,49 @@ mindsim/
         ├── checkpoints/     # Model checkpoints
         └── recordings/      # Rerun .rrd files
 ```
+
+## Parametric CAD System (`botcad/`)
+
+The `botcad/` package is the design-to-fabrication pipeline. A bot is defined once as a kinematic tree of bodies, joints, and real components, then all outputs are generated automatically.
+
+**Defining a bot** (`design.py`):
+
+```python
+bot = Bot("wheeler_arm")
+base = bot.body("base", shape="box", padding=0.008)
+base.mount(RaspberryPiZero2W(), position="center")
+base.mount(LiPo2S(1000), position="bottom")
+
+left_wheel = base.joint("left_wheel", servo=STS3215(continuous=True),
+                        axis="-x", pos=(-0.06, 0, 0))
+left_wheel.body("left_rim", shape="cylinder", radius=0.05, width=0.03)
+# ... more joints and bodies ...
+
+bot.solve()   # packing + wire routing
+bot.emit()    # generate all outputs
+```
+
+**What `emit()` produces:**
+
+| Output | Generator | Purpose |
+|--------|-----------|---------|
+| `assembly.step` | `emit/cad.py` | Full assembly — printable parts positioned + colored. Open in FreeCAD/Fusion 360 to inspect or prepare for slicing. |
+| `meshes/*.stl` | `emit/cad.py` | Per-body STL files. Used by both MuJoCo (sim visuals) and slicer (3D printing). Same files, no divergence. |
+| `bot.xml` | `emit/mujoco.py` | MuJoCo robot definition (bodies, joints, actuators, sensors, cameras). References the STL meshes. |
+| `scene.xml` | `emit/mujoco.py` | Thin wrapper: timestep + bot.xml + room.xml include. |
+| `bom.md` | `emit/bom.py` | Bill of materials — every purchased component with specs. |
+| `assembly_guide.md` | `emit/readme.py` | Step-by-step assembly instructions for physical build. |
+| Validation renders | `emit/renders.py` | Visual sanity checks (bracket fit, clearances, wire routes). |
+
+**CAD assembly structure:**
+
+The STEP assembly mirrors the kinematic tree. Each body is a printable structural part (hollow shell + servo brackets unioned in). Purchased components (servos, Pi, camera, battery) aren't modeled as solids — they get mounting pockets cut into the structure, and the assembly guide tells you what to insert.
+
+Servos are the mechanical separation points. Everything between joints is one rigid solid = one printed part. Wheels, arm tubes, the base box — each is a separate piece you print, then assemble with servos bolting them together.
+
+**Component catalog** (`botcad/components/`):
+
+Real components with real dimensions, masses, and mounting patterns. Currently: STS3215 servo, Raspberry Pi Zero 2W, OV5647 camera, LiPo batteries. Adding a component means providing its datasheet dimensions — the system handles pocket cutting, mass accounting, and BOM entries.
 
 ## Environment API
 
