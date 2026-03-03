@@ -41,8 +41,10 @@ Servo Daisy Chain:
    - Mount LiPo2S-1000 (battery) at bottom position
 
 4. **Attach left_rim** via STS3215 at joint `left_wheel`
+   - Mount Pololu 90x10mm Wheel (wheel)
 
 5. **Attach right_rim** via STS3215 at joint `right_wheel`
+   - Mount Pololu 90x10mm Wheel (wheel)
 
 6. **Attach turntable** via STS3215 at joint `shoulder_yaw`
    - Attach upper_arm via STS3215 at `shoulder_pitch`

@@ -18,7 +18,7 @@ from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from botcad.component import Vec3 as Vec3Type
-from botcad.geometry import servo_placement
+from botcad.geometry import rotate_vec, servo_placement
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -239,9 +239,14 @@ def _emit_body_tree(
             size="0.005",
         )
 
-    # Wire route visualization — colored capsules along cable paths
-    if is_root:
-        _emit_wire_routes(body_el, bot)
+    # Mounted component visualization — boxes at resolved positions
+    _emit_mounted_components(body_el, body, is_wheel=is_wheel)
+
+    # Mounting hardware visualization — screws at ear/mount positions
+    _emit_mounting_hardware(body_el, body)
+
+    # Wire route visualization — segments on their respective bodies
+    _emit_body_wires(body_el, body, bot)
 
     # Servo visualization geoms — green boxes at each joint location
     for joint in body.joints:
@@ -269,6 +274,111 @@ def _emit_body_tree(
             _emit_body_tree(
                 body_el, joint.child, bot, parent_joint=joint, is_root=False
             )
+
+
+def _emit_mounted_components(
+    parent_el: Element, body: Body, is_wheel: bool = False
+) -> None:
+    """Emit visualization geoms for all mounted components (Pi, battery, camera, etc.)."""
+    if is_wheel:
+        return  # wheel mesh already represents the component
+    for mount in body.mounts:
+        comp = mount.component
+        r, g, b, a = comp.color
+        SubElement(
+            parent_el,
+            "geom",
+            name=f"comp_{body.name}_{mount.label}",
+            type="box",
+            size=_half_dims(comp.dimensions),
+            pos=_fmt_vec3(mount.resolved_pos),
+            rgba=f"{r} {g} {b} {a}",
+            contype="0",
+            conaffinity="0",
+            group="1",
+        )
+
+
+def _emit_mounting_hardware(body_el: Element, body: Body) -> None:
+    """Emit small cylinder geoms at screw/mounting positions."""
+    _SCREW_RGBA = "0.7 0.7 0.7 0.9"
+    _SCREW_HEIGHT = "0.001"  # 1mm half-height
+
+    # Servo mounting ears (bracket screw holes on this body's joints)
+    for joint in body.joints:
+        center, quat = servo_placement(
+            joint.servo.shaft_offset,
+            joint.servo.shaft_axis,
+            joint.axis,
+            joint.pos,
+        )
+        for ear in joint.servo.mounting_ears:
+            world_pos = _add_vec3(center, rotate_vec(quat, ear.pos))
+            SubElement(
+                body_el,
+                "geom",
+                name=f"screw_{joint.name}_{ear.label}",
+                type="cylinder",
+                size=f"{ear.hole_diameter / 2:.4f} {_SCREW_HEIGHT}",
+                pos=_fmt_vec3(world_pos),
+                rgba=_SCREW_RGBA,
+                contype="0",
+                conaffinity="0",
+                group="1",
+            )
+
+        # Horn mounting points (output face screw holes)
+        for mp in joint.servo.horn_mounting_points:
+            world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
+            SubElement(
+                body_el,
+                "geom",
+                name=f"horn_{joint.name}_{mp.label}",
+                type="cylinder",
+                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                pos=_fmt_vec3(world_pos),
+                rgba=_SCREW_RGBA,
+                contype="0",
+                conaffinity="0",
+                group="1",
+            )
+
+        # Rear horn mounting points (blind side screw holes)
+        for mp in joint.servo.rear_horn_mounting_points:
+            world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
+            SubElement(
+                body_el,
+                "geom",
+                name=f"rear_{joint.name}_{mp.label}",
+                type="cylinder",
+                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                pos=_fmt_vec3(world_pos),
+                rgba=_SCREW_RGBA,
+                contype="0",
+                conaffinity="0",
+                group="1",
+            )
+
+    # Component mount points (screw holes on mounted components)
+    for mount in body.mounts:
+        for mp in mount.component.mounting_points:
+            pos = _add_vec3(mount.resolved_pos, mp.pos)
+            SubElement(
+                body_el,
+                "geom",
+                name=f"mount_{body.name}_{mount.label}_{mp.label}",
+                type="cylinder",
+                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                pos=_fmt_vec3(pos),
+                rgba=_SCREW_RGBA,
+                contype="0",
+                conaffinity="0",
+                group="1",
+            )
+
+
+def _add_vec3(a: Vec3Type, b: Vec3Type) -> Vec3Type:
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
 
 
 def _emit_camera(parent_el: Element, body: Body) -> None:
@@ -301,21 +411,29 @@ _WIRE_RADIUS = {
 }
 
 
-def _emit_wire_routes(parent_el: Element, bot: Bot) -> None:
-    """Emit wire route visualization as capsule geoms on the root body.
+def _emit_body_wires(body_el: Element, body: Body, bot: Bot) -> None:
+    """Emit wire segments that belong to this body.
 
-    Positions are in root-body-local frame (matching the world-frame
-    waypoints from the routing solver). Static — doesn't track joint
-    motion, but shows correct paths at rest pose.
+    Each segment's body_name is checked against the current body — only
+    segments belonging to this body become geoms here. Coordinates are
+    already in body-local frame from the routing solver.
     """
     for route in bot.wire_routes:
         color = _WIRE_COLORS.get(route.bus_type, "0.5 0.5 0.5 0.9")
         radius = _WIRE_RADIUS.get(route.bus_type, "0.0015")
         for i, seg in enumerate(route.segments):
+            if seg.body_name != body.name:
+                continue
+            # Skip degenerate segments (endpoints too close)
+            dx = seg.end[0] - seg.start[0]
+            dy = seg.end[1] - seg.start[1]
+            dz = seg.end[2] - seg.start[2]
+            if dx * dx + dy * dy + dz * dz < 1e-6:
+                continue
             SubElement(
-                parent_el,
+                body_el,
                 "geom",
-                name=f"wire_{route.label}_{i}",
+                name=f"wire_{route.label}_{body.name}_{i}",
                 type="capsule",
                 fromto=(
                     f"{seg.start[0]:.6f} {seg.start[1]:.6f} {seg.start[2]:.6f} "

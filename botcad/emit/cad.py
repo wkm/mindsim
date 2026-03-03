@@ -25,8 +25,44 @@ from botcad.bracket import BracketSpec, bracket_solid
 from botcad.geometry import servo_placement
 
 if TYPE_CHECKING:
+    from botcad.component import Component
     from botcad.geometry import Quat
     from botcad.skeleton import Body, Bot, Joint
+
+
+def make_component_solid(component: Component):
+    """Create a build123d solid representing a component's physical geometry.
+
+    Used by component tear sheets to render actual CAD geometry instead of
+    primitive approximations. Dispatches to shape-specific builders:
+    - Wheels get tire ring + hub + bore via _make_wheel_solid()
+    - Servos use body_dimensions (main block without ears/horn)
+    - Everything else gets a box from dimensions
+    """
+    from build123d import Align, Box
+
+    from botcad.component import ServoSpec
+
+    dims = component.dimensions
+
+    # Wheels: detailed tire/hub geometry
+    if "Wheel" in component.name:
+        r = dims[0] / 2
+        w = dims[2]
+        return _make_wheel_solid(r, w)
+
+    # Servos: use body_dimensions (without ears/horn)
+    if isinstance(component, ServoSpec):
+        bd = component.body_dimensions
+        if any(x > 0 for x in bd):
+            dims = bd
+
+    return Box(
+        dims[0],
+        dims[1],
+        dims[2],
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
 
 
 def emit_cad(bot: Bot, output_dir: Path) -> None:
@@ -195,16 +231,23 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
     if body.shape == "cylinder":
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
-        outer = Cylinder(r, h, align=(Align.CENTER, Align.CENTER, Align.CENTER))
-        if r > wall and h > wall * 2:
-            inner = Cylinder(
-                r - wall,
-                h - wall * 2,
-                align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            )
-            shell = outer - inner
+
+        # Check if this body has a wheel component mounted
+        has_wheel = any("Wheel" in m.component.name for m in body.mounts)
+
+        if has_wheel:
+            shell = _make_wheel_solid(r, h)
         else:
-            shell = outer
+            outer = Cylinder(r, h, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+            if r > wall and h > wall * 2:
+                inner = Cylinder(
+                    r - wall,
+                    h - wall * 2,
+                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
+                )
+                shell = outer - inner
+            else:
+                shell = outer
 
         # Orient cylinder along parent joint's rotation axis
         if parent_joint is not None:
@@ -247,17 +290,19 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
         else:
             shell = outer
 
-    # Cut component pockets
-    for mount in body.mounts:
-        cd = mount.component.dimensions
-        pocket = Box(
-            cd[0] + 0.0005,
-            cd[1] + 0.0005,
-            cd[2] + 0.0005,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
-        )
-        pocket = pocket.locate(Location(mount.resolved_pos))
-        shell = shell - pocket
+    # Cut component pockets (skip for wheel bodies — the wheel IS the component)
+    is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
+    if not is_wheel_body:
+        for mount in body.mounts:
+            cd = mount.component.dimensions
+            pocket = Box(
+                cd[0] + 0.0005,
+                cd[1] + 0.0005,
+                cd[2] + 0.0005,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            pocket = pocket.locate(Location(mount.resolved_pos))
+            shell = shell - pocket
 
     # Union servo brackets at each joint
     bracket_spec = BracketSpec()
@@ -273,6 +318,80 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
         shell = shell + bracket
 
     return shell
+
+
+def _make_wheel_solid(radius: float, width: float):
+    """Create a Pololu-style wheel: tire + rim + 6 spokes + hub + bore.
+
+    Dimensions derived from the official Pololu STEP model (whe07a.STEP)
+    for the 90x10mm servo wheel. Proportions are parameterized by radius
+    and width so the same function works for other wheel sizes.
+
+    Cross-section profile (from STEP face analysis):
+        Tire:   r=0.89R–R,   full width    (silicone rubber outer ring)
+        Rim:    r=0.76R–0.89R, full width   (plastic rim, tire seats here)
+        Spokes: r=0.27R–0.76R, 50% width   (6 spokes, narrower than rim)
+        Hub:    r=bore–0.27R, 68% width     (center disc with spline bore)
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+
+    # Radial dimensions (proportional to wheel radius)
+    tire_r = radius  # outer tire surface
+    rim_outer_r = radius * 0.889  # tire inner / rim outer
+    rim_inner_r = radius * 0.756  # rim inner / spoke outer
+    spoke_inner_r = radius * 0.267  # spoke inner / hub outer
+    hub_r = spoke_inner_r
+    bore_r = 0.0029  # 5.8mm diameter (25T spline)
+
+    # Axial widths (from STEP X-extent analysis)
+    tire_w = width  # full width
+    rim_w = width  # rim also full width
+    spoke_w = width * 0.5  # spokes narrower
+    hub_w = width * 0.68  # hub disc slightly wider than spokes
+
+    # Spoke cross-section
+    spoke_tangential = radius * 0.16  # ~7mm for 90mm wheel
+    spoke_length = rim_inner_r - spoke_inner_r + 0.004  # +2mm overlap each end
+
+    # --- Tire ring (silicone rubber) ---
+    tire = Cylinder(tire_r, tire_w, align=C) - Cylinder(
+        rim_outer_r, tire_w + 0.001, align=C
+    )
+
+    # --- Rim ring (plastic, tire seats on this) ---
+    rim = Cylinder(rim_outer_r, rim_w, align=C) - Cylinder(
+        rim_inner_r, rim_w + 0.001, align=C
+    )
+
+    # --- Hub disc ---
+    hub = Cylinder(hub_r, hub_w, align=C) - Cylinder(bore_r, hub_w + 0.001, align=C)
+
+    # --- 6 spokes connecting hub to rim ---
+    spokes = None
+    mid_r = (spoke_inner_r + rim_inner_r) / 2
+    for i in range(6):
+        angle_rad = i * math.pi / 3
+        angle_deg = math.degrees(angle_rad)
+        cx = mid_r * math.cos(angle_rad)
+        cy = mid_r * math.sin(angle_rad)
+
+        spoke = Box(spoke_length, spoke_tangential, spoke_w, align=C)
+        spoke = spoke.locate(Location((cx, cy, 0), (0, 0, angle_deg)))
+
+        if spokes is None:
+            spokes = spoke
+        else:
+            spokes = spokes + spoke
+
+    # --- Bore through full width ---
+    bore = Cylinder(bore_r, width + 0.002, align=C)
+
+    # Union order matters: each step must add geometry that touches the
+    # previous result. Hub→spokes→rim→tire (inside out).
+    wheel = hub + spokes + rim + tire - bore
+    return _as_solid(wheel)
 
 
 def _orient_z_to_axis(solid, axis: tuple[float, float, float]):

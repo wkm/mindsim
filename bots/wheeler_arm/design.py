@@ -14,7 +14,13 @@ Run this script to generate all outputs:
 
 from pathlib import Path
 
-from botcad.components import OV5647, STS3215, LiPo2S, RaspberryPiZero2W
+from botcad.components import (
+    OV5647,
+    STS3215,
+    LiPo2S,
+    PololuWheel90mm,
+    RaspberryPiZero2W,
+)
 from botcad.skeleton import Bot
 
 
@@ -36,7 +42,8 @@ def build() -> Bot:
         axis="-x",
         pos=(-0.06, 0.0, 0.0),
     )
-    left_joint.body("left_rim", shape="cylinder", radius=0.05, width=0.03)
+    left_rim = left_joint.body("left_rim", shape="cylinder", radius=0.045, width=0.010)
+    left_rim.mount(PololuWheel90mm(), label="wheel")
 
     # Right wheel: servo at right side of base, axis = X (opposite direction)
     right_joint = base.joint(
@@ -45,7 +52,10 @@ def build() -> Bot:
         axis="x",
         pos=(0.06, 0.0, 0.0),
     )
-    right_joint.body("right_rim", shape="cylinder", radius=0.05, width=0.03)
+    right_rim = right_joint.body(
+        "right_rim", shape="cylinder", radius=0.045, width=0.010
+    )
+    right_rim.mount(PololuWheel90mm(), label="wheel")
 
     # --- 4-DOF Arm ---
 

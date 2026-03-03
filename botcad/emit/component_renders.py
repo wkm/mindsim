@@ -17,8 +17,8 @@ Called as part of Bot.emit() pipeline, or standalone:
 
 from __future__ import annotations
 
-import math
-import struct
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -30,7 +30,8 @@ from botcad.component import Component, ServoSpec
 
 # ── Rendering config ──
 
-WIDTH, HEIGHT = 400, 400  # per-view resolution
+WIDTH, HEIGHT = 800, 800  # per-view resolution
+PNG_DPI = (150, 150)  # DPI metadata for saved PNGs
 VIEWS = {
     "front (+Y)": {"azimuth": 90, "elevation": 0},
     "right (+X)": {"azimuth": 0, "elevation": 0},
@@ -58,104 +59,31 @@ LEGEND_HORN_HOLE = ("horn holes (green)", (51, 255, 77))
 LEGEND_REAR_HOLE = ("rear holes (cyan)", (51, 230, 230))
 
 
-# ── STL generation helpers ──
-
-
-def _box_stl_bytes(sx: float, sy: float, sz: float) -> bytes:
-    """Minimal binary STL for a box centered at origin."""
-    hx, hy, hz = sx / 2, sy / 2, sz / 2
-    verts = [
-        (-hx, -hy, -hz),
-        (hx, -hy, -hz),
-        (hx, hy, -hz),
-        (-hx, hy, -hz),
-        (-hx, -hy, hz),
-        (hx, -hy, hz),
-        (hx, hy, hz),
-        (-hx, hy, hz),
-    ]
-    tris = [
-        (0, 2, 1),
-        (0, 3, 2),
-        (4, 5, 6),
-        (4, 6, 7),
-        (3, 7, 6),
-        (3, 6, 2),
-        (0, 1, 5),
-        (0, 5, 4),
-        (1, 2, 6),
-        (1, 6, 5),
-        (0, 4, 7),
-        (0, 7, 3),
-    ]
-    return _pack_stl(verts, tris)
-
-
-def _cylinder_stl_bytes(radius: float, height: float, segments: int = 16) -> bytes:
-    """Minimal binary STL for a Z-axis cylinder centered at origin."""
-    hz = height / 2
-    verts = [(0, 0, -hz), (0, 0, hz)]
-    tris = []
-    for i in range(segments):
-        a = 2 * math.pi * i / segments
-        verts.append((radius * math.cos(a), radius * math.sin(a), -hz))
-        verts.append((radius * math.cos(a), radius * math.sin(a), hz))
-    for i in range(segments):
-        bi, ti = 2 + i * 2, 3 + i * 2
-        ni = (i + 1) % segments
-        bni, tni = 2 + ni * 2, 3 + ni * 2
-        tris.extend([(0, bni, bi), (1, ti, tni), (bi, bni, tni), (bi, tni, ti)])
-    return _pack_stl(verts, tris)
-
-
-def _pack_stl(verts, tris) -> bytes:
-    """Pack vertices and triangles into binary STL format."""
-    data = bytearray(b"\x00" * 80)
-    data.extend(struct.pack("<I", len(tris)))
-    for i0, i1, i2 in tris:
-        v0, v1, v2 = verts[i0], verts[i1], verts[i2]
-        e1 = (v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2])
-        e2 = (v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2])
-        nx = e1[1] * e2[2] - e1[2] * e2[1]
-        ny = e1[2] * e2[0] - e1[0] * e2[2]
-        nz = e1[0] * e2[1] - e1[1] * e2[0]
-        m = math.sqrt(nx * nx + ny * ny + nz * nz)
-        if m > 0:
-            nx, ny, nz = nx / m, ny / m, nz / m
-        data.extend(struct.pack("<fff", nx, ny, nz))
-        data.extend(struct.pack("<fff", *v0))
-        data.extend(struct.pack("<fff", *v1))
-        data.extend(struct.pack("<fff", *v2))
-        data.extend(struct.pack("<H", 0))
-    return bytes(data)
-
-
 # ── Scene building: layered approach ──
 
 
 def _add_common_geoms(geoms, legends, component: Component):
-    """Body envelope + axis indicators — every component gets these."""
-    d = component.dimensions
-    c = component.color
+    """Body mesh + axis indicators — every component gets these.
 
-    # Body envelope — use component's color at α=0.85
+    The body is rendered as a mesh from the CAD pipeline (actual STL geometry),
+    not a primitive approximation. The mesh asset "comp_mesh" must be defined
+    in the scene's <asset> block by the caller.
+    """
+    c = component.color
     body_rgba = f"{c[0]:.2f} {c[1]:.2f} {c[2]:.2f} 0.85"
 
-    # For servos, prefer body_dimensions (without ears/horn)
+    # Body: reference the CAD-generated mesh
+    geoms.append(f'<geom name="body" type="mesh" mesh="comp_mesh" rgba="{body_rgba}"/>')
+
+    body_rgb = (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
+    legends.append(("body", body_rgb))
+
+    # Effective dimensions for axis sizing
+    d = component.dimensions
     if isinstance(component, ServoSpec):
         bd = component.body_dimensions
         if any(x > 0 for x in bd):
             d = bd
-
-    geoms.append(
-        f'<geom name="body" type="box"'
-        f' size="{d[0] / 2:.6f} {d[1] / 2:.6f} {d[2] / 2:.6f}"'
-        f' rgba="{body_rgba}"/>'
-    )
-
-    # Body legend: use component color name
-    body_rgb = (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
-    legends.append(("body", body_rgb))
 
     # Axis indicators: thin cylinders for X (red), Y (green), Z (blue)
     axis_len = max(d) * 1.0  # match component's largest dimension
@@ -276,8 +204,24 @@ def _add_servo_geoms(geoms, legends, servo: ServoSpec):
         legends.append(LEGEND_REAR_HOLE)
 
 
-def build_component_scene(component: Component) -> tuple[str, list]:
-    """Build MuJoCo XML showing any component with all its features."""
+def build_component_scene(component: Component) -> tuple[str, list, Path]:
+    """Build MuJoCo XML showing any component with all its features.
+
+    Generates a real STL mesh via the CAD pipeline and loads it as a
+    MuJoCo mesh asset. Debug overlays (mounting points, wire ports, etc.)
+    are layered on top as primitive geoms.
+
+    Returns (xml_string, legends, temp_dir). Caller must clean up temp_dir.
+    """
+    from build123d import export_stl
+
+    from botcad.emit.cad import make_component_solid
+
+    # Generate actual CAD solid → temp STL
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_comp_"))
+    solid = make_component_solid(component)
+    export_stl(solid, str(temp_dir / "component.stl"))
+
     geoms: list[str] = []
     legends: list[tuple[str, tuple[int, int, int]]] = []
 
@@ -293,10 +237,14 @@ def build_component_scene(component: Component) -> tuple[str, list]:
     xml = f"""<?xml version='1.0' encoding='utf-8'?>
 <mujoco model="component_debug">
   <option gravity="0 0 0"/>
+  <compiler meshdir="{temp_dir}"/>
   <visual>
     <rgba haze="1 1 1 1"/>
     <global offwidth="{WIDTH}" offheight="{HEIGHT}"/>
   </visual>
+  <asset>
+    <mesh name="comp_mesh" file="component.stl" scale="1 1 1"/>
+  </asset>
   <worldbody>
     <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
     <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.4 0.4 0.4"/>
@@ -306,7 +254,7 @@ def build_component_scene(component: Component) -> tuple[str, list]:
   </worldbody>
 </mujoco>
 """
-    return xml, legends
+    return xml, legends, temp_dir
 
 
 # ── Rendering ──
@@ -337,22 +285,25 @@ def _render_view(model, data, renderer, azimuth: float, elevation: float) -> np.
 
 def render_component_views(component: Component, name: str) -> Image.Image:
     """Render all views of a component and composite into a single image."""
-    xml, legends = build_component_scene(component)
+    xml, legends, temp_dir = build_component_scene(component)
 
-    model = mujoco.MjModel.from_xml_string(xml)
-    data = mujoco.MjData(model)
-    renderer = mujoco.Renderer(model, WIDTH, HEIGHT)
+    try:
+        model = mujoco.MjModel.from_xml_string(xml)
+        data = mujoco.MjData(model)
+        renderer = mujoco.Renderer(model, WIDTH, HEIGHT)
 
-    images = []
-    labels = []
-    for label, params in VIEWS.items():
-        img_array = _render_view(
-            model, data, renderer, params["azimuth"], params["elevation"]
-        )
-        images.append(Image.fromarray(img_array))
-        labels.append(label)
+        images = []
+        labels = []
+        for label, params in VIEWS.items():
+            img_array = _render_view(
+                model, data, renderer, params["azimuth"], params["elevation"]
+            )
+            images.append(Image.fromarray(img_array))
+            labels.append(label)
 
-    renderer.close()
+        renderer.close()
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Composite: 3x2 grid with labels
     n_cols = 3
@@ -474,7 +425,7 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
         img = render_component_views(comp, name)
         out_path = components_dir / filename
-        img.save(out_path)
+        img.save(out_path, optimize=True, dpi=PNG_DPI)
         print(f"  {out_path}")
 
     # Render servo variants (position + continuous)
@@ -488,7 +439,7 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
             img = render_component_views(variant, display_name)
             out_path = components_dir / filename
-            img.save(out_path)
+            img.save(out_path, optimize=True, dpi=PNG_DPI)
             print(f"  {out_path}")
 
     print(f"  component renders done ({time.perf_counter() - t0:.1f}s)")
@@ -522,5 +473,5 @@ if __name__ == "__main__":
         img = render_component_views(comp, name)
         safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
         out_path = out_dir / f"test_{category}_{safe_name}.png"
-        img.save(out_path)
+        img.save(out_path, optimize=True, dpi=PNG_DPI)
         print(f"Saved: {out_path}")
