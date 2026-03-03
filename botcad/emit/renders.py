@@ -22,8 +22,9 @@ from PIL import Image, ImageDraw
 
 # ── Config ──
 
-VIEW_W, VIEW_H = 500, 500  # per-view resolution for overview/closeups
-SWEEP_W, SWEEP_H = 300, 300  # per-frame resolution for sweeps
+VIEW_W, VIEW_H = 1000, 1000  # per-view resolution for overview/closeups
+SWEEP_W, SWEEP_H = 600, 600  # per-frame resolution for sweeps
+PNG_DPI = (150, 150)  # DPI metadata for saved PNGs
 SWEEP_FRAMES = 9
 
 OVERVIEW_VIEWS = {
@@ -193,7 +194,7 @@ def render_overview(
         canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_overview.png"
-    canvas.save(out)
+    canvas.save(out, optimize=True, dpi=PNG_DPI)
     print(f"  overview: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 
@@ -293,7 +294,7 @@ def render_closeups(
             canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_closeups.png"
-    canvas.save(out)
+    canvas.save(out, optimize=True, dpi=PNG_DPI)
     print(f"  closeups: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 
@@ -475,7 +476,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
             draw.text((x, y + SWEEP_H + 2), label, fill=color)
 
     out = output_dir / "test_sweep.png"
-    canvas.save(out)
+    canvas.save(out, optimize=True, dpi=PNG_DPI)
     print(f"  sweeps: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 

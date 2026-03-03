@@ -4,400 +4,88 @@ Design robots from real components, train them in simulation, then build the phy
 
 ## Pipeline Philosophy
 
-The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments. The goal is a tight loop: design a bot, validate it in sim, train a neural network to control it, 3D print the structure, assemble purchased components, and deploy.
+The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 
 ```
 Skeleton DSL (design.py)
-    │
-    ├─→ CAD assembly (the real, physical bot)
-    │     ├─→ printable structural parts (STLs for slicing)
-    │     ├─→ sim meshes (same STLs, referenced by MuJoCo XML)
-    │     └─→ assembly guide (mount servos here, Pi here, route wires X→Y)
-    │
-    ├─→ MuJoCo XML (physics: joints, actuators, contacts, sensors)
-    │     └── references CAD meshes (not separate "sim geometry")
-    │
+    ├─→ CAD assembly (STEP + per-body STLs for slicing)
+    ├─→ MuJoCo XML (references same STL meshes — no separate "sim geometry")
     ├─→ validation renders (visual sanity checks before printing)
-    │
-    └─→ training pipeline (PPO, reward shaping, scene gen, etc.)
+    └─→ training pipeline (PPO, reward shaping, scene gen)
 ```
 
-**Key principles:**
+**Key invariants:**
 
-- **CAD geometry = sim geometry.** MuJoCo references the same STL meshes you'd send to a slicer. No divergence between "sim version" and "real version" — they're the same files.
-- **Rigid sub-chains become single printed parts.** Everything between servo joints gets unioned into one solid — that's what you physically print. Servos are the mechanical separation points.
-- **Purchased components get pockets, not models.** The CAD cuts mounting holes and clearance volumes for servos, compute boards, cameras, batteries. The assembly guide tells you what to insert where.
-- **Validation catches mistakes before printing.** Joint clearances, servo fit, mass distribution, wire routing feasibility — all checkable from the skeleton before any physical work.
-- **Sim fidelity matters.** The simulation should be close enough to reality that policies trained in sim transfer to the physical bot. We intentionally ignore some details (wiring, fasteners) but geometry, mass, and actuation should match.
+- **CAD geometry = sim geometry.** MuJoCo references the same STLs you'd send to a slicer.
+- **Rigid sub-chains become single printed parts.** Servos are the mechanical separation points.
+- **Purchased components get pockets, not models.** Assembly guide says what to insert where.
+- **Sim fidelity matters.** Geometry, mass, and actuation should match physical reality.
 
 ## Quick Start
 
-**Single entry point — always use `main.py` via `mjpython`:**
-
 ```bash
 uv run mjpython main.py                    # Interactive TUI (default)
-uv run mjpython main.py scene              # Scene gen preview (procedural furniture)
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
-uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]  # Play trained policy
-uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
-uv run mjpython main.py smoketest          # Alias for train --smoketest
-uv run mjpython main.py quicksim           # Rerun debug vis
-uv run mjpython main.py visualize [--bot NAME] [--steps N]
-uv run mjpython main.py validate-rewards [--bot NAME]  # Validate reward hierarchy
+uv run mjpython main.py train [--smoketest] [--bot NAME]
+uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]
+uv run mjpython main.py scene              # Scene gen preview
 ```
 
-`--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.
+`--bot NAME`: bot directory name (e.g., `wheeler_arm`). Make shortcuts: `make`, `make view`, `make train`.
 
-`--run RUN_NAME` resolves the latest checkpoint from a specific run directory (e.g., `--run s2w-lstm-0218-1045`).
-
-Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smoketest`.
-
-**Worktree management:**
-
-```bash
-make wt-new NAME=my-experiment              # exp/YYMMDD-my-experiment branch
-make wt-new NAME=better-tui TYPE=infra      # infra/better-tui branch
-make wt-new DESC='implement PPO'            # Claude suggests a branch name
-make wt-ls                                  # List all worktrees
-make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
-```
+**Worktrees:** `make wt-new NAME=foo`, `make wt-new NAME=bar TYPE=infra`, `make wt-ls`, `make wt-rm NAME=foo`
 
 ## Project Structure
 
-```txt
-mindsim/
+```
 ├── main.py                   # Single entry point for all modes
-├── run_manager.py            # Run directory lifecycle & W&B init
 ├── botcad/                   # Parametric bot CAD system
 │   ├── skeleton.py           # Kinematic tree DSL (Bot, Body, Joint)
 │   ├── component.py          # Component base classes (ServoSpec, etc.)
-│   ├── components/           # Real component catalog (STS3215, RPi, etc.)
+│   ├── components/           # Real component catalog (STS3215, RPi, wheels, etc.)
 │   ├── bracket.py            # Parametric servo bracket geometry
 │   ├── geometry.py           # Servo placement, quaternion math
-│   ├── packing.py            # Body dimension solver (fit components)
+│   ├── packing.py            # Body dimension solver
 │   ├── routing.py            # Wire route solver
-│   └── emit/                 # Output generators
-│       ├── cad.py            # STEP assembly + per-body STLs (build123d)
-│       ├── mujoco.py         # MuJoCo XML (bot.xml + scene.xml)
-│       ├── bom.py            # Bill of materials
-│       ├── readme.py         # Assembly guide
-│       ├── renders.py        # Validation render pipeline
-│       └── servo_renders.py  # Servo bracket detail renders
-├── bots/                     # Generated bot output directories
+│   └── emit/                 # Output generators (cad, mujoco, bom, readme, renders)
+├── bots/                     # Bot definitions + generated outputs
 │   └── wheeler_arm/
-│       ├── design.py         # Bot definition script (the source of truth)
-│       ├── bot.xml           # Generated MuJoCo robot definition
-│       ├── scene.xml         # Generated scene wrapper
-│       ├── assembly.step     # Generated full CAD assembly
-│       └── meshes/*.stl      # Generated per-body mesh files
-├── worlds/
-│   └── room.xml             # Standalone arena (floor, curbs, target, distractors)
-├── sim_env.py               # Environment API (SimEnv)
-├── train.py                 # Training loop & policy networks
-├── checkpoint.py            # Checkpoint save/load/resolve
-├── view.py                  # MuJoCo viewer
-├── play.py                  # Interactive play mode
-├── scene_preview.py          # Scene gen preview (loads room.xml directly)
-├── scene_gen/                # Procedural scene generation
-│   ├── primitives.py        # Prim types, GeomType, material colors
-│   ├── composer.py          # SceneComposer, placement, descriptions
-│   └── concepts/            # Parametric furniture (auto-discovered)
-│       ├── table.py         # Table (top + 4 legs)
-│       ├── chair.py         # Chair (seat + back + 4 legs)
-│       └── shelf.py         # Shelf (2 sides + N boards)
-├── visualize.py             # Rerun visualization
-└── runs/                    # Per-run directories (gitignored)
-    └── s2w-lstm-0218-1045/
-        ├── run_info.json    # Run metadata
-        ├── checkpoints/     # Model checkpoints
-        └── recordings/      # Rerun .rrd files
+│       ├── design.py         # Bot definition (the source of truth)
+│       └── meshes/*.stl      # Generated meshes (used by sim + slicer)
+├── sim_env.py                # MuJoCo simulation wrapper (SimEnv)
+├── train.py                  # PPO training loop & policy networks
+├── scene_gen/                # Procedural scene generation (auto-discovered concepts)
+├── worlds/room.xml           # Static arena (floor, curbs, target)
+└── runs/                     # Per-run directories (gitignored)
 ```
 
-## Parametric CAD System (`botcad/`)
-
-The `botcad/` package is the design-to-fabrication pipeline. A bot is defined once as a kinematic tree of bodies, joints, and real components, then all outputs are generated automatically.
-
-**Defining a bot** (`design.py`):
-
-```python
-bot = Bot("wheeler_arm")
-base = bot.body("base", shape="box", padding=0.008)
-base.mount(RaspberryPiZero2W(), position="center")
-base.mount(LiPo2S(1000), position="bottom")
-
-left_wheel = base.joint("left_wheel", servo=STS3215(continuous=True),
-                        axis="-x", pos=(-0.06, 0, 0))
-left_wheel.body("left_rim", shape="cylinder", radius=0.05, width=0.03)
-# ... more joints and bodies ...
-
-bot.solve()   # packing + wire routing
-bot.emit()    # generate all outputs
-```
-
-**What `emit()` produces:**
-
-| Output | Generator | Purpose |
-|--------|-----------|---------|
-| `assembly.step` | `emit/cad.py` | Full assembly — printable parts positioned + colored. Open in FreeCAD/Fusion 360 to inspect or prepare for slicing. |
-| `meshes/*.stl` | `emit/cad.py` | Per-body STL files. Used by both MuJoCo (sim visuals) and slicer (3D printing). Same files, no divergence. |
-| `bot.xml` | `emit/mujoco.py` | MuJoCo robot definition (bodies, joints, actuators, sensors, cameras). References the STL meshes. |
-| `scene.xml` | `emit/mujoco.py` | Thin wrapper: timestep + bot.xml + room.xml include. |
-| `bom.md` | `emit/bom.py` | Bill of materials — every purchased component with specs. |
-| `assembly_guide.md` | `emit/readme.py` | Step-by-step assembly instructions for physical build. |
-| Validation renders | `emit/renders.py` | Visual sanity checks (bracket fit, clearances, wire routes). |
-
-**CAD assembly structure:**
-
-The STEP assembly mirrors the kinematic tree. Each body is a printable structural part (hollow shell + servo brackets unioned in). Purchased components (servos, Pi, camera, battery) aren't modeled as solids — they get mounting pockets cut into the structure, and the assembly guide tells you what to insert.
-
-Servos are the mechanical separation points. Everything between joints is one rigid solid = one printed part. Wheels, arm tubes, the base box — each is a separate piece you print, then assemble with servos bolting them together.
-
-**Component catalog** (`botcad/components/`):
-
-Real components with real dimensions, masses, and mounting patterns. Currently: STS3215 servo, Raspberry Pi Zero 2W, OV5647 camera, LiPo batteries. Adding a component means providing its datasheet dimensions — the system handles pocket cutting, mass accounting, and BOM entries.
-
-## Environment API
-
-```python
-from sim_env import SimEnv
-
-env = SimEnv(render_width=128, render_height=128)
-
-# Step simulation
-camera_img = env.step(left_motor=0.5, right_motor=0.5)  # [-1, 1]
-
-# Access MuJoCo model/data directly
-env.model    # MjModel - structure (bodies, geoms, cams, meshes)
-env.data     # MjData - state (xpos, xquat, sensor data)
-
-# Convenience methods
-env.get_bot_position()
-env.get_target_position()
-env.get_distance_to_target()
-
-env.close()
-```
-
-## Visualization
-
-```bash
-uv run mjpython main.py visualize
-rerun recordings/simple2wheeler_viz.rrd
-```
-
-Creates a Rerun recording with:
-
-- 3D robot meshes from MuJoCo model
-- Camera view with proper FOV
-- Trajectory trail
-- Motor inputs and distance plots
-
-## Procedural Scene Generation
-
-The `scene_gen/` module generates rooms with parametric furniture for training diversity.
-
-**Preview scenes:**
-
-```bash
-uv run mjpython main.py scene              # MuJoCo viewer with random furniture
-```
-
-Loads `worlds/room.xml` directly — no bot needed. Controls: `Space` = next scene, `Backspace` = regenerate same scene, `Arrow keys` = move target.
-
-**Architecture:**
-
-1. **Concepts** (`scene_gen/concepts/`) — Each concept is a Python file with a frozen `Params` dataclass + `@lru_cache`d `generate()` function that returns MuJoCo primitives. Auto-discovered via `pkgutil`.
-2. **Primitives** (`scene_gen/primitives.py`) — `Prim` dataclass mapping to MuJoCo geom types (box, cylinder, sphere). Includes material color constants.
-3. **Composer** (`scene_gen/composer.py`) — `SceneComposer` discovers pre-allocated obstacle slot bodies in the MuJoCo model, writes concept primitives into them at reset time. No model recompilation needed.
-
-**Scene identity:** Each scene has an integer `seed` for deterministic reproduction. `describe_scene()` produces a human-readable text description. `scene_id()` gives a short hex tag.
-
-**Adding new furniture:** Drop a file in `scene_gen/concepts/` following the pattern in `concepts/__init__.py` docstring. Needs a `Params` frozen dataclass + `generate(params) -> tuple[Prim, ...]`. That's it — auto-discovered.
-
-**Obstacle slots via MjSpec:** Obstacle body+geom slots are injected programmatically via `SceneComposer.prepare_spec(spec)` before model compilation (uses MuJoCo's MjSpec API). The slot count is configurable (default: 8 objects x 8 geoms). `worlds/room.xml` contains only the static arena (floor, curbs, target, distractors) — no pre-allocated placeholders. Bot `scene.xml` files include `room.xml` via `<include>`.
-
-**Scale progression (planned):** Room → Apartment → House → Village.
-
-## MuJoCo → Visualization Gotchas
-
-1. **Always call `mj_forward()` after `mj_resetData()`**
-   Positions/orientations aren't computed until forward kinematics runs
-
-2. **Get meshes from model, not files**
-   `model.mesh_vert` and `model.mesh_face` have XML `scale=` already applied
-
-3. **Use model structure to drive everything**
-   Iterate `model.nbody`, `model.ngeom`, `model.ncam` - don't hardcode names
-
-4. **Respect geometry hierarchy**
-   Bodies → Geoms → Meshes (each has relative transforms)
-
-   ```txt
-   world/{body}              (data.xpos, data.xquat)
-     └─ {geom}               (model.geom_pos, model.geom_quat)
-        └─ mesh              (vertices, faces)
-   ```
-
-5. **Cameras need coordinate corrections**
-   MuJoCo ≠ Rerun conventions → compose quaternions to fix orientation
-
-6. **Don't duplicate model entities**
-   If the model has floor/target/etc., use it - don't log separately
-
-## Key Files
-
-- **main.py** - Single entry point for all modes (TUI, view, play, train, etc.)
-- **run_manager.py** - Run directory lifecycle, run naming, W&B init, run discovery
-- **checkpoint.py** - Checkpoint save/load/resolve (searches `runs/` then legacy `checkpoints/`)
-- **config.py** - Centralized training configuration (all hyperparameters)
-- **bot.xml** - Robot structure (motors, sensors, camera, meshes)
-- **worlds/room.xml** - Standalone arena (floor, curbs, target, distractors)
-- **scene.xml** - Thin wrapper: timestep + bot.xml + room.xml include
-- **sim_env.py** - MuJoCo simulation wrapper (SimEnv: step, reset, sensors, camera)
-- **view.py** - MuJoCo viewer (called via `main.py view`)
-- **play.py** - Interactive play mode (called via `main.py play`)
-- **scene_preview.py** - Scene gen preview in MuJoCo viewer (called via `main.py scene`)
-- **scene_gen/** - Procedural scene generation (concepts, composer, primitives)
-- **train.py** - Training loop and policy networks (called via `main.py train`)
-- **rerun_wandb.py** - Rerun-W&B integration for eval episode recordings
-- **visualize.py** - Rerun visualization (called via `main.py visualize`)
-
-## Run Management
-
-Each training run gets its own directory under `runs/<run_name>/`:
-
-- **Run naming**: `<bot_abbrev>-<policy>-<MMDD>-<HHMM>` (e.g., `s2w-lstm-0218-1045`). Collision avoidance appends `-2`, `-3`, etc.
-- **Bot abbreviations**: `simple2wheeler` -> `s2w`, `simplebiped` -> `biped`, `walker2d` -> `w2d`
-- **Metadata**: `run_info.json` tracks status (running/completed/failed), bot, algorithm, W&B link, batch count, etc.
-- **W&B**: All runs go to a single `mindsim` project, with tags for bot/algorithm/policy filtering.
-
-## TUI
-
-The interactive TUI (`uv run mjpython main.py`) has a screen-based flow:
-
-```
-MainMenuScreen
-  ├── [s] Smoketest     -> runs smoketest
-  ├── [n] New run       -> BotSelectorScreen -> TrainingDashboard
-  ├── [g] Scene gen     -> MuJoCo viewer with procedural scenes (loads room.xml directly)
-  ├── [b] Browse runs   -> RunBrowserScreen -> RunActionScreen
-  └── [q] Quit
-```
-
-**RunActionScreen** actions for a selected run: **[p]** play, **[r]** resume, **[v]** view, **[w]** open W&B.
-
-**Navigation**: `Esc` and `Backspace` consistently go back / leave a screen.
-
-## Training
-
-Current algorithm: **PPO** (Proximal Policy Optimization with GAE)
+Each bot's `design.py` calls `bot.solve()` then `bot.emit()` to produce: `assembly.step`, `meshes/*.stl`, `bot.xml`, `scene.xml`, `bom.md`, `assembly_guide.md`, and validation renders.
 
 ## Branching & Change Philosophy
 
-### Guiding principles
+1. **Master stays stable.** Only small, safe changes land directly on master.
+2. **Experiments are focused.** `exp/YYMMDD-<name>` branches test one hypothesis. No drive-by refactors.
+3. **Tooling/infra changes are separate.** `infra/<name>` branches, not mixed into experiments.
+4. **Commit logs are a journal.** Explain *why*, not just *what*.
 
-1. **Master stays stable.** Only small, safe changes land directly on master: hyperparameter tweaks, minor bugfixes, config changes. No big refactors, no risky rewrites.
-2. **Experiments are focused.** An `exp/` branch tests a hypothesis — it should not also reorganize the codebase or refactor tooling. Keep the diff reviewable and the intent clear.
-3. **Tooling/infra changes are separate.** Improvements to the training pipeline, TUI, visualization, build system, etc. go on `infra/` branches, not mixed into experiments.
-4. **Commit logs are a journal.** Every commit should tell a reader *why* the change was made, what was tried, and what was learned. The git log is the project's memory.
+**Before any non-trivial change:** ensure working tree is clean, classify the change, use `make wt-new` for experiments/infra.
 
-### Before ANY non-trivial change
+**Experiment workflow:** `make wt-new NAME=foo` → work on branch → add entry to `EXPERIMENTS.md` → merge or abandon.
 
-**Always bookmark your starting point before writing code.** You must be able to get back to a known-good state.
-
-1. **Ensure the working tree is clean.** Run `git status` to verify. Commit or stash first.
-2. **Classify the change** — decide which category it falls into (see below).
-
-### Change categories
-
-**Hyperparameter tweaks / minor bugfixes** → Commit directly on master
-
-- Learning rate, batch size, reward coefficients, small bugfixes, config changes.
-- Working tree must be clean before starting.
-- Keep changes small and low-risk.
-
-**Experiments** → `exp/YYMMDD-<name>` branch via worktree
-
-- New algorithms, architecture changes, reward structures, training approaches — anything where the outcome is uncertain.
-- **Stay focused**: only make changes that serve the experiment's hypothesis. No drive-by refactors, no structural changes.
-- Workflow:
-  1. Ensure working tree is clean (committed on master).
-  2. Create a worktree: `make wt-new NAME=<descriptive-name>`
-     - This creates `../mindsim-<name>/` on branch `exp/YYMMDD-<name>` (date auto-prefixed)
-  3. `cd ../mindsim-<name>/ && claude` to start a Claude Code session in the worktree.
-  4. Add an entry to `EXPERIMENTS.md` on the branch.
-  5. Now begin writing code.
-- If the experiment succeeds, merge to master: `git merge exp/YYMMDD-<name>`
-- Clean up: `make wt-rm NAME=<name>` (then `git branch -d exp/YYMMDD-<name>` if merged)
-- If it fails, remove the worktree — the branch stays as a record.
-
-**Tooling / infrastructure improvements** → `infra/<name>` branch via worktree
-
-- TUI improvements, visualization changes, build system updates, training pipeline refactors, new CLI features.
-- Workflow:
-  1. Ensure working tree is clean.
-  2. Create a worktree: `make wt-new NAME=<name> TYPE=infra`
-     - This creates `../mindsim-<name>/` on branch `infra/<name>`
-  3. Work, commit, merge back to master when done.
-- These can be larger structural changes — that's fine, just keep them separate from experiments.
-
-### Parallel experiments with worktrees
-
-Worktrees let you run multiple experiments simultaneously, each with its own Claude Code session:
-
-```bash
-# From the main repo (on master), spin up parallel experiments
-make wt-new NAME=ppo-baseline
-make wt-new NAME=reward-shaping-v2
-
-# Infra work in parallel
-make wt-new NAME=better-tui TYPE=infra
-
-# Each gets its own isolated directory + Claude session
-cd ../mindsim-ppo-baseline && claude
-cd ../mindsim-reward-shaping-v2 && claude    # (in another terminal)
-
-# Main repo stays clean on master — you can train/view/etc. uninterrupted
-make wt-ls
-```
-
-- Each worktree is a full working copy with its own branch — no file conflicts between sessions.
-- `CLAUDE.md` and all project files are available in each worktree (checked into git).
-- Worktrees share the same `.git` database, so branches/history are shared.
-
-### Tracking experiments
-
-Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
-
-- Branch name (including date prefix)
-- Hypothesis (what you're testing and why)
-- Status (in-progress / succeeded / failed / partially worked / merged to main)
-- Outcome notes (what was learned)
-- Link to relevant W&B runs
+**Tracking:** `EXPERIMENTS.md` records branch, hypothesis, status, outcome, W&B links.
 
 ## Development Notes
 
-- **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
-- **Bot changes require the checklist** - When creating a new bot or modifying bot XML (geometry, actuators, damping, sensors), read and follow `NEW_BOT_CHECKLIST.md` before committing. Common mistakes it catches: unrealistic joint speeds from wrong damping, gait phase period copied from a different-sized robot, feet not touching the floor, missing contact exclusions.
+- **Clean up before committing** — remove debug*.py, test*.py, .rrd files, temp files
+- **Bot changes require the checklist** — read `NEW_BOT_CHECKLIST.md` before committing bot XML changes
 
 ## Commit Message Format
 
-The git log is the project's journal. Each commit should be useful to a future reader trying to understand *why* things are the way they are.
+```
+Short summary (imperative mood, <72 chars)
 
-```text
-Short summary (imperative mood, one line)
-
-What changed and why. Not just "updated X" — explain the motivation, the
-problem being solved, or the hypothesis being tested. Include context that
-won't be obvious from the diff alone: what alternatives were considered,
-what failed first, what tradeoffs were made.
-
-For experiment branches, note observations: did the change help? What
-metrics moved? What surprised you?
+Why this change was made. Context, reasoning, alternatives considered,
+observations. The git log is the project's journal.
 
 Session: <link to Claude session>
 ```
-
-- **First line**: Concise summary (imperative mood, <72 chars)
-- **Body**: The "journal entry" — context, reasoning, observations. Use markdown. Be generous with detail; a too-verbose commit message is far better than a cryptic one.
-- **Session link**: Link to the Claude Code session (when applicable)
