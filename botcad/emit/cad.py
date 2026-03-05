@@ -21,7 +21,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from botcad.bracket import BracketSpec, bracket_solid
+from botcad.bracket import BracketSpec, bracket_solid, servo_solid
 from botcad.geometry import servo_placement
 
 if TYPE_CHECKING:
@@ -130,12 +130,33 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             positioned = group_solid.moved(Location(group_root_pos))
             assembly_parts.append(positioned)
 
+    # --- Servo solids (purchased parts, shown seated in brackets) ---
+    servo_count = 0
+    for body in bot.all_bodies:
+        body_world = world_positions[body.name]
+        for joint in body.joints:
+            servo = joint.servo
+            center, quat = servo_placement(
+                servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+            )
+            euler = _quat_to_euler(quat)
+
+            # Build servo solid, place in body-local frame, then world frame
+            solid = servo_solid(servo)
+            solid = solid.moved(Location(center, euler))
+            solid = solid.moved(Location(body_world))
+            solid = _as_solid(solid)
+            solid.color = Color(0.15, 0.15, 0.15)  # dark gray
+            solid.label = f"servo_{joint.name}"
+            assembly_parts.append(solid)
+            servo_count += 1
+
     if assembly_parts:
         assembly = Compound(label=bot.name, children=assembly_parts)
         export_step(assembly, str(output_dir / "assembly.step"))
         print(
-            f"CAD: wrote assembly.step ({len(assembly_parts)} parts) "
-            f"+ {len(body_solids)} STLs to {output_dir}"
+            f"CAD: wrote assembly.step ({len(assembly_parts) - servo_count} printed "
+            f"+ {servo_count} servo parts) + {len(body_solids)} STLs to {output_dir}"
         )
 
 
