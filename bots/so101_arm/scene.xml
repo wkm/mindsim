@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="so101_arm_scene">
+  <option timestep="0.005"/>
+  <include file="bot.xml"/>
+  <include file="../../worlds/tabletop.xml"/>
+</mujoco>

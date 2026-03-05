@@ -150,15 +150,20 @@ def _emit_body_tree(
     attribs: dict[str, str] = {"name": body.name}
 
     if is_root:
-        ground_clearance = _estimate_ground_clearance(body, bot)
-        attribs["pos"] = f"0 0 {ground_clearance:.4f}"
+        if bot.base_type == "fixed":
+            # Fixed base: sit on ground plane (half body height + small gap)
+            base_z = body.dimensions[2] / 2 + 0.001
+            attribs["pos"] = f"0 0 {base_z:.4f}"
+        else:
+            ground_clearance = _estimate_ground_clearance(body, bot)
+            attribs["pos"] = f"0 0 {ground_clearance:.4f}"
     elif parent_joint is not None:
         attribs["pos"] = _fmt_vec3(parent_joint.pos)
 
     body_el = SubElement(parent_el, "body", **attribs)
 
-    # Root gets a freejoint
-    if is_root:
+    # Root gets a freejoint (unless fixed base)
+    if is_root and bot.base_type != "fixed":
         SubElement(body_el, "freejoint", name="root")
 
     # Inertial
@@ -478,12 +483,21 @@ def _estimate_ground_clearance(root_body: Body, bot: Bot) -> float:
 def _build_scene_xml(bot: Bot) -> str:
     root = Element("mujoco", model=f"{bot.name}_scene")
     # Self-balancing wheeled bots need a small timestep (500 Hz) for stable
-    # PID control. Non-wheeled bots can use a larger step.
+    # PID control. Fixed-base arms use moderate timestep. Others use large.
     has_wheels = any(j.servo.continuous for j in bot.all_joints)
-    timestep = "0.002" if has_wheels else "0.02"
+    if has_wheels:
+        timestep = "0.002"
+    elif bot.base_type == "fixed":
+        timestep = "0.005"  # 200 Hz — good for position-controlled arms
+    else:
+        timestep = "0.02"
     SubElement(root, "option", timestep=timestep)
     SubElement(root, "include", file="bot.xml")
-    SubElement(root, "include", file="../../worlds/room.xml")
+    # Fixed-base arms use tabletop scene if available, else room
+    if bot.base_type == "fixed":
+        SubElement(root, "include", file="../../worlds/tabletop.xml")
+    else:
+        SubElement(root, "include", file="../../worlds/room.xml")
     return _prettify(root)
 
 

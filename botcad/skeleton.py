@@ -188,6 +188,9 @@ class Bot:
 
     name: str
     root: Body | None = None
+    base_type: Literal["free", "fixed"] = (
+        "free"  # free = freejoint, fixed = bolted down
+    )
 
     # Populated by solve()
     all_bodies: list[Body] = field(default_factory=list)
