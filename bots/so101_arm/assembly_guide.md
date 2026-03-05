@@ -15,6 +15,20 @@ STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo ne
 | 5 | wrist_roll | Position | -157° to 163° |
 | 6 | gripper | Position | -10° to 100° |
 
+## Joint Range of Motion
+
+```
+                  -180°   -90°       0°       +90°      +180°
+                  |         |         |         |         |
+shoulder_pan             █████████████████████████          ±110°
+shoulder_lift             ███████████████████████           ±100°
+elbow_flex                 █████████████████████            ±97°
+wrist_flex                 █████████████████████            ±95°
+wrist_roll          ████████████████████████████████████    -157° to +163°
+gripper                             █████████████           -10° to +100°
+```
+
+
 ## Wiring Diagram
 
 ```

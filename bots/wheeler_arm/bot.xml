@@ -203,9 +203,12 @@
     <exclude body1="base" body2="left_rim"/>
     <exclude body1="base" body2="right_rim"/>
     <exclude body1="base" body2="turntable"/>
+    <exclude body1="base" body2="upper_arm"/>
+    <exclude body1="forearm" body2="hand"/>
+    <exclude body1="turntable" body2="forearm"/>
     <exclude body1="turntable" body2="upper_arm"/>
     <exclude body1="upper_arm" body2="forearm"/>
-    <exclude body1="forearm" body2="hand"/>
+    <exclude body1="upper_arm" body2="hand"/>
   </contact>
   <actuator>
     <motor name="left_wheel_motor" joint="left_wheel" gear="2.94" ctrlrange="-1 1"/>

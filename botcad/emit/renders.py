@@ -437,11 +437,40 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
 
     for strip_idx, (jname, frames, frame_labels, collisions) in enumerate(strips):
         lo, hi = model.jnt_range[sweep_joints[strip_idx]]
+        lo_deg, hi_deg = math.degrees(lo), math.degrees(hi)
         sy = 30 + strip_idx * strip_h
-        draw.text(
-            (margin, sy + 4),
-            f"{jname}  [{math.degrees(lo):+.0f}° .. {math.degrees(hi):+.0f}°]",
-            fill=(0, 0, 0),
+        range_text = f"{jname}  [{lo_deg:+.0f}° .. {hi_deg:+.0f}°]"
+        draw.text((margin, sy + 4), range_text, fill=(0, 0, 0))
+
+        # ROM bar: horizontal bar showing range within [-180°, +180°]
+        bar_x0 = margin + len(range_text) * 7 + 20
+        bar_w = 200
+        bar_y = sy + 8
+        bar_h = 12
+        # Background bar (full range)
+        draw.rectangle(
+            [bar_x0, bar_y, bar_x0 + bar_w, bar_y + bar_h],
+            fill=(230, 230, 230),
+            outline=(180, 180, 180),
+        )
+        # Active range fill
+        px_lo = int((lo_deg + 180) / 360 * bar_w)
+        px_hi = int((hi_deg + 180) / 360 * bar_w)
+        px_lo = max(0, min(bar_w, px_lo))
+        px_hi = max(px_lo + 1, min(bar_w, px_hi))
+        # Color: green if no collisions in this joint's sweep, yellow otherwise
+        has_any_col = any(collisions)
+        bar_color = (255, 180, 50) if has_any_col else (80, 180, 80)
+        draw.rectangle(
+            [bar_x0 + px_lo, bar_y, bar_x0 + px_hi, bar_y + bar_h],
+            fill=bar_color,
+        )
+        # Center tick (0°)
+        center_px = int(180 / 360 * bar_w)
+        draw.line(
+            [bar_x0 + center_px, bar_y, bar_x0 + center_px, bar_y + bar_h],
+            fill=(100, 100, 100),
+            width=1,
         )
 
         for fi, (frame, label, has_col) in enumerate(
