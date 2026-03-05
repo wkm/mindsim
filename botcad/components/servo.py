@@ -48,6 +48,18 @@ _STS3215_VOLTAGE = 12.0
 # Shaft is at X=+12.5mm along the long axis, at the +Z face
 _STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0159)
 
+# Horn mount XY coordinates (4x M2.5 pattern around shaft center)
+# Spacing: 9.9mm x 9.9mm; shared between front horn and rear horn
+_HORN_XY = (
+    (+0.00755, +0.00495),
+    (+0.01745, +0.00495),
+    (+0.00755, -0.00495),
+    (+0.01745, -0.00495),
+)
+_HORN_FRONT_Z = +0.0187  # output face
+_HORN_REAR_Z = -0.0190  # blind/rear face
+_HORN_HOLE_DIA = 0.0025  # M2.5
+
 
 def STS3215(continuous: bool = False) -> ServoSpec:
     """Feetech STS3215 serial bus servo (C018, 12V 30kg-cm).
@@ -74,14 +86,11 @@ def STS3215(continuous: bool = False) -> ServoSpec:
                 bus_type="uart_half_duplex",
             ),
         ),
-        mounting_points=(
-            # Horn mounting holes — 4x M2.5 (ø2.5mm) on the output face
-            # Pattern centered on shaft at X=+12.5mm, Y=0, Z=+18.7mm
-            # Spacing: 9.9mm x 9.9mm; positions in body-center coords
-            MountPoint("horn_1", pos=(+0.00755, +0.00495, +0.0187), diameter=0.0025),
-            MountPoint("horn_2", pos=(+0.01745, +0.00495, +0.0187), diameter=0.0025),
-            MountPoint("horn_3", pos=(+0.00755, -0.00495, +0.0187), diameter=0.0025),
-            MountPoint("horn_4", pos=(+0.01745, -0.00495, +0.0187), diameter=0.0025),
+        mounting_points=tuple(
+            MountPoint(
+                f"horn_{i + 1}", pos=(x, y, _HORN_FRONT_Z), diameter=_HORN_HOLE_DIA
+            )
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         color=(0.15, 0.15, 0.15, 1.0),
         stall_torque=_STS3215_STALL_TORQUE,
@@ -122,69 +131,25 @@ def STS3215(continuous: bool = False) -> ServoSpec:
                 "ear_6", pos=(-0.0203, +0.01025, -0.0175), hole_diameter=0.0042
             ),
         ),
-        horn_mounting_points=(
-            # Same as mounting_points above (4x M2.5 on output side)
-            # Positions in body-center coords, centered on shaft at X=+12.5mm
+        horn_mounting_points=tuple(
             MountPoint(
-                "out_1",
-                pos=(+0.00755, +0.00495, +0.0187),
-                diameter=0.0025,
+                f"out_{i + 1}",
+                pos=(x, y, _HORN_FRONT_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M2.5",
-            ),
-            MountPoint(
-                "out_2",
-                pos=(+0.01745, +0.00495, +0.0187),
-                diameter=0.0025,
-                axis=(0.0, 0.0, 1.0),
-                fastener_type="M2.5",
-            ),
-            MountPoint(
-                "out_3",
-                pos=(+0.00755, -0.00495, +0.0187),
-                diameter=0.0025,
-                axis=(0.0, 0.0, 1.0),
-                fastener_type="M2.5",
-            ),
-            MountPoint(
-                "out_4",
-                pos=(+0.01745, -0.00495, +0.0187),
-                diameter=0.0025,
-                axis=(0.0, 0.0, 1.0),
-                fastener_type="M2.5",
-            ),
+            )
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
-        rear_horn_mounting_points=(
-            # 4x M2.5 on blind/rear side, same XY pattern as front horn
-            # At Z=-19.0mm (below body bottom, where rear support bracket attaches)
+        rear_horn_mounting_points=tuple(
             MountPoint(
-                "rear_1",
-                pos=(+0.00755, +0.00495, -0.0190),
-                diameter=0.0025,
+                f"rear_{i + 1}",
+                pos=(x, y, _HORN_REAR_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2.5",
-            ),
-            MountPoint(
-                "rear_2",
-                pos=(+0.01745, +0.00495, -0.0190),
-                diameter=0.0025,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2.5",
-            ),
-            MountPoint(
-                "rear_3",
-                pos=(+0.00755, -0.00495, -0.0190),
-                diameter=0.0025,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2.5",
-            ),
-            MountPoint(
-                "rear_4",
-                pos=(+0.01745, -0.00495, -0.0190),
-                diameter=0.0025,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2.5",
-            ),
+            )
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         # PA2.0 connector on bottom face, toward back (-X) end
         connector_pos=(-0.0080, 0.0, -0.0159),

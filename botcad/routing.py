@@ -516,12 +516,5 @@ def _joint_slack(range_rad: tuple[float, float], distance_from_axis: float) -> f
     return total_range * distance_from_axis
 
 
-def _add_vec3(a: Vec3, b: Vec3) -> Vec3:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def _dist_vec3(a: Vec3, b: Vec3) -> float:
-    dx = a[0] - b[0]
-    dy = a[1] - b[1]
-    dz = a[2] - b[2]
-    return math.sqrt(dx * dx + dy * dy + dz * dz)
+from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
+from botcad.geometry import dist_vec3 as _dist_vec3  # noqa: E402

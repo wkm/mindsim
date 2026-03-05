@@ -18,7 +18,6 @@ and speed determine the joint's geometry, control limits, and damping.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -298,8 +297,6 @@ class Bot:
         output_dir_path.mkdir(parents=True, exist_ok=True)
         (output_dir_path / "meshes").mkdir(exist_ok=True)
 
-        self._collect_tree()
-
         from botcad.emit.cad import emit_cad
 
         emit_cad(self, output_dir_path)
@@ -330,19 +327,13 @@ class Bot:
 
         # Per-module outputs (STEP, BOM, assembly guide)
         if self._modules:
-            from botcad.emit.cad import emit_cad_for_module
-
-            for mod_name in self._modules:
-                emit_cad_for_module(self, mod_name, output_dir_path)
-
             from botcad.emit.bom import emit_bom_for_module
-
-            for mod_name in self._modules:
-                emit_bom_for_module(self, mod_name, output_dir_path)
-
+            from botcad.emit.cad import emit_cad_for_module
             from botcad.emit.readme import emit_assembly_guide_for_module
 
             for mod_name in self._modules:
+                emit_cad_for_module(self, mod_name, output_dir_path)
+                emit_bom_for_module(self, mod_name, output_dir_path)
                 emit_assembly_guide_for_module(self, mod_name, output_dir_path)
 
 
@@ -359,7 +350,3 @@ def _parse_axis(axis: str | Vec3) -> Vec3:
         }
         return mapping.get(axis.lower(), (0.0, 0.0, 1.0))
     return axis
-
-
-def _magnitude(v: Vec3) -> float:
-    return math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)

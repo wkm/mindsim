@@ -18,7 +18,7 @@ from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from botcad.component import Vec3 as Vec3Type
-from botcad.geometry import rotate_vec, servo_placement
+from botcad.geometry import rotate_vec, rotation_between, servo_placement
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -269,18 +269,15 @@ def _emit_body_tree(
     # Mounted component visualization — boxes at resolved positions
     _emit_mounted_components(body_el, body, is_wheel=is_wheel)
 
-    # Mounting hardware visualization — screws at ear/mount positions
-    _emit_mounting_hardware(body_el, body)
-
-    # Wire route visualization — segments on their respective bodies
-    _emit_body_wires(body_el, body, bot)
-
-    # Servo visualization geoms — green boxes at each joint location
+    # Servo visualization geoms — green boxes + shaft boss at each joint
+    # Cache servo_placement per joint (also used by _emit_mounting_hardware).
+    joint_placements: dict[str, tuple] = {}
     for joint in body.joints:
         servo = joint.servo
         center, quat = servo_placement(
             servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
         )
+        joint_placements[joint.name] = (center, quat)
         SubElement(
             body_el,
             "geom",
@@ -299,14 +296,8 @@ def _emit_body_tree(
             group="1",
         )
 
-    # Shaft boss visualization geoms — cylinders on top of servo boxes
-    for joint in body.joints:
-        servo = joint.servo
+        # Shaft boss cylinder on top of servo body
         if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
-            center, quat = servo_placement(
-                servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
-            )
-            # Boss sits at the shaft offset position, on top of the body
             boss_local = (
                 servo.shaft_offset[0],
                 servo.shaft_offset[1],
@@ -328,6 +319,12 @@ def _emit_body_tree(
             if boss_quat is not None:
                 boss_attribs["quat"] = _fmt_quat(boss_quat)
             SubElement(body_el, "geom", **boss_attribs)
+
+    # Mounting hardware visualization — screws at ear/mount positions
+    _emit_mounting_hardware(body_el, body, joint_placements)
+
+    # Wire route visualization — segments on their respective bodies
+    _emit_body_wires(body_el, body, bot)
 
     # Recurse: each child joint creates a child body
     for joint in body.joints:
@@ -360,19 +357,16 @@ def _emit_mounted_components(
         )
 
 
-def _emit_mounting_hardware(body_el: Element, body: Body) -> None:
+def _emit_mounting_hardware(
+    body_el: Element, body: Body, joint_placements: dict[str, tuple]
+) -> None:
     """Emit small cylinder geoms at screw/mounting positions."""
     _SCREW_RGBA = "0.7 0.7 0.7 0.9"
     _SCREW_HEIGHT = "0.001"  # 1mm half-height
 
     # Servo mounting ears (bracket screw holes on this body's joints)
     for joint in body.joints:
-        center, quat = servo_placement(
-            joint.servo.shaft_offset,
-            joint.servo.shaft_axis,
-            joint.axis,
-            joint.pos,
-        )
+        center, quat = joint_placements[joint.name]
         for ear in joint.servo.mounting_ears:
             world_pos = _add_vec3(center, rotate_vec(quat, ear.pos))
             SubElement(
@@ -438,8 +432,7 @@ def _emit_mounting_hardware(body_el: Element, body: Body) -> None:
             )
 
 
-def _add_vec3(a: Vec3Type, b: Vec3Type) -> Vec3Type:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
 
 
 def _emit_camera(parent_el: Element, body: Body) -> None:
@@ -486,10 +479,7 @@ def _emit_body_wires(body_el: Element, body: Body, bot: Bot) -> None:
             if seg.body_name != body.name:
                 continue
             # Skip degenerate segments (endpoints too close)
-            dx = seg.end[0] - seg.start[0]
-            dy = seg.end[1] - seg.start[1]
-            dz = seg.end[2] - seg.start[2]
-            if dx * dx + dy * dy + dz * dz < 1e-6:
+            if seg.straight_length < 0.001:
                 continue
             SubElement(
                 body_el,
@@ -550,11 +540,17 @@ def _build_scene_xml(bot: Bot) -> str:
 
 def _body_color(body: Body) -> str:
     """Pick a color for a body based on its shape/role."""
+    r, g, b = _body_color_rgb(body)
+    return f"{r} {g} {b} 1.0"
+
+
+def _body_color_rgb(body: Body) -> tuple[float, float, float]:
+    """Shape-based body color. Shared between CAD and MuJoCo emitters."""
     if body.shape == "cylinder" and body.radius and body.radius > 0.03:
-        return "0.15 0.15 0.15 1.0"  # dark for wheels
+        return (0.15, 0.15, 0.15)  # dark gray: wheels
     if body.shape == "tube":
-        return "0.7 0.7 0.7 1.0"  # light gray for structural tubes
-    return "0.9 0.9 0.9 1.0"  # off-white default
+        return (0.7, 0.7, 0.7)  # light gray: structural tubes
+    return (0.9, 0.9, 0.9)  # off-white: default
 
 
 def _z_to_axis_quat(
@@ -566,13 +562,8 @@ def _z_to_axis_quat(
         if az < 0:
             return (0.0, 1.0, 0.0, 0.0)  # 180° around X
         return None  # identity, no rotation needed
-
-    angle = math.acos(max(-1.0, min(1.0, az)))
-    half = angle / 2
-    # Rotation axis = Z × target = (-ay, ax, 0)
-    rot_mag = math.sqrt(ax * ax + ay * ay)
-    s = math.sin(half)
-    return (math.cos(half), -ay / rot_mag * s, ax / rot_mag * s, 0.0)
+    q = rotation_between((0.0, 0.0, 1.0), axis)
+    return q
 
 
 def _fmt_quat(q: tuple[float, float, float, float]) -> str:

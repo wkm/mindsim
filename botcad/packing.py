@@ -20,6 +20,16 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+_POSITION_AXES: dict[str, Vec3] = {
+    "top": (0.0, 0.0, 1.0),
+    "bottom": (0.0, 0.0, -1.0),
+    "front": (0.0, 1.0, 0.0),
+    "back": (0.0, -1.0, 0.0),
+    "left": (-1.0, 0.0, 0.0),
+    "right": (1.0, 0.0, 0.0),
+    "center": (0.0, 0.0, 1.0),
+}
+
 
 def solve_packing(bot: Bot) -> None:
     """Solve packing for all bodies in the bot."""
@@ -154,15 +164,6 @@ def _resolve_insertion_axis(
     if isinstance(position, tuple):
         return (0.0, 0.0, 1.0)
 
-    _POSITION_AXES: dict[str, Vec3] = {
-        "top": (0.0, 0.0, 1.0),
-        "bottom": (0.0, 0.0, -1.0),
-        "front": (0.0, 1.0, 0.0),
-        "back": (0.0, -1.0, 0.0),
-        "left": (-1.0, 0.0, 0.0),
-        "right": (1.0, 0.0, 0.0),
-        "center": (0.0, 0.0, 1.0),
-    }
     return _POSITION_AXES.get(position, (0.0, 0.0, 1.0))
 
 

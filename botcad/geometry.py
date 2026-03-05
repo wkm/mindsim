@@ -9,8 +9,22 @@ from __future__ import annotations
 
 import math
 
-Vec3 = tuple[float, float, float]
+from botcad.component import Vec3
+
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
+
+
+def add_vec3(a: Vec3, b: Vec3) -> Vec3:
+    """Element-wise addition of two 3-tuples."""
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def dist_vec3(a: Vec3, b: Vec3) -> float:
+    """Euclidean distance between two 3D points."""
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    dz = a[2] - b[2]
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
 def rotation_between(v_from: Vec3, v_to: Vec3) -> Quat:

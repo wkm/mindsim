@@ -81,10 +81,14 @@ def _render(
     cam.elevation = elevation
     renderer.update_scene(data, camera=cam)
     img = renderer.render().copy()
-    # White background — replace black pixels
+    white_background(img)
+    return img
+
+
+def white_background(img: np.ndarray) -> None:
+    """Replace black pixels with white (MuJoCo renders on black)."""
     mask = np.all(img == 0, axis=2)
     img[mask] = 255
-    return img
 
 
 def _set_mesh_alpha(model: mujoco.MjModel, alpha: float) -> np.ndarray:

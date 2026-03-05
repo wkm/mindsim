@@ -21,6 +21,12 @@
       <site name="imu" pos="0 0 0" size="0.005"/>
       <geom name="comp_base_pi" type="box" size="0.032500 0.015000 0.002500" pos="0.000000 0.000000 0.000000" rgba="0.0 0.5 0.0 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="comp_base_battery" type="box" size="0.036500 0.017500 0.009000" pos="0.000000 0.000000 -0.023500" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="-0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+      <geom name="right_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="right_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+      <geom name="shoulder_yaw_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.012500 0.000000 0.024100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="shoulder_yaw_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.000000 0.000000 0.041400" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.026600 -0.010250 -0.008300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_2" type="cylinder" size="0.0021 0.001" pos="-0.026600 -0.010250 -0.029000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_3" type="cylinder" size="0.0021 0.001" pos="-0.026600 0.010250 -0.008300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -82,12 +88,6 @@
       <geom name="wire_camera_csi_base_8" type="capsule" fromto="-0.038000 0.000000 0.000000 0.016000 0.000000 0.002500" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_0" type="capsule" fromto="0.036500 0.000000 -0.023500 0.036500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="capsule" fromto="0.036500 0.000000 0.000000 -0.032500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="right_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="shoulder_yaw_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.012500 0.000000 0.024100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="left_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="-0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 -0.707107 0.000000"/>
-      <geom name="right_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
-      <geom name="shoulder_yaw_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.000000 0.000000 0.041400" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <body name="left_rim" pos="-0.060000 0.000000 0.000000">
         <inertial pos="0.000000 0.000000 0.000000" mass="0.048600" fullinertia="3.321000e-05 3.321000e-05 6.561000e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
         <joint name="left_wheel" type="hinge" pos="0 0 0" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>
@@ -117,6 +117,8 @@
         <joint name="shoulder_yaw" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6246" range="-1.5000 1.5000"/>
         <geom name="shoulder_yaw_horn_disc" type="cylinder" size="0.009250 0.001400" pos="0.000000 0.000000 0.001400" rgba="0.85 0.85 0.88 0.9" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="turntable_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
+        <geom name="shoulder_pitch_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.015900 0.000000 0.032500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+        <geom name="shoulder_pitch_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.001400 0.000000 0.020000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
         <geom name="screw_shoulder_pitch_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.033400 -0.010250 0.028300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
         <geom name="screw_shoulder_pitch_ear_2" type="cylinder" size="0.0021 0.001" pos="-0.033400 -0.010250 0.049000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
         <geom name="screw_shoulder_pitch_ear_3" type="cylinder" size="0.0021 0.001" pos="-0.033400 0.010250 0.028300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -138,13 +140,13 @@
         <geom name="wire_servo_bus_turntable_15" type="capsule" fromto="0.000000 0.000000 0.058000 -0.031800 0.000000 0.058000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
         <geom name="wire_camera_csi_turntable_5" type="capsule" fromto="-0.031800 0.000000 0.058000 0.000000 0.000000 0.058000" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
         <geom name="wire_camera_csi_turntable_6" type="capsule" fromto="0.000000 0.000000 0.058000 0.000000 0.000000 0.000000" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
-        <geom name="shoulder_pitch_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.015900 0.000000 0.032500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-        <geom name="shoulder_pitch_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.001400 0.000000 0.020000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
         <body name="upper_arm" pos="0.000000 0.000000 0.020000">
           <inertial pos="0.000000 0.000000 0.095763" mass="0.068920" fullinertia="4.284776e-05 5.107767e-05 1.523781e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
           <joint name="shoulder_pitch" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6246" range="-1.5000 1.5000"/>
-          <geom name="shoulder_pitch_horn_disc" type="cylinder" size="0.009250 0.001400" pos="0.001400 0.000000 0.000000" rgba="0.85 0.85 0.88 0.9" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
+          <geom name="shoulder_pitch_horn_disc" type="cylinder" size="0.009250 0.001400" pos="0.001400 0.000000 0.000000" rgba="0.85 0.85 0.88 0.9" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
           <geom type="mesh" mesh="upper_arm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
+          <geom name="elbow_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.015900 0.000000 0.132500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+          <geom name="elbow_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.001400 0.000000 0.120000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
           <geom name="screw_elbow_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.033400 -0.010250 0.128300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
           <geom name="screw_elbow_ear_2" type="cylinder" size="0.0021 0.001" pos="-0.033400 -0.010250 0.149000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
           <geom name="screw_elbow_ear_3" type="cylinder" size="0.0021 0.001" pos="-0.033400 0.010250 0.128300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -166,13 +168,13 @@
           <geom name="wire_servo_bus_upper_arm_20" type="capsule" fromto="0.000000 0.000000 0.158000 -0.031800 0.000000 0.158000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
           <geom name="wire_camera_csi_upper_arm_3" type="capsule" fromto="-0.031800 0.000000 0.158000 0.000000 0.000000 0.158000" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
           <geom name="wire_camera_csi_upper_arm_4" type="capsule" fromto="0.000000 0.000000 0.158000 0.000000 0.000000 0.000000" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
-          <geom name="elbow_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.015900 0.000000 0.132500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-          <geom name="elbow_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.001400 0.000000 0.120000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
           <body name="forearm" pos="0.000000 0.000000 0.120000">
             <inertial pos="0.000000 0.000000 0.082090" mass="0.067000" fullinertia="2.788905e-05 3.588968e-05 1.481331e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
             <joint name="elbow" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6246" range="-2.0000 0.0000"/>
-            <geom name="elbow_horn_disc" type="cylinder" size="0.009250 0.001400" pos="0.001400 0.000000 0.000000" rgba="0.85 0.85 0.88 0.9" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
+            <geom name="elbow_horn_disc" type="cylinder" size="0.009250 0.001400" pos="0.001400 0.000000 0.000000" rgba="0.85 0.85 0.88 0.9" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
             <geom type="mesh" mesh="forearm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
+            <geom name="wrist_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.012500 0.000000 0.084100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+            <geom name="wrist_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.000000 0.000000 0.101400" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
             <geom name="screw_wrist_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.008300 -0.010250 0.066600" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
             <geom name="screw_wrist_ear_2" type="cylinder" size="0.0021 0.001" pos="-0.029000 -0.010250 0.066600" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
             <geom name="screw_wrist_ear_3" type="cylinder" size="0.0021 0.001" pos="-0.008300 0.010250 0.066600" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -191,8 +193,6 @@
             <geom name="wire_servo_bus_forearm_22" type="capsule" fromto="0.000000 0.000000 0.068200 -0.020500 0.000000 0.068200" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
             <geom name="wire_camera_csi_forearm_1" type="capsule" fromto="-0.038000 0.000000 0.068200 0.000000 0.000000 0.068200" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
             <geom name="wire_camera_csi_forearm_2" type="capsule" fromto="0.000000 0.000000 0.068200 0.000000 0.000000 0.000000" size="0.0018" rgba="1.0 0.8 0.0 0.9" contype="0" conaffinity="0" group="2"/>
-            <geom name="wrist_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.012500 0.000000 0.084100" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-            <geom name="wrist_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.000000 0.000000 0.101400" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
             <body name="hand" pos="0.000000 0.000000 0.100000">
               <inertial pos="0.000000 0.001905 0.000000" mass="0.012600" fullinertia="8.013058e-07 7.413000e-07 1.372506e-06 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
               <joint name="wrist" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6246" range="-1.5000 1.5000"/>

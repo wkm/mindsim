@@ -27,6 +27,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from botcad.component import Component, ServoSpec
+from botcad.emit.renders import white_background
 
 # ── Rendering config ──
 
@@ -286,9 +287,7 @@ def _render_view(model, data, renderer, azimuth: float, elevation: float) -> np.
 
     renderer.update_scene(data, camera=cam)
     img = renderer.render().copy()
-    # Replace black background with white
-    mask = np.all(img == 0, axis=2)
-    img[mask] = 255
+    white_background(img)
     return img
 
 

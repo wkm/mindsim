@@ -255,13 +255,12 @@ def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
 def _body_color_rgb(body: Body) -> tuple[float, float, float]:
     """Pick RGB color for a body based on shape/role.
 
-    Matches the MuJoCo emitter's _body_color() scheme.
+    Delegates to the shared implementation in mujoco.py so CAD and sim
+    colors stay in sync.
     """
-    if body.shape == "cylinder" and body.radius and body.radius > 0.03:
-        return (0.15, 0.15, 0.15)  # dark gray: wheels
-    if body.shape == "tube":
-        return (0.7, 0.7, 0.7)  # light gray: structural tubes
-    return (0.9, 0.9, 0.9)  # off-white: electronics housing / default
+    from botcad.emit.mujoco import _body_color_rgb as _shared_body_color_rgb
+
+    return _shared_body_color_rgb(body)
 
 
 def _as_solid(shape):
