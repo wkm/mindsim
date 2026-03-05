@@ -68,7 +68,7 @@
         <geom name="wire_servo_bus_shoulder_9" type="capsule" fromto="-0.038000 -0.031800 0.000000 -0.038000 -0.031800 0.054000" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
         <geom name="shoulder_lift_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.012500 -0.015900 0.054000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
         <body name="upper_arm" pos="0.000000 0.000000 0.054000">
-          <inertial pos="0.000000 0.000000 0.090794" mass="0.068210" fullinertia="3.658427e-05 4.472935e-05 1.508074e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
+          <inertial pos="0.000000 0.000000 0.077258" mass="0.080160" fullinertia="8.095535e-05 9.052742e-05 1.772284e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
           <joint name="shoulder_lift" type="hinge" pos="0 0 0" axis="0.000000 1.000000 0.000000" damping="0.6246" range="-1.7500 1.7500"/>
           <geom type="mesh" mesh="upper_arm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
           <geom name="screw_elbow_flex_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.008300 -0.033400 0.122850" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -91,7 +91,7 @@
           <geom name="wire_servo_bus_upper_arm_13" type="capsule" fromto="0.000000 0.000000 0.112600 -0.038000 -0.031800 0.112600" size="0.0015" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
           <geom name="elbow_flex_servo" type="box" size="0.022600 0.012350 0.017500" pos="-0.012500 -0.015900 0.112600" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
           <body name="forearm" pos="0.000000 0.000000 0.112600">
-            <inertial pos="0.000000 0.000000 0.105465" mass="0.070350" fullinertia="5.841156e-05 6.681228e-05 1.555406e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
+            <inertial pos="0.000000 0.000000 0.092188" mass="0.080482" fullinertia="1.126448e-04 1.222554e-04 1.779415e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
             <joint name="elbow_flex" type="hinge" pos="0 0 0" axis="0.000000 1.000000 0.000000" damping="0.6246" range="-1.6900 1.6900"/>
             <geom type="mesh" mesh="forearm_mesh" rgba="0.7 0.7 0.7 1.0" contype="1" conaffinity="1"/>
             <geom name="screw_wrist_flex_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.008300 -0.033400 0.145150" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>

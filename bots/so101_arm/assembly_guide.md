@@ -50,8 +50,8 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 |------|----------|-------|-----------------|
 | base | `meshes/base.stl` | box | 75.0 x 75.0 x 20.0 |
 | shoulder | `meshes/shoulder.stl` | box | 50.0 x 40.0 x 54.0 |
-| upper_arm | `meshes/upper_arm.stl` | tube | 20.0 x 20.0 x 127.6 |
-| forearm | `meshes/forearm.stl` | tube | 20.0 x 20.0 x 149.9 |
+| upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 127.6 |
+| forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 149.9 |
 | wrist | `meshes/wrist.stl` | box | 40.0 x 35.0 x 35.0 |
 | hand | `meshes/hand.stl` | box | 45.0 x 40.0 x 30.0 |
 | jaw | `meshes/jaw.stl` | box | 60.0 x 20.0 x 10.0 |
