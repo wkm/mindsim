@@ -209,3 +209,83 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         shell = shell - slot
 
     return shell
+
+
+def servo_solid(servo: ServoSpec):
+    """Build a solid representing the physical servo body.
+
+    Includes the main rectangular block, mounting ear flanges, and an output
+    shaft stub. Used in STEP assemblies to show where purchased servos sit.
+
+    Returns a build123d Solid in the servo's local frame (origin = body center,
+    Z = shaft axis).
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    bd = servo.body_dimensions
+    if bd[0] == 0.0:
+        bd = servo.dimensions
+    body_x, body_y, body_z = bd
+
+    # Main body block
+    body = Box(body_x, body_y, body_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+
+    # Mounting ear flanges — thin tabs extending below the body
+    if servo.mounting_ears:
+        # Group ears by Y-side to build flange plates
+        ear_y_sides: dict[str, list] = {}
+        for ear in servo.mounting_ears:
+            side = "pos" if ear.pos[1] > 0 else "neg"
+            ear_y_sides.setdefault(side, []).append(ear)
+
+        for _side, ears in ear_y_sides.items():
+            # Flange spans the full X-extent of the ear positions
+            xs = [e.pos[0] for e in ears]
+            hole_r = ears[0].hole_diameter / 2
+            flange_x_min = min(xs) - hole_r - 0.001
+            flange_x_max = max(xs) + hole_r + 0.001
+            flange_x = flange_x_max - flange_x_min
+            flange_cx = (flange_x_min + flange_x_max) / 2
+
+            # Flange extends from body bottom to ear Z position
+            ear_z = ears[0].pos[2]  # all ears on same side share Z
+            flange_top = -body_z / 2
+            flange_bottom = ear_z - hole_r - 0.0005
+            flange_z = flange_top - flange_bottom
+            if flange_z <= 0:
+                continue
+            flange_cz = (flange_top + flange_bottom) / 2
+
+            # Flange Y: from body edge outward to ear Y + clearance
+            ear_y = abs(ears[0].pos[1])
+            flange_y_inner = body_y / 2
+            flange_y_outer = ear_y + hole_r + 0.001
+            flange_y = flange_y_outer - flange_y_inner
+            if flange_y <= 0:
+                continue
+            flange_cy = (flange_y_inner + flange_y_outer) / 2
+            if ears[0].pos[1] < 0:
+                flange_cy = -flange_cy
+
+            flange = Box(
+                flange_x,
+                flange_y,
+                flange_z,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            flange = flange.locate(Location((flange_cx, flange_cy, flange_cz)))
+            body = body + flange
+
+    # Output shaft stub — small cylinder on +Z face
+    sx, sy, sz = servo.shaft_offset
+    shaft_r = 0.006  # 12mm diameter shaft/horn hub
+    shaft_h = 0.004  # 4mm stub height
+    shaft = Cylinder(
+        shaft_r,
+        shaft_h,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+    shaft = shaft.locate(Location((sx, sy, body_z / 2)))
+    body = body + shaft
+
+    return body
