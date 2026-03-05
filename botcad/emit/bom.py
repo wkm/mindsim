@@ -89,7 +89,7 @@ def emit_bom(bot: Bot, output_dir: Path) -> None:
 
     lines.append(f"| **Total** | | | **{total_mass * 1000:.0f}** | |")
 
-    # Power budget
+    # Power budget — derived from actual components
     lines.append("\n## Power Budget\n")
     lines.append("| Consumer | Voltage (V) | Current (A) | Power (W) |")
     lines.append("|----------|-------------|-------------|-----------|")
@@ -106,10 +106,18 @@ def emit_bom(bot: Bot, output_dir: Path) -> None:
             f"~{avg_current * info['count']:.1f} | ~{power:.1f} |"
         )
 
-    # Pi power
-    pi_power = 5.0 * 0.6  # 5V, 600mA typical
-    total_power += pi_power
-    lines.append(f"| Raspberry Pi Zero 2W | 5.0 | 0.6 | {pi_power:.1f} |")
+    # Add power for mounted compute/controller components (not servos)
+    _COMPONENT_POWER: dict[str, tuple[float, float]] = {
+        # name -> (voltage, typical_current_amps)
+        "RaspberryPiZero2W": (5.0, 0.6),
+        "WaveshareSerialBus": (5.0, 0.1),
+    }
+    for name, info in components.items():
+        if name in _COMPONENT_POWER:
+            v, a = _COMPONENT_POWER[name]
+            p = v * a * info["count"]
+            total_power += p
+            lines.append(f"| {name} x{info['count']} | {v:.1f} | {a:.1f} | {p:.1f} |")
 
     lines.append(f"| **Total** | | | **~{total_power:.1f}** |")
 
