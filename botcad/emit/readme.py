@@ -32,6 +32,12 @@ def emit_assembly_guide(bot: Bot, output_dir: Path) -> None:
         range_deg = f"{math.degrees(lo):.0f}° to {math.degrees(hi):.0f}°"
         lines.append(f"| {i} | {joint.name} | {mode} | {range_deg} |")
 
+    # ── Range of motion diagram ─────────────────────────────────────
+    lines.append("\n## Joint Range of Motion\n")
+    lines.append("```")
+    _emit_rom_diagram(lines, bot)
+    lines.append("```\n")
+
     # ── Wiring diagram — derived from actual components ──────────────
     lines.append("\n## Wiring Diagram\n")
 
@@ -248,3 +254,72 @@ def _axis_label(axis: tuple[float, float, float]) -> str:
     if abs(x) > 0.9:
         return "roll" if x > 0 else "roll (inverted)"
     return f"({x:.1f}, {y:.1f}, {z:.1f})"
+
+
+def _emit_rom_diagram(lines: list[str], bot: Bot) -> None:
+    """Emit an ASCII range-of-motion diagram for all joints.
+
+    Example output:
+        -180°       -90°         0°        +90°       +180°
+          |          |          |          |          |
+    shoulder_pan   ████████████████████████  ±110°
+    shoulder_lift     ███████████████████    ±100°
+    ...
+    """
+    bar_width = 40  # characters for the [-180, +180] scale
+    scale_min = -180.0
+    scale_max = 180.0
+    scale_range = scale_max - scale_min
+
+    # Header: scale labels
+    # Place markers at -180, -90, 0, +90, +180
+    markers = [-180, -90, 0, 90, 180]
+    header = " " * 18  # joint name padding
+    tick_line = " " * 18
+    for m in markers:
+        col = int((m - scale_min) / scale_range * bar_width)
+        label = f"{m:+d}°" if m != 0 else "0°"
+        # Center the label on the column
+        start = col - len(label) // 2
+        while len(header) < 18 + start:
+            header += " "
+        header += label
+        while len(tick_line) < 18 + col:
+            tick_line += " "
+        tick_line += "|"
+
+    lines.append(header)
+    lines.append(tick_line)
+
+    # Find max joint name length for alignment
+    max_name = max((len(j.name) for j in bot.all_joints), default=10)
+    pad = max(max_name + 2, 18)
+
+    for joint in bot.all_joints:
+        lo, hi = joint.effective_range
+        lo_deg = math.degrees(lo)
+        hi_deg = math.degrees(hi)
+
+        # Clamp to scale
+        lo_clamped = max(lo_deg, scale_min)
+        hi_clamped = min(hi_deg, scale_max)
+
+        # Convert to bar positions
+        start_col = int((lo_clamped - scale_min) / scale_range * bar_width)
+        end_col = int((hi_clamped - scale_min) / scale_range * bar_width)
+        start_col = max(0, min(bar_width - 1, start_col))
+        end_col = max(start_col + 1, min(bar_width, end_col))
+
+        # Build the bar
+        bar = [" "] * bar_width
+        for c in range(start_col, end_col):
+            bar[c] = "█"
+
+        # Range summary
+        if abs(lo_deg + hi_deg) < 1.0:
+            range_str = f"±{hi_deg:.0f}°"
+        else:
+            range_str = f"{lo_deg:+.0f}° to {hi_deg:+.0f}°"
+
+        name_padded = joint.name.ljust(pad - 2) + "  "
+        lines.append(f"{name_padded}{''.join(bar)}  {range_str}")

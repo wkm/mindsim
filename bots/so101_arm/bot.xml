@@ -172,11 +172,16 @@
   </worldbody>
   <contact>
     <exclude body1="base" body2="shoulder"/>
+    <exclude body1="base" body2="upper_arm"/>
+    <exclude body1="forearm" body2="hand"/>
+    <exclude body1="forearm" body2="wrist"/>
+    <exclude body1="hand" body2="jaw"/>
+    <exclude body1="shoulder" body2="forearm"/>
     <exclude body1="shoulder" body2="upper_arm"/>
     <exclude body1="upper_arm" body2="forearm"/>
-    <exclude body1="forearm" body2="wrist"/>
+    <exclude body1="upper_arm" body2="wrist"/>
     <exclude body1="wrist" body2="hand"/>
-    <exclude body1="hand" body2="jaw"/>
+    <exclude body1="wrist" body2="jaw"/>
   </contact>
   <actuator>
     <position name="shoulder_pan_motor" joint="shoulder_pan" kp="58.8" ctrlrange="-1.9200 1.9200" forcerange="-2.94 2.94"/>
