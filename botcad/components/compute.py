@@ -29,4 +29,6 @@ def RaspberryPiZero2W() -> Component:
             MountPoint("m4", pos=(0.029, 0.0115, 0.0), diameter=0.0025),
         ),
         color=(0.0, 0.5, 0.0, 1.0),  # PCB green
+        voltage=5.0,
+        typical_current=0.6,  # ~600mA typical under load
     )

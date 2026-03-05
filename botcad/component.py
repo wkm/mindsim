@@ -53,6 +53,8 @@ class Component:
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
     color: RGBA = (0.5, 0.5, 0.5, 1.0)
+    voltage: float = 0.0  # operating voltage (V), 0 = unpowered
+    typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 
 
 @dataclass(frozen=True)

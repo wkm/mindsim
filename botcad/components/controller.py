@@ -33,4 +33,6 @@ def WaveshareSerialBus() -> Component:
             MountPoint("m4", pos=(0.022, 0.009, 0.0), diameter=0.003),
         ),
         color=(0.0, 0.3, 0.6, 1.0),  # PCB blue
+        voltage=5.0,
+        typical_current=0.1,  # board logic only, servo power is separate
     )
