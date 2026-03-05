@@ -21,7 +21,12 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from botcad.bracket import BracketSpec, bracket_solid
+from botcad.bracket import (
+    BracketSpec,
+    bracket_envelope,
+    bracket_solid,
+    horn_disc_params,
+)
 from botcad.geometry import servo_placement
 
 if TYPE_CHECKING:
@@ -51,11 +56,32 @@ def make_component_solid(component: Component):
         w = dims[2]
         return _make_wheel_solid(r, w)
 
-    # Servos: use body_dimensions (without ears/horn)
+    # Servos: use body_dimensions (without ears/horn) + shaft boss
     if isinstance(component, ServoSpec):
         bd = component.body_dimensions
         if any(x > 0 for x in bd):
             dims = bd
+
+        body = Box(
+            dims[0], dims[1], dims[2], align=(Align.CENTER, Align.CENTER, Align.CENTER)
+        )
+
+        if component.shaft_boss_radius > 0 and component.shaft_boss_height > 0:
+            from build123d import Cylinder, Location
+
+            boss = Cylinder(
+                component.shaft_boss_radius,
+                component.shaft_boss_height,
+                align=(Align.CENTER, Align.CENTER, Align.MIN),
+            )
+            boss = boss.locate(
+                Location(
+                    (component.shaft_offset[0], component.shaft_offset[1], dims[2] / 2)
+                )
+            )
+            body = body + boss
+
+        return body
 
     return Box(
         dims[0],
@@ -84,17 +110,27 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
     # Group bodies into rigid parts (separated at servo joints)
     rigid_groups = _collect_rigid_groups(bot)
 
+    # Collect per-body wire segments for channel cutting
+    body_wire_segments: dict[str, list] = {}
+    for route in bot.wire_routes:
+        for seg in route.segments:
+            body_wire_segments.setdefault(seg.body_name, []).append(
+                (seg, route.bus_type)
+            )
+
     # --- Per-body STLs (for MuJoCo sim) ---
     body_solids: dict[str, object] = {}
     for body in bot.all_bodies:
         pj = parent_joint_map.get(body.name)
-        solid = _make_body_solid(body, pj)
+        wire_segs = body_wire_segments.get(body.name, [])
+        solid = _make_body_solid(body, pj, wire_segs)
         if solid is not None:
             body_solids[body.name] = solid
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
 
     # --- STEP assembly (printable parts, positioned + colored) ---
     assembly_parts = []
+    part_modules: list[str | None] = []  # parallel list: module name per part
     for group_name, bodies in rigid_groups.items():
         group_root = bodies[0]
         group_root_pos = world_positions[group_root.name]
@@ -129,6 +165,38 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             group_solid.label = group_name
             positioned = group_solid.moved(Location(group_root_pos))
             assembly_parts.append(positioned)
+            part_modules.append(group_root.module.name if group_root.module else None)
+
+    # --- Horn discs (purchased parts, not in body STLs) ---
+    for body in bot.all_bodies:
+        body_world_pos = world_positions[body.name]
+        for joint in body.joints:
+            if joint.servo.continuous:
+                continue
+            params = horn_disc_params(joint.servo)
+            if params is None:
+                continue
+            solid = _horn_solid(joint.servo)
+            if solid is None:
+                continue
+
+            # Orient disc Z-axis to joint axis
+            solid = _orient_z_to_axis(solid, joint.axis)
+
+            # Joint world position + half-thickness offset along axis
+            jx = body_world_pos[0] + joint.pos[0]
+            jy = body_world_pos[1] + joint.pos[1]
+            jz = body_world_pos[2] + joint.pos[2]
+            ax, ay, az = joint.axis
+            offset = params.thickness / 2
+            pos = (jx + ax * offset, jy + ay * offset, jz + az * offset)
+
+            solid.color = Color(0.85, 0.85, 0.88)
+            solid.label = f"{joint.name}_horn"
+            positioned = solid.moved(Location(pos))
+            assembly_parts.append(positioned)
+            # Horn belongs to parent body's module (joint owner)
+            part_modules.append(body.module.name if body.module else None)
 
     if assembly_parts:
         assembly = Compound(label=bot.name, children=assembly_parts)
@@ -137,6 +205,10 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             f"CAD: wrote assembly.step ({len(assembly_parts)} parts) "
             f"+ {len(body_solids)} STLs to {output_dir}"
         )
+
+    # Store for per-module export
+    bot._assembly_parts = assembly_parts
+    bot._part_modules = part_modules
 
 
 def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
@@ -211,13 +283,16 @@ def _as_solid(shape):
     return shape
 
 
-def _make_body_solid(body: Body, parent_joint: Joint | None = None):
+def _make_body_solid(
+    body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
+):
     """Create a build123d solid for a body.
 
     Returns a Solid with:
-    - Structural shell (hollow box/cylinder/tube/sphere)
+    - Outer solid shape (no hollowing — fabrication shell pass comes later)
     - Servo brackets unioned in at each joint location
     - Component pockets cut out
+    - Wire channels subtracted along routed cable paths
 
     Mesh origin conventions (matching MuJoCo emitter expectations):
     - box/sphere/cylinder: centered at origin
@@ -225,46 +300,32 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
     """
     from build123d import Align, Box, Cylinder, Location, Sphere
 
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = body.dimensions
-    wall = 0.002  # 2mm wall thickness
 
     if body.shape == "cylinder":
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
 
-        # Check if this body has a wheel component mounted
         has_wheel = any("Wheel" in m.component.name for m in body.mounts)
-
         if has_wheel:
+            # Wheels: centered on origin (hub at center)
             shell = _make_wheel_solid(r, h)
+        elif parent_joint is not None:
+            # Child cylinder: bottom face at origin (sits on top of horn).
+            # Offset so z=0 is the joint/horn end, z=+h is the far end.
+            shell = Cylinder(r, h, align=C)
+            shell = shell.locate(Location((0, 0, h / 2)))
         else:
-            outer = Cylinder(r, h, align=(Align.CENTER, Align.CENTER, Align.CENTER))
-            if r > wall and h > wall * 2:
-                inner = Cylinder(
-                    r - wall,
-                    h - wall * 2,
-                    align=(Align.CENTER, Align.CENTER, Align.CENTER),
-                )
-                shell = outer - inner
-            else:
-                shell = outer
+            shell = Cylinder(r, h, align=C)
 
-        # Orient cylinder along parent joint's rotation axis
         if parent_joint is not None:
             shell = _orient_z_to_axis(shell, parent_joint.axis)
 
     elif body.shape == "tube":
         r = body.outer_r or dims[0] / 2
         length = body.length or dims[2]
-        outer = Cylinder(r, length, align=(Align.CENTER, Align.CENTER, Align.CENTER))
-        inner_r = max(r - wall, r * 0.6)
-        inner = Cylinder(
-            inner_r,
-            length + 0.001,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
-        )
-        shell = outer - inner
-        # Offset tube so z=0 is the joint end, z=+length is the far end
+        shell = Cylinder(r, length, align=C)
         shell = shell.locate(Location((0, 0, length / 2)))
 
     elif body.shape == "sphere":
@@ -272,23 +333,7 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
         shell = Sphere(r)
 
     else:
-        # Box shell
-        outer = Box(
-            dims[0],
-            dims[1],
-            dims[2],
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
-        )
-        if all(d > wall * 2 for d in dims):
-            inner = Box(
-                dims[0] - wall * 2,
-                dims[1] - wall * 2,
-                dims[2] - wall * 2,
-                align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            )
-            shell = outer - inner
-        else:
-            shell = outer
+        shell = Box(dims[0], dims[1], dims[2], align=C)
 
     # Cut component pockets (skip for wheel bodies — the wheel IS the component)
     is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
@@ -304,7 +349,10 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
             pocket = pocket.locate(Location(mount.resolved_pos))
             shell = shell - pocket
 
-    # Union servo brackets at each joint
+    # Cut bracket footprints then union finished brackets at each joint.
+    # Order matters: subtract envelope first so shell material doesn't
+    # fill the servo pocket, then union the bracket (which has the pocket
+    # already cut).  Result: (shell - envelope) + bracket
     bracket_spec = BracketSpec()
     for joint in body.joints:
         servo = joint.servo
@@ -313,11 +361,182 @@ def _make_body_solid(body: Body, parent_joint: Joint | None = None):
         )
         euler = _quat_to_euler(quat)
 
-        bracket = bracket_solid(servo, bracket_spec)
-        bracket = bracket.locate(Location(center, euler))
-        shell = shell + bracket
+        envelope = bracket_envelope(servo, bracket_spec)
+        envelope = envelope.locate(Location(center, euler))
+
+        # Wheel joints: cut pocket only, no bracket union.
+        # Solid body material provides structural support; adding bracket
+        # walls would protrude past the body surface and collide with the wheel.
+        child_has_wheel = joint.child is not None and any(
+            "Wheel" in m.component.name for m in joint.child.mounts
+        )
+        if child_has_wheel:
+            shell = shell - envelope
+        else:
+            bracket = bracket_solid(servo, bracket_spec)
+            bracket = bracket.locate(Location(center, euler))
+            shell = (shell - envelope) + bracket
+
+    # Cut clearance volumes for rotating child bodies
+    for joint in body.joints:
+        if joint.child is not None:
+            clearance = _child_clearance_volume(joint.child, joint)
+            if clearance is not None:
+                shell = shell - clearance
+
+    # Cut wire channels along routed cable paths
+    if wire_segments:
+        for seg, bus_type in wire_segments:
+            channel = _wire_channel(seg, bus_type)
+            if channel is not None:
+                shell = shell - channel
 
     return shell
+
+
+# Channel radii for wire routing (matches MuJoCo rendering radii)
+_CHANNEL_RADIUS = {
+    "uart_half_duplex": 0.0015,  # 1.5mm — servo bus
+    "csi": 0.003,  # 3mm — CSI ribbon
+    "power": 0.002,  # 2mm — power cable
+}
+
+
+def _wire_channel(seg, bus_type: str):
+    """Create a cylindrical channel solid along a wire segment.
+
+    The channel uses the full cable radius so the wire fits inside.
+    Returns None for degenerate (too-short) segments.
+    """
+    from build123d import Align, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+
+    dx = seg.end[0] - seg.start[0]
+    dy = seg.end[1] - seg.start[1]
+    dz = seg.end[2] - seg.start[2]
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length < 0.001:  # skip sub-millimeter segments
+        return None
+
+    radius = _CHANNEL_RADIUS.get(bus_type, 0.0015)
+
+    mid = (
+        (seg.start[0] + seg.end[0]) / 2,
+        (seg.start[1] + seg.end[1]) / 2,
+        (seg.start[2] + seg.end[2]) / 2,
+    )
+    # Rotate Z-aligned cylinder to match segment direction
+    axis = (dx / length, dy / length, dz / length)
+    ax, ay, az = axis
+
+    if abs(az) > 0.999:
+        if az < 0:
+            quat = _axis_angle_to_quat((1, 0, 0), math.pi)
+        else:
+            quat = (1.0, 0.0, 0.0, 0.0)
+    else:
+        rot_angle = math.acos(max(-1.0, min(1.0, az)))
+        rot_axis_x = -ay
+        rot_axis_y = ax
+        rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
+        if rot_mag < 1e-9:
+            quat = (1.0, 0.0, 0.0, 0.0)
+        else:
+            quat = _axis_angle_to_quat(
+                (rot_axis_x / rot_mag, rot_axis_y / rot_mag, 0), rot_angle
+            )
+
+    euler = _quat_to_euler(quat)
+    channel = Cylinder(radius, length, align=C)
+    return channel.locate(Location(mid, euler))
+
+
+def _child_outer_envelope(child: Body, parent_joint: Joint):
+    """Solid outer envelope of a child body, for clearance subtraction."""
+    from build123d import Align, Box, Cylinder, Location, Sphere
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    tol = 0.0005  # 0.5mm clearance per side
+    dims = child.dimensions
+
+    if child.shape == "cylinder":
+        r = (child.radius or dims[0] / 2) + tol
+        h = (child.width or child.height or dims[2]) + 2 * tol
+        has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+        outer = Cylinder(r, h, align=C)
+        if not has_wheel:
+            # Match _make_body_solid: bottom face at origin for child cylinders
+            outer = outer.locate(Location((0, 0, h / 2)))
+        return _orient_z_to_axis(outer, parent_joint.axis)
+
+    elif child.shape == "tube":
+        r = (child.outer_r or dims[0] / 2) + tol
+        length = (child.length or dims[2]) + tol
+        outer = Cylinder(r, length, align=C)
+        return outer.locate(Location((0, 0, length / 2)))  # z=0 at joint end
+
+    elif child.shape == "sphere":
+        r = (child.radius or dims[0] / 2) + tol
+        return Sphere(r)
+
+    else:  # box
+        return Box(dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol, align=C)
+
+
+def _is_axially_symmetric(child: Body, joint: Joint) -> bool:
+    """Check if child body is rotationally symmetric around the joint axis."""
+    if child.shape == "sphere":
+        return True
+    if child.shape == "cylinder":
+        # Cylinder gets oriented along parent_joint.axis via _orient_z_to_axis,
+        # which is the same as the joint axis — so it's symmetric.
+        return True
+    return False
+
+
+def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
+    """Rotate a solid around the given axis by angle_rad."""
+    from build123d import Location
+
+    if abs(angle_rad) < 1e-9:
+        return solid
+    quat = _axis_angle_to_quat(axis, angle_rad)
+    euler = _quat_to_euler(quat)
+    return solid.moved(Location((0, 0, 0), euler))
+
+
+def _child_clearance_volume(child: Body, joint: Joint):
+    """Compute the volume swept by a child body through its joint range.
+
+    For axially symmetric children (cylinders, spheres), the swept volume
+    equals the static envelope. For asymmetric shapes, we union discrete
+    rotations sampled every ~15 degrees through the joint range.
+    """
+    from build123d import Location
+
+    envelope = _child_outer_envelope(child, joint)
+    if envelope is None:
+        return None
+
+    if _is_axially_symmetric(child, joint):
+        clearance = envelope
+    else:
+        lo, hi = joint.effective_range
+        if lo == 0.0 and hi == 0.0:  # continuous rotation
+            lo, hi = 0.0, 2 * math.pi
+
+        range_deg = abs(math.degrees(hi - lo))
+        n_samples = max(8, int(range_deg / 15))
+
+        clearance = envelope  # angle=0 (rest pose)
+        for i in range(1, n_samples + 1):
+            angle = lo + (hi - lo) * i / n_samples
+            rotated = _rotate_solid(envelope, joint.axis, angle)
+            clearance = clearance + rotated  # boolean union
+
+    # Position at joint.pos in parent frame
+    return clearance.moved(Location(joint.pos))
 
 
 def _make_wheel_solid(radius: float, width: float):
@@ -394,8 +613,27 @@ def _make_wheel_solid(radius: float, width: float):
     return _as_solid(wheel)
 
 
+def _horn_solid(servo):
+    """Build a horn disc cylinder from servo specs."""
+    from build123d import Align, Cylinder
+
+    params = horn_disc_params(servo)
+    if params is None:
+        return None
+
+    return Cylinder(
+        params.radius,
+        params.thickness,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+
+
 def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
-    """Rotate a solid from Z-up to align with the given axis."""
+    """Rotate a solid from Z-up to align with the given axis.
+
+    Uses .moved() (not .locate()) so any existing z-offset on the solid
+    is preserved and composed with the rotation.
+    """
     from build123d import Location
 
     ax, ay, az = axis
@@ -408,7 +646,7 @@ def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
     if abs(az) > 0.999:
         if az < 0:
             # 180° around X
-            return solid.locate(Location((0, 0, 0), (180, 0, 0)))
+            return solid.moved(Location((0, 0, 0), (180, 0, 0)))
         return solid
 
     # Compute rotation from Z to target axis
@@ -429,7 +667,7 @@ def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
     # Convert axis-angle to Euler angles for build123d Location
     quat = _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
     euler = _quat_to_euler(quat)
-    return solid.locate(Location((0, 0, 0), euler))
+    return solid.moved(Location((0, 0, 0), euler))
 
 
 def _axis_angle_to_quat(
@@ -464,3 +702,21 @@ def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
     rz = math.atan2(siny_cosp, cosy_cosp)
 
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
+
+
+def emit_cad_for_module(bot: Bot, module_name: str, output_dir: Path) -> None:
+    """Export a per-module STEP file containing only parts in the named module."""
+    from build123d import Compound, export_step
+
+    assembly_parts = getattr(bot, "_assembly_parts", [])
+    part_modules = getattr(bot, "_part_modules", [])
+
+    module_parts = [
+        part for part, mod in zip(assembly_parts, part_modules) if mod == module_name
+    ]
+
+    if module_parts:
+        assembly = Compound(label=f"{bot.name}_{module_name}", children=module_parts)
+        filename = f"assembly_{module_name}.step"
+        export_step(assembly, str(output_dir / filename))
+        print(f"CAD: wrote {filename} ({len(module_parts)} parts)")

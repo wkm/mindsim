@@ -55,6 +55,9 @@ def _solve_body(body: Body) -> None:
         mount.resolved_pos = _resolve_position(
             mount.position, mount.component.dimensions, dims
         )
+        mount.resolved_insertion_axis = _resolve_insertion_axis(
+            mount.position, mount.insertion_axis
+        )
 
     _compute_mass_inertia(body)
 
@@ -135,6 +138,32 @@ def _resolve_position(
             return (bx / 2 - cx / 2, 0.0, 0.0)
         case _:
             return (0.0, 0.0, 0.0)
+
+
+def _resolve_insertion_axis(
+    position: str | Vec3,
+    explicit_axis: Vec3 | None,
+) -> Vec3:
+    """Resolve component insertion axis from mount position heuristic.
+
+    Explicit axis always wins. Otherwise derive from the position keyword.
+    """
+    if explicit_axis is not None:
+        return explicit_axis
+
+    if isinstance(position, tuple):
+        return (0.0, 0.0, 1.0)
+
+    _POSITION_AXES: dict[str, Vec3] = {
+        "top": (0.0, 0.0, 1.0),
+        "bottom": (0.0, 0.0, -1.0),
+        "front": (0.0, 1.0, 0.0),
+        "back": (0.0, -1.0, 0.0),
+        "left": (-1.0, 0.0, 0.0),
+        "right": (1.0, 0.0, 0.0),
+        "center": (0.0, 0.0, 1.0),
+    }
+    return _POSITION_AXES.get(position, (0.0, 0.0, 1.0))
 
 
 def _compute_mass_inertia(body: Body) -> None:

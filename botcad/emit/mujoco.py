@@ -191,9 +191,36 @@ def _emit_body_tree(
             joint_attribs["range"] = f"{lo:.4f} {hi:.4f}"
         SubElement(body_el, "joint", **joint_attribs)
 
+    # Horn disc geom (purchased part visualization on child bodies)
+    is_wheel = parent_joint is not None and parent_joint.servo.continuous
+    if parent_joint is not None and not is_wheel:
+        from botcad.bracket import horn_disc_params
+
+        params = horn_disc_params(parent_joint.servo)
+        if params is not None:
+            ax, ay, az = parent_joint.axis
+            ht = params.thickness / 2
+            disc_pos = (ax * ht, ay * ht, az * ht)
+
+            disc_attribs: dict[str, str] = {
+                "name": f"{parent_joint.name}_horn_disc",
+                "type": "cylinder",
+                "size": f"{params.radius:.6f} {ht:.6f}",
+                "pos": _fmt_vec3(disc_pos),
+                "rgba": "0.85 0.85 0.88 0.9",
+                "contype": "0",
+                "conaffinity": "0",
+                "group": "1",
+            }
+
+            quat = _z_to_axis_quat(parent_joint.axis)
+            if quat is not None:
+                disc_attribs["quat"] = _fmt_quat(quat)
+
+            SubElement(body_el, "geom", **disc_attribs)
+
     # Visual geom (mesh) — for wheel bodies, mesh is visual-only;
     # a primitive cylinder handles collision instead.
-    is_wheel = parent_joint is not None and parent_joint.servo.continuous
     mesh_name = f"{body.name}_mesh"
     mesh_attribs: dict[str, str] = {
         "type": "mesh",
@@ -259,7 +286,11 @@ def _emit_body_tree(
             "geom",
             name=f"{joint.name}_servo",
             type="box",
-            size=_half_dims(servo.dimensions),
+            size=_half_dims(
+                servo.body_dimensions
+                if any(servo.body_dimensions)
+                else servo.dimensions
+            ),
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
             rgba="0.2 0.8 0.2 0.8",
@@ -267,6 +298,36 @@ def _emit_body_tree(
             conaffinity="0",
             group="1",
         )
+
+    # Shaft boss visualization geoms — cylinders on top of servo boxes
+    for joint in body.joints:
+        servo = joint.servo
+        if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
+            center, quat = servo_placement(
+                servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+            )
+            # Boss sits at the shaft offset position, on top of the body
+            boss_local = (
+                servo.shaft_offset[0],
+                servo.shaft_offset[1],
+                servo.body_dimensions[2] / 2 + servo.shaft_boss_height / 2,
+            )
+            boss_world = _add_vec3(center, rotate_vec(quat, boss_local))
+            boss_quat = _z_to_axis_quat(joint.axis)
+
+            boss_attribs: dict[str, str] = {
+                "name": f"{joint.name}_servo_boss",
+                "type": "cylinder",
+                "size": f"{servo.shaft_boss_radius:.6f} {servo.shaft_boss_height / 2:.6f}",
+                "pos": _fmt_vec3(boss_world),
+                "rgba": "0.2 0.8 0.2 0.8",
+                "contype": "0",
+                "conaffinity": "0",
+                "group": "1",
+            }
+            if boss_quat is not None:
+                boss_attribs["quat"] = _fmt_quat(boss_quat)
+            SubElement(body_el, "geom", **boss_attribs)
 
     # Recurse: each child joint creates a child body
     for joint in body.joints:
@@ -319,7 +380,7 @@ def _emit_mounting_hardware(body_el: Element, body: Body) -> None:
                 "geom",
                 name=f"screw_{joint.name}_{ear.label}",
                 type="cylinder",
-                size=f"{ear.hole_diameter / 2:.4f} {_SCREW_HEIGHT}",
+                size=f"{ear.diameter / 2:.4f} {_SCREW_HEIGHT}",
                 pos=_fmt_vec3(world_pos),
                 rgba=_SCREW_RGBA,
                 contype="0",
@@ -405,9 +466,9 @@ _WIRE_COLORS = {
     "power": "0.9 0.2 0.2 0.9",  # red — power
 }
 _WIRE_RADIUS = {
-    "uart_half_duplex": "0.0015",  # 1.5mm — typical servo cable
-    "csi": "0.003",  # 3mm — CSI ribbon width approximation
-    "power": "0.002",  # 2mm — power cable
+    "uart_half_duplex": "0.0009",  # 0.9mm — servo bus (channel is 1.5mm)
+    "csi": "0.0018",  # 1.8mm — CSI ribbon (channel is 3mm)
+    "power": "0.0012",  # 1.2mm — power cable (channel is 2mm)
 }
 
 
@@ -494,6 +555,24 @@ def _body_color(body: Body) -> str:
     if body.shape == "tube":
         return "0.7 0.7 0.7 1.0"  # light gray for structural tubes
     return "0.9 0.9 0.9 1.0"  # off-white default
+
+
+def _z_to_axis_quat(
+    axis: tuple[float, float, float],
+) -> tuple[float, float, float, float] | None:
+    """Quaternion rotating Z to the given axis. Returns None if already Z-aligned."""
+    ax, ay, az = axis
+    if abs(az) > 0.999:
+        if az < 0:
+            return (0.0, 1.0, 0.0, 0.0)  # 180° around X
+        return None  # identity, no rotation needed
+
+    angle = math.acos(max(-1.0, min(1.0, az)))
+    half = angle / 2
+    # Rotation axis = Z × target = (-ay, ax, 0)
+    rot_mag = math.sqrt(ax * ax + ay * ay)
+    s = math.sin(half)
+    return (math.cos(half), -ay / rot_mag * s, ax / rot_mag * s, 0.0)
 
 
 def _fmt_quat(q: tuple[float, float, float, float]) -> str:

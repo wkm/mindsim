@@ -28,19 +28,25 @@ class MountPoint:
     label: str
     pos: Vec3  # position relative to component origin (meters)
     diameter: float  # hole diameter (meters)
+    axis: Vec3 = (0.0, 0.0, 1.0)  # fastener insertion direction
+    fastener_type: str = ""  # "M2", "M2.5", "M3", "press_fit", etc.
 
 
-@dataclass(frozen=True)
-class MountingEar:
-    """A mounting tab/flange on a servo with a through-hole for bracket attachment.
-
-    Servo mounting ears are tabs that extend beyond the main body and have
-    screw holes for attaching the servo to a 3D-printed bracket.
-    """
-
-    label: str
-    pos: Vec3  # hole center relative to component origin (meters)
-    hole_diameter: float  # clearance hole diameter (meters)
+def MountingEar(
+    label: str,
+    pos: Vec3,
+    hole_diameter: float,
+    axis: Vec3 = (0.0, 0.0, -1.0),
+    fastener_type: str = "M3",
+) -> MountPoint:
+    """Factory for servo mounting ear points (returns MountPoint)."""
+    return MountPoint(
+        label=label,
+        pos=pos,
+        diameter=hole_diameter,
+        axis=axis,
+        fastener_type=fastener_type,
+    )
 
 
 @dataclass(frozen=True)
@@ -81,7 +87,9 @@ class ServoSpec(Component):
 
     # Extended geometry (optional, for detailed CAD / visualization)
     body_dimensions: Vec3 = (0.0, 0.0, 0.0)  # main body only (no ears/horn)
-    mounting_ears: tuple[MountingEar, ...] = ()  # bracket attachment tabs
+    shaft_boss_radius: float = 0.0  # bearing housing radius (meters)
+    shaft_boss_height: float = 0.0  # protrusion above body top face (meters)
+    mounting_ears: tuple[MountPoint, ...] = ()  # bracket attachment tabs
     horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on output horn
     rear_horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on blind side
     connector_pos: Vec3 | None = None  # wire connector center position

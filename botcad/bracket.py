@@ -36,21 +36,18 @@ class BracketSpec:
     cable_slot_height: float = 0.006  # 6mm tall cable exit
 
 
-def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Build a bracket solid in servo local frame.
+def _bracket_outer(
+    servo: ServoSpec, spec: BracketSpec, insertion_clearance: float = 0.0
+):
+    """Compute the bracket's outer box solid and ear_bottom_z.
 
-    The bracket is an outer shell with the servo pocket, shaft clearance,
-    screw holes, and cable exit already subtracted. The caller just needs
-    to union it into the parent body.
-
-    Returns a build123d Solid centered on the servo body origin.
+    Shared between bracket_solid() and bracket_envelope().
+    insertion_clearance extends the box upward (+Z) to cut a clear servo
+    insertion path through the parent body shell.
+    Returns (outer_solid, ear_bottom_z, body_dims).
     """
-    from build123d import Align, Box, Cylinder, Location
+    from build123d import Align, Box, Location
 
-    if spec is None:
-        spec = BracketSpec()
-
-    # Use body_dimensions if available, otherwise fall back to overall dims
     bd = servo.body_dimensions
     if bd[0] == 0.0:
         bd = servo.dimensions
@@ -60,25 +57,24 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     wall = spec.wall
 
     # --- Ear geometry ---
-    # Find the lowest ear Z position to determine bracket bottom extent
-    ear_bottom_z = -body_z / 2  # default: flush with body bottom
+    ear_bottom_z = -body_z / 2
     if servo.mounting_ears:
         min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
-        # Bracket extends to below the lowest ear hole
-        # Ear hole diameter / 2 + wall gives clearance below hole center
-        max_hole_d = max(ear.hole_diameter for ear in servo.mounting_ears)
+        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
         ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+
+    # --- Shaft boss extra height ---
+    boss_extra = 0.0
+    if servo.shaft_boss_height > 0:
+        boss_extra = servo.shaft_boss_height + tol
 
     # --- Outer box dimensions ---
     outer_x = body_x + 2 * (tol + wall)
     outer_y = body_y + 2 * (tol + wall)
-    # Top: flush with body top (+Z face)
-    # Bottom: extends down to cover ears
-    outer_top_z = body_z / 2 + wall  # small cap above body for shaft face
+    outer_top_z = body_z / 2 + boss_extra + wall + insertion_clearance
     outer_bottom_z = ear_bottom_z
     outer_z = outer_top_z - outer_bottom_z
 
-    # Outer box center is offset in Z (not centered on servo origin)
     outer_center_z = (outer_top_z + outer_bottom_z) / 2
 
     outer = Box(
@@ -88,6 +84,44 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
     )
     outer = outer.locate(Location((0, 0, outer_center_z)))
+    return outer, ear_bottom_z, bd
+
+
+def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Return the bracket's outer box extended with an insertion channel.
+
+    Used by the CAD emitter to cut the bracket footprint from the parent
+    body shell before unioning the finished bracket in. The insertion
+    channel extends 200mm above the bracket so the servo has a clear path
+    through the parent body shell (the CSG only removes material where
+    shell exists).
+    """
+    if spec is None:
+        spec = BracketSpec()
+    outer, _, _ = _bracket_outer(servo, spec, insertion_clearance=0.200)
+    return outer
+
+
+def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a bracket solid in servo local frame.
+
+    The bracket is an outer shell with the servo pocket, shaft clearance,
+    screw holes, and cable exit already subtracted. The caller should
+    first subtract bracket_envelope() from the parent body, then union
+    this bracket in: ``(shell - envelope) + bracket``.
+
+    Returns a build123d Solid centered on the servo body origin.
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    if spec is None:
+        spec = BracketSpec()
+
+    outer, ear_bottom_z, bd = _bracket_outer(servo, spec)
+    body_x, body_y, body_z = bd
+    tol = spec.tolerance
+    wall = spec.wall
+    outer_x = body_x + 2 * (tol + wall)
 
     # --- Servo body pocket (open on +Z for insertion) ---
     pocket_x = body_x + 2 * tol
@@ -131,6 +165,20 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     )
     shell = shell - shaft_hole
 
+    # --- Shaft boss clearance (bearing housing cylinder above body top) ---
+    if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
+        boss_r = servo.shaft_boss_radius + tol
+        boss_h = servo.shaft_boss_height + tol + 0.001  # extra for clean cut
+        boss = Cylinder(
+            boss_r,
+            boss_h,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        boss = boss.locate(
+            Location((servo.shaft_offset[0], servo.shaft_offset[1], body_z / 2 - 0.001))
+        )
+        shell = shell - boss
+
     # --- Ear ledge shelves ---
     # The pocket cuts away the body area; we need thin shelves at the ear
     # positions to support the servo flanges. The shelves span the full
@@ -154,7 +202,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
             # Shelf spans full X width, narrow in Y (just the ear overhang)
             ear_y = abs(ears[0].pos[1])
             shelf_y_inner = body_y / 2  # inner edge = body side
-            shelf_y_outer = ear_y + ears[0].hole_diameter / 2 + wall
+            shelf_y_outer = ear_y + ears[0].diameter / 2 + wall
             shelf_width_y = shelf_y_outer - shelf_y_inner
 
             if shelf_width_y <= 0:
@@ -178,7 +226,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
 
     # --- M3 through-holes at each ear position ---
     for ear in servo.mounting_ears:
-        hole_r = ear.hole_diameter / 2
+        hole_r = ear.diameter / 2
         # Hole goes from bracket bottom through to above ear position
         hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
         hole = Cylinder(
@@ -209,3 +257,49 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         shell = shell - slot
 
     return shell
+
+
+@dataclass(frozen=True)
+class HornDiscParams:
+    """Dimensions for the metal horn disc (purchased part)."""
+
+    radius: float  # outer radius of the disc
+    thickness: float  # disc thickness along shaft axis
+    center_z: float  # disc center Z in servo local frame
+    center_xy: tuple[float, float]  # shaft XY in servo frame
+
+
+def horn_disc_params(
+    servo: ServoSpec, material_margin: float = 0.001
+) -> HornDiscParams | None:
+    """Compute horn disc dimensions from servo mounting point data.
+
+    Returns None if the servo has no horn_mounting_points.
+    """
+    if not servo.horn_mounting_points:
+        return None
+
+    sx, sy, sz = servo.shaft_offset
+
+    # Radius: max distance from shaft center to screw hole edge + margin
+    max_r = 0.0
+    for mp in servo.horn_mounting_points:
+        dx = mp.pos[0] - sx
+        dy = mp.pos[1] - sy
+        r = (dx * dx + dy * dy) ** 0.5 + mp.diameter / 2
+        if r > max_r:
+            max_r = r
+    radius = max_r + material_margin
+
+    # Thickness: Z span from shaft face to top of horn screws
+    max_z = max(mp.pos[2] for mp in servo.horn_mounting_points)
+    thickness = max_z - sz
+
+    center_z = sz + thickness / 2
+
+    return HornDiscParams(
+        radius=radius,
+        thickness=thickness,
+        center_z=center_z,
+        center_xy=(sx, sy),
+    )

@@ -95,6 +95,8 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         continuous=continuous,
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
+        shaft_boss_radius=0.004,  # 4mm radius (8mm OD bearing housing)
+        shaft_boss_height=0.0028,  # 2.8mm protrusion above body top
         mounting_ears=(
             # 6x M3 clearance holes (ø4.2mm) in mounting flanges below body
             # Flanges extend 3.2mm below body bottom (Z=-15.9mm)
@@ -123,18 +125,66 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         horn_mounting_points=(
             # Same as mounting_points above (4x M2.5 on output side)
             # Positions in body-center coords, centered on shaft at X=+12.5mm
-            MountPoint("out_1", pos=(+0.00755, +0.00495, +0.0187), diameter=0.0025),
-            MountPoint("out_2", pos=(+0.01745, +0.00495, +0.0187), diameter=0.0025),
-            MountPoint("out_3", pos=(+0.00755, -0.00495, +0.0187), diameter=0.0025),
-            MountPoint("out_4", pos=(+0.01745, -0.00495, +0.0187), diameter=0.0025),
+            MountPoint(
+                "out_1",
+                pos=(+0.00755, +0.00495, +0.0187),
+                diameter=0.0025,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "out_2",
+                pos=(+0.01745, +0.00495, +0.0187),
+                diameter=0.0025,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "out_3",
+                pos=(+0.00755, -0.00495, +0.0187),
+                diameter=0.0025,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "out_4",
+                pos=(+0.01745, -0.00495, +0.0187),
+                diameter=0.0025,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M2.5",
+            ),
         ),
         rear_horn_mounting_points=(
             # 4x M2.5 on blind/rear side, same XY pattern as front horn
             # At Z=-19.0mm (below body bottom, where rear support bracket attaches)
-            MountPoint("rear_1", pos=(+0.00755, +0.00495, -0.0190), diameter=0.0025),
-            MountPoint("rear_2", pos=(+0.01745, +0.00495, -0.0190), diameter=0.0025),
-            MountPoint("rear_3", pos=(+0.00755, -0.00495, -0.0190), diameter=0.0025),
-            MountPoint("rear_4", pos=(+0.01745, -0.00495, -0.0190), diameter=0.0025),
+            MountPoint(
+                "rear_1",
+                pos=(+0.00755, +0.00495, -0.0190),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "rear_2",
+                pos=(+0.01745, +0.00495, -0.0190),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "rear_3",
+                pos=(+0.00755, -0.00495, -0.0190),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "rear_4",
+                pos=(+0.01745, -0.00495, -0.0190),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
         ),
         # PA2.0 connector on bottom face, toward back (-X) end
         connector_pos=(-0.0080, 0.0, -0.0159),

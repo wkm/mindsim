@@ -23,10 +23,34 @@ def RaspberryPiZero2W() -> Component:
         ),
         mounting_points=(
             # Four M2.5 holes at standard Pi Zero locations
-            MountPoint("m1", pos=(-0.029, -0.0115, 0.0), diameter=0.0025),
-            MountPoint("m2", pos=(0.029, -0.0115, 0.0), diameter=0.0025),
-            MountPoint("m3", pos=(-0.029, 0.0115, 0.0), diameter=0.0025),
-            MountPoint("m4", pos=(0.029, 0.0115, 0.0), diameter=0.0025),
+            MountPoint(
+                "m1",
+                pos=(-0.029, -0.0115, 0.0),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "m2",
+                pos=(0.029, -0.0115, 0.0),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "m3",
+                pos=(-0.029, 0.0115, 0.0),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "m4",
+                pos=(0.029, 0.0115, 0.0),
+                diameter=0.0025,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2.5",
+            ),
         ),
         color=(0.0, 0.5, 0.0, 1.0),  # PCB green
     )

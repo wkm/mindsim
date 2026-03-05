@@ -74,6 +74,10 @@ Each bot's `design.py` calls `bot.solve()` then `bot.emit()` to produce: `assemb
 
 **Tracking:** `EXPERIMENTS.md` records branch, hypothesis, status, outcome, W&B links.
 
+## Future Directions
+
+- **Structural validation (FEA):** Run finite-element analysis on generated meshes to validate printability before fabrication. The immediate smoke test is cross-section analysis (servo stall torque → minimum bridge cross-section at each bracket). The longer-term goal is mesh FEA using `solidspy` or `sfepy` — load each body with servo reaction forces and gravity, check peak stress vs. material yield strength. This would catch thin bridges, under-supported brackets, and other structural failures that the packing solver doesn't reason about.
+
 ## Development Notes
 
 - **Clean up before committing** — remove debug*.py, test*.py, .rrd files, temp files
