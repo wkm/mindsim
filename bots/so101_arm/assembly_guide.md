@@ -4,7 +4,7 @@
 
 ## Servo Bus Configuration
 
-STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo needs a unique ID programmed via the Feetech debug board.
+STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo needs a unique ID programmed via the Feetech debug board or the Waveshare controller software.
 
 | Servo ID | Joint | Mode | Range |
 |----------|-------|------|-------|
@@ -18,35 +18,69 @@ STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo ne
 ## Wiring Diagram
 
 ```
-Battery (LiPo 2S, 7.4V)
-  ├── XT30 → Servo bus power (direct 7.4V)
-  └── XT30 → 5V Buck converter → Raspberry Pi USB power
+Host PC (USB)
+  └── USB-C → Waveshare Serial Bus Servo Driver Board
 
-Raspberry Pi Zero 2W
-  ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
-  └── CSI connector → Camera ribbon cable → OV5647
+Power Supply (12V)
+  └── Barrel jack → Waveshare board → Servo bus power
 
 Servo Daisy Chain:
-  Pi UART → ID1(shoulder_pan) → ID2(shoulder_lift) → ID3(elbow_flex) → ID4(wrist_flex) → ID5(wrist_roll) → ID6(gripper)
+  Waveshare board → ID1(shoulder_pan) → ID2(shoulder_lift) → ID3(elbow_flex) → ID4(wrist_flex) → ID5(wrist_roll) → ID6(gripper)
 ```
+
+## 3D Printed Parts
+
+Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm nozzle, 0.2mm layer height, 15–20% infill.
+
+| Part | STL File | Shape | Dimensions (mm) |
+|------|----------|-------|-----------------|
+| base | `meshes/base.stl` | box | 75.0 x 75.0 x 20.0 |
+| shoulder | `meshes/shoulder.stl` | box | 50.0 x 40.0 x 54.0 |
+| upper_arm | `meshes/upper_arm.stl` | tube | 20.0 x 20.0 x 127.6 |
+| forearm | `meshes/forearm.stl` | tube | 20.0 x 20.0 x 149.9 |
+| wrist | `meshes/wrist.stl` | box | 40.0 x 35.0 x 35.0 |
+| hand | `meshes/hand.stl` | box | 45.0 x 40.0 x 30.0 |
+| jaw | `meshes/jaw.stl` | box | 60.0 x 20.0 x 10.0 |
 
 ## Assembly Sequence
 
-1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board and assign IDs 1–N as listed above.
+1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–6 as listed above.
 
-2. **Print structural parts** — Print all body shells from the STL files in `meshes/`. Recommended: PLA or PETG, 0.2mm layer height, 20% infill.
+2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
 
-3. **Assemble base body** (`base`):
+3. **Assemble base** (`base`):
    - Mount WaveshareSerialBus (controller) at center position
 
-4. **Attach shoulder** via STS3215 at joint `shoulder_pan`
-   - Attach upper_arm via STS3215 at `shoulder_lift`
+4. **Attach shoulder** to base via STS3215 at joint `shoulder_pan` (axis: vertical):
+   - Screw servo into base bracket using M3 mounting screws
+   - Attach shoulder bracket to servo horn using M2.5 horn screws
 
-5. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Use the cable channel in each structural member.
+5. **Attach upper_arm** to shoulder via STS3215 at joint `shoulder_lift` (axis: pitch):
+   - Screw servo into shoulder bracket using M3 mounting screws
+   - Attach upper_arm bracket to servo horn using M2.5 horn screws
 
-6. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+6. **Attach forearm** to upper_arm via STS3215 at joint `elbow_flex` (axis: pitch):
+   - Screw servo into upper_arm bracket using M3 mounting screws
+   - Attach forearm bracket to servo horn using M2.5 horn screws
 
-7. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
+7. **Attach wrist** to forearm via STS3215 at joint `wrist_flex` (axis: pitch):
+   - Screw servo into forearm bracket using M3 mounting screws
+   - Attach wrist bracket to servo horn using M2.5 horn screws
 
-8. **Test** — Power on, verify all servo IDs respond via `sts3215_scan.py`, test camera with `rpicam-hello`.
+8. **Attach hand** to wrist via STS3215 at joint `wrist_roll` (axis: vertical):
+   - Screw servo into wrist bracket using M3 mounting screws
+   - Attach hand bracket to servo horn using M2.5 horn screws
+
+9. **Attach jaw** to hand via STS3215 at joint `gripper` (axis: pitch):
+   - Screw servo into hand bracket using M3 mounting screws
+   - Attach jaw bracket to servo horn using M2.5 horn screws
+
+10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
+
+11. **Connect power** — Connect 12V power supply to the Waveshare board barrel jack. Connect USB-C cable from host PC.
+
+12. **Mount to table** — Secure the base plate to a flat surface using table clamps (150mm+ opening recommended) or M4 bolts through the base plate mounting holes.
+
+13. **Test** — Power on and verify all servo IDs respond. 
+   Use the Waveshare controller software or `python -m lerobot.scripts.control_robot` to test each joint.
 

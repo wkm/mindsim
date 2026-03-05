@@ -16,8 +16,8 @@
 | Consumer | Voltage (V) | Current (A) | Power (W) |
 |----------|-------------|-------------|-----------|
 | STS3215 x6 | 12.0 | ~4.9 | ~58.8 |
-| Raspberry Pi Zero 2W | 5.0 | 0.6 | 3.0 |
-| **Total** | | | **~61.8** |
+| WaveshareSerialBus x1 | 5.0 | 0.1 | 0.5 |
+| **Total** | | | **~59.3** |
 
 ## Wire Lengths
 
