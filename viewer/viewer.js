@@ -43,7 +43,7 @@ scene.background = new THREE.Color(0x1a1a2e);
 const camera = new THREE.PerspectiveCamera(
   45, (window.innerWidth - SIDE_PANEL_WIDTH) / window.innerHeight, 0.001, 100
 );
-camera.position.set(0.3, 0.35, 0.4);
+camera.position.set(0.4, 0.45, 0.55);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -53,7 +53,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.15, 0);
+controls.target.set(0, 0.2, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 controls.update();
@@ -241,6 +241,30 @@ function buildScene() {
 
     getPosition(model.geom_pos, g, mesh.position);
     getQuaternion(model.geom_quat, g, mesh.quaternion);
+  }
+
+  // Assign distinct colors to mesh-type bodies for visual differentiation.
+  // Only override the default gray (0.9, 0.9, 0.9); leave detail geoms alone.
+  const bodyColors = [
+    null,              // body 0 = world, skip
+    [0.85, 0.85, 0.88], // base — light steel
+    [0.35, 0.35, 0.40], // left_rim — dark gray
+    [0.35, 0.35, 0.40], // right_rim — dark gray
+    [0.55, 0.65, 0.85], // turntable — blue-gray
+    [0.75, 0.80, 0.90], // upper_arm — light blue
+    [0.65, 0.75, 0.85], // forearm — medium blue
+    [0.90, 0.85, 0.75], // hand — warm beige
+  ];
+  for (const [b, group] of Object.entries(bodies)) {
+    const bi = parseInt(b);
+    if (bi > 0 && bi < bodyColors.length && bodyColors[bi] && group.has_custom_mesh) {
+      group.traverse(child => {
+        if (child.isMesh && child.geomGroup === 0) {
+          const [r, g, bl] = bodyColors[bi];
+          child.material.color.setRGB(r, g, bl);
+        }
+      });
+    }
   }
 
   // Parent all bodies to root (flat — transforms come from xpos/xquat)

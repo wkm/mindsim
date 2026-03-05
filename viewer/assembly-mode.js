@@ -21,7 +21,9 @@ export class AssemblyMode {
   activate() {
     this.active = true;
     this.cacheGeomMeshes();
+    this.buildBodyNameMap();
     this.loadManifest().then(() => {
+      this.resolveManifestSteps();
       this.buildUI();
       this.applyStep(this.currentStep, 1.0);
     });
@@ -41,6 +43,39 @@ export class AssemblyMode {
         if (obj.bodyID === 1) this.rootBodyMeshes.push(obj);
       }
     });
+  }
+
+  /** Map body name → body ID and body ID → list of geom names */
+  buildBodyNameMap() {
+    const { model, getMujocoName } = this.ctx;
+    this.bodyNameToId = {};
+    this.bodyGeomNames = {};
+    for (let b = 0; b < model.nbody; b++) {
+      const name = getMujocoName(model.name_bodyadr, b);
+      if (name) this.bodyNameToId[name] = b;
+      this.bodyGeomNames[b] = [];
+    }
+    for (let g = 0; g < model.ngeom; g++) {
+      const b = model.geom_bodyid[g];
+      const gname = getMujocoName(model.name_geomadr, g);
+      if (gname) this.bodyGeomNames[b].push(gname);
+    }
+  }
+
+  /** Resolve manifest body names to bodyId and geom name lists */
+  resolveManifestSteps() {
+    for (const step of this.steps) {
+      // Manifest uses "body" (string name), code needs "bodyId" (number)
+      if (step.body && step.bodyId === undefined) {
+        step.bodyId = this.bodyNameToId[step.body];
+      }
+      // If no geom name lists, populate from the body's geoms
+      if (!step.structural && step.bodyId !== undefined) {
+        step.structural = this.bodyGeomNames[step.bodyId] || [];
+        step.details = [];
+        step.wires = [];
+      }
+    }
   }
 
   async loadManifest() {

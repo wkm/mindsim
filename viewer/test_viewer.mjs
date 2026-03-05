@@ -255,25 +255,61 @@ async function main() {
       console.log(`  Screenshot: ${ssPath} (${(ssSize / 1024).toFixed(0)} KB)`);
     }
 
-    // Joint mode slider test
+    // Joint mode slider test — move shoulder_pitch (index 3) for visible arm movement
     await page.click('.mode-tab[data-mode="joint"]');
     await page.waitForTimeout(200);
     const sliders = await page.$$('#side-panel input[type="range"]');
     assert(sliders.length > 0, `Joint mode has slider controls (found ${sliders.length})`);
 
-    if (sliders.length > 0) {
-      const sliderBB = await sliders[0].boundingBox();
+    if (sliders.length >= 4) {
+      // Take before screenshot for comparison
+      const beforeShot = await page.screenshot();
+
+      // Move shoulder_pitch slider (index 3) — visibly tilts the arm
+      const sliderBB = await sliders[3].boundingBox();
       if (sliderBB) {
         await page.mouse.click(
-          sliderBB.x + sliderBB.width * 0.75,
+          sliderBB.x + sliderBB.width * 0.25,
           sliderBB.y + sliderBB.height / 2
         );
         await page.waitForTimeout(300);
         const ssPath = path.join(screenshotDir, 'joint_slider_moved.png');
-        await page.screenshot({ path: ssPath });
+        const afterShot = await page.screenshot({ path: ssPath });
         console.log(`  Screenshot after slider move: ${ssPath}`);
-        assert(true, 'Joint slider interaction works');
+
+        // Verify the 3D scene actually changed (screenshots differ)
+        const differs = Buffer.compare(beforeShot, afterShot) !== 0;
+        assert(differs, 'Joint slider changes 3D scene (screenshots differ)');
       }
+    }
+
+    // Assembly mode step-through test
+    await page.click('.mode-tab[data-mode="assembly"]');
+    await page.waitForTimeout(500);
+
+    // Step 1 should show something (base body)
+    const asmStep1Shot = await page.screenshot();
+    const asmStep1Size = asmStep1Shot.length;
+
+    // Click "Show All" to see the full robot
+    const showAllBtn = await page.$('#asm-show-all-btn');
+    if (showAllBtn) {
+      await showAllBtn.click();
+      await page.waitForTimeout(300);
+      const showAllShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_show_all.png') });
+      assert(showAllShot.length > 30000, `Assembly "Show All" renders full robot (${(showAllShot.length/1024).toFixed(0)} KB)`);
+    }
+
+    // Click "Next" a few times and verify step counter advances
+    const nextBtn = await page.$('#asm-next-btn');
+    if (nextBtn) {
+      await nextBtn.click();
+      await page.waitForTimeout(300);
+      const stepText = await page.$eval('#asm-step-val', el => el.textContent);
+      assert(stepText.includes('2'), `Assembly step advances to 2 (got "${stepText}")`);
+
+      // Take screenshot at step 2
+      await page.screenshot({ path: path.join(screenshotDir, 'assembly_step2.png') });
     }
   }
 
