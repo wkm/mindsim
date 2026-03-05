@@ -8,8 +8,8 @@
 |------|-----|-----------------|----------|-------|
 | STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | WaveshareSerialBus | 1 | 55.0 x 25.0 x 12.0 | 15 | controller |
-| Structural (printed) | — | — | 91 | PLA/PETG frame |
-| **Total** | | | **436** | |
+| Structural (printed) | — | — | 113 | PLA/PETG frame |
+| **Total** | | | **458** | |
 
 ## Power Budget
 

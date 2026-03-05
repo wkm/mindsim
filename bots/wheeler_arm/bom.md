@@ -11,8 +11,8 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 15 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 140 | PLA/PETG frame |
-| **Total** | | | **568** | |
+| Structural (printed) | — | — | 175 | PLA/PETG frame |
+| **Total** | | | **603** | |
 
 ## Power Budget
 

@@ -46,8 +46,14 @@ def _solve_body(body: Body) -> None:
         return
 
     if body.explicit_dimensions is None:
-        body.solved_dimensions = _compute_bounding_box(
-            internal_items, body.padding, joint_positions
+        # Start from shape-derived minimum (respects outer_r, length, etc.)
+        shape_dims = body._shape_default_dimensions()
+        solved = _compute_bounding_box(internal_items, body.padding, joint_positions)
+        # Take the max of shape-derived and solver-computed per axis
+        body.solved_dimensions = (
+            max(shape_dims[0], solved[0]),
+            max(shape_dims[1], solved[1]),
+            max(shape_dims[2], solved[2]),
         )
 
     dims = body.dimensions

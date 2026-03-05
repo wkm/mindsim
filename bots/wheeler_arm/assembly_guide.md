@@ -53,9 +53,9 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 | base | `meshes/base.stl` | box | 89.0 x 51.0 x 65.0 |
 | left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
-| turntable | `meshes/turntable.stl` | cylinder | 20.0 x 20.0 x 35.0 |
-| upper_arm | `meshes/upper_arm.stl` | tube | 20.0 x 20.0 x 135.0 |
-| forearm | `meshes/forearm.stl` | tube | 20.0 x 20.0 x 115.0 |
+| turntable | `meshes/turntable.stl` | cylinder | 60.0 x 60.0 x 35.0 |
+| upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 135.0 |
+| forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 115.0 |
 | hand | `meshes/hand.stl` | box | 40.0 x 40.0 x 30.0 |
 
 ## Assembly Sequence
