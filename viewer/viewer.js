@@ -9,6 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
+import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -259,7 +260,7 @@ function buildScene() {
     const bi = parseInt(b);
     if (bi > 0 && bi < bodyColors.length && bodyColors[bi] && group.has_custom_mesh) {
       group.traverse(child => {
-        if (child.isMesh && child.geomGroup === 0) {
+        if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
           const [r, g, bl] = bodyColors[bi];
           child.material.color.setRGB(r, g, bl);
         }

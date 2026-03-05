@@ -28,7 +28,7 @@ const botName = args.includes('--bot') ? args[args.indexOf('--bot') + 1] : 'whee
 const port = args.includes('--port') ? parseInt(args[args.indexOf('--port') + 1]) : 8765;
 const screenshotDir = path.join(__dirname, 'test_screenshots');
 
-// CDN URL → local file mapping
+// CDN URL → local file mapping (files read once into memory)
 const CDN_ROUTES = {
   'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js':
     path.join(CDN_CACHE, 'three.module.js'),
@@ -37,6 +37,26 @@ const CDN_ROUTES = {
   'https://cdn.jsdelivr.net/npm/mujoco-js@0.0.7/dist/mujoco_wasm.js':
     path.join(CDN_CACHE, 'mujoco_wasm.js'),
 };
+
+// Pre-read CDN files into memory (avoids re-reading on every route intercept)
+const CDN_BUFFERS = {};
+for (const [url, localPath] of Object.entries(CDN_ROUTES)) {
+  if (fs.existsSync(localPath)) {
+    CDN_BUFFERS[url] = fs.readFileSync(localPath);
+  }
+}
+
+/** Register CDN route interceptors on a Playwright browser context. */
+async function setupCdnRoutes(context) {
+  for (const [cdnUrl, localPath] of Object.entries(CDN_ROUTES)) {
+    const body = CDN_BUFFERS[cdnUrl];
+    if (!body) continue;
+    await context.route(cdnUrl, async (route) => {
+      console.log(`  CDN intercept: ${path.basename(localPath)} (${(body.length / 1024).toFixed(0)} KB)`);
+      await route.fulfill({ status: 200, contentType: 'application/javascript', body });
+    });
+  }
+}
 
 // -- Helpers -----------------------------------------------------------------
 
@@ -140,25 +160,13 @@ async function main() {
   });
 
   // Intercept CDN requests and serve from local cache
-  for (const [cdnUrl, localPath] of Object.entries(CDN_ROUTES)) {
-    await context.route(cdnUrl, async (route) => {
-      const body = fs.readFileSync(localPath);
-      console.log(`  CDN intercept: ${path.basename(localPath)} (${(body.length / 1024).toFixed(0)} KB)`);
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body,
-      });
-    });
-  }
+  await setupCdnRoutes(context);
 
   const page = await context.newPage();
 
-  // Collect console messages and errors
-  const consoleMsgs = [];
+  // Collect console errors
   const consoleErrors = [];
   page.on('console', msg => {
-    consoleMsgs.push(`[${msg.type()}] ${msg.text()}`);
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
 
@@ -333,8 +341,7 @@ async function main() {
     const initialStepText = await page.textContent('#asm-step-val');
     assert(initialStepText.includes('1 / 7'), `Assembly starts at step 1 (got "${initialStepText}")`);
 
-    await page.screenshot({ path: path.join(screenshotDir, 'assembly_step_1.png') });
-    let prevAsmShot = fs.readFileSync(path.join(screenshotDir, 'assembly_step_1.png'));
+    let prevAsmShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_step_1.png') });
 
     for (let step = 2; step <= 7; step++) {
       await page.click('#asm-next-btn');
@@ -343,10 +350,7 @@ async function main() {
       const stepText = await page.textContent('#asm-step-val');
       assert(stepText.includes(`${step} / 7`), `Assembly step ${step} counter (got "${stepText}")`);
 
-      const ssPath = path.join(screenshotDir, `assembly_step_${step}.png`);
-      await page.screenshot({ path: ssPath });
-
-      const currentShot = fs.readFileSync(ssPath);
+      const currentShot = await page.screenshot({ path: path.join(screenshotDir, `assembly_step_${step}.png`) });
       const isDifferent = !prevAsmShot.equals(currentShot);
       assert(isDifferent, `Assembly step ${step} differs from step ${step - 1}`);
       prevAsmShot = currentShot;
@@ -448,11 +452,7 @@ async function main() {
     // Use a separate browser context so a WASM crash doesn't kill the main page
     const errContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     // Set up CDN routes for the error context too
-    for (const [cdnUrl, localPath] of Object.entries(CDN_ROUTES)) {
-      await errContext.route(cdnUrl, async (route) => {
-        await route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(localPath) });
-      });
-    }
+    await setupCdnRoutes(errContext);
     const errorPage = await errContext.newPage();
     const errorPageErrors = [];
     const errorFailedReqs = [];

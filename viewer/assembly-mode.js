@@ -45,20 +45,20 @@ export class AssemblyMode {
     });
   }
 
-  /** Map body name → body ID and body ID → list of geom names */
+  /** Map body name → body ID and body ID → list of geom {name, group} */
   buildBodyNameMap() {
     const { model, getMujocoName } = this.ctx;
     this.bodyNameToId = {};
-    this.bodyGeomNames = {};
+    this.bodyGeoms = {};
     for (let b = 0; b < model.nbody; b++) {
       const name = getMujocoName(model.name_bodyadr, b);
       if (name) this.bodyNameToId[name] = b;
-      this.bodyGeomNames[b] = [];
+      this.bodyGeoms[b] = [];
     }
     for (let g = 0; g < model.ngeom; g++) {
       const b = model.geom_bodyid[g];
       const gname = getMujocoName(model.name_geomadr, g);
-      if (gname) this.bodyGeomNames[b].push(gname);
+      if (gname) this.bodyGeoms[b].push({ name: gname, group: model.geom_group[g] });
     }
   }
 
@@ -71,7 +71,8 @@ export class AssemblyMode {
       }
       // If no geom name lists, populate from the body's geoms
       if (!step.structural && step.bodyId !== undefined) {
-        step.structural = this.bodyGeomNames[step.bodyId] || [];
+        const geoms = this.bodyGeoms[step.bodyId] || [];
+        step.structural = geoms.map(g => g.name);
         step.details = [];
         step.wires = [];
       }
@@ -96,20 +97,9 @@ export class AssemblyMode {
     const HINGE = mujoco.mjtJoint.mjJNT_HINGE.value;
     const steps = [];
 
-    // Collect geoms per body
-    const bodyGeoms = {};
-    for (let g = 0; g < model.ngeom; g++) {
-      const b = model.geom_bodyid[g];
-      if (!bodyGeoms[b]) bodyGeoms[b] = [];
-      bodyGeoms[b].push({
-        name: getMujocoName(model.name_geomadr, g),
-        group: model.geom_group[g],
-      });
-    }
-
     for (let b = 1; b < model.nbody; b++) {
       const bodyName = getMujocoName(model.name_bodyadr, b);
-      const geoms = bodyGeoms[b] || [];
+      const geoms = this.bodyGeoms[b] || [];
 
       const structural = geoms.filter(g => g.group === GEOM_GROUP_STRUCTURAL).map(g => g.name);
       const details = geoms.filter(g => g.group === GEOM_GROUP_DETAIL).map(g => g.name);
