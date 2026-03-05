@@ -70,12 +70,21 @@ def _add_common_geoms(geoms, legends, component: Component):
     in the scene's <asset> block by the caller.
     """
     c = component.color
-    body_rgba = f"{c[0]:.2f} {c[1]:.2f} {c[2]:.2f} 0.85"
+    # Lighten very dark components so mesh geometry details (bosses, pockets)
+    # are visible in the tear sheet.  The tear sheet is for inspection, not
+    # photorealism — readability trumps color accuracy.
+    min_lum = 0.35
+    r, g, b = c[0], c[1], c[2]
+    lum = 0.299 * r + 0.587 * g + 0.114 * b
+    if lum < min_lum and lum > 0:
+        scale = min_lum / lum
+        r, g, b = min(r * scale, 1.0), min(g * scale, 1.0), min(b * scale, 1.0)
+    body_rgba = f"{r:.2f} {g:.2f} {b:.2f} 0.85"
 
     # Body: reference the CAD-generated mesh
     geoms.append(f'<geom name="body" type="mesh" mesh="comp_mesh" rgba="{body_rgba}"/>')
 
-    body_rgb = (int(c[0] * 255), int(c[1] * 255), int(c[2] * 255))
+    body_rgb = (int(r * 255), int(g * 255), int(b * 255))
     legends.append(("body", body_rgb))
 
     # Effective dimensions for axis sizing

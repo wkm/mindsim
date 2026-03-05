@@ -15,6 +15,13 @@ STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo ne
 | 5 | elbow | Position | -115° to 0° |
 | 6 | wrist | Position | -86° to 86° |
 
+## Servo Daisy Chain
+
+```
+  ID1(left_wheel) → ID2(right_wheel) → ID3(shoulder_yaw) → ID4(shoulder_pitch) → ID5(elbow) → ID6(wrist)
+```
+
+
 ## Wiring Diagram
 
 ```
@@ -25,18 +32,15 @@ Battery (LiPo 2S, 7.4V)
 Raspberry Pi Zero 2W
   ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
   └── CSI connector → Camera ribbon cable → OV5647
-
-Servo Daisy Chain:
-  Pi UART → ID1(left_wheel) → ID2(right_wheel) → ID3(shoulder_yaw) → ID4(shoulder_pitch) → ID5(elbow) → ID6(wrist)
 ```
 
 ## Assembly Sequence
 
-1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board and assign IDs 1–N as listed above.
+1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board and assign IDs as listed above.
 
-2. **Print structural parts** — Print all body shells from the STL files in `meshes/`. Recommended: PLA or PETG, 0.2mm layer height, 20% infill.
+2. **Print structural parts** — Print body shells from the STL files in `meshes/`. Recommended: PLA or PETG, 0.2mm layer height, 20% infill.
 
-3. **Assemble base body** (`base`):
+3. **Assemble root body** (`base`):
    - Mount RaspberryPiZero2W (pi) at center position
    - Mount LiPo2S-1000 (battery) at bottom position
 
@@ -49,11 +53,20 @@ Servo Daisy Chain:
 6. **Attach turntable** via STS3215 at joint `shoulder_yaw`
    - Attach upper_arm via STS3215 at `shoulder_pitch`
 
-7. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Use the cable channel in each structural member.
+7. **Attach upper_arm** via STS3215 at joint `shoulder_pitch`
+   - Attach forearm via STS3215 at `elbow`
 
-8. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+8. **Attach forearm** via STS3215 at joint `elbow`
+   - Attach hand via STS3215 at `wrist`
 
-9. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
+9. **Attach hand** via STS3215 at joint `wrist`
+   - Mount OV5647 (camera)
 
-10. **Test** — Power on, verify all servo IDs respond via `sts3215_scan.py`, test camera with `rpicam-hello`.
+10. **Route servo bus cable** — Daisy-chain servos following the wiring diagram. Use the cable channel in each structural member.
+
+11. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+
+12. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
+
+13. **Test** — Power on, verify all servo IDs respond via `sts3215_scan.py`, test camera with `rpicam-hello`.
 

@@ -28,13 +28,32 @@ Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
 
 
 @dataclass
+class Module:
+    """A named fabrication unit — a group of bodies printed/assembled together."""
+
+    name: str
+    _bot: Bot = field(repr=False)
+
+    def body(self, name: str, shape: str = "box", **kwargs) -> Body:
+        """Create a body in this module. First body created becomes bot root."""
+        b = Body(name=name, shape=shape, module=self, **kwargs)
+        if self._bot.root is None:
+            self._bot.root = b
+        return b
+
+
+@dataclass
 class Mount:
     """A component placed inside a body."""
 
     component: Component
     label: str
     position: Position | Vec3  # heuristic position or explicit (x, y, z)
+    insertion_axis: Vec3 | None = (
+        None  # explicit override, or None = derive from position
+    )
     resolved_pos: Vec3 = (0.0, 0.0, 0.0)  # filled by packing solver
+    resolved_insertion_axis: Vec3 = (0.0, 0.0, 1.0)  # filled by packing solver
 
 
 @dataclass
@@ -66,6 +85,7 @@ class Joint:
         outer_r: float = 0.0,
         padding: float = 0.005,
         dimensions: Vec3 | None = None,
+        module: Module | None = None,
     ) -> Body:
         """Create and attach a child body to this joint."""
         b = Body(
@@ -78,6 +98,7 @@ class Joint:
             outer_r=outer_r,
             padding=padding,
             explicit_dimensions=dimensions,
+            module=module,
         )
         self.child = b
         return b
@@ -100,6 +121,7 @@ class Body:
     outer_r: float = 0.0
     padding: float = 0.005  # clearance around components (meters)
     explicit_dimensions: Vec3 | None = None
+    module: Module | None = None
 
     mounts: list[Mount] = field(default_factory=list)
     joints: list[Joint] = field(default_factory=list)
@@ -150,11 +172,17 @@ class Body:
         component: Component,
         position: Position | Vec3 = "center",
         label: str = "",
+        insertion_axis: Vec3 | None = None,
     ) -> Mount:
         """Mount a component inside this body."""
         if not label:
             label = component.name.lower()
-        m = Mount(component=component, label=label, position=position)
+        m = Mount(
+            component=component,
+            label=label,
+            position=position,
+            insertion_axis=insertion_axis,
+        )
         self.mounts.append(m)
         return m
 
@@ -194,6 +222,14 @@ class Bot:
     all_joints: list[Joint] = field(default_factory=list)
     wire_routes: list = field(default_factory=list)
 
+    _modules: dict[str, Module] = field(default_factory=dict)
+
+    def module(self, name: str) -> Module:
+        """Create or retrieve a named module (fabrication unit)."""
+        if name not in self._modules:
+            self._modules[name] = Module(name=name, _bot=self)
+        return self._modules[name]
+
     def body(
         self,
         name: str,
@@ -210,19 +246,34 @@ class Bot:
         return b
 
     def _collect_tree(self) -> None:
-        """Walk the kinematic tree and populate all_bodies / all_joints."""
+        """Walk the kinematic tree, populate all_bodies/all_joints, resolve modules."""
         self.all_bodies.clear()
         self.all_joints.clear()
 
-        def _walk(body: Body) -> None:
+        def _walk(body: Body, parent_module: Module | None) -> None:
+            # Inherit module from parent if not set explicitly
+            if body.module is None:
+                body.module = parent_module
             self.all_bodies.append(body)
             for joint in body.joints:
                 self.all_joints.append(joint)
                 if joint.child is not None:
-                    _walk(joint.child)
+                    _walk(joint.child, body.module)
 
         if self.root is not None:
-            _walk(self.root)
+            _walk(self.root, None)
+
+    def _module_bodies(self, module_name: str) -> list[Body]:
+        """Return all bodies belonging to the named module."""
+        return [b for b in self.all_bodies if b.module and b.module.name == module_name]
+
+    def _module_joints(self, module_name: str) -> list[Joint]:
+        """Return joints owned by the named module (parent body's module)."""
+        parent_module: dict[str, str | None] = {}
+        for body in self.all_bodies:
+            for joint in body.joints:
+                parent_module[joint.name] = body.module.name if body.module else None
+        return [j for j in self.all_joints if parent_module.get(j.name) == module_name]
 
     def solve(self) -> None:
         """Run packing solver and wire routing."""
@@ -272,6 +323,27 @@ class Bot:
         from botcad.emit.component_renders import emit_component_renders
 
         emit_component_renders(self, output_dir_path)
+
+        from botcad.emit.assembly_renders import emit_assembly_renders
+
+        emit_assembly_renders(self, output_dir_path)
+
+        # Per-module outputs (STEP, BOM, assembly guide)
+        if self._modules:
+            from botcad.emit.cad import emit_cad_for_module
+
+            for mod_name in self._modules:
+                emit_cad_for_module(self, mod_name, output_dir_path)
+
+            from botcad.emit.bom import emit_bom_for_module
+
+            for mod_name in self._modules:
+                emit_bom_for_module(self, mod_name, output_dir_path)
+
+            from botcad.emit.readme import emit_assembly_guide_for_module
+
+            for mod_name in self._modules:
+                emit_assembly_guide_for_module(self, mod_name, output_dir_path)
 
 
 def _parse_axis(axis: str | Vec3) -> Vec3:

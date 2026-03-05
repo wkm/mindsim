@@ -20,8 +20,20 @@ def OV5647() -> Component:
         ),
         mounting_points=(
             # Two M2 mounting holes
-            MountPoint("m1", pos=(-0.0105, -0.0095, 0.0), diameter=0.002),
-            MountPoint("m2", pos=(0.0105, -0.0095, 0.0), diameter=0.002),
+            MountPoint(
+                "m1",
+                pos=(-0.0105, -0.0095, 0.0),
+                diameter=0.002,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2",
+            ),
+            MountPoint(
+                "m2",
+                pos=(0.0105, -0.0095, 0.0),
+                diameter=0.002,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2",
+            ),
         ),
         color=(0.1, 0.6, 0.1, 1.0),  # PCB green
     )

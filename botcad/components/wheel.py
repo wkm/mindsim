@@ -26,12 +26,48 @@ def PololuWheel90mm() -> Component:
         mass=0.015,
         mounting_points=(
             # 6x M3 holes in 3 pairs at 19.1mm spacing
-            MountPoint("m1", pos=(0.00955, 0.0, 0.0), diameter=0.003),
-            MountPoint("m2", pos=(-0.00955, 0.0, 0.0), diameter=0.003),
-            MountPoint("m3", pos=(0.0, 0.00955, 0.0), diameter=0.003),
-            MountPoint("m4", pos=(0.0, -0.00955, 0.0), diameter=0.003),
-            MountPoint("m5", pos=(0.00675, 0.00675, 0.0), diameter=0.003),
-            MountPoint("m6", pos=(-0.00675, -0.00675, 0.0), diameter=0.003),
+            MountPoint(
+                "m1",
+                pos=(0.00955, 0.0, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
+            MountPoint(
+                "m2",
+                pos=(-0.00955, 0.0, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
+            MountPoint(
+                "m3",
+                pos=(0.0, 0.00955, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
+            MountPoint(
+                "m4",
+                pos=(0.0, -0.00955, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
+            MountPoint(
+                "m5",
+                pos=(0.00675, 0.00675, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
+            MountPoint(
+                "m6",
+                pos=(-0.00675, -0.00675, 0.0),
+                diameter=0.003,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M3",
+            ),
         ),
         color=(0.2, 0.2, 0.2, 1.0),  # dark rubber
     )

@@ -27,9 +27,11 @@ from botcad.skeleton import Bot
 def build() -> Bot:
     """Define the wheeler_arm robot."""
     bot = Bot("wheeler_arm")
+    base_mod = bot.module("base")
+    arm_mod = bot.module("arm")
 
     # Base body — houses electronics, battery on bottom, Pi in center
-    base = bot.body("base", shape="box", padding=0.008)
+    base = base_mod.body("base", shape="box", padding=0.008)
     base.mount(RaspberryPiZero2W(), position="center", label="pi")
     base.mount(LiPo2S(1000), position="bottom", label="battery")
 
@@ -68,7 +70,7 @@ def build() -> Bot:
         range=(-1.5, 1.5),
     )
     turntable = shoulder_yaw.body(
-        "turntable", shape="cylinder", radius=0.03, height=0.02
+        "turntable", shape="cylinder", radius=0.03, height=0.02, module=arm_mod
     )
 
     # Shoulder pitch: tilts the arm up/down, axis = X
