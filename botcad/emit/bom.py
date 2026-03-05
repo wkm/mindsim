@@ -107,17 +107,15 @@ def emit_bom(bot: Bot, output_dir: Path) -> None:
         )
 
     # Add power for mounted compute/controller components (not servos)
-    _COMPONENT_POWER: dict[str, tuple[float, float]] = {
-        # name -> (voltage, typical_current_amps)
-        "RaspberryPiZero2W": (5.0, 0.6),
-        "WaveshareSerialBus": (5.0, 0.1),
-    }
     for name, info in components.items():
-        if name in _COMPONENT_POWER:
-            v, a = _COMPONENT_POWER[name]
-            p = v * a * info["count"]
+        c = info["component"]
+        if c.voltage > 0 and c.typical_current > 0:
+            p = c.voltage * c.typical_current * info["count"]
             total_power += p
-            lines.append(f"| {name} x{info['count']} | {v:.1f} | {a:.1f} | {p:.1f} |")
+            lines.append(
+                f"| {name} x{info['count']} | {c.voltage:.1f} | "
+                f"{c.typical_current:.1f} | {p:.1f} |"
+            )
 
     lines.append(f"| **Total** | | | **~{total_power:.1f}** |")
 
