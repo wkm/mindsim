@@ -17,6 +17,10 @@
       <site name="imu" pos="0 0 0" size="0.005"/>
       <geom name="comp_base_pi" type="box" size="0.032500 0.015000 0.002500" pos="0.000000 0.000000 0.000000" rgba="0.0 0.5 0.0 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="comp_base_battery" type="box" size="0.036500 0.017500 0.009000" pos="0.000000 0.000000 -0.008000" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="-0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+      <geom name="right_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
+      <geom name="right_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
       <geom name="screw_left_wheel_ear_1" type="cylinder" size="0.0021 0.001" pos="-0.026600 -0.010250 -0.008300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_2" type="cylinder" size="0.0021 0.001" pos="-0.026600 -0.010250 -0.029000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_3" type="cylinder" size="0.0021 0.001" pos="-0.026600 0.010250 -0.008300" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
@@ -56,10 +60,6 @@
       <geom name="wire_servo_bus_base_4" type="capsule" fromto="0.028200 0.000000 0.000000 0.028200 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_0" type="capsule" fromto="0.036500 0.000000 -0.008000 0.036500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="capsule" fromto="0.036500 0.000000 0.000000 -0.032500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="-0.044100 0.000000 -0.012500" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="right_wheel_servo" type="box" size="0.022700 0.012400 0.015900" pos="0.044100 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="left_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="-0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 -0.707107 0.000000"/>
-      <geom name="right_wheel_servo_boss" type="cylinder" size="0.004000 0.001400" pos="0.061400 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 0.707107 0.000000"/>
       <body name="left_rim" pos="-0.060000 0.000000 0.000000">
         <inertial pos="0.000000 0.000000 0.000000" mass="0.048600" fullinertia="3.321000e-05 3.321000e-05 6.561000e-05 -0.000000e+00 -0.000000e+00 -0.000000e+00"/>
         <joint name="left_wheel" type="hinge" pos="0 0 0" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>

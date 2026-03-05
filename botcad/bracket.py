@@ -63,15 +63,15 @@ def _bracket_outer(
         max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
         ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
 
-    # --- Shaft boss extra height ---
-    boss_extra = 0.0
-    if servo.shaft_boss_height > 0:
-        boss_extra = servo.shaft_boss_height + tol
-
     # --- Outer box dimensions ---
+    # Boss clearance extends the top face so the bracket wall covers the
+    # bearing housing cylinder that protrudes above the servo body.
     outer_x = body_x + 2 * (tol + wall)
     outer_y = body_y + 2 * (tol + wall)
-    outer_top_z = body_z / 2 + boss_extra + wall + insertion_clearance
+    boss_clearance = (
+        (servo.shaft_boss_height + tol) if servo.shaft_boss_height > 0 else 0.0
+    )
+    outer_top_z = body_z / 2 + boss_clearance + wall + insertion_clearance
     outer_bottom_z = ear_bottom_z
     outer_z = outer_top_z - outer_bottom_z
 
@@ -141,19 +141,12 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     shell = outer - pocket
 
     # --- Shaft clearance hole (circular, through +Z face) ---
-    # Horn diameter: approximate from horn mounting points spread
+    # Use horn_disc_params to get the horn radius (same loop as used for
+    # the horn disc solid, avoiding duplication).
     horn_radius = 0.011  # ~22mm diameter default for STS3215 horn
-    if servo.horn_mounting_points:
-        # Find max radial distance from shaft center
-        sx, sy, sz = servo.shaft_offset
-        max_r = 0.0
-        for mp in servo.horn_mounting_points:
-            dx = mp.pos[0] - sx
-            dy = mp.pos[1] - sy
-            r = (dx * dx + dy * dy) ** 0.5 + mp.diameter / 2
-            if r > max_r:
-                max_r = r
-        horn_radius = max_r + spec.shaft_clearance
+    params = horn_disc_params(servo)
+    if params is not None:
+        horn_radius = params.radius + spec.shaft_clearance
 
     shaft_hole = Cylinder(
         horn_radius,

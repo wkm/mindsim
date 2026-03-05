@@ -30,6 +30,7 @@ from botcad.emit.renders import (
     _joint_name,
     _servo_geom_id,
     _sweepable_joints,
+    white_background,
 )
 
 # ── Config ──
@@ -183,8 +184,7 @@ def _render_composite(
     renderer.update_scene(data, camera=cam)
     renderer.scene.flags[mujoco.mjtRndFlag.mjRND_WIREFRAME] = 1
     img_wire = renderer.render().copy()
-    mask_black = np.all(img_wire == 0, axis=2)
-    img_wire[mask_black] = 255
+    white_background(img_wire)
 
     # ── Pass 2: flat-shaded target bodies + arrow geoms ──
     model.geom_rgba[:] = saved_rgba
