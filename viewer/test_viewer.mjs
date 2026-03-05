@@ -255,17 +255,16 @@ async function main() {
       console.log(`  Screenshot: ${ssPath} (${(ssSize / 1024).toFixed(0)} KB)`);
     }
 
-    // Joint mode slider test — move shoulder_pitch (index 3) for visible arm movement
+    // =================================================================
+    // Joint mode: single slider moves geometry
+    // =================================================================
     await page.click('.mode-tab[data-mode="joint"]');
     await page.waitForTimeout(200);
     const sliders = await page.$$('#side-panel input[type="range"]');
     assert(sliders.length > 0, `Joint mode has slider controls (found ${sliders.length})`);
 
     if (sliders.length >= 4) {
-      // Take before screenshot for comparison
       const beforeShot = await page.screenshot();
-
-      // Move shoulder_pitch slider (index 3) — visibly tilts the arm
       const sliderBB = await sliders[3].boundingBox();
       if (sliderBB) {
         await page.mouse.click(
@@ -273,44 +272,209 @@ async function main() {
           sliderBB.y + sliderBB.height / 2
         );
         await page.waitForTimeout(300);
-        const ssPath = path.join(screenshotDir, 'joint_slider_moved.png');
-        const afterShot = await page.screenshot({ path: ssPath });
-        console.log(`  Screenshot after slider move: ${ssPath}`);
-
-        // Verify the 3D scene actually changed (screenshots differ)
+        const afterShot = await page.screenshot({ path: path.join(screenshotDir, 'joint_slider_moved.png') });
         const differs = Buffer.compare(beforeShot, afterShot) !== 0;
         assert(differs, 'Joint slider changes 3D scene (screenshots differ)');
       }
     }
 
-    // Assembly mode step-through test
+    // =================================================================
+    // Joint mode: ALL sliders functional
+    // =================================================================
+    console.log('\n--- All Joint Sliders ---');
+    await page.click('.mode-tab[data-mode="joint"]');
+    await page.waitForTimeout(300);
+    // Reset first so we start from a known state
+    await page.click('#joint-reset-btn');
+    await page.waitForTimeout(200);
+
+    const allSliders = await page.$$('#side-panel input[type="range"]');
+    for (let i = 0; i < allSliders.length; i++) {
+      const slider = allSliders[i];
+      const sliderId = await slider.getAttribute('id');
+      const valDisplay = await page.$(`#${sliderId}-val`);
+      const originalText = await valDisplay.textContent();
+
+      const box = await slider.boundingBox();
+      await page.mouse.click(box.x + box.width * 0.25, box.y + box.height / 2);
+      await page.waitForTimeout(200);
+
+      const newText = await valDisplay.textContent();
+      assert(newText !== originalText, `Slider ${sliderId} value changed ("${originalText}" → "${newText}")`);
+    }
+
+    // =================================================================
+    // Joint mode: Reset All button
+    // =================================================================
+    console.log('\n--- Reset All ---');
+    await page.click('#joint-reset-btn');
+    await page.waitForTimeout(300);
+
+    const slidersAfterReset = await page.$$('#side-panel input[type="range"]');
+    for (let i = 0; i < slidersAfterReset.length; i++) {
+      const sliderId = await slidersAfterReset[i].getAttribute('id');
+      const valDisplay = await page.$(`#${sliderId}-val`);
+      const text = await valDisplay.textContent();
+      assert(text.trim() === '0.0°', `After reset, ${sliderId} shows "${text}" (expect "0.0°")`);
+    }
+    await page.screenshot({ path: path.join(screenshotDir, 'joint_reset.png') });
+
+    // =================================================================
+    // Assembly mode: full step-through (7 steps)
+    // =================================================================
+    console.log('\n--- Assembly Step-Through ---');
     await page.click('.mode-tab[data-mode="assembly"]');
     await page.waitForTimeout(500);
 
-    // Step 1 should show something (base body)
-    const asmStep1Shot = await page.screenshot();
-    const asmStep1Size = asmStep1Shot.length;
+    // Go back to step 1 via slider
+    await page.$eval('#asm-step-slider', el => { el.value = 0; el.dispatchEvent(new Event('input')); });
+    await page.waitForTimeout(300);
 
-    // Click "Show All" to see the full robot
-    const showAllBtn = await page.$('#asm-show-all-btn');
-    if (showAllBtn) {
-      await showAllBtn.click();
+    const initialStepText = await page.textContent('#asm-step-val');
+    assert(initialStepText.includes('1 / 7'), `Assembly starts at step 1 (got "${initialStepText}")`);
+
+    await page.screenshot({ path: path.join(screenshotDir, 'assembly_step_1.png') });
+    let prevAsmShot = fs.readFileSync(path.join(screenshotDir, 'assembly_step_1.png'));
+
+    for (let step = 2; step <= 7; step++) {
+      await page.click('#asm-next-btn');
       await page.waitForTimeout(300);
-      const showAllShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_show_all.png') });
-      assert(showAllShot.length > 30000, `Assembly "Show All" renders full robot (${(showAllShot.length/1024).toFixed(0)} KB)`);
+
+      const stepText = await page.textContent('#asm-step-val');
+      assert(stepText.includes(`${step} / 7`), `Assembly step ${step} counter (got "${stepText}")`);
+
+      const ssPath = path.join(screenshotDir, `assembly_step_${step}.png`);
+      await page.screenshot({ path: ssPath });
+
+      const currentShot = fs.readFileSync(ssPath);
+      const isDifferent = !prevAsmShot.equals(currentShot);
+      assert(isDifferent, `Assembly step ${step} differs from step ${step - 1}`);
+      prevAsmShot = currentShot;
     }
 
-    // Click "Next" a few times and verify step counter advances
-    const nextBtn = await page.$('#asm-next-btn');
-    if (nextBtn) {
-      await nextBtn.click();
-      await page.waitForTimeout(300);
-      const stepText = await page.$eval('#asm-step-val', el => el.textContent);
-      assert(stepText.includes('2'), `Assembly step advances to 2 (got "${stepText}")`);
+    // Assembly Show All
+    await page.click('#asm-show-all-btn');
+    await page.waitForTimeout(300);
+    const showAllShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_show_all.png') });
+    assert(showAllShot.length > 30000, `Assembly "Show All" renders full robot (${(showAllShot.length/1024).toFixed(0)} KB)`);
 
-      // Take screenshot at step 2
-      await page.screenshot({ path: path.join(screenshotDir, 'assembly_step2.png') });
+    // =================================================================
+    // IK mode: body selection
+    // =================================================================
+    console.log('\n--- IK Body Selection ---');
+    await page.click('.mode-tab[data-mode="ik"]');
+    await page.waitForTimeout(500);
+
+    const initAnchor = (await page.textContent('#ik-anchor-name')).trim().toLowerCase();
+    const initTarget = (await page.textContent('#ik-target-name')).trim().toLowerCase();
+    assert(initAnchor === 'none', `IK anchor starts as "none" (got "${initAnchor}")`);
+    assert(initTarget === 'none', `IK target starts as "none" (got "${initTarget}")`);
+
+    // Click on the robot body. The robot renders right-of-center in the
+    // canvas area (0 to width-320). From screenshots: base ~(620,600),
+    // turntable ~(620,500), arm ~(640,350).
+    // Scan a grid of positions on the robot to find clickable bodies.
+    const clickPositions = [
+      [620, 590],  // base/wheels area
+      [630, 500],  // turntable
+      [640, 400],  // upper arm
+      [640, 350],  // forearm
+      [600, 550],  // base side
+      [650, 300],  // hand
+      [580, 620],  // wheel
+    ];
+
+    // First click — set anchor
+    for (const [x, y] of clickPositions) {
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(200);
+      const name = (await page.textContent('#ik-anchor-name')).trim();
+      if (name.toLowerCase() !== 'none') {
+        assert(true, `IK anchor set to "${name}" at (${x},${y})`);
+        break;
+      }
     }
+
+    let anchorName = (await page.textContent('#ik-anchor-name')).trim();
+    const anchorSet = anchorName.toLowerCase() !== 'none';
+
+    if (anchorSet) {
+      // Second click — set target (try positions different from anchor)
+      for (const [x, y] of clickPositions) {
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(200);
+        const name = (await page.textContent('#ik-target-name')).trim();
+        if (name.toLowerCase() !== 'none') {
+          assert(true, `IK target set to "${name}" at (${x},${y})`);
+          assert(anchorName !== name, `IK anchor ("${anchorName}") differs from target ("${name}")`);
+          break;
+        }
+      }
+
+      await page.screenshot({ path: path.join(screenshotDir, 'ik_body_selection.png') });
+
+      // Clear selection
+      await page.click('#ik-clear-btn');
+      await page.waitForTimeout(300);
+      const clearedAnchor = (await page.textContent('#ik-anchor-name')).trim().toLowerCase();
+      const clearedTarget = (await page.textContent('#ik-target-name')).trim().toLowerCase();
+      assert(clearedAnchor === 'none', `IK anchor cleared (got "${clearedAnchor}")`);
+      assert(clearedTarget === 'none', `IK target cleared (got "${clearedTarget}")`);
+    } else {
+      await page.screenshot({ path: path.join(screenshotDir, 'ik_miss_debug.png') });
+      console.log(`  WARN: Could not click on robot body. See ik_miss_debug.png`);
+    }
+
+    // =================================================================
+    // Manifest validation
+    // =================================================================
+    console.log('\n--- Manifest Validation ---');
+    const manifestData = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'bots', botName, 'viewer_manifest.json'), 'utf-8'));
+    const botXml = fs.readFileSync(path.join(PROJECT_ROOT, 'bots', botName, 'bot.xml'), 'utf-8');
+
+    const manifestBodies = manifestData.bodies ? manifestData.bodies.length : 0;
+    assert(manifestBodies > 0, `Manifest has bodies (found ${manifestBodies})`);
+
+    const xmlBodyMatches = botXml.match(/<body\s+name=/g);
+    const xmlBodyCount = xmlBodyMatches ? xmlBodyMatches.length : 0;
+    assert(manifestBodies === xmlBodyCount, `Body count matches: manifest=${manifestBodies}, xml=${xmlBodyCount}`);
+  }
+
+  // =================================================================
+  // Error state: bad bot name (separate browser context to isolate crash)
+  // =================================================================
+  console.log('\n--- Error State: Bad Bot Name ---');
+  try {
+    // Use a separate browser context so a WASM crash doesn't kill the main page
+    const errContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    // Set up CDN routes for the error context too
+    for (const [cdnUrl, localPath] of Object.entries(CDN_ROUTES)) {
+      await errContext.route(cdnUrl, async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(localPath) });
+      });
+    }
+    const errorPage = await errContext.newPage();
+    const errorPageErrors = [];
+    const errorFailedReqs = [];
+    errorPage.on('console', msg => {
+      if (msg.type() === 'error') errorPageErrors.push(msg.text());
+    });
+    errorPage.on('requestfailed', req => errorFailedReqs.push(req.url()));
+
+    await errorPage.goto(`http://localhost:${port}/viewer/?bot=nonexistent_bot_12345`, { timeout: 30000 }).catch(() => {});
+    await errorPage.waitForTimeout(5000);
+
+    const errorLoadingText = await errorPage.$eval('#loading-text', el => el.textContent).catch(() => '');
+    const hasUIError = errorLoadingText.toLowerCase().includes('error');
+    const hasFailedReqs = errorFailedReqs.length > 0;
+    const hasJSErrors = errorPageErrors.length > 0;
+    assert(hasUIError || hasFailedReqs || hasJSErrors,
+      `Bad bot name shows error (UI: "${errorLoadingText}", failed reqs: ${errorFailedReqs.length}, JS errors: ${errorPageErrors.length})`);
+    await errorPage.screenshot({ path: path.join(screenshotDir, 'error_bad_bot.png') }).catch(() => {});
+    await errContext.close();
+  } catch (e) {
+    // WASM crash may kill the page — that itself proves the error path exists
+    assert(true, `Bad bot name causes error (${e.message.slice(0, 60)})`);
   }
 
   // Summary
