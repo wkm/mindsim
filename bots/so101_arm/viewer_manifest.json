@@ -1,0 +1,286 @@
+{
+  "bot_name": "so101_arm",
+  "bodies": [
+    {
+      "name": "base",
+      "mesh": "base.stl",
+      "parent": null
+    },
+    {
+      "name": "shoulder",
+      "mesh": "shoulder.stl",
+      "parent": "base",
+      "joint": "shoulder_pan"
+    },
+    {
+      "name": "upper_arm",
+      "mesh": "upper_arm.stl",
+      "parent": "shoulder",
+      "joint": "shoulder_lift"
+    },
+    {
+      "name": "forearm",
+      "mesh": "forearm.stl",
+      "parent": "upper_arm",
+      "joint": "elbow_flex"
+    },
+    {
+      "name": "wrist",
+      "mesh": "wrist.stl",
+      "parent": "forearm",
+      "joint": "wrist_flex"
+    },
+    {
+      "name": "hand",
+      "mesh": "hand.stl",
+      "parent": "wrist",
+      "joint": "wrist_roll"
+    },
+    {
+      "name": "jaw",
+      "mesh": "jaw.stl",
+      "parent": "hand",
+      "joint": "gripper"
+    }
+  ],
+  "joints": [
+    {
+      "name": "shoulder_pan",
+      "parent_body": "base",
+      "child_body": "shoulder",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -1.92,
+        1.92
+      ],
+      "range_deg": [
+        -110.0,
+        110.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.0624
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "shoulder_lift",
+      "parent_body": "shoulder",
+      "child_body": "upper_arm",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "range": [
+        -1.75,
+        1.75
+      ],
+      "range_deg": [
+        -100.3,
+        100.3
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.054
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "elbow_flex",
+      "parent_body": "upper_arm",
+      "child_body": "forearm",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "range": [
+        -1.69,
+        1.69
+      ],
+      "range_deg": [
+        -96.8,
+        96.8
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.1126
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "wrist_flex",
+      "parent_body": "forearm",
+      "child_body": "wrist",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "range": [
+        -1.66,
+        1.66
+      ],
+      "range_deg": [
+        -95.1,
+        95.1
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.1349
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "wrist_roll",
+      "parent_body": "wrist",
+      "child_body": "hand",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -2.74,
+        2.84
+      ],
+      "range_deg": [
+        -157.0,
+        162.7
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.0611
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "gripper",
+      "parent_body": "hand",
+      "child_body": "jaw",
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "range": [
+        -0.175,
+        1.745
+      ],
+      "range_deg": [
+        -10.0,
+        100.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.0234
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    }
+  ],
+  "assembly_steps": [
+    {
+      "step": 1,
+      "title": "base",
+      "body": "base",
+      "components": [
+        {
+          "label": "controller",
+          "component": "WaveshareSerialBus"
+        }
+      ],
+      "description": "Base structure \u2014 mount controller"
+    },
+    {
+      "step": 2,
+      "title": "shoulder",
+      "body": "shoulder",
+      "servo": {
+        "joint": "shoulder_pan",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_pan"
+    },
+    {
+      "step": 3,
+      "title": "upper_arm",
+      "body": "upper_arm",
+      "servo": {
+        "joint": "shoulder_lift",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_lift"
+    },
+    {
+      "step": 4,
+      "title": "forearm",
+      "body": "forearm",
+      "servo": {
+        "joint": "elbow_flex",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint elbow_flex"
+    },
+    {
+      "step": 5,
+      "title": "wrist",
+      "body": "wrist",
+      "servo": {
+        "joint": "wrist_flex",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint wrist_flex"
+    },
+    {
+      "step": 6,
+      "title": "hand",
+      "body": "hand",
+      "servo": {
+        "joint": "wrist_roll",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint wrist_roll"
+    },
+    {
+      "step": 7,
+      "title": "jaw",
+      "body": "jaw",
+      "servo": {
+        "joint": "gripper",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint gripper"
+    }
+  ],
+  "ik_chains": [
+    {
+      "name": "chain_0",
+      "joints": [
+        "shoulder_pan",
+        "shoulder_lift",
+        "elbow_flex",
+        "wrist_flex",
+        "wrist_roll",
+        "gripper"
+      ],
+      "end_effector": "jaw"
+    }
+  ]
+}
