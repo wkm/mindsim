@@ -252,6 +252,8 @@ def _body_waypoints(body: Body, start: Vec3, end: Vec3) -> list[Vec3]:
         return _tube_waypoints(start, end)
     if body.shape == "box":
         return _box_waypoints(start, end)
+    if body.shape == "jaw":
+        return []  # jaw is a leaf — no internal routing
     return []
 
 
@@ -395,8 +397,10 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
     if bot.root is None:
         return route
 
-    # Find camera body and CSI port (look for OV5647 specifically,
+    # Find camera body and CSI port (look for CameraSpec instances,
     # not just any CSI port — the Pi also has one)
+    from botcad.component import CameraSpec
+
     camera_body: Body | None = None
     camera_pos: Vec3 | None = None
 
@@ -405,7 +409,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         if camera_body is not None:
             return
         for mount in body.mounts:
-            if mount.component.name == "OV5647":
+            if isinstance(mount.component, CameraSpec):
                 for port in mount.component.wire_ports:
                     if port.bus_type == "csi":
                         camera_body = body

@@ -12,7 +12,7 @@ import math
 
 import pytest
 
-from botcad.component import Component, MountingEar, MountPoint, Vec3
+from botcad.component import CameraSpec, Component, MountingEar, MountPoint, Vec3
 
 # ── TestMountPoint ──
 
@@ -292,3 +292,108 @@ class TestBotBuild:
                 assert _is_unit_vector(mount.resolved_insertion_axis), (
                     f"{body.name}/{mount.label} axis not unit: {mount.resolved_insertion_axis}"
                 )
+
+    def test_so101_arm_builds(self):
+        import importlib
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "so101_arm_design", "bots/so101_arm/design.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["so101_arm_design"] = mod
+        spec.loader.exec_module(mod)
+
+        bot = mod.build()
+        bot.solve()
+
+        # 7 bodies: base, turntable, upper_arm, forearm, wrist, wrist_roll, jaw
+        assert len(bot.all_bodies) == 7
+        # 6 joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
+        assert len(bot.all_joints) == 6
+
+        for body in bot.all_bodies:
+            for mount in body.mounts:
+                assert _is_unit_vector(mount.resolved_insertion_axis), (
+                    f"{body.name}/{mount.label} axis not unit: {mount.resolved_insertion_axis}"
+                )
+
+
+# ── TestCameraSpec ──
+
+
+class TestCameraSpec:
+    def test_ov5647_is_camera_spec(self):
+        from botcad.components.camera import OV5647
+
+        cam = OV5647()
+        assert isinstance(cam, CameraSpec)
+        assert cam.fov_deg == 72.0
+
+    def test_picamera2_is_camera_spec(self):
+        from botcad.components.camera import PiCamera2
+
+        cam = PiCamera2()
+        assert isinstance(cam, CameraSpec)
+        assert cam.fov_deg == 62.2
+        assert cam.resolution == (3280, 2464)
+
+    def test_camera_spec_inherits_component(self):
+        from botcad.components.camera import PiCamera2
+
+        cam = PiCamera2()
+        assert isinstance(cam, Component)
+        assert cam.name == "PiCamera2"
+
+
+# ── TestGripJoint ──
+
+
+class TestGripJoint:
+    def test_grip_defaults_false(self):
+        from botcad.components.servo import STS3215
+        from botcad.skeleton import Joint
+
+        j = Joint(
+            name="test",
+            servo=STS3215(),
+            axis=(1.0, 0.0, 0.0),
+            pos=(0.0, 0.0, 0.0),
+        )
+        assert j.grip is False
+
+    def test_grip_set_true(self):
+        from botcad.components.servo import STS3215
+        from botcad.skeleton import Bot
+
+        bot = Bot("test_grip")
+        base = bot.body("base")
+        j = base.joint("gripper", servo=STS3215(), grip=True)
+        assert j.grip is True
+
+
+# ── TestJawShape ──
+
+
+class TestJawShape:
+    def test_jaw_dimensions(self):
+        from botcad.skeleton import Body
+
+        b = Body(
+            name="jaw",
+            shape="jaw",
+            jaw_length=0.04,
+            jaw_width=0.03,
+            jaw_thickness=0.005,
+        )
+        dims = b.dimensions
+        assert dims == (0.03, 0.005, 0.04)  # X=width, Y=thickness, Z=length
+
+    def test_jaw_defaults(self):
+        from botcad.skeleton import Body
+
+        b = Body(name="jaw", shape="jaw")
+        dims = b.dimensions
+        assert dims[0] == 0.03  # default width
+        assert dims[1] == 0.005  # default thickness
+        assert dims[2] == 0.04  # default length

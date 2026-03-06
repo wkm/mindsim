@@ -62,6 +62,14 @@ class Component:
 
 
 @dataclass(frozen=True)
+class CameraSpec(Component):
+    """A camera module with optical parameters."""
+
+    fov_deg: float = 72.0  # diagonal field of view
+    resolution: tuple[int, int] = (640, 480)  # width x height pixels
+
+
+@dataclass(frozen=True)
 class ServoSpec(Component):
     """A servo motor with mechanical and electrical specs.
 
