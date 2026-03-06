@@ -53,9 +53,7 @@ def make_component_solid(component: Component):
 
     # Servos: use body_dimensions (without ears/horn)
     if isinstance(component, ServoSpec):
-        bd = component.body_dimensions
-        if any(x > 0 for x in bd):
-            dims = bd
+        dims = component.effective_body_dims
 
     return Box(
         dims[0],
@@ -132,6 +130,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
 
     # --- Servo solids (purchased parts, shown seated in brackets) ---
     servo_count = 0
+    servo_solid_cache: dict[str, object] = {}
     for body in bot.all_bodies:
         body_world = world_positions[body.name]
         for joint in body.joints:
@@ -141,9 +140,10 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             )
             euler = _quat_to_euler(quat)
 
-            # Build servo solid, place in body-local frame, then world frame
-            solid = servo_solid(servo)
-            solid = solid.moved(Location(center, euler))
+            # Cache base solid by servo model (same geometry for all STS3215s)
+            if servo.name not in servo_solid_cache:
+                servo_solid_cache[servo.name] = servo_solid(servo)
+            solid = servo_solid_cache[servo.name].moved(Location(center, euler))
             solid = solid.moved(Location(body_world))
             solid = _as_solid(solid)
             solid.color = Color(0.15, 0.15, 0.15)  # dark gray
