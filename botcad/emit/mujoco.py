@@ -89,6 +89,20 @@ def _build_bot_xml(bot: Bot) -> str:
                 gear=f"{joint.servo.stall_torque:.2f}",
                 ctrlrange="-1 1",
             )
+        elif joint.grip:
+            # Gripper: position actuator with reduced gain and force limit
+            # for compliant grasping (jaw yields on contact).
+            lo, hi = joint.effective_range
+            grip_force = joint.servo.stall_torque * 0.2
+            SubElement(
+                actuator_el,
+                "position",
+                name=f"{joint.name}_motor",
+                joint=joint.name,
+                kp=f"{joint.servo.kp * 0.3:.1f}",
+                ctrlrange=f"{lo:.4f} {hi:.4f}",
+                forcerange=f"{-grip_force:.2f} {grip_force:.2f}",
+            )
         else:
             # Position servo: position actuator with kp from servo specs.
             # forcerange limits output to actual servo stall torque so
@@ -437,16 +451,19 @@ from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
 
 def _emit_camera(parent_el: Element, body: Body) -> None:
     """Emit camera element if this body has a camera mounted."""
+    from botcad.component import CameraSpec
+
     for mount in body.mounts:
-        if mount.component.name == "OV5647":
+        if isinstance(mount.component, CameraSpec):
+            cam = mount.component
             pos = mount.resolved_pos
             # Camera looks forward (+Y in MuJoCo convention)
             # Rotate 180° around Y to flip the image right-side up
             SubElement(
                 parent_el,
                 "camera",
-                name="camera_1_cam",
-                fovy="72.0",
+                name=f"{mount.label}_cam",
+                fovy=f"{cam.fov_deg:.1f}",
                 pos=_fmt_vec3(pos),
                 euler=f"0 {math.pi} 0",
             )
@@ -550,6 +567,8 @@ def _body_color_rgb(body: Body) -> tuple[float, float, float]:
         return (0.15, 0.15, 0.15)  # dark gray: wheels
     if body.shape == "tube":
         return (0.7, 0.7, 0.7)  # light gray: structural tubes
+    if body.shape == "jaw":
+        return (0.85, 0.85, 0.85)  # light gray: gripper jaw
     return (0.9, 0.9, 0.9)  # off-white: default
 
 

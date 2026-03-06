@@ -64,6 +64,7 @@ class Joint:
     axis: Vec3  # rotation axis in parent frame
     pos: Vec3  # joint position relative to parent body origin
     range_rad: tuple[float, float] | None = None  # override servo default
+    grip: bool = False  # force-limited gripper actuator
     child: Body | None = None
 
     @property
@@ -82,6 +83,9 @@ class Joint:
         height: float = 0.0,
         length: float = 0.0,
         outer_r: float = 0.0,
+        jaw_length: float = 0.0,
+        jaw_width: float = 0.0,
+        jaw_thickness: float = 0.0,
         padding: float = 0.005,
         dimensions: Vec3 | None = None,
         module: Module | None = None,
@@ -95,6 +99,9 @@ class Joint:
             height=height,
             length=length,
             outer_r=outer_r,
+            jaw_length=jaw_length,
+            jaw_width=jaw_width,
+            jaw_thickness=jaw_thickness,
             padding=padding,
             explicit_dimensions=dimensions,
             module=module,
@@ -112,12 +119,15 @@ class Body:
     """
 
     name: str
-    shape: str = "box"  # box, cylinder, tube, sphere
+    shape: str = "box"  # box, cylinder, tube, sphere, jaw
     radius: float = 0.0
     width: float = 0.0
     height: float = 0.0
     length: float = 0.0
     outer_r: float = 0.0
+    jaw_length: float = 0.0
+    jaw_width: float = 0.0
+    jaw_thickness: float = 0.0
     padding: float = 0.005  # clearance around components (meters)
     explicit_dimensions: Vec3 | None = None
     module: Module | None = None
@@ -159,6 +169,11 @@ class Body:
         if self.shape == "sphere":
             r = self.radius or 0.02
             return (r * 2, r * 2, r * 2)
+        if self.shape == "jaw":
+            jl = self.jaw_length or 0.04
+            jw = self.jaw_width or 0.03
+            jt = self.jaw_thickness or 0.005
+            return (jw, jt, jl)  # X=width, Y=thickness, Z=length
         # box: use explicit or small default
         return (
             self.width or 0.05,
@@ -192,10 +207,13 @@ class Body:
         axis: str | Vec3 = "z",
         pos: Vec3 = (0.0, 0.0, 0.0),
         range: tuple[float, float] | None = None,
+        grip: bool = False,
     ) -> Joint:
         """Add a joint (with servo) connecting to a new child body."""
         axis_vec = _parse_axis(axis)
-        j = Joint(name=name, servo=servo, axis=axis_vec, pos=pos, range_rad=range)
+        j = Joint(
+            name=name, servo=servo, axis=axis_vec, pos=pos, range_rad=range, grip=grip
+        )
         self.joints.append(j)
         return j
 

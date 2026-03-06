@@ -282,6 +282,19 @@ def _as_solid(shape):
     return shape
 
 
+def _ensure_solid(shape):
+    """Keep only the largest solid when a boolean op fragments the body."""
+    from build123d import Solid
+
+    if isinstance(shape, Solid):
+        return shape
+    # Compound or ShapeList — pick the largest piece by volume
+    solids = shape.solids() if hasattr(shape, "solids") else list(shape)
+    if not solids:
+        return shape
+    return max(solids, key=lambda s: abs(s.volume))
+
+
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
 ):
@@ -330,6 +343,22 @@ def _make_body_solid(
     elif body.shape == "sphere":
         r = body.radius or dims[0] / 2
         shell = Sphere(r)
+
+    elif body.shape == "jaw":
+        jw = body.jaw_width or dims[0]
+        jt = body.jaw_thickness or dims[1]
+        jl = body.jaw_length or dims[2]
+        knuckle_h = 0.008  # thicker base for horn attachment
+        # Knuckle at base (z=0 to z=knuckle_h)
+        knuckle = Box(
+            jw, jt * 2, knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
+        )
+        # Jaw plate extending from knuckle to full length
+        plate = Box(
+            jw, jt, jl - knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
+        )
+        plate = plate.locate(Location((0, 0, knuckle_h)))
+        shell = knuckle + plate
 
     else:
         shell = Box(dims[0], dims[1], dims[2], align=C)
@@ -382,6 +411,7 @@ def _make_body_solid(
             clearance = _child_clearance_volume(joint.child, joint)
             if clearance is not None:
                 shell = shell - clearance
+                shell = _ensure_solid(shell)
 
     # Cut wire channels along routed cable paths
     if wire_segments:
@@ -389,6 +419,7 @@ def _make_body_solid(
             channel = _wire_channel(seg, bus_type)
             if channel is not None:
                 shell = shell - channel
+                shell = _ensure_solid(shell)
 
     return shell
 
@@ -478,6 +509,13 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
     elif child.shape == "sphere":
         r = (child.radius or dims[0] / 2) + tol
         return Sphere(r)
+
+    elif child.shape == "jaw":
+        jw = (child.jaw_width or dims[0]) + 2 * tol
+        jt = (child.jaw_thickness or dims[1]) * 2 + 2 * tol  # knuckle is 2x thickness
+        jl = (child.jaw_length or dims[2]) + tol
+        outer = Box(jw, jt, jl, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        return outer
 
     else:  # box
         return Box(dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol, align=C)
