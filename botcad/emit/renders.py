@@ -306,61 +306,89 @@ def render_closeups(
 # ── Step 3 & 4: Joint sweep filmstrip with collision detection ──
 
 
-def _build_sweep_model(bot_xml: Path) -> tuple[mujoco.MjModel, mujoco.MjData]:
-    """Load bot.xml a second time and add invisible collision capsules to
-    non-wheel bodies for self-collision detection during sweeps."""
-    spec = mujoco.MjSpec.from_file(str(bot_xml))
-    _configure_spec(spec)
-
-    # Walk spec bodies, add collision geoms to each non-world body
-    for body in spec.bodies:
-        _add_collision_geoms_recursive(body)
-
-    model = spec.compile()
-    data = mujoco.MjData(model)
-    return model, data
+def _get_mesh_body_ids(model: mujoco.MjModel) -> list[int]:
+    """Return body IDs that have mesh geoms (i.e., have STL geometry)."""
+    mesh_bodies = set()
+    for gid in range(model.ngeom):
+        if model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH:
+            mesh_bodies.add(model.geom_bodyid[gid])
+    return sorted(mesh_bodies)
 
 
-def _add_collision_geoms_recursive(body):
-    """Recursively add invisible collision capsules to bodies that have mesh geoms."""
-    # Check if this body has any mesh geoms (visual geometry)
-    has_mesh = False
-    for geom in body.geoms:
-        if geom.type == mujoco.mjtGeom.mjGEOM_MESH:
-            has_mesh = True
-            break
+def _check_sweep_collision(
+    meshes_dir: Path,
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    swept_bid: int,
+    joint_axis: np.ndarray,
+    mesh_body_ids: list[int],
+    mesh_cache: dict,
+) -> bool:
+    """Check if swept body collides with any other body using trimesh.
 
-    if has_mesh:
-        # Check if this is a wheel body (has a continuous hinge — range==[0,0])
-        is_wheel = False
-        for joint in body.joints:
-            if joint.type == mujoco.mjtJoint.mjJNT_HINGE:
-                lo, hi = joint.range
-                if lo == 0.0 and hi == 0.0:
-                    is_wheel = True
-                    break
+    Checks against all mesh bodies except the direct parent at the joint
+    interface (which shares a flush face). Uses 0.5mm offset along joint axis
+    for the parent to ignore flush-face contacts.
+    """
+    import trimesh
 
-        if not is_wheel:
-            # Add an invisible collision box approximating the body
-            g = body.add_geom()
-            g.type = mujoco.mjtGeom.mjGEOM_BOX
-            g.size = [0.02, 0.02, 0.02]  # conservative default
-            g.contype = 2
-            g.conaffinity = 2
-            g.rgba = [1, 0, 0, 0]  # invisible
-            g.group = 3  # hidden visual group
+    parent_bid = model.body_parentid[swept_bid]
+    swept_name = _body_name(model, swept_bid)
+    swept_stl = meshes_dir / f"{swept_name}.stl"
+    if not swept_stl.exists():
+        return False
 
-    # Recurse into child bodies
-    for child_body in body.bodies:
-        _add_collision_geoms_recursive(child_body)
+    # Load and cache swept body mesh
+    if str(swept_stl) not in mesh_cache:
+        mesh_cache[str(swept_stl)] = trimesh.load(swept_stl, force="mesh")
+
+    for other_bid in mesh_body_ids:
+        if other_bid == swept_bid:
+            continue
+        # Skip world body (bid 0)
+        if other_bid == 0:
+            continue
+
+        other_name = _body_name(model, other_bid)
+        if other_name is None:
+            continue
+        other_stl = meshes_dir / f"{other_name}.stl"
+        if not other_stl.exists():
+            continue
+
+        if str(other_stl) not in mesh_cache:
+            mesh_cache[str(other_stl)] = trimesh.load(other_stl, force="mesh")
+
+        # Copy meshes before transforming (don't mutate cache)
+        swept_mesh = mesh_cache[str(swept_stl)].copy()
+        other_mesh = mesh_cache[str(other_stl)].copy()
+
+        # Transform both to world frame
+        for bid, mesh in [(swept_bid, swept_mesh), (other_bid, other_mesh)]:
+            T = np.eye(4)
+            T[:3, :3] = data.xmat[bid].reshape(3, 3)
+            T[:3, 3] = data.xpos[bid]
+            mesh.apply_transform(T)
+
+        # For the direct parent, offset along joint axis to ignore flush-face
+        # contacts at the designed interface
+        if other_bid == parent_bid:
+            swept_mesh.apply_translation(joint_axis * 0.0005)
+
+        manager = trimesh.collision.CollisionManager()
+        manager.add_object("other", other_mesh)
+        if manager.in_collision_single(swept_mesh):
+            return True
+
+    return False
 
 
 def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -> Path:
     """Render per-joint filmstrip across range of motion with collision detection."""
     t0 = time.perf_counter()
 
-    # Build sweep model with collision geoms
-    model, data = _build_sweep_model(bot_xml)
+    # Use the normal model (no fake collision geoms needed)
+    model, data = _load_model(bot_xml)
     renderer = mujoco.Renderer(model, SWEEP_W, SWEEP_H)
 
     sweep_joints = _sweepable_joints(model)
@@ -370,6 +398,10 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
         print("  sweeps: no sweepable joints found, skipping")
         return output_dir / "test_sweep.png"
 
+    meshes_dir = bot_xml.parent / "meshes"
+    mesh_cache: dict = {}
+    mesh_body_ids = _get_mesh_body_ids(model)
+
     strips: list[tuple[str, list[Image.Image], list[str], list[bool]]] = []
 
     for jid in sweep_joints:
@@ -377,6 +409,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
         child_bid = _child_body_id(model, jid)
         lo, hi = model.jnt_range[jid]
         qposadr = model.jnt_qposadr[jid]
+        joint_axis = model.jnt_axis[jid].copy()
         angles = np.linspace(lo, hi, SWEEP_FRAMES)
 
         frames = []
@@ -404,16 +437,16 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
             frames.append(Image.fromarray(img))
             frame_labels.append(f"{math.degrees(angle):+.0f}°")
 
-            # Check for self-collisions among contype=2 geoms
-            has_collision = False
-            for ci in range(data.ncon):
-                contact = data.contact[ci]
-                if contact.dist < 0:
-                    g1_contype = model.geom_contype[contact.geom1]
-                    g2_contype = model.geom_contype[contact.geom2]
-                    if g1_contype == 2 and g2_contype == 2:
-                        has_collision = True
-                        break
+            # Check for collisions using trimesh with actual STL meshes
+            has_collision = _check_sweep_collision(
+                meshes_dir,
+                model,
+                data,
+                child_bid,
+                joint_axis,
+                mesh_body_ids,
+                mesh_cache,
+            )
             collisions.append(has_collision)
 
         strips.append((jname, frames, frame_labels, collisions))
