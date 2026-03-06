@@ -7,15 +7,15 @@
       "parent": null
     },
     {
-      "name": "shoulder",
-      "mesh": "shoulder.stl",
+      "name": "turntable",
+      "mesh": "turntable.stl",
       "parent": "base",
       "joint": "shoulder_pan"
     },
     {
       "name": "upper_arm",
       "mesh": "upper_arm.stl",
-      "parent": "shoulder",
+      "parent": "turntable",
       "joint": "shoulder_lift"
     },
     {
@@ -31,15 +31,15 @@
       "joint": "wrist_flex"
     },
     {
-      "name": "hand",
-      "mesh": "hand.stl",
+      "name": "wrist_roll",
+      "mesh": "wrist_roll.stl",
       "parent": "wrist",
       "joint": "wrist_roll"
     },
     {
       "name": "jaw",
       "mesh": "jaw.stl",
-      "parent": "hand",
+      "parent": "wrist_roll",
       "joint": "gripper"
     }
   ],
@@ -47,7 +47,7 @@
     {
       "name": "shoulder_pan",
       "parent_body": "base",
-      "child_body": "shoulder",
+      "child_body": "turntable",
       "axis": [
         0.0,
         0.0,
@@ -64,32 +64,32 @@
       "pos": [
         0.0,
         0.0,
-        0.0624
+        0.031
       ],
       "servo": "STS3215",
       "continuous": false
     },
     {
       "name": "shoulder_lift",
-      "parent_body": "shoulder",
+      "parent_body": "turntable",
       "child_body": "upper_arm",
       "axis": [
-        0.0,
         1.0,
+        0.0,
         0.0
       ],
       "range": [
-        -1.75,
-        1.75
+        -1.745,
+        1.745
       ],
       "range_deg": [
-        -100.3,
-        100.3
+        -100.0,
+        100.0
       ],
       "pos": [
         0.0,
         0.0,
-        0.054
+        0.02
       ],
       "servo": "STS3215",
       "continuous": false
@@ -99,8 +99,8 @@
       "parent_body": "upper_arm",
       "child_body": "forearm",
       "axis": [
-        0.0,
         1.0,
+        0.0,
         0.0
       ],
       "range": [
@@ -114,7 +114,7 @@
       "pos": [
         0.0,
         0.0,
-        0.1126
+        0.116
       ],
       "servo": "STS3215",
       "continuous": false
@@ -124,22 +124,22 @@
       "parent_body": "forearm",
       "child_body": "wrist",
       "axis": [
-        0.0,
         1.0,
+        0.0,
         0.0
       ],
       "range": [
-        -1.66,
-        1.66
+        -1.658,
+        1.658
       ],
       "range_deg": [
-        -95.1,
-        95.1
+        -95.0,
+        95.0
       ],
       "pos": [
         0.0,
         0.0,
-        0.1349
+        0.135
       ],
       "servo": "STS3215",
       "continuous": false
@@ -147,35 +147,35 @@
     {
       "name": "wrist_roll",
       "parent_body": "wrist",
-      "child_body": "hand",
+      "child_body": "wrist_roll",
       "axis": [
         0.0,
         0.0,
         1.0
       ],
       "range": [
-        -2.74,
-        2.84
+        -2.744,
+        2.841
       ],
       "range_deg": [
-        -157.0,
-        162.7
+        -157.2,
+        162.8
       ],
       "pos": [
         0.0,
         0.0,
-        0.0611
+        0.032
       ],
       "servo": "STS3215",
       "continuous": false
     },
     {
       "name": "gripper",
-      "parent_body": "hand",
+      "parent_body": "wrist_roll",
       "child_body": "jaw",
       "axis": [
-        0.0,
         1.0,
+        0.0,
         0.0
       ],
       "range": [
@@ -189,7 +189,7 @@
       "pos": [
         0.0,
         0.0,
-        0.0234
+        0.018
       ],
       "servo": "STS3215",
       "continuous": false
@@ -202,16 +202,20 @@
       "body": "base",
       "components": [
         {
-          "label": "controller",
-          "component": "WaveshareSerialBus"
+          "label": "pi",
+          "component": "RaspberryPiZero2W"
+        },
+        {
+          "label": "battery",
+          "component": "LiPo2S-1000"
         }
       ],
-      "description": "Base structure \u2014 mount controller"
+      "description": "Base structure \u2014 mount pi, battery"
     },
     {
       "step": 2,
-      "title": "shoulder",
-      "body": "shoulder",
+      "title": "turntable",
+      "body": "turntable",
       "servo": {
         "joint": "shoulder_pan",
         "model": "STS3215"
@@ -250,8 +254,14 @@
     },
     {
       "step": 6,
-      "title": "hand",
-      "body": "hand",
+      "title": "wrist_roll",
+      "body": "wrist_roll",
+      "components": [
+        {
+          "label": "camera",
+          "component": "PiCamera2"
+        }
+      ],
       "servo": {
         "joint": "wrist_roll",
         "model": "STS3215"

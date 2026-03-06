@@ -318,7 +318,7 @@ def servo_solid(servo: ServoSpec):
         for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
             # Flange spans the full X-extent of the ear positions
             xs = [e.pos[0] for e in ears]
-            hole_r = ears[0].hole_diameter / 2
+            hole_r = ears[0].diameter / 2
             flange_x_min = min(xs) - hole_r - 0.001
             flange_x_max = max(xs) + hole_r + 0.001
             flange_x = flange_x_max - flange_x_min
