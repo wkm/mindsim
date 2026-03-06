@@ -6,6 +6,8 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from botcad.component import CameraSpec
+
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot
 
@@ -47,10 +49,10 @@ def emit_assembly_guide(bot: Bot, output_dir: Path) -> None:
     has_controller = False
     for body in bot.all_bodies:
         for mount in body.mounts:
-            if mount.component.name == "RaspberryPiZero2W":
-                has_pi = True
-            elif mount.component.name == "OV5647":
+            if isinstance(mount.component, CameraSpec):
                 has_camera = True
+            elif mount.component.name == "RaspberryPiZero2W":
+                has_pi = True
             elif mount.component.name == "WaveshareSerialBus":
                 has_controller = True
 
@@ -348,8 +350,6 @@ def emit_assembly_guide_for_module(
     lines.append("## Joints\n")
     for j in joints:
         lo, hi = j.effective_range
-        import math
-
         lines.append(
             f"- **{j.name}** — {j.servo.name}, "
             f"{math.degrees(lo):.0f}° to {math.degrees(hi):.0f}°"

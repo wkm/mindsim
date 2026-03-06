@@ -212,8 +212,9 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             # Cache base solid by servo model (same geometry for all STS3215s)
             if servo.name not in servo_solid_cache:
                 servo_solid_cache[servo.name] = servo_solid(servo)
-            solid = servo_solid_cache[servo.name].moved(Location(center, euler))
-            solid = solid.moved(Location(body_world))
+            solid = servo_solid_cache[servo.name].moved(
+                Location(body_world) * Location(center, euler)
+            )
             solid = _as_solid(solid)
             solid.color = Color(0.15, 0.15, 0.15)  # dark gray
             solid.label = f"servo_{joint.name}"

@@ -38,6 +38,7 @@ Battery (LiPo 2S, 7.4V)
 
 Raspberry Pi Zero 2W
   ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
+  └── CSI connector → Camera ribbon cable → OV5647
 
 Servo Daisy Chain:
   Pi UART → ID1(shoulder_pan) → ID2(shoulder_lift) → ID3(elbow_flex) → ID4(wrist_flex) → ID5(wrist_roll) → ID6(gripper)
@@ -96,6 +97,8 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 11. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
 
-12. **Test** — Power on and verify all servo IDs respond. 
-   Run `sts3215_scan.py` to verify servos.
+12. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+
+13. **Test** — Power on and verify all servo IDs respond. 
+   Run `sts3215_scan.py` to verify servos, test camera with `rpicam-hello`.
 
