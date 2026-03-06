@@ -89,6 +89,14 @@ class ServoSpec(Component):
     connector_pos: Vec3 | None = None  # wire connector center position
 
     @property
+    def effective_body_dims(self) -> Vec3:
+        """Body dimensions (without ears/horn), falling back to overall dims."""
+        bd = self.body_dimensions
+        if bd[0] > 0.0:
+            return bd
+        return self.dimensions
+
+    @property
     def kp(self) -> float:
         """Position gain derived from stall torque.
 

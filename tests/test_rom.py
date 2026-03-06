@@ -38,9 +38,9 @@ BOT_SCENES = _discover_bots()
 BOT_IDS = [name for name, _ in BOT_SCENES]
 
 
-@pytest.fixture(params=BOT_SCENES, ids=BOT_IDS)
+@pytest.fixture(params=BOT_SCENES, ids=BOT_IDS, scope="class")
 def bot_model(request):
-    """Load a bot's MuJoCo model + data."""
+    """Load a bot's MuJoCo model + data (shared per test class)."""
     name, scene_path = request.param
     model = mujoco.MjModel.from_xml_path(str(scene_path))
     data = mujoco.MjData(model)
@@ -129,7 +129,6 @@ def _set_pose_and_step(
     model: mujoco.MjModel,
     data: mujoco.MjData,
     joint_angles: dict[int, float],
-    n_steps: int = 50,
 ) -> None:
     """Set joint angles and step the sim to settle contacts."""
     mujoco.mj_resetData(model, data)

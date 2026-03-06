@@ -25,6 +25,15 @@ if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
 
+def _group_ears_by_y_side(ears) -> dict[str, list]:
+    """Group mounting ears into +Y and -Y sides."""
+    sides: dict[str, list] = {}
+    for ear in ears:
+        side = "pos" if ear.pos[1] > 0 else "neg"
+        sides.setdefault(side, []).append(ear)
+    return sides
+
+
 @dataclass(frozen=True)
 class BracketSpec:
     """Parameters controlling bracket geometry around a servo."""
@@ -51,11 +60,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         spec = BracketSpec()
 
     # Use body_dimensions if available, otherwise fall back to overall dims
-    bd = servo.body_dimensions
-    if bd[0] == 0.0:
-        bd = servo.dimensions
-
-    body_x, body_y, body_z = bd
+    body_x, body_y, body_z = servo.effective_body_dims
     tol = spec.tolerance
     wall = spec.wall
 
@@ -136,13 +141,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     # positions to support the servo flanges. The shelves span the full
     # bracket width at the ear Z height.
     if servo.mounting_ears:
-        # Ears are in two Y-rows (±Y). Build one shelf per Y-side.
-        ear_y_groups: dict[str, list] = {}
-        for ear in servo.mounting_ears:
-            y_key = "pos" if ear.pos[1] > 0 else "neg"
-            ear_y_groups.setdefault(y_key, []).append(ear)
-
-        for _side, ears in ear_y_groups.items():
+        for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
             # Shelf spans from body bottom to just below the ear holes
             shelf_top = -body_z / 2  # body bottom face
             shelf_bottom = ear_bottom_z
@@ -222,23 +221,14 @@ def servo_solid(servo: ServoSpec):
     """
     from build123d import Align, Box, Cylinder, Location
 
-    bd = servo.body_dimensions
-    if bd[0] == 0.0:
-        bd = servo.dimensions
-    body_x, body_y, body_z = bd
+    body_x, body_y, body_z = servo.effective_body_dims
 
     # Main body block
     body = Box(body_x, body_y, body_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
 
     # Mounting ear flanges — thin tabs extending below the body
     if servo.mounting_ears:
-        # Group ears by Y-side to build flange plates
-        ear_y_sides: dict[str, list] = {}
-        for ear in servo.mounting_ears:
-            side = "pos" if ear.pos[1] > 0 else "neg"
-            ear_y_sides.setdefault(side, []).append(ear)
-
-        for _side, ears in ear_y_sides.items():
+        for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
             # Flange spans the full X-extent of the ear positions
             xs = [e.pos[0] for e in ears]
             hole_r = ears[0].hole_diameter / 2
@@ -278,8 +268,17 @@ def servo_solid(servo: ServoSpec):
 
     # Output shaft stub — small cylinder on +Z face
     sx, sy, sz = servo.shaft_offset
-    shaft_r = 0.006  # 12mm diameter shaft/horn hub
-    shaft_h = 0.004  # 4mm stub height
+    _SHAFT_STUB_HEIGHT = 0.004  # 4mm visible stub
+    _DEFAULT_SHAFT_RADIUS = 0.006  # 12mm diameter fallback
+    shaft_r = _DEFAULT_SHAFT_RADIUS
+    if servo.horn_mounting_points:
+        # Derive from outermost horn screw position
+        max_r = max(
+            ((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) ** 0.5
+            for mp in servo.horn_mounting_points
+        )
+        shaft_r = max_r + 0.002  # 2mm beyond outermost screw
+    shaft_h = _SHAFT_STUB_HEIGHT
     shaft = Cylinder(
         shaft_r,
         shaft_h,
