@@ -8,8 +8,8 @@
 |------|-----|-----------------|----------|-------|
 | STS3215 | 3 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pitch, elbow, wrist |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 40 | PLA/PETG frame |
-| **Total** | | | **208** | |
+| Structural (printed) | — | — | 75 | PLA/PETG frame |
+| **Total** | | | **243** | |
 
 ## Power Budget
 

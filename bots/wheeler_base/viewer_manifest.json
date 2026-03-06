@@ -1,0 +1,125 @@
+{
+  "bot_name": "wheeler_base",
+  "bodies": [
+    {
+      "name": "base",
+      "mesh": "base.stl",
+      "parent": null
+    },
+    {
+      "name": "left_rim",
+      "mesh": "left_rim.stl",
+      "parent": "base",
+      "joint": "left_wheel"
+    },
+    {
+      "name": "right_rim",
+      "mesh": "right_rim.stl",
+      "parent": "base",
+      "joint": "right_wheel"
+    }
+  ],
+  "joints": [
+    {
+      "name": "left_wheel",
+      "parent_body": "base",
+      "child_body": "left_rim",
+      "axis": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -3.14159,
+        3.14159
+      ],
+      "range_deg": [
+        -180.0,
+        180.0
+      ],
+      "pos": [
+        -0.06,
+        0.0,
+        0.0
+      ],
+      "servo": "STS3215",
+      "continuous": true
+    },
+    {
+      "name": "right_wheel",
+      "parent_body": "base",
+      "child_body": "right_rim",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -3.14159,
+        3.14159
+      ],
+      "range_deg": [
+        -180.0,
+        180.0
+      ],
+      "pos": [
+        0.06,
+        0.0,
+        0.0
+      ],
+      "servo": "STS3215",
+      "continuous": true
+    }
+  ],
+  "assembly_steps": [
+    {
+      "step": 1,
+      "title": "base",
+      "body": "base",
+      "components": [
+        {
+          "label": "pi",
+          "component": "RaspberryPiZero2W"
+        },
+        {
+          "label": "battery",
+          "component": "LiPo2S-1000"
+        }
+      ],
+      "description": "Base structure \u2014 mount pi, battery"
+    },
+    {
+      "step": 2,
+      "title": "left_rim",
+      "body": "left_rim",
+      "components": [
+        {
+          "label": "wheel",
+          "component": "Pololu 90x10mm Wheel"
+        }
+      ],
+      "servo": {
+        "joint": "left_wheel",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint left_wheel"
+    },
+    {
+      "step": 3,
+      "title": "right_rim",
+      "body": "right_rim",
+      "components": [
+        {
+          "label": "wheel",
+          "component": "Pololu 90x10mm Wheel"
+        }
+      ],
+      "servo": {
+        "joint": "right_wheel",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint right_wheel"
+    }
+  ],
+  "ik_chains": []
+}

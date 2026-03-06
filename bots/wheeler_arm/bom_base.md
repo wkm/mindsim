@@ -18,5 +18,5 @@
 | Consumer | Voltage (V) | Current (A) | Power (W) |
 |----------|-------------|-------------|-----------|
 | STS3215 x3 | 12.0 | ~2.5 | ~29.4 |
-| Raspberry Pi Zero 2W | 5.0 | 0.6 | 3.0 |
+| RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~32.4** |

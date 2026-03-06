@@ -10,15 +10,15 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 15 | wheel, wheel |
-| Structural (printed) | — | — | 90 | PLA/PETG frame |
-| **Total** | | | **295** | |
+| Structural (printed) | — | — | 95 | PLA/PETG frame |
+| **Total** | | | **300** | |
 
 ## Power Budget
 
 | Consumer | Voltage (V) | Current (A) | Power (W) |
 |----------|-------------|-------------|-----------|
 | STS3215 x2 | 12.0 | ~1.6 | ~19.6 |
-| Raspberry Pi Zero 2W | 5.0 | 0.6 | 3.0 |
+| RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~22.6** |
 
 ## Wire Lengths
@@ -26,4 +26,4 @@
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
 | servo_bus | uart_half_duplex | 14.0 | 0.0 |
-| power | power | 7.7 | 0.0 |
+| power | power | 8.5 | 0.0 |

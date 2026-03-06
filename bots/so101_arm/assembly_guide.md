@@ -32,14 +32,15 @@ gripper                             █████████████     
 ## Wiring Diagram
 
 ```
-Host PC (USB)
-  └── USB-C → Waveshare Serial Bus Servo Driver Board
+Battery (LiPo 2S, 7.4V)
+  ├── XT30 → Servo bus power (direct 7.4V)
+  └── XT30 → 5V Buck converter → Raspberry Pi USB power
 
-Power Supply (12V)
-  └── Barrel jack → Waveshare board → Servo bus power
+Raspberry Pi Zero 2W
+  ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
 
 Servo Daisy Chain:
-  Waveshare board → ID1(shoulder_pan) → ID2(shoulder_lift) → ID3(elbow_flex) → ID4(wrist_flex) → ID5(wrist_roll) → ID6(gripper)
+  Pi UART → ID1(shoulder_pan) → ID2(shoulder_lift) → ID3(elbow_flex) → ID4(wrist_flex) → ID5(wrist_roll) → ID6(gripper)
 ```
 
 ## 3D Printed Parts
@@ -48,13 +49,13 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| base | `meshes/base.stl` | box | 75.0 x 75.0 x 20.0 |
-| shoulder | `meshes/shoulder.stl` | box | 50.0 x 40.0 x 54.0 |
-| upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 127.6 |
-| forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 149.9 |
-| wrist | `meshes/wrist.stl` | box | 40.0 x 35.0 x 35.0 |
-| hand | `meshes/hand.stl` | box | 45.0 x 40.0 x 30.0 |
-| jaw | `meshes/jaw.stl` | box | 60.0 x 20.0 x 10.0 |
+| base | `meshes/base.stl` | box | 89.0 x 51.0 x 56.0 |
+| turntable | `meshes/turntable.stl` | box | 60.0 x 40.0 x 40.0 |
+| upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 131.0 |
+| forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 150.0 |
+| wrist | `meshes/wrist.stl` | box | 40.0 x 35.0 x 64.0 |
+| wrist_roll | `meshes/wrist_roll.stl` | box | 35.0 x 35.0 x 37.0 |
+| jaw | `meshes/jaw.stl` | jaw | 30.0 x 5.0 x 40.0 |
 
 ## Assembly Sequence
 
@@ -63,38 +64,38 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
-   - Mount WaveshareSerialBus (controller) at center position
+   - Mount RaspberryPiZero2W (pi) at center position
+   - Mount LiPo2S-1000 (battery) at bottom position
 
-4. **Attach shoulder** to base via STS3215 at joint `shoulder_pan` (axis: vertical):
+4. **Attach turntable** to base via STS3215 at joint `shoulder_pan` (axis: vertical):
    - Screw servo into base bracket using M3 mounting screws
-   - Attach shoulder bracket to servo horn using M2.5 horn screws
+   - Attach turntable bracket to servo horn using M2.5 horn screws
 
-5. **Attach upper_arm** to shoulder via STS3215 at joint `shoulder_lift` (axis: pitch):
-   - Screw servo into shoulder bracket using M3 mounting screws
+5. **Attach upper_arm** to turntable via STS3215 at joint `shoulder_lift` (axis: roll):
+   - Screw servo into turntable bracket using M3 mounting screws
    - Attach upper_arm bracket to servo horn using M2.5 horn screws
 
-6. **Attach forearm** to upper_arm via STS3215 at joint `elbow_flex` (axis: pitch):
+6. **Attach forearm** to upper_arm via STS3215 at joint `elbow_flex` (axis: roll):
    - Screw servo into upper_arm bracket using M3 mounting screws
    - Attach forearm bracket to servo horn using M2.5 horn screws
 
-7. **Attach wrist** to forearm via STS3215 at joint `wrist_flex` (axis: pitch):
+7. **Attach wrist** to forearm via STS3215 at joint `wrist_flex` (axis: roll):
    - Screw servo into forearm bracket using M3 mounting screws
    - Attach wrist bracket to servo horn using M2.5 horn screws
 
-8. **Attach hand** to wrist via STS3215 at joint `wrist_roll` (axis: vertical):
+8. **Attach wrist_roll** to wrist via STS3215 at joint `wrist_roll` (axis: vertical):
    - Screw servo into wrist bracket using M3 mounting screws
-   - Attach hand bracket to servo horn using M2.5 horn screws
+   - Attach wrist_roll bracket to servo horn using M2.5 horn screws
+   - Mount PiCamera2 (camera) at front position
 
-9. **Attach jaw** to hand via STS3215 at joint `gripper` (axis: pitch):
-   - Screw servo into hand bracket using M3 mounting screws
+9. **Attach jaw** to wrist_roll via STS3215 at joint `gripper` (axis: roll):
+   - Screw servo into wrist_roll bracket using M3 mounting screws
    - Attach jaw bracket to servo horn using M2.5 horn screws
 
 10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 
-11. **Connect power** — Connect 12V power supply to the Waveshare board barrel jack. Connect USB-C cable from host PC.
+11. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
 
-12. **Mount to table** — Secure the base plate to a flat surface using table clamps (150mm+ opening recommended) or M4 bolts through the base plate mounting holes.
-
-13. **Test** — Power on and verify all servo IDs respond. 
-   Use the Waveshare controller software or `python -m lerobot.scripts.control_robot` to test each joint.
+12. **Test** — Power on and verify all servo IDs respond. 
+   Run `sts3215_scan.py` to verify servos.
 
