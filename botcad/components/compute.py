@@ -53,4 +53,6 @@ def RaspberryPiZero2W() -> Component:
             ),
         ),
         color=(0.0, 0.5, 0.0, 1.0),  # PCB green
+        voltage=5.0,
+        typical_current=0.6,  # ~600mA typical under load
     )

@@ -4,7 +4,7 @@
 
 ## Servo Bus Configuration
 
-STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo needs a unique ID programmed via the Feetech debug board.
+STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo needs a unique ID programmed via the Feetech debug board or the Waveshare controller software.
 
 | Servo ID | Joint | Mode | Range |
 |----------|-------|------|-------|
@@ -15,10 +15,17 @@ STS3215 servos are daisy-chained on a single UART half-duplex bus. Each servo ne
 | 5 | elbow | Position | -115° to 0° |
 | 6 | wrist | Position | -86° to 86° |
 
-## Servo Daisy Chain
+## Joint Range of Motion
 
 ```
-  ID1(left_wheel) → ID2(right_wheel) → ID3(shoulder_yaw) → ID4(shoulder_pitch) → ID5(elbow) → ID6(wrist)
+                  -180°   -90°       0°       +90°      +180°
+                  |         |         |         |         |
+left_wheel        ███████████████████████████████████████   ±180°
+right_wheel       ███████████████████████████████████████   ±180°
+shoulder_yaw                ███████████████████             ±86°
+shoulder_pitch              ███████████████████             ±86°
+elbow                    █████████████                      -115° to +0°
+wrist                       ███████████████████             ±86°
 ```
 
 
@@ -32,41 +39,68 @@ Battery (LiPo 2S, 7.4V)
 Raspberry Pi Zero 2W
   ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
   └── CSI connector → Camera ribbon cable → OV5647
+
+Servo Daisy Chain:
+  Pi UART → ID1(left_wheel) → ID2(right_wheel) → ID3(shoulder_yaw) → ID4(shoulder_pitch) → ID5(elbow) → ID6(wrist)
 ```
+
+## 3D Printed Parts
+
+Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm nozzle, 0.2mm layer height, 15–20% infill.
+
+| Part | STL File | Shape | Dimensions (mm) |
+|------|----------|-------|-----------------|
+| base | `meshes/base.stl` | box | 89.0 x 51.0 x 65.0 |
+| left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
+| right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
+| turntable | `meshes/turntable.stl` | cylinder | 60.0 x 60.0 x 35.0 |
+| upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 135.0 |
+| forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 115.0 |
+| hand | `meshes/hand.stl` | box | 40.0 x 40.0 x 30.0 |
 
 ## Assembly Sequence
 
-1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board and assign IDs as listed above.
+1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–6 as listed above.
 
-2. **Print structural parts** — Print body shells from the STL files in `meshes/`. Recommended: PLA or PETG, 0.2mm layer height, 20% infill.
+2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
 
-3. **Assemble root body** (`base`):
+3. **Assemble base** (`base`):
    - Mount RaspberryPiZero2W (pi) at center position
    - Mount LiPo2S-1000 (battery) at bottom position
 
-4. **Attach left_rim** via STS3215 at joint `left_wheel`
-   - Mount Pololu 90x10mm Wheel (wheel)
+4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
+   - Screw servo into base bracket using M3 mounting screws
+   - Attach left_rim bracket to servo horn using M2.5 horn screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position
 
-5. **Attach right_rim** via STS3215 at joint `right_wheel`
-   - Mount Pololu 90x10mm Wheel (wheel)
+5. **Attach right_rim** to base via STS3215 at joint `right_wheel` (axis: roll):
+   - Screw servo into base bracket using M3 mounting screws
+   - Attach right_rim bracket to servo horn using M2.5 horn screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position
 
-6. **Attach turntable** via STS3215 at joint `shoulder_yaw`
-   - Attach upper_arm via STS3215 at `shoulder_pitch`
+6. **Attach turntable** to base via STS3215 at joint `shoulder_yaw` (axis: vertical):
+   - Screw servo into base bracket using M3 mounting screws
+   - Attach turntable bracket to servo horn using M2.5 horn screws
 
-7. **Attach upper_arm** via STS3215 at joint `shoulder_pitch`
-   - Attach forearm via STS3215 at `elbow`
+7. **Attach upper_arm** to turntable via STS3215 at joint `shoulder_pitch` (axis: roll):
+   - Screw servo into turntable bracket using M3 mounting screws
+   - Attach upper_arm bracket to servo horn using M2.5 horn screws
 
-8. **Attach forearm** via STS3215 at joint `elbow`
-   - Attach hand via STS3215 at `wrist`
+8. **Attach forearm** to upper_arm via STS3215 at joint `elbow` (axis: roll):
+   - Screw servo into upper_arm bracket using M3 mounting screws
+   - Attach forearm bracket to servo horn using M2.5 horn screws
 
-9. **Attach hand** via STS3215 at joint `wrist`
-   - Mount OV5647 (camera)
+9. **Attach hand** to forearm via STS3215 at joint `wrist` (axis: vertical):
+   - Screw servo into forearm bracket using M3 mounting screws
+   - Attach hand bracket to servo horn using M2.5 horn screws
+   - Mount OV5647 (camera) at front position
 
-10. **Route servo bus cable** — Daisy-chain servos following the wiring diagram. Use the cable channel in each structural member.
+10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 
-11. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+11. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
 
-12. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
+12. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
 
-13. **Test** — Power on, verify all servo IDs respond via `sts3215_scan.py`, test camera with `rpicam-hello`.
+13. **Test** — Power on and verify all servo IDs respond. 
+   Run `sts3215_scan.py` to verify servos, test camera with `rpicam-hello`.
 

@@ -89,7 +89,7 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
 
     lines.append(f"| **Total** | | | **{total_mass * 1000:.0f}** | |")
 
-    # Power budget
+    # Power budget — derived from actual components
     lines.append("\n## Power Budget\n")
     lines.append("| Consumer | Voltage (V) | Current (A) | Power (W) |")
     lines.append("|----------|-------------|-------------|-----------|")
@@ -105,12 +105,16 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
             f"~{avg_current * info['count']:.1f} | ~{power:.1f} |"
         )
 
-    # Pi power (only if a Pi is in the bodies)
-    has_pi = any("Pi" in m.component.name for b in bodies for m in b.mounts)
-    if has_pi:
-        pi_power = 5.0 * 0.6
-        total_power += pi_power
-        lines.append(f"| Raspberry Pi Zero 2W | 5.0 | 0.6 | {pi_power:.1f} |")
+    # Add power for mounted compute/controller components (not servos)
+    for name, info in components.items():
+        c = info["component"]
+        if c.voltage > 0 and c.typical_current > 0:
+            p = c.voltage * c.typical_current * info["count"]
+            total_power += p
+            lines.append(
+                f"| {name} x{info['count']} | {c.voltage:.1f} | "
+                f"{c.typical_current:.1f} | {p:.1f} |"
+            )
 
     lines.append(f"| **Total** | | | **~{total_power:.1f}** |")
 

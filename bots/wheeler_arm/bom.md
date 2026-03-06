@@ -11,15 +11,15 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 15 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 140 | PLA/PETG frame |
-| **Total** | | | **568** | |
+| Structural (printed) | — | — | 175 | PLA/PETG frame |
+| **Total** | | | **603** | |
 
 ## Power Budget
 
 | Consumer | Voltage (V) | Current (A) | Power (W) |
 |----------|-------------|-------------|-----------|
 | STS3215 x6 | 12.0 | ~4.9 | ~58.8 |
-| Raspberry Pi Zero 2W | 5.0 | 0.6 | 3.0 |
+| RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~61.8** |
 
 ## Wire Lengths

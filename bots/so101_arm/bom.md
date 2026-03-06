@@ -7,24 +7,20 @@
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
 | STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
-| RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
-| LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 102 | PLA/PETG frame |
-| **Total** | | | **500** | |
+| WaveshareSerialBus | 1 | 55.0 x 25.0 x 12.0 | 15 | controller |
+| Structural (printed) | — | — | 113 | PLA/PETG frame |
+| **Total** | | | **458** | |
 
 ## Power Budget
 
 | Consumer | Voltage (V) | Current (A) | Power (W) |
 |----------|-------------|-------------|-----------|
 | STS3215 x6 | 12.0 | ~4.9 | ~58.8 |
-| Raspberry Pi Zero 2W | 5.0 | 0.6 | 3.0 |
-| **Total** | | | **~61.8** |
+| WaveshareSerialBus x1 | 5.0 | 0.1 | 0.5 |
+| **Total** | | | **~59.3** |
 
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 102.8 | 19.6 |
-| camera_csi | csi | 77.5 | 19.6 |
-| power | power | 8.8 | 0.0 |
+| servo_bus | uart_half_duplex | 125.6 | 19.6 |
