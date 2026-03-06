@@ -309,11 +309,7 @@ def _emit_body_tree(
             "geom",
             name=f"{joint.name}_servo",
             type="box",
-            size=_half_dims(
-                servo.body_dimensions
-                if any(servo.body_dimensions)
-                else servo.dimensions
-            ),
+            size=_half_dims(servo.effective_body_dims),
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
             rgba="0.2 0.8 0.2 0.8",

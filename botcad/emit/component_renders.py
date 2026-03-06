@@ -91,9 +91,7 @@ def _add_common_geoms(geoms, legends, component: Component):
     # Effective dimensions for axis sizing
     d = component.dimensions
     if isinstance(component, ServoSpec):
-        bd = component.body_dimensions
-        if any(x > 0 for x in bd):
-            d = bd
+        d = component.effective_body_dims
 
     # Axis indicators: thin cylinders for X (red), Y (green), Z (blue)
     axis_len = max(d) * 1.0  # match component's largest dimension

@@ -55,7 +55,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                     ],
                     "pos": list(joint.pos),
                     "servo": joint.servo.name,
-                    "continuous": getattr(joint.servo, "continuous", False),
+                    "continuous": joint.servo.continuous,
                 }
             )
 

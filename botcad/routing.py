@@ -127,7 +127,7 @@ def _cable_exit_local(joint: Joint) -> Vec3:
         joint.axis,
         joint.pos,
     )
-    body_x = servo.body_dimensions[0] or servo.dimensions[0]
+    body_x = servo.effective_body_dims[0]
     spec = BracketSpec()
     bracket_half_x = body_x / 2 + spec.tolerance + spec.wall
     _cx, cy, cz = servo.connector_pos
