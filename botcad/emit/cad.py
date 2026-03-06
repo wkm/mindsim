@@ -26,6 +26,7 @@ from botcad.bracket import (
     bracket_envelope,
     bracket_solid,
     horn_disc_params,
+    servo_solid,
 )
 from botcad.geometry import servo_placement
 
@@ -58,9 +59,7 @@ def make_component_solid(component: Component):
 
     # Servos: use body_dimensions (without ears/horn) + shaft boss
     if isinstance(component, ServoSpec):
-        bd = component.body_dimensions
-        if any(x > 0 for x in bd):
-            dims = bd
+        dims = component.effective_body_dims
 
         body = Box(
             dims[0], dims[1], dims[2], align=(Align.CENTER, Align.CENTER, Align.CENTER)
@@ -198,12 +197,35 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             # Horn belongs to parent body's module (joint owner)
             part_modules.append(body.module.name if body.module else None)
 
+    # --- Servo solids (purchased parts, shown seated in brackets) ---
+    servo_count = 0
+    servo_solid_cache: dict[str, object] = {}
+    for body in bot.all_bodies:
+        body_world = world_positions[body.name]
+        for joint in body.joints:
+            servo = joint.servo
+            center, quat = servo_placement(
+                servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+            )
+            euler = _quat_to_euler(quat)
+
+            # Cache base solid by servo model (same geometry for all STS3215s)
+            if servo.name not in servo_solid_cache:
+                servo_solid_cache[servo.name] = servo_solid(servo)
+            solid = servo_solid_cache[servo.name].moved(Location(center, euler))
+            solid = solid.moved(Location(body_world))
+            solid = _as_solid(solid)
+            solid.color = Color(0.15, 0.15, 0.15)  # dark gray
+            solid.label = f"servo_{joint.name}"
+            assembly_parts.append(solid)
+            servo_count += 1
+
     if assembly_parts:
         assembly = Compound(label=bot.name, children=assembly_parts)
         export_step(assembly, str(output_dir / "assembly.step"))
         print(
-            f"CAD: wrote assembly.step ({len(assembly_parts)} parts) "
-            f"+ {len(body_solids)} STLs to {output_dir}"
+            f"CAD: wrote assembly.step ({len(assembly_parts) - servo_count} printed "
+            f"+ {servo_count} servo parts) + {len(body_solids)} STLs to {output_dir}"
         )
 
     # Store for per-module export

@@ -233,6 +233,9 @@ class Bot:
 
     name: str
     root: Body | None = None
+    base_type: Literal["free", "fixed"] = (
+        "free"  # free = freejoint, fixed = bolted down
+    )
 
     # Populated by solve()
     all_bodies: list[Body] = field(default_factory=list)
@@ -353,6 +356,10 @@ class Bot:
                 emit_cad_for_module(self, mod_name, output_dir_path)
                 emit_bom_for_module(self, mod_name, output_dir_path)
                 emit_assembly_guide_for_module(self, mod_name, output_dir_path)
+
+        from botcad.emit.viewer import emit_viewer_manifest
+
+        emit_viewer_manifest(self, output_dir_path)
 
 
 def _parse_axis(axis: str | Vec3) -> Vec3:

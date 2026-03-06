@@ -59,6 +59,8 @@ class Component:
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
     color: RGBA = (0.5, 0.5, 0.5, 1.0)
+    voltage: float = 0.0  # operating voltage (V), 0 = unpowered
+    typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,14 @@ class ServoSpec(Component):
     horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on output horn
     rear_horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on blind side
     connector_pos: Vec3 | None = None  # wire connector center position
+
+    @property
+    def effective_body_dims(self) -> Vec3:
+        """Body dimensions (without ears/horn), falling back to overall dims."""
+        bd = self.body_dimensions
+        if bd[0] > 0.0:
+            return bd
+        return self.dimensions
 
     @property
     def kp(self) -> float:
