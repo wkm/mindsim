@@ -66,8 +66,8 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     d.add_section("top_shaft", Plane.XY.offset(shaft_top_z))
     d.add_section("mid_body", Plane.XY.offset(0.0))
     d.add_section("ears", Plane.XY.offset(ear_z))
-    d.add_section("side_XZ", Plane.XZ)
-    d.add_section("side_YZ", Plane.YZ)
+    d.add_projection("side_XZ", origin=(0, -0.1, 0))
+    d.add_projection("side_YZ", origin=(0.1, 0, 0))
     outputs.append(d.save(out_dir / f"drawing_pocket_{safe}.svg"))
 
     # --- Coupler + servo ---
@@ -77,8 +77,8 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     d.add_section("front_horn", Plane.XY.offset(front_z))
     d.add_section("rear_horn", Plane.XY.offset(rear_z))
     d.add_section("mid_body", Plane.XY.offset((front_z + rear_z) / 2))
-    d.add_section("side_XZ", Plane.XZ)
-    d.add_section("side_YZ", Plane.YZ)
+    d.add_projection("side_XZ", origin=(0, -0.1, 0))
+    d.add_projection("side_YZ", origin=(0.1, 0, 0))
     outputs.append(d.save(out_dir / f"drawing_coupler_{safe}.svg"))
 
     # --- Cradle + servo ---
@@ -88,8 +88,8 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     d.add_section("front_horn", Plane.XY.offset(front_z))
     d.add_section("rear_horn", Plane.XY.offset(rear_z))
     d.add_section("mid_body", Plane.XY.offset((front_z + rear_z) / 2))
-    d.add_section("side_XZ", Plane.XZ)
-    d.add_section("side_YZ", Plane.YZ)
+    d.add_projection("side_XZ", origin=(0, -0.1, 0))
+    d.add_projection("side_YZ", origin=(0.1, 0, 0))
     outputs.append(d.save(out_dir / f"drawing_cradle_{safe}.svg"))
 
     # --- Full coupler assembly: cradle + servo + coupler ---
@@ -99,7 +99,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     d.add_part("coupler", coupler, color=(220, 60, 40))
     d.add_section("front_horn", Plane.XY.offset(front_z))
     d.add_section("rear_horn", Plane.XY.offset(rear_z))
-    d.add_section("side_XZ", Plane.XZ)
+    d.add_projection("side_XZ", origin=(0, -0.1, 0))
     outputs.append(d.save(out_dir / f"drawing_coupler_assembly_{safe}.svg"))
 
     return outputs
@@ -143,7 +143,7 @@ def emit_drawings(bot, output_dir: Path) -> list[Path]:
             d.add_part("bracket", bracket, color=(50, 120, 190))
             d.add_section("shaft_face", Plane.XY.offset(shaft_top_z))
             d.add_section("mid_body", Plane.XY.offset(0.0))
-            d.add_section("side_XZ", Plane.XZ)
+            d.add_projection("side_XZ", origin=(0, -0.1, 0))
             outputs.append(d.save(drawings_dir / f"drawing_joint_{safe_name}.svg"))
 
     if outputs:
