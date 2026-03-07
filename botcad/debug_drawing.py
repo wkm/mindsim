@@ -70,10 +70,140 @@ FOOTER_MM = 9  # space above geometry for section labels
 SECTION_GAP_MM = 8  # horizontal gap between sections
 MARGIN_MM = 3  # margin around content
 
+# Dimension line styling (mm)
+DIM_OFFSET_MM = 3.0  # offset from geometry edge to dimension line
+DIM_ARROW_MM = 1.5  # arrowhead length
+DIM_TICK_MM = 0.8  # extension line overshoot past dimension line
+DIM_LINE_WEIGHT_MM = 0.2  # dimension line stroke width
+DIM_COLOR = "#555"  # dimension line/text color
+
 
 def _mm(mm: float) -> float:
     """Convert mm to meters (viewBox units)."""
     return mm / 1000.0
+
+
+def _dim_line_h(
+    x1: float, x2: float, y: float, label: str, above: bool = True
+) -> list[str]:
+    """SVG elements for a horizontal dimension line with arrows and label.
+
+    All coordinates in viewBox units (meters). Renders:
+    - Extension ticks at x1 and x2
+    - Horizontal line with arrowheads
+    - Centered label text
+    """
+    lw = _mm(DIM_LINE_WEIGHT_MM)
+    arrow = _mm(DIM_ARROW_MM)
+    tick = _mm(DIM_TICK_MM)
+    fs = _mm(1.6)
+    sign = -1 if above else 1
+
+    els: list[str] = []
+    # Extension ticks
+    for x in [x1, x2]:
+        els.append(
+            f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
+            f'x2="{x:.6f}" y2="{y + tick:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        )
+    # Main dimension line
+    els.append(
+        f'  <line x1="{x1:.6f}" y1="{y:.6f}" '
+        f'x2="{x2:.6f}" y2="{y:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+    )
+    # Arrowheads (simple triangles)
+    ah = arrow * 0.4  # half-height
+    # Left arrow (pointing left)
+    els.append(
+        f'  <polygon points="{x1:.6f},{y:.6f} '
+        f"{x1 + arrow:.6f},{y - ah:.6f} "
+        f'{x1 + arrow:.6f},{y + ah:.6f}" '
+        f'fill="{DIM_COLOR}"/>'
+    )
+    # Right arrow (pointing right)
+    els.append(
+        f'  <polygon points="{x2:.6f},{y:.6f} '
+        f"{x2 - arrow:.6f},{y - ah:.6f} "
+        f'{x2 - arrow:.6f},{y + ah:.6f}" '
+        f'fill="{DIM_COLOR}"/>'
+    )
+    # Label
+    cx = (x1 + x2) / 2
+    text_y = y + sign * _mm(1.8)
+    els.append(
+        f'  <text x="{cx:.6f}" y="{text_y:.6f}" '
+        f'text-anchor="middle" '
+        f'font-family="{FONT_FAMILY}" '
+        f'font-size="{fs:.6f}" '
+        f'fill="{DIM_COLOR}">{label}</text>'
+    )
+    return els
+
+
+def _dim_line_v(
+    y1: float, y2: float, x: float, label: str, right: bool = True
+) -> list[str]:
+    """SVG elements for a vertical dimension line with arrows and label.
+
+    y1 < y2 (y1 is top, y2 is bottom in viewBox Y-down coordinates).
+    """
+    lw = _mm(DIM_LINE_WEIGHT_MM)
+    arrow = _mm(DIM_ARROW_MM)
+    tick = _mm(DIM_TICK_MM)
+    fs = _mm(1.6)
+
+    els: list[str] = []
+    # Extension ticks
+    for y in [y1, y2]:
+        els.append(
+            f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
+            f'x2="{x + tick:.6f}" y2="{y:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        )
+    # Main dimension line
+    els.append(
+        f'  <line x1="{x:.6f}" y1="{y1:.6f}" '
+        f'x2="{x:.6f}" y2="{y2:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+    )
+    # Arrowheads
+    ah = arrow * 0.4
+    # Top arrow (pointing up)
+    els.append(
+        f'  <polygon points="{x:.6f},{y1:.6f} '
+        f"{x - ah:.6f},{y1 + arrow:.6f} "
+        f'{x + ah:.6f},{y1 + arrow:.6f}" '
+        f'fill="{DIM_COLOR}"/>'
+    )
+    # Bottom arrow (pointing down)
+    els.append(
+        f'  <polygon points="{x:.6f},{y2:.6f} '
+        f"{x - ah:.6f},{y2 - arrow:.6f} "
+        f'{x + ah:.6f},{y2 - arrow:.6f}" '
+        f'fill="{DIM_COLOR}"/>'
+    )
+    # Label (rotated 90° beside the line)
+    cy = (y1 + y2) / 2
+    text_x = x + (_mm(1.5) if right else -_mm(1.5))
+    els.append(
+        f'  <text x="{text_x:.6f}" y="{cy:.6f}" '
+        f'text-anchor="middle" dominant-baseline="central" '
+        f'font-family="{FONT_FAMILY}" '
+        f'font-size="{fs:.6f}" '
+        f'fill="{DIM_COLOR}" '
+        f'transform="rotate(-90 {text_x:.6f} {cy:.6f})">{label}</text>'
+    )
+    return els
+
+
+def _fmt_mm(meters: float) -> str:
+    """Format a meter value as mm with appropriate precision."""
+    mm = abs(meters) * 1000
+    if mm >= 10:
+        return f"{mm:.1f}"
+    return f"{mm:.2f}"
 
 
 @dataclass
@@ -344,16 +474,18 @@ class DebugDrawing:
         margin = _mm(MARGIN_MM)
         header = _mm(HEADER_MM)
         footer = _mm(FOOTER_MM)
+        dim_space = _mm(DIM_OFFSET_MM + 5)  # space for dimension lines + label
 
         # In build123d's SVG, the geometry group has scale(1,-1), so positive
         # Y in geometry = negative Y in viewBox. The viewBox Y range covers
         # the flipped geometry. We add space:
         #   - above geometry (more negative Y) for footer/labels
-        #   - below geometry (more positive Y) for header/title
+        #   - below geometry (more positive Y) for header/title + width dims
+        #   - right of geometry for height dims
         new_x = geo_left - margin
         new_y = geo_top - footer
-        new_w = vb_w + 2 * margin
-        new_h = vb_h + header + footer
+        new_w = vb_w + 2 * margin + dim_space
+        new_h = vb_h + header + footer + dim_space
 
         # Update viewBox and SVG dimensions
         content = re.sub(
@@ -462,9 +594,11 @@ class DebugDrawing:
         sublabel_y = geo_top - _mm(2)
         label_y = geo_top - _mm(5.5)
 
+        dim_offset = _mm(DIM_OFFSET_MM)
+
         for i, (
             (col_name, is_section, _data),
-            (xmin, _ymin, xmax, _ymax),
+            (xmin, ymin, xmax, ymax),
             x_off,
         ) in enumerate(zip(columns, col_bounds, x_offsets)):
             cx = (xmin + xmax) / 2 + x_off
@@ -493,6 +627,25 @@ class DebugDrawing:
                     f'font-size="{fs_small:.6f}" '
                     f'fill="#888">{col_name}</text>'
                 )
+
+            # --- Dimension lines ---
+            # Geometry Y is up; viewBox Y is down. Mapping: viewBox_y = -geo_y
+            vb_top = -ymax  # top of geometry in viewBox
+            vb_bottom = -ymin  # bottom of geometry in viewBox
+            vb_left = xmin + x_off
+            vb_right = xmax + x_off
+            col_w = xmax - xmin
+            col_h = ymax - ymin
+
+            # Width dimension (below geometry)
+            if col_w > 1e-6:
+                wd_y = vb_bottom + dim_offset
+                elements.extend(_dim_line_h(vb_left, vb_right, wd_y, _fmt_mm(col_w)))
+
+            # Height dimension (right of geometry)
+            if col_h > 1e-6:
+                hd_x = vb_right + dim_offset
+                elements.extend(_dim_line_v(vb_top, vb_bottom, hd_x, _fmt_mm(col_h)))
 
         # --- Title block (below geometry in viewBox = positive Y direction) ---
         title_x = new_x + _mm(2)
