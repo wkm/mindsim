@@ -42,6 +42,7 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.031),
         range=(-1.92, 1.92),
+        bracket_style="coupler",
     )
     turntable = shoulder_pan.body(
         "turntable",
@@ -57,6 +58,7 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.02),
         range=(-1.745, 1.745),
+        bracket_style="coupler",
     )
     upper_arm = shoulder_lift.body(
         "upper_arm", shape="tube", length=0.116, outer_r=0.018
@@ -69,6 +71,7 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.116),
         range=(-1.69, 1.69),
+        bracket_style="coupler",
     )
     forearm = elbow_flex.body("forearm", shape="tube", length=0.135, outer_r=0.016)
 
@@ -79,6 +82,7 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.135),
         range=(-1.658, 1.658),
+        bracket_style="coupler",
     )
     wrist = wrist_flex.body("wrist", shape="box", dimensions=(0.04, 0.035, 0.064))
 
@@ -105,6 +109,7 @@ def build() -> Bot:
         pos=(0.0, 0.0, 0.018),
         range=(-0.175, 1.745),
         grip=True,
+        bracket_style="coupler",
     )
     gripper.body(
         "jaw",

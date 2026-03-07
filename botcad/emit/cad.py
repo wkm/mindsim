@@ -25,6 +25,9 @@ from botcad.bracket import (
     BracketSpec,
     bracket_envelope,
     bracket_solid,
+    coupler_solid,
+    cradle_envelope,
+    cradle_solid,
     horn_disc_params,
     servo_solid,
 )
@@ -318,6 +321,29 @@ def _ensure_solid(shape):
     return max(solids, key=lambda s: abs(s.volume))
 
 
+def _to_compound(shape):
+    """Ensure shape is a Compound (wrapping ShapeList or bare Solid)."""
+    from build123d import Compound, Solid
+
+    if isinstance(shape, Compound):
+        return shape
+    if isinstance(shape, Solid):
+        return Compound(children=[shape])
+    # ShapeList or other iterable
+    return Compound(children=list(shape))
+
+
+def _bool_cut(shape, tool):
+    """Boolean cut that works on Solid, Compound, or ShapeList."""
+    from build123d import Solid
+
+    if isinstance(shape, Solid):
+        return shape.cut(tool)
+    shape = _to_compound(shape)
+    result = shape.cut(tool)
+    return _to_compound(result)
+
+
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
 ):
@@ -400,11 +426,26 @@ def _make_body_solid(
             pocket = pocket.locate(Location(mount.resolved_pos))
             shell = shell - pocket
 
+    # Union coupler onto child body for coupler-style joints.
+    # The coupler is built in servo-local frame; place it so the shaft
+    # center lands at the child body origin (joint point).
+    bracket_spec = BracketSpec()
+    if parent_joint is not None and parent_joint.bracket_style == "coupler":
+        servo = parent_joint.servo
+        # servo_placement with joint_pos=(0,0,0) gives the transform that
+        # puts servo-local geometry into child body frame with shaft at origin.
+        center, quat = servo_placement(
+            servo.shaft_offset, servo.shaft_axis, parent_joint.axis, (0, 0, 0)
+        )
+        euler = _quat_to_euler(quat)
+        coupler = coupler_solid(servo, bracket_spec)
+        coupler = coupler.locate(Location(center, euler))
+        shell = _as_solid(shell.fuse(coupler))
+
     # Cut bracket footprints then union finished brackets at each joint.
     # Order matters: subtract envelope first so shell material doesn't
     # fill the servo pocket, then union the bracket (which has the pocket
     # already cut).  Result: (shell - envelope) + bracket
-    bracket_spec = BracketSpec()
     for joint in body.joints:
         servo = joint.servo
         center, quat = servo_placement(
@@ -412,28 +453,38 @@ def _make_body_solid(
         )
         euler = _quat_to_euler(quat)
 
-        envelope = bracket_envelope(servo, bracket_spec)
-        envelope = envelope.locate(Location(center, euler))
-
         # Wheel joints: cut pocket only, no bracket union.
         # Solid body material provides structural support; adding bracket
         # walls would protrude past the body surface and collide with the wheel.
         child_has_wheel = joint.child is not None and any(
             "Wheel" in m.component.name for m in joint.child.mounts
         )
-        if child_has_wheel:
-            shell = shell - envelope
+
+        if joint.bracket_style == "coupler":
+            envelope = cradle_envelope(servo, bracket_spec)
+            envelope = envelope.locate(Location(center, euler))
+            if child_has_wheel:
+                shell = shell - envelope
+            else:
+                cradle = cradle_solid(servo, bracket_spec)
+                cradle = cradle.locate(Location(center, euler))
+                shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
         else:
-            bracket = bracket_solid(servo, bracket_spec)
-            bracket = bracket.locate(Location(center, euler))
-            shell = (shell - envelope) + bracket
+            envelope = bracket_envelope(servo, bracket_spec)
+            envelope = envelope.locate(Location(center, euler))
+            if child_has_wheel:
+                shell = shell - envelope
+            else:
+                bracket = bracket_solid(servo, bracket_spec)
+                bracket = bracket.locate(Location(center, euler))
+                shell = (shell - envelope) + bracket
 
     # Cut clearance volumes for rotating child bodies
     for joint in body.joints:
         if joint.child is not None:
             clearance = _child_clearance_volume(joint.child, joint)
             if clearance is not None:
-                shell = shell - clearance
+                shell = _bool_cut(shell, clearance)
                 shell = _ensure_solid(shell)
 
     # Cut wire channels along routed cable paths
@@ -441,7 +492,7 @@ def _make_body_solid(
         for seg, bus_type in wire_segments:
             channel = _wire_channel(seg, bus_type)
             if channel is not None:
-                shell = shell - channel
+                shell = _bool_cut(shell, channel)
                 shell = _ensure_solid(shell)
 
     return shell

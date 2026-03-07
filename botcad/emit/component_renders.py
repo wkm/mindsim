@@ -373,8 +373,8 @@ def render_component_views(component: Component, name: str) -> Image.Image:
 
 # ── Bracket rendering ──
 
-COLOR_BRACKET = (0.55, 0.75, 0.85, 0.85)  # light blue — printed bracket
-COLOR_SERVO_BODY = (0.15, 0.15, 0.15, 0.6)  # dark translucent — servo body
+COLOR_BRACKET = (0.55, 0.75, 0.85, 1.0)  # light blue — printed bracket
+COLOR_SERVO_BODY = (0.15, 0.15, 0.15, 1.0)  # dark — servo body
 LEGEND_BRACKET = ("bracket (blue)", (140, 191, 217))
 LEGEND_SERVO_BODY = ("servo (dark)", (38, 38, 38))
 
@@ -508,6 +508,322 @@ def render_bracket_views(servo: ServoSpec, name: str) -> Image.Image:
     return _composite_grid(title, legends, views)
 
 
+# ── Coupler-style bracket rendering ──
+
+COLOR_CRADLE = (0.55, 0.75, 0.85, 1.0)  # light blue — cradle (static)
+COLOR_COUPLER = (0.85, 0.55, 0.55, 1.0)  # light red — coupler (moving)
+LEGEND_CRADLE = ("cradle/static (blue)", (140, 191, 217))
+LEGEND_COUPLER = ("coupler/moving (red)", (217, 140, 140))
+
+
+def build_cradle_scene(servo: ServoSpec) -> tuple[str, list, Path]:
+    """Build MuJoCo scene showing cradle + servo + annotations."""
+    from build123d import export_stl
+
+    from botcad.bracket import BracketSpec, cradle_solid, servo_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_cradle_"))
+
+    cradle = cradle_solid(servo, BracketSpec())
+    export_stl(cradle, str(temp_dir / "cradle.stl"))
+
+    servo_body = servo_solid(servo)
+    export_stl(servo_body, str(temp_dir / "servo.stl"))
+
+    geoms: list[str] = []
+    legends: list[tuple[str, tuple[int, int, int]]] = []
+
+    cr = COLOR_CRADLE
+    geoms.append(
+        f'<geom name="cradle" type="mesh" mesh="cradle_mesh"'
+        f' rgba="{cr[0]} {cr[1]} {cr[2]} {cr[3]}"/>'
+    )
+    legends.append(LEGEND_CRADLE)
+
+    sv = COLOR_SERVO_BODY
+    geoms.append(
+        f'<geom name="servo" type="mesh" mesh="servo_mesh"'
+        f' rgba="{sv[0]} {sv[1]} {sv[2]} {sv[3]}"/>'
+    )
+    legends.append(LEGEND_SERVO_BODY)
+
+    # Mounting ears (blue)
+    if servo.mounting_ears:
+        for i, ear in enumerate(servo.mounting_ears):
+            geoms.append(
+                f'<geom name="ear_{i}" type="sphere" size="0.002"'
+                f' pos="{ear.pos[0]:.6f} {ear.pos[1]:.6f} {ear.pos[2]:.6f}"'
+                f' rgba="{COLOR_MOUNTING[0]} {COLOR_MOUNTING[1]} {COLOR_MOUNTING[2]} {COLOR_MOUNTING[3]}"/>'
+            )
+        legends.append(LEGEND_MOUNTING)
+
+    # Shaft (red)
+    so = servo.shaft_offset
+    shaft_h = 0.008
+    shaft_z = so[2] + shaft_h / 2
+    geoms.append(
+        f'<geom name="shaft" type="cylinder" size="0.003 {shaft_h / 2:.6f}"'
+        f' pos="{so[0]:.6f} {so[1]:.6f} {shaft_z:.6f}"'
+        f' rgba="{COLOR_SHAFT[0]} {COLOR_SHAFT[1]} {COLOR_SHAFT[2]} {COLOR_SHAFT[3]}"/>'
+    )
+    legends.append(LEGEND_SHAFT)
+
+    # Wire port (orange)
+    if servo.connector_pos:
+        cp = servo.connector_pos
+        geoms.append(
+            f'<geom name="wire_0" type="sphere" size="0.003"'
+            f' pos="{cp[0]:.6f} {cp[1]:.6f} {cp[2]:.6f}"'
+            f' rgba="{COLOR_WIRE_PORT[0]} {COLOR_WIRE_PORT[1]} {COLOR_WIRE_PORT[2]} {COLOR_WIRE_PORT[3]}"/>'
+        )
+        legends.append(LEGEND_WIRE_PORT)
+
+    geoms_str = "\n      ".join(geoms)
+
+    xml = f"""<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="cradle_debug">
+  <option gravity="0 0 0"/>
+  <compiler meshdir="{temp_dir}"/>
+  <visual>
+    <rgba haze="1 1 1 1"/>
+    <global offwidth="{WIDTH}" offheight="{HEIGHT}"/>
+  </visual>
+  <asset>
+    <mesh name="cradle_mesh" file="cradle.stl" scale="1 1 1"/>
+    <mesh name="servo_mesh" file="servo.stl" scale="1 1 1"/>
+  </asset>
+  <worldbody>
+    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
+    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.4 0.4 0.4"/>
+    <body name="assembly" pos="0 0 0">
+      {geoms_str}
+    </body>
+  </worldbody>
+</mujoco>
+"""
+    return xml, legends, temp_dir
+
+
+def build_coupler_scene(servo: ServoSpec) -> tuple[str, list, Path]:
+    """Build MuJoCo scene showing coupler in shaft-centered frame."""
+    from build123d import export_stl
+
+    from botcad.bracket import BracketSpec, coupler_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_coupler_"))
+
+    coupler = coupler_solid(servo, BracketSpec())
+    export_stl(coupler, str(temp_dir / "coupler.stl"))
+
+    geoms: list[str] = []
+    legends: list[tuple[str, tuple[int, int, int]]] = []
+
+    cp = COLOR_COUPLER
+    geoms.append(
+        f'<geom name="coupler" type="mesh" mesh="coupler_mesh"'
+        f' rgba="{cp[0]} {cp[1]} {cp[2]} {cp[3]}"/>'
+    )
+    legends.append(LEGEND_COUPLER)
+
+    sx, sy, sz = servo.shaft_offset
+
+    # Front horn holes (green) — in shaft-centered frame
+    if servo.horn_mounting_points:
+        for i, mp in enumerate(servo.horn_mounting_points):
+            px, py, pz = mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz
+            geoms.append(
+                f'<geom name="horn_{i}" type="sphere" size="0.0015"'
+                f' pos="{px:.6f} {py:.6f} {pz:.6f}"'
+                f' rgba="{COLOR_HORN_HOLE[0]} {COLOR_HORN_HOLE[1]} {COLOR_HORN_HOLE[2]} {COLOR_HORN_HOLE[3]}"/>'
+            )
+        legends.append(LEGEND_HORN_HOLE)
+
+    # Rear horn holes (cyan) — in shaft-centered frame
+    if servo.rear_horn_mounting_points:
+        for i, mp in enumerate(servo.rear_horn_mounting_points):
+            px, py, pz = mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz
+            geoms.append(
+                f'<geom name="rear_{i}" type="sphere" size="0.0015"'
+                f' pos="{px:.6f} {py:.6f} {pz:.6f}"'
+                f' rgba="{COLOR_REAR_HOLE[0]} {COLOR_REAR_HOLE[1]} {COLOR_REAR_HOLE[2]} {COLOR_REAR_HOLE[3]}"/>'
+            )
+        legends.append(LEGEND_REAR_HOLE)
+
+    # Shaft origin indicator (red)
+    geoms.append(
+        f'<geom name="shaft" type="cylinder" size="0.003 0.004"'
+        f' pos="0 0 0.004"'
+        f' rgba="{COLOR_SHAFT[0]} {COLOR_SHAFT[1]} {COLOR_SHAFT[2]} {COLOR_SHAFT[3]}"/>'
+    )
+    legends.append(LEGEND_SHAFT)
+
+    geoms_str = "\n      ".join(geoms)
+
+    xml = f"""<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="coupler_debug">
+  <option gravity="0 0 0"/>
+  <compiler meshdir="{temp_dir}"/>
+  <visual>
+    <rgba haze="1 1 1 1"/>
+    <global offwidth="{WIDTH}" offheight="{HEIGHT}"/>
+  </visual>
+  <asset>
+    <mesh name="coupler_mesh" file="coupler.stl" scale="1 1 1"/>
+  </asset>
+  <worldbody>
+    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
+    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.4 0.4 0.4"/>
+    <body name="assembly" pos="0 0 0">
+      {geoms_str}
+    </body>
+  </worldbody>
+</mujoco>
+"""
+    return xml, legends, temp_dir
+
+
+def build_coupler_assembly_scene(servo: ServoSpec) -> tuple[str, list, Path]:
+    """Build scene showing cradle + servo + coupler together in servo frame."""
+    from build123d import Location, export_stl
+
+    from botcad.bracket import BracketSpec, coupler_solid, cradle_solid, servo_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_coupler_asm_"))
+
+    cradle = cradle_solid(servo, BracketSpec())
+    export_stl(cradle, str(temp_dir / "cradle.stl"))
+
+    servo_body = servo_solid(servo)
+    export_stl(servo_body, str(temp_dir / "servo.stl"))
+
+    # Coupler is in shaft-centered frame; move it to servo frame for the assembly view
+    sx, sy, sz = servo.shaft_offset
+    coupler = coupler_solid(servo, BracketSpec())
+    coupler = coupler.moved(Location((sx, sy, sz)))
+    export_stl(coupler, str(temp_dir / "coupler.stl"))
+
+    geoms: list[str] = []
+    legends: list[tuple[str, tuple[int, int, int]]] = []
+
+    cr = COLOR_CRADLE
+    geoms.append(
+        f'<geom name="cradle" type="mesh" mesh="cradle_mesh"'
+        f' rgba="{cr[0]} {cr[1]} {cr[2]} {cr[3]}"/>'
+    )
+    legends.append(LEGEND_CRADLE)
+
+    sv = COLOR_SERVO_BODY
+    geoms.append(
+        f'<geom name="servo" type="mesh" mesh="servo_mesh"'
+        f' rgba="{sv[0]} {sv[1]} {sv[2]} {sv[3]}"/>'
+    )
+    legends.append(LEGEND_SERVO_BODY)
+
+    cp = COLOR_COUPLER
+    geoms.append(
+        f'<geom name="coupler" type="mesh" mesh="coupler_mesh"'
+        f' rgba="{cp[0]} {cp[1]} {cp[2]} {cp[3]}"/>'
+    )
+    legends.append(LEGEND_COUPLER)
+
+    # Mounting ears (blue)
+    if servo.mounting_ears:
+        for i, ear in enumerate(servo.mounting_ears):
+            geoms.append(
+                f'<geom name="ear_{i}" type="sphere" size="0.002"'
+                f' pos="{ear.pos[0]:.6f} {ear.pos[1]:.6f} {ear.pos[2]:.6f}"'
+                f' rgba="{COLOR_MOUNTING[0]} {COLOR_MOUNTING[1]} {COLOR_MOUNTING[2]} {COLOR_MOUNTING[3]}"/>'
+            )
+        legends.append(LEGEND_MOUNTING)
+
+    # Front horn holes (green)
+    if servo.horn_mounting_points:
+        for i, mp in enumerate(servo.horn_mounting_points):
+            geoms.append(
+                f'<geom name="horn_{i}" type="sphere" size="0.0015"'
+                f' pos="{mp.pos[0]:.6f} {mp.pos[1]:.6f} {mp.pos[2]:.6f}"'
+                f' rgba="{COLOR_HORN_HOLE[0]} {COLOR_HORN_HOLE[1]} {COLOR_HORN_HOLE[2]} {COLOR_HORN_HOLE[3]}"/>'
+            )
+        legends.append(LEGEND_HORN_HOLE)
+
+    # Rear horn holes (cyan)
+    if servo.rear_horn_mounting_points:
+        for i, mp in enumerate(servo.rear_horn_mounting_points):
+            geoms.append(
+                f'<geom name="rear_{i}" type="sphere" size="0.0015"'
+                f' pos="{mp.pos[0]:.6f} {mp.pos[1]:.6f} {mp.pos[2]:.6f}"'
+                f' rgba="{COLOR_REAR_HOLE[0]} {COLOR_REAR_HOLE[1]} {COLOR_REAR_HOLE[2]} {COLOR_REAR_HOLE[3]}"/>'
+            )
+        legends.append(LEGEND_REAR_HOLE)
+
+    # Shaft (red)
+    so = servo.shaft_offset
+    shaft_h = 0.008
+    shaft_z = so[2] + shaft_h / 2
+    geoms.append(
+        f'<geom name="shaft" type="cylinder" size="0.003 {shaft_h / 2:.6f}"'
+        f' pos="{so[0]:.6f} {so[1]:.6f} {shaft_z:.6f}"'
+        f' rgba="{COLOR_SHAFT[0]} {COLOR_SHAFT[1]} {COLOR_SHAFT[2]} {COLOR_SHAFT[3]}"/>'
+    )
+    legends.append(LEGEND_SHAFT)
+
+    geoms_str = "\n      ".join(geoms)
+
+    xml = f"""<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="coupler_assembly_debug">
+  <option gravity="0 0 0"/>
+  <compiler meshdir="{temp_dir}"/>
+  <visual>
+    <rgba haze="1 1 1 1"/>
+    <global offwidth="{WIDTH}" offheight="{HEIGHT}"/>
+  </visual>
+  <asset>
+    <mesh name="cradle_mesh" file="cradle.stl" scale="1 1 1"/>
+    <mesh name="servo_mesh" file="servo.stl" scale="1 1 1"/>
+    <mesh name="coupler_mesh" file="coupler.stl" scale="1 1 1"/>
+  </asset>
+  <worldbody>
+    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
+    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.4 0.4 0.4"/>
+    <body name="assembly" pos="0 0 0">
+      {geoms_str}
+    </body>
+  </worldbody>
+</mujoco>
+"""
+    return xml, legends, temp_dir
+
+
+def render_cradle_views(servo: ServoSpec, name: str) -> Image.Image:
+    """Render cradle + servo from all views."""
+    xml, legends, temp_dir = build_cradle_scene(servo)
+    try:
+        views = _render_and_collect(xml, temp_dir)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    return _composite_grid(f"Cradle (static side) — {name}", legends, views)
+
+
+def render_coupler_views(servo: ServoSpec, name: str) -> Image.Image:
+    """Render coupler alone from all views."""
+    xml, legends, temp_dir = build_coupler_scene(servo)
+    try:
+        views = _render_and_collect(xml, temp_dir)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    return _composite_grid(f"Coupler (moving side) — {name}", legends, views)
+
+
+def render_coupler_assembly_views(servo: ServoSpec, name: str) -> Image.Image:
+    """Render complete coupler assembly (cradle + servo + coupler)."""
+    xml, legends, temp_dir = build_coupler_assembly_scene(servo)
+    try:
+        views = _render_and_collect(xml, temp_dir)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    return _composite_grid(f"Coupler Assembly — {name}", legends, views)
+
+
 # ── Pipeline entry point ──
 
 
@@ -639,9 +955,15 @@ if __name__ == "__main__":
         img.save(out_path, optimize=True, dpi=PNG_DPI)
         print(f"Saved: {out_path}")
 
-    # Bracket tear sheet
+    # Bracket tear sheets
     servo = STS3215()
-    img = render_bracket_views(servo, "STS3215")
-    out_path = out_dir / "test_bracket_sts3215.png"
-    img.save(out_path, optimize=True, dpi=PNG_DPI)
-    print(f"Saved: {out_path}")
+    for render_fn, label in [
+        (render_bracket_views, "bracket"),
+        (render_cradle_views, "cradle"),
+        (render_coupler_views, "coupler"),
+        (render_coupler_assembly_views, "coupler_assembly"),
+    ]:
+        img = render_fn(servo, "STS3215")
+        out_path = out_dir / f"test_{label}_sts3215.png"
+        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        print(f"Saved: {out_path}")

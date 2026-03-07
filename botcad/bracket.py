@@ -43,6 +43,7 @@ class BracketSpec:
     shaft_clearance: float = 0.001  # 1mm extra radius around horn
     cable_slot_width: float = 0.010  # 10mm wide cable exit
     cable_slot_height: float = 0.006  # 6mm tall cable exit
+    coupler_thickness: float = 0.010  # 10mm plate thickness for PLA rigidity
 
 
 def _bracket_outer(
@@ -353,25 +354,587 @@ def servo_solid(servo: ServoSpec):
             flange = flange.locate(Location((flange_cx, flange_cy, flange_cz)))
             body = body + flange
 
-    # Output shaft stub — small cylinder on +Z face
+    # Output shaft boss — bearing housing cylinder on +Z face.
+    # This represents only the physical boss that protrudes from the servo
+    # body. The horn disc is a separate purchased part (modeled independently
+    # by horn_disc_params / the horn disc solid in cad.py).
     sx, sy, sz = servo.shaft_offset
-    _SHAFT_STUB_HEIGHT = 0.004  # 4mm visible stub
-    _DEFAULT_SHAFT_RADIUS = 0.006  # 12mm diameter fallback
-    shaft_r = _DEFAULT_SHAFT_RADIUS
-    if servo.horn_mounting_points:
-        # Derive from outermost horn screw position
-        max_r = max(
-            ((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) ** 0.5
-            for mp in servo.horn_mounting_points
+    if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
+        shaft = Cylinder(
+            servo.shaft_boss_radius,
+            servo.shaft_boss_height,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
-        shaft_r = max_r + 0.002  # 2mm beyond outermost screw
-    shaft_h = _SHAFT_STUB_HEIGHT
-    shaft = Cylinder(
-        shaft_r,
-        shaft_h,
-        align=(Align.CENTER, Align.CENTER, Align.MIN),
-    )
-    shaft = shaft.locate(Location((sx, sy, body_z / 2)))
-    body = body + shaft
+        shaft = shaft.locate(Location((sx, sy, body_z / 2)))
+        body = body + shaft
 
     return body
+
+
+# ── Coupler-style bracket: cradle (static) + coupler (moving) ──────────
+#
+# Cross-section looking from +Y (front), X horizontal, Z vertical:
+#
+#              CCCCCCCCCC      <- coupler top plate (+Z horn face)
+#  ---------    HHHHH  CC     <- front horn
+#  -SSSSSSSSSSSSSSSSSS CC     <- servo body
+#  -SSSSSSSSSSSSSSSSSS CC     <- servo body (shaft at +X end)
+#  -SSSSSSSSSSSSSSSSSS CC     <- servo body
+#  ---------    HHHHH  CC     <- rear horn
+#              CCCCCCCCCC      <- coupler bottom plate (-Z horn face)
+#
+# Cradle (dashes) wraps the -X end (back, ears, connector).
+# Coupler (C) wraps the +X end (shaft side), bridging both horns.
+
+
+def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a cradle wrapping the -X (back) end of the servo body.
+
+    The cradle holds the servo by its mounting ears on the side opposite
+    the shaft. It is open on the +X side so the coupler can reach the
+    horns. Used as the static (parent-body) side of a coupler-style joint.
+
+    Built in servo local frame (origin = body center, Z = shaft axis).
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    if spec is None:
+        spec = BracketSpec()
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+    sx, sy, _sz = servo.shaft_offset
+
+    # --- Ear geometry ---
+    ear_bottom_z = -body_z / 2
+    if servo.mounting_ears:
+        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
+        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
+        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+
+    # --- Cradle extent in X ---
+    # Wraps from the -X body edge (with wall) up to a safe boundary
+    # that won't intersect the coupler's swept volume. The coupler
+    # rotates around Z at the shaft center; its plates extend inward
+    # from the horn holes. The swept circle radius determines the
+    # maximum +X the cradle can reach.
+    cradle_min_x = -body_x / 2 - tol - wall
+
+    # Use the coupler's actual sweep radius (plates + side wall) to
+    # determine where the cradle must stop.
+    sweep_r = coupler_sweep_radius(servo, spec)
+    if sweep_r > 0:
+        cradle_max_x = sx - sweep_r - 0.001  # 1mm clearance
+    else:
+        cradle_max_x = sx - 0.002  # fallback
+    cradle_lx = cradle_max_x - cradle_min_x
+    cradle_cx = (cradle_min_x + cradle_max_x) / 2
+
+    # --- Cradle extent in Y (full body width + wall) ---
+    outer_ly = body_y + 2 * (tol + wall)
+
+    # --- Cradle extent in Z (full body height + ears) ---
+    outer_top_z = body_z / 2 + tol + wall
+    outer_bottom_z = ear_bottom_z
+    outer_lz = outer_top_z - outer_bottom_z
+    outer_cz = (outer_top_z + outer_bottom_z) / 2
+
+    outer = Box(
+        cradle_lx,
+        outer_ly,
+        outer_lz,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    outer = outer.locate(Location((cradle_cx, 0, outer_cz)))
+
+    # --- Pocket (servo body cavity, open on +X side) ---
+    # Extends past cradle_max_x to create the open side
+    pocket_x = body_x + 2 * tol
+    pocket_y = body_y + 2 * tol
+    pocket_z = body_z + 2 * tol
+    pocket = Box(
+        pocket_x,
+        pocket_y,
+        pocket_z,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    shell = outer - pocket
+
+    # --- M3 through-holes at each ear position ---
+    for ear in servo.mounting_ears:
+        # Only include ears within the cradle's X range
+        if ear.pos[0] > cradle_max_x + 0.001:
+            continue
+        hole_r = ear.diameter / 2
+        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+        hole = Cylinder(
+            hole_r,
+            hole_depth,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+        shell = shell - hole
+
+    # --- Cable exit slot (connector is at -X end) ---
+    if servo.connector_pos is not None:
+        _cx, cy, cz = servo.connector_pos
+        slot_w = spec.cable_slot_width
+        slot_h = spec.cable_slot_height
+        slot_depth = wall + tol + 0.002
+        slot = Box(
+            slot_depth,
+            slot_w,
+            slot_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        slot_x = cradle_min_x + slot_depth / 2 - 0.001
+        slot = slot.locate(Location((slot_x, cy, cz)))
+        shell = shell - slot
+
+    return shell
+
+
+def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Cradle envelope for cutting from parent body shell.
+
+    Covers the cradle footprint plus a 200mm insertion channel in +X
+    so the servo can slide in from the shaft side.
+    """
+    from build123d import Align, Box, Location
+
+    if spec is None:
+        spec = BracketSpec()
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+    sx = servo.shaft_offset[0]
+
+    ear_bottom_z = -body_z / 2
+    if servo.mounting_ears:
+        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
+        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
+        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+
+    cradle_min_x = -body_x / 2 - tol - wall
+    # Extend +X 200mm for insertion clearance through parent shell
+    cradle_max_x = sx - 0.002 + 0.200
+    cradle_lx = cradle_max_x - cradle_min_x
+    cradle_cx = (cradle_min_x + cradle_max_x) / 2
+
+    outer_ly = body_y + 2 * (tol + wall)
+    outer_top_z = body_z / 2 + tol + wall
+    outer_bottom_z = ear_bottom_z
+    outer_lz = outer_top_z - outer_bottom_z
+    outer_cz = (outer_top_z + outer_bottom_z) / 2
+
+    envelope = Box(
+        cradle_lx,
+        outer_ly,
+        outer_lz,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    envelope = envelope.locate(Location((cradle_cx, 0, outer_cz)))
+    return envelope
+
+
+def coupler_sweep_radius(servo: ServoSpec, spec: BracketSpec | None = None) -> float:
+    """Compute the coupler's maximum sweep radius from shaft center.
+
+    Used by the cradle to know how far it must retract. Returns the
+    distance from shaft center to the farthest point of the coupler.
+
+    With rounded plates, the sweep is the max of:
+    - The horn circle clip radius (rounded plate boundary)
+    - The wall strip corners (plate_max_x, ±plate_t/2)
+    """
+    import math
+
+    if spec is None:
+        spec = BracketSpec()
+    plate_t = spec.coupler_thickness
+    hole_margin = 0.002
+    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    body_x = servo.effective_body_dims[0]
+
+    all_horn = list(servo.horn_mounting_points or []) + list(
+        servo.rear_horn_mounting_points or []
+    )
+    if not all_horn:
+        return 0.0
+
+    # Horn circle clip radius (must match coupler_solid logic)
+    horn_r = max(
+        math.sqrt((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) for mp in all_horn
+    )
+    horn_clip_r = horn_r + hole_margin + spec.wall
+    # Constrain to ear clearance (must match coupler_solid)
+    if servo.mounting_ears:
+        min_ear_r = min(
+            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
+            - ear.diameter / 2
+            - spec.tolerance
+            - 0.001
+            for ear in servo.mounting_ears
+        )
+        horn_clip_r = min(horn_clip_r, min_ear_r)
+
+    # Wall position
+    holes_x = [mp.pos[0] - sx for mp in all_horn]
+    body_plus_x = body_x / 2 - sx
+    body_half_y = servo.effective_body_dims[1] / 2
+    if servo.mounting_ears:
+        max_ear_y = max(
+            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
+        )
+        body_half_y = max(body_half_y, max_ear_y)
+    body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
+    wall_clear_x = body_diag + 0.001
+    plate_max_x = max(
+        max(holes_x) + hole_margin + plate_t,
+        wall_clear_x + plate_t,
+    )
+
+    # Wall strip corners: (plate_max_x, ±horn_clip_r) — strip matches disc width
+    wall_corner_r = math.sqrt(plate_max_x**2 + horn_clip_r**2)
+
+    return max(horn_clip_r, wall_corner_r)
+
+
+def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> float:
+    """Compute the maximum safe ROM (half-range) for a coupler bracket.
+
+    Returns the largest |angle| in radians where the coupler's side wall
+    rib stays outside the servo body (including ear flanges) at all
+    rotation angles within [-result, +result].
+
+    The constraint: as the coupler rotates, its side wall rib (on the +X
+    edge) sweeps through positions that may enter the servo body. The body
+    is asymmetric (shaft offset from center), so the rib enters the body
+    at large angles where sin(θ) isn't large enough to clear the body width.
+    """
+    import math
+
+    if spec is None:
+        spec = BracketSpec()
+
+    sx = servo.shaft_offset[0]
+    body_x, body_y, _body_z = servo.effective_body_dims
+
+    # Body envelope from shaft center (including ear flanges)
+    body_plus_x = body_x / 2 - sx
+    body_minus_x = body_x / 2 + sx
+    body_half_y = body_y / 2
+    if servo.mounting_ears:
+        max_ear_y = max(
+            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
+        )
+        body_half_y = max(body_half_y, max_ear_y)
+
+    # Wall geometry (must match coupler_solid — uses plate_t for all margins)
+    plate_t = spec.coupler_thickness
+    body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
+    wall_clear_x = body_diag + 0.001
+    hole_margin = 0.002
+    all_horn = list(servo.horn_mounting_points or []) + list(
+        servo.rear_horn_mounting_points or []
+    )
+    if not all_horn:
+        return 0.0
+    holes_x = [mp.pos[0] - sx for mp in all_horn]
+    plate_max_x = max(
+        max(holes_x) + hole_margin + plate_t,
+        wall_clear_x + plate_t,
+    )
+    wall_inner = plate_max_x - plate_t
+
+    # Wall strip matches disc width (2 * horn_clip_r) for PLA strength
+    sy = servo.shaft_offset[1]
+    horn_r = max(
+        math.sqrt((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) for mp in all_horn
+    )
+    horn_clip_r = horn_r + hole_margin + spec.wall
+    # Constrain to ear clearance (must match coupler_solid)
+    if servo.mounting_ears:
+        min_ear_r = min(
+            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
+            - ear.diameter / 2
+            - spec.tolerance
+            - 0.001
+            for ear in servo.mounting_ears
+        )
+        horn_clip_r = min(horn_clip_r, min_ear_r)
+    wall_half_y = horn_clip_r
+
+    # Wall corners in coupler local frame (XY only)
+    rib_corners = [
+        (wall_inner, -wall_half_y),
+        (wall_inner, wall_half_y),
+        (plate_max_x, -wall_half_y),
+        (plate_max_x, wall_half_y),
+    ]
+
+    # Binary search for max safe angle
+    lo, hi = 0.0, math.pi
+    for _ in range(50):  # converge to ~1e-15 rad precision
+        mid = (lo + hi) / 2
+        safe = True
+        for theta in [mid, -mid]:
+            ct, st = math.cos(theta), math.sin(theta)
+            for cx, cy in rib_corners:
+                rx = cx * ct - cy * st
+                ry = cx * st + cy * ct
+                # Inside body if within all bounds
+                if -body_minus_x < rx < body_plus_x and -body_half_y < ry < body_half_y:
+                    safe = False
+                    break
+            if not safe:
+                break
+        if safe:
+            lo = mid
+        else:
+            hi = mid
+
+    return lo
+
+
+def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a C-shaped coupler bridging front and rear horn faces.
+
+    Side profile (looking from +Y):
+
+              TTTTTTTTTTTT      <- top plate (front horn face)
+              T  hh  hh  W     <- horn holes, W = side wall
+              T          W
+              T   servo  W     <- servo body lives in this gap
+              T          W
+              T  hh  hh  W     <- horn holes
+              BBBBBBBBBBBB      <- bottom plate (rear horn face)
+
+    The coupler is one printed C-shape:
+    - Top plate bolted to front horn (screws down into horn)
+    - Bottom plate bolted to rear horn (screws up into horn)
+    - Side wall on the +X edge (past shaft, outside servo body) connecting them
+
+    Built in shaft-centered frame (origin = shaft center, Z = shaft axis).
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    if spec is None:
+        spec = BracketSpec()
+
+    tol = spec.tolerance
+    sx, sy, sz = servo.shaft_offset
+    body_x, body_y, body_z = servo.effective_body_dims
+
+    # --- Collect horn hole positions in shaft-centered frame ---
+    front_holes = []
+    if servo.horn_mounting_points:
+        for mp in servo.horn_mounting_points:
+            front_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    rear_holes = []
+    if servo.rear_horn_mounting_points:
+        for mp in servo.rear_horn_mounting_points:
+            rear_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    if not front_holes or not rear_holes:
+        return Box(
+            0.001, 0.001, 0.001, align=(Align.CENTER, Align.CENTER, Align.CENTER)
+        )
+
+    all_holes = front_holes + rear_holes
+
+    # --- Key Z coordinates (in shaft frame) ---
+    front_z = front_holes[0][2]  # front horn face Z
+    rear_z = rear_holes[0][2]  # rear horn face Z
+
+    # --- Plate extent in XY: cover all horn holes + material margin ---
+    # The side wall on +X must clear the servo body at ALL rotation
+    # angles. The worst case is the body's XY diagonal from shaft center.
+    # Wall inner radius must exceed this diagonal.
+    import math
+
+    body_plus_x = body_x / 2 - sx  # body +X edge from shaft
+    # Use the full collision envelope including ear flanges (wider than body)
+    body_half_y = body_y / 2
+    if servo.mounting_ears:
+        max_ear_y = max(
+            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
+        )
+        body_half_y = max(body_half_y, max_ear_y)
+    body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
+    wall_clear_x = body_diag + 0.001  # 1mm clearance for mesh tolerance
+
+    plate_t = spec.coupler_thickness  # wall thickness in X matches plate thickness
+    hole_margin = 0.002  # 2mm material around each hole
+    plate_min_x = min(h[0] for h in all_holes) - hole_margin - plate_t
+    plate_max_x = max(
+        max(h[0] for h in all_holes) + hole_margin + plate_t,
+        wall_clear_x + plate_t,  # side wall outer edge
+    )
+    plate_min_y = min(h[1] for h in all_holes) - hole_margin - plate_t
+    plate_max_y = max(h[1] for h in all_holes) + hole_margin + plate_t
+    plate_lx = plate_max_x - plate_min_x
+    plate_ly = plate_max_y - plate_min_y
+    plate_cx = (plate_min_x + plate_max_x) / 2
+    plate_cy = (plate_min_y + plate_max_y) / 2
+
+    # --- Shaft boss clearance ---
+    boss_clear_r = (
+        servo.shaft_boss_radius + tol + 0.001 if servo.shaft_boss_radius > 0 else 0
+    )
+
+    # --- Plate thickness ---
+    plate_t = spec.coupler_thickness  # 10mm for PLA rigidity
+
+    # --- Horn circle clip radius ---
+    # The horns are round — plates only need to cover the bolt circle, not
+    # extend to full rectangular corners. Clip both plates to a circle
+    # (horn radius + material margin) plus a rectangular strip on +X for
+    # the wall connection. This dramatically shrinks the sweep envelope.
+    front_horn_r = max(math.sqrt(h[0] ** 2 + h[1] ** 2) for h in front_holes)
+    rear_horn_r = max(math.sqrt(h[0] ** 2 + h[1] ** 2) for h in rear_holes)
+    horn_clip_r = max(front_horn_r, rear_horn_r) + hole_margin + spec.wall
+    # Constrain to ear clearance so all parts (discs, wing, wall) match
+    if servo.mounting_ears:
+        min_ear_r = min(
+            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
+            - ear.diameter / 2
+            - tol
+            - 0.001
+            for ear in servo.mounting_ears
+        )
+        horn_clip_r = min(horn_clip_r, min_ear_r)
+
+    def _clip_plate_to_horn_circle(plate, clip_r, z_base, z_align_max):
+        """Clip a plate to a D-shape: semicircle (-X) + rectangle (+X).
+
+        The semicircle matches the horn bolt circle. The rectangle
+        extends to the wall at constant width = disc diameter. No
+        overlap zone where rectangle corners stick past the circle.
+        """
+        clip_h = plate_t + 0.002
+        if z_align_max:
+            clip_z = z_base + 0.001
+            align_z = Align.MAX
+        else:
+            clip_z = z_base - 0.001
+            align_z = Align.MIN
+        # Big cylinder covering entire plate (what we subtract from)
+        clip_outer = Cylinder(
+            plate_lx,
+            clip_h,
+            align=(Align.CENTER, Align.CENTER, align_z),
+        ).locate(Location((0, 0, clip_z)))
+        # D-shape keep zone:
+        # 1) Semicircle on -X side (rounded horn end)
+        keep_circle = Cylinder(
+            clip_r,
+            clip_h + 0.002,
+            align=(Align.CENTER, Align.CENTER, align_z),
+        ).locate(Location((0, 0, clip_z)))
+        # Cut away the +X half to get just the -X semicircle
+        cut_pos_x = Box(
+            clip_r + 0.001,
+            clip_r * 2 + 0.004,
+            clip_h + 0.004,
+            align=(Align.MIN, Align.CENTER, align_z),
+        ).locate(Location((0, plate_cy, clip_z)))
+        keep_semi = keep_circle - cut_pos_x
+        # 2) Rectangle from X=0 to plate_max_x, width = 2*clip_r
+        keep_rect = Box(
+            plate_max_x + 0.001,
+            clip_r * 2 + 0.002,
+            clip_h + 0.002,
+            align=(Align.MIN, Align.CENTER, align_z),
+        ).locate(Location((0, plate_cy, clip_z)))
+        # Union: seamless at X=0 (both are ±clip_r wide there)
+        keep = keep_semi.fuse(keep_rect)
+        clip_cut = clip_outer - keep
+        return plate - clip_cut
+
+    # --- Build top plate (front horn face) ---
+    front_plate = Box(
+        plate_lx,
+        plate_ly,
+        plate_t,
+        align=(Align.CENTER, Align.CENTER, Align.MIN),
+    )
+    front_plate = front_plate.locate(Location((plate_cx, plate_cy, front_z)))
+    if boss_clear_r > 0:
+        boss_hole = Cylinder(
+            boss_clear_r,
+            plate_t + 0.002,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        boss_hole = boss_hole.locate(Location((0, 0, front_z - 0.001)))
+        front_plate = front_plate - boss_hole
+    front_plate = _clip_plate_to_horn_circle(
+        front_plate, horn_clip_r, front_z, z_align_max=False
+    )
+
+    # --- Build bottom plate (rear horn face) ---
+    rear_plate = Box(
+        plate_lx,
+        plate_ly,
+        plate_t,
+        align=(Align.CENTER, Align.CENTER, Align.MAX),
+    )
+    rear_plate = rear_plate.locate(Location((plate_cx, plate_cy, rear_z)))
+    if boss_clear_r > 0:
+        boss_hole = Cylinder(
+            boss_clear_r,
+            plate_t + 0.002,
+            align=(Align.CENTER, Align.CENTER, Align.MAX),
+        )
+        boss_hole = boss_hole.locate(Location((0, 0, rear_z + 0.001)))
+        rear_plate = rear_plate - boss_hole
+    # Ear clearance already folded into horn_clip_r above
+    rear_plate = _clip_plate_to_horn_circle(
+        rear_plate, horn_clip_r, rear_z, z_align_max=True
+    )
+
+    # --- Side wall connecting both plates on +X edge ---
+    # Same width as the disc (2 * horn_clip_r) for consistent profile.
+    # Spans from bottom of rear plate to top of front plate.
+    wall_z_lo = rear_z - plate_t
+    wall_z_hi = front_z + plate_t
+    wall_lz = wall_z_hi - wall_z_lo
+    wall_cz = (wall_z_lo + wall_z_hi) / 2
+    wall_cx = plate_max_x - plate_t / 2
+    wall_width = horn_clip_r * 2
+
+    side_wall = Box(
+        plate_t,
+        wall_width,
+        wall_lz,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    side_wall = side_wall.locate(Location((wall_cx, plate_cy, wall_cz)))
+
+    # Fuse all three pieces (wall overlaps both plates at their +X edges)
+    shell = front_plate.fuse(side_wall).fuse(rear_plate)
+
+    # --- Through-holes for front horn mounting (M2.5) ---
+    for hx, hy, _hz in front_holes:
+        hole = Cylinder(
+            0.00125,  # M2.5 clearance
+            plate_t + 0.002,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        hole = hole.locate(Location((hx, hy, front_z - 0.001)))
+        shell = shell - hole
+
+    # --- Through-holes for rear horn mounting (M2.5) ---
+    for hx, hy, _hz in rear_holes:
+        hole = Cylinder(
+            0.00125,  # M2.5 clearance
+            plate_t + 0.002,
+            align=(Align.CENTER, Align.CENTER, Align.MAX),
+        )
+        hole = hole.locate(Location((hx, hy, rear_z + 0.001)))
+        shell = shell - hole
+
+    return shell
