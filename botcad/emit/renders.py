@@ -20,6 +20,9 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw
 
+from botcad.emit.composite import _FONT_LABEL, _FONT_TITLE, filmstrip
+from botcad.emit.render3d import white_background  # re-exported for dependents
+
 # ── Config ──
 
 VIEW_W, VIEW_H = 1000, 1000  # per-view resolution for overview/closeups
@@ -83,12 +86,6 @@ def _render(
     img = renderer.render().copy()
     white_background(img)
     return img
-
-
-def white_background(img: np.ndarray) -> None:
-    """Replace black pixels with white (MuJoCo renders on black)."""
-    mask = np.all(img == 0, axis=2)
-    img[mask] = 255
 
 
 def _set_mesh_alpha(model: mujoco.MjModel, alpha: float) -> np.ndarray:
@@ -181,14 +178,19 @@ def render_overview(
 
     canvas = Image.new("RGB", (cw, ch), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Bot overview — {output_dir.name}", fill=(0, 0, 0))
+    draw.text(
+        (margin, margin),
+        f"Bot overview — {output_dir.name}",
+        fill=(0, 0, 0),
+        font=_FONT_TITLE,
+    )
 
     for idx, (img, label) in enumerate(zip(images, labels)):
         col = idx % cols
         row = idx // cols
         x = margin + col * (VIEW_W + margin)
         y = title_h + margin + row * (VIEW_H + label_h + margin)
-        draw.text((x, y), label, fill=(80, 80, 80))
+        draw.text((x, y), label, fill=(80, 80, 80), font=_FONT_LABEL)
         img_y = y + label_h
         draw.rectangle(
             [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
@@ -277,18 +279,25 @@ def render_closeups(
 
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Servo closeups — {output_dir.name}", fill=(0, 0, 0))
+    draw.text(
+        (margin, margin),
+        f"Servo closeups — {output_dir.name}",
+        fill=(0, 0, 0),
+        font=_FONT_TITLE,
+    )
 
     for sec_idx, (jname, imgs, lbls) in enumerate(sections):
         sec_y = title_h + sec_idx * section_h
-        draw.text((margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0))
+        draw.text(
+            (margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0), font=_FONT_LABEL
+        )
 
         for idx, (img, label) in enumerate(zip(imgs, lbls)):
             col = idx % cols
             row = idx // cols
             x = margin + col * (VIEW_W + margin)
             y = sec_y + header_h + margin + row * (VIEW_H + label_h + margin)
-            draw.text((x, y), label, fill=(80, 80, 80))
+            draw.text((x, y), label, fill=(80, 80, 80), font=_FONT_LABEL)
             img_y = y + label_h
             draw.rectangle(
                 [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
@@ -458,88 +467,41 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
 
     renderer.close()
 
-    # Composite: one horizontal filmstrip per joint, stacked vertically
+    # Composite: one filmstrip per joint, stacked vertically
+    elapsed = time.perf_counter() - t0
+    strip_images = []
+    for jname, frames, frame_labels, collisions in strips:
+        angles = [float(lbl.replace("°", "").replace("+", "")) for lbl in frame_labels]
+        strip_img = filmstrip(
+            jname,
+            frames,
+            angles,
+            collisions,
+            cell_w=SWEEP_W,
+            cell_h=SWEEP_H,
+            elapsed=elapsed / max(len(strips), 1),
+        )
+        strip_images.append(strip_img)
+
+    # Stack strips vertically with a title header
     margin = 8
-    header_h = 28
-    label_h = 20
-    strip_h = header_h + SWEEP_H + label_h + margin
-    border_w = 3  # red border width for collision frames
+    title_h = 30
+    total_w = max(img.width for img in strip_images) if strip_images else 100
+    total_h = title_h + sum(img.height for img in strip_images) + margin
 
-    canvas_w = SWEEP_W * SWEEP_FRAMES + margin * (SWEEP_FRAMES + 1)
-    canvas_h = 30 + strip_h * len(strips) + margin
-
-    canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
+    canvas = Image.new("RGB", (total_w, total_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, margin), f"Joint sweeps — {output_dir.name}", fill=(0, 0, 0))
+    draw.text(
+        (margin, margin),
+        f"Joint sweeps — {output_dir.name}",
+        fill=(0, 0, 0),
+        font=_FONT_TITLE,
+    )
 
-    for strip_idx, (jname, frames, frame_labels, collisions) in enumerate(strips):
-        lo, hi = model.jnt_range[sweep_joints[strip_idx]]
-        lo_deg, hi_deg = math.degrees(lo), math.degrees(hi)
-        sy = 30 + strip_idx * strip_h
-        range_text = f"{jname}  [{lo_deg:+.0f}° .. {hi_deg:+.0f}°]"
-        draw.text((margin, sy + 4), range_text, fill=(0, 0, 0))
-
-        # ROM bar: horizontal bar showing range within [-180°, +180°]
-        bar_x0 = margin + len(range_text) * 7 + 20
-        bar_w = 200
-        bar_y = sy + 8
-        bar_h = 12
-        # Background bar (full range)
-        draw.rectangle(
-            [bar_x0, bar_y, bar_x0 + bar_w, bar_y + bar_h],
-            fill=(230, 230, 230),
-            outline=(180, 180, 180),
-        )
-        # Active range fill
-        px_lo = int((lo_deg + 180) / 360 * bar_w)
-        px_hi = int((hi_deg + 180) / 360 * bar_w)
-        px_lo = max(0, min(bar_w, px_lo))
-        px_hi = max(px_lo + 1, min(bar_w, px_hi))
-        # Color: green if no collisions in this joint's sweep, yellow otherwise
-        has_any_col = any(collisions)
-        bar_color = (255, 180, 50) if has_any_col else (80, 180, 80)
-        draw.rectangle(
-            [bar_x0 + px_lo, bar_y, bar_x0 + px_hi, bar_y + bar_h],
-            fill=bar_color,
-        )
-        # Center tick (0°)
-        center_px = int(180 / 360 * bar_w)
-        draw.line(
-            [bar_x0 + center_px, bar_y, bar_x0 + center_px, bar_y + bar_h],
-            fill=(100, 100, 100),
-            width=1,
-        )
-
-        for fi, (frame, label, has_col) in enumerate(
-            zip(frames, frame_labels, collisions)
-        ):
-            x = margin + fi * (SWEEP_W + margin)
-            y = sy + header_h
-
-            if has_col:
-                # Red border for collision frames
-                draw.rectangle(
-                    [
-                        x - border_w,
-                        y - border_w,
-                        x + SWEEP_W + border_w,
-                        y + SWEEP_H + border_w,
-                    ],
-                    fill=(220, 40, 40),
-                )
-            else:
-                # Black border for normal frames
-                draw.rectangle(
-                    [x - 1, y - 1, x + SWEEP_W, y + SWEEP_H],
-                    outline=(0, 0, 0),
-                    width=1,
-                )
-
-            canvas.paste(frame, (x, y))
-
-            # Angle label below frame
-            color = (220, 40, 40) if has_col else (80, 80, 80)
-            draw.text((x, y + SWEEP_H + 2), label, fill=color)
+    y = title_h
+    for strip_img in strip_images:
+        canvas.paste(strip_img, (0, y))
+        y += strip_img.height
 
     out = output_dir / "test_sweep.png"
     canvas.save(out, optimize=True, dpi=PNG_DPI)
