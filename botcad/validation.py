@@ -35,9 +35,10 @@ from pathlib import Path
 
 import mujoco
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
-from botcad.emit.renders import white_background
+from botcad.emit.composite import filmstrip
+from botcad.emit.render3d import Color, Renderer3D, SceneBuilder
 
 Vec3 = tuple[float, float, float]
 
@@ -86,7 +87,15 @@ class SweepResult:
 
     def image(self) -> Image.Image:
         """Composite filmstrip with collision indicators."""
-        return _composite_filmstrip(self)
+        return filmstrip(
+            self.name,
+            self.frames,
+            self.angles_deg,
+            self.collisions,
+            cell_w=SWEEP_W,
+            cell_h=SWEEP_H,
+            elapsed=self.elapsed,
+        )
 
     def save(self, path: str | Path) -> Path:
         """Save filmstrip to PNG."""
@@ -132,20 +141,18 @@ def validate_subassembly(
         _export_parts(fixed, temp_dir, prefix="fixed")
         _export_parts(moving, temp_dir, prefix="moving")
 
-        # Build MuJoCo XML
-        xml = _build_scene_xml(fixed, moving, pivot, axis, range_rad, temp_dir)
+        # Build scene via SceneBuilder
+        scene = _build_scene(fixed, moving, pivot, axis, range_rad, temp_dir)
+        xml = scene.to_xml()
 
-        # Load and sweep
-        model = mujoco.MjModel.from_xml_string(xml)
-        data = mujoco.MjData(model)
-        renderer = mujoco.Renderer(model, SWEEP_W, SWEEP_H)
+        # Create renderer (gets orthographic, edges, SSAO, CAD lighting)
+        r = Renderer3D(xml, SWEEP_W, SWEEP_H)
 
         # Auto camera distance from scene extent
-        mujoco.mj_forward(model, data)
-        dist = camera_distance or max(model.stat.extent * 2.5, 0.05)
+        dist = camera_distance or max(r._geom_extent * 2.5, 0.05)
 
         angles = np.linspace(range_rad[0], range_rad[1], frames)
-        qposadr = model.jnt_qposadr[0]  # single hinge joint
+        qposadr = r.model.jnt_qposadr[0]  # single hinge joint
 
         result = SweepResult(name=name)
 
@@ -155,21 +162,23 @@ def validate_subassembly(
         moving_meshes = _load_trimeshes(moving, temp_dir, "moving")
 
         for angle in angles:
-            mujoco.mj_resetData(model, data)
-            data.qpos[qposadr] = angle
-            mujoco.mj_forward(model, data)
+            mujoco.mj_resetData(r.model, r.data)
+            r.data.qpos[qposadr] = angle
+            mujoco.mj_forward(r.model, r.data)
 
-            # Render
-            img = _render_frame(
-                model, data, renderer, dist, camera_azimuth, camera_elevation
+            # Render with CAD-style edges
+            img = r.render_frame(
+                azimuth=camera_azimuth,
+                elevation=camera_elevation,
+                distance=dist,
             )
             result.frames.append(Image.fromarray(img))
             result.angles_deg.append(math.degrees(angle))
 
             # Collision check using trimesh
             has_col = _check_collision(
-                model,
-                data,
+                r.model,
+                r.data,
                 collision_fixed,
                 moving,
                 fixed_meshes,
@@ -179,7 +188,7 @@ def validate_subassembly(
             )
             result.collisions.append(has_col)
 
-        renderer.close()
+        r.close()
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -217,74 +226,39 @@ def _export_parts(parts: list[SolidPart], temp_dir: Path, prefix: str) -> None:
         export_stl(solid, str(stl_path))
 
 
-def _build_scene_xml(
+def _build_scene(
     fixed: list[SolidPart],
     moving: list[SolidPart],
     pivot: Vec3,
     axis: Vec3,
     range_rad: tuple[float, float],
     temp_dir: Path,
-) -> str:
-    """Build MuJoCo XML for the subassembly sweep."""
-    assets = []
-    for part in fixed:
-        assets.append(f'<mesh name="fixed_{part.name}" file="fixed_{part.name}.stl"/>')
-    for part in moving:
-        assets.append(
-            f'<mesh name="moving_{part.name}" file="moving_{part.name}.stl"/>'
-        )
-    assets_str = "\n    ".join(assets)
+) -> SceneBuilder:
+    """Build MuJoCo scene for the subassembly sweep via SceneBuilder."""
+    scene = SceneBuilder(model_name="rom_sweep", width=SWEEP_W, height=SWEEP_H)
+    scene.set_mesh_dir(temp_dir)
 
-    fixed_geoms = []
+    # Fixed parts as root-level geoms
     for part in fixed:
         r, g, b, a = part.rgba
-        fixed_geoms.append(
-            f'<geom name="fixed_{part.name}" type="mesh"'
-            f' mesh="fixed_{part.name}" rgba="{r} {g} {b} {a}"/>'
-        )
-    fixed_geoms_str = "\n        ".join(fixed_geoms)
+        color = Color(r, g, b, a)
+        scene.add_mesh(f"fixed_{part.name}", f"fixed_{part.name}.stl", color)
 
+    # Moving parts in a child body with hinge joint
     moving_geoms = []
     for part in moving:
         r, g, b, a = part.rgba
+        mesh_name = f"moving_{part.name}_mesh"
+        scene._meshes.append((mesh_name, f"moving_{part.name}.stl"))
         moving_geoms.append(
             f'<geom name="moving_{part.name}" type="mesh"'
-            f' mesh="moving_{part.name}" rgba="{r} {g} {b} {a}"/>'
+            f' mesh="{mesh_name}" rgba="{r} {g} {b} {a}"/>'
         )
-    moving_geoms_str = "\n        ".join(moving_geoms)
 
-    px, py, pz = pivot
-    ax, ay, az = axis
-    lo, hi = range_rad
+    scene.add_body("moving", pos=pivot, geoms=moving_geoms)
+    scene.add_hinge("sweep", axis=axis, range_rad=range_rad)
 
-    xml = f"""<?xml version='1.0' encoding='utf-8'?>
-<mujoco model="rom_sweep">
-  <option gravity="0 0 0"/>
-  <compiler meshdir="{temp_dir}"/>
-  <visual>
-    <rgba haze="1 1 1 1"/>
-    <global offwidth="{SWEEP_W * 2}" offheight="{SWEEP_H * 2}"/>
-    <headlight diffuse="0.7 0.7 0.7" ambient="0.3 0.3 0.3"/>
-  </visual>
-  <asset>
-    {assets_str}
-  </asset>
-  <worldbody>
-    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.8 0.8 0.8"/>
-    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.4 0.4 0.4"/>
-    <body name="fixed" pos="0 0 0">
-      {fixed_geoms_str}
-      <body name="moving" pos="{px} {py} {pz}">
-        <joint name="sweep" type="hinge"
-               axis="{ax} {ay} {az}"
-               range="{lo} {hi}" limited="true"/>
-        {moving_geoms_str}
-      </body>
-    </body>
-  </worldbody>
-</mujoco>
-"""
-    return xml
+    return scene
 
 
 def _load_trimeshes(parts: list[SolidPart], temp_dir: Path, prefix: str) -> list:
@@ -342,111 +316,3 @@ def _check_collision(
             return True
 
     return False
-
-
-def _render_frame(
-    model: mujoco.MjModel,
-    data: mujoco.MjData,
-    renderer: mujoco.Renderer,
-    distance: float,
-    azimuth: float,
-    elevation: float,
-) -> np.ndarray:
-    """Render a single sweep frame."""
-    cam = mujoco.MjvCamera()
-    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-    cam.lookat[:] = model.stat.center
-    cam.distance = distance
-    cam.azimuth = azimuth
-    cam.elevation = elevation
-    renderer.update_scene(data, camera=cam)
-    img = renderer.render().copy()
-    white_background(img)
-    return img
-
-
-def _composite_filmstrip(result: SweepResult) -> Image.Image:
-    """Build a filmstrip image from sweep results."""
-    n = len(result.frames)
-    if n == 0:
-        return Image.new("RGB", (100, 100), (255, 255, 255))
-
-    margin = 8
-    header_h = 32
-    label_h = 20
-    border_w = 3
-
-    # Layout: one row of frames
-    canvas_w = SWEEP_W * n + margin * (n + 1)
-    canvas_h = header_h + SWEEP_H + label_h + margin * 2
-
-    canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
-    draw = ImageDraw.Draw(canvas)
-
-    # Header with name and range
-    lo = min(result.angles_deg) if result.angles_deg else 0
-    hi = max(result.angles_deg) if result.angles_deg else 0
-    collision_text = "  COLLISIONS DETECTED" if result.has_collisions else ""
-    header = (
-        f"ROM sweep: {result.name}  "
-        f"[{lo:+.0f}° .. {hi:+.0f}°]"
-        f"  ({result.elapsed:.1f}s){collision_text}"
-    )
-    draw.text((margin, margin), header, fill=(0, 0, 0))
-
-    # ROM bar
-    bar_x0 = margin
-    bar_w = min(300, canvas_w - 2 * margin)
-    bar_y = margin + 16
-    bar_h = 10
-    draw.rectangle(
-        [bar_x0, bar_y, bar_x0 + bar_w, bar_y + bar_h],
-        fill=(230, 230, 230),
-        outline=(180, 180, 180),
-    )
-    px_lo = int((lo + 180) / 360 * bar_w)
-    px_hi = int((hi + 180) / 360 * bar_w)
-    px_lo = max(0, min(bar_w, px_lo))
-    px_hi = max(px_lo + 1, min(bar_w, px_hi))
-    bar_color = (255, 180, 50) if result.has_collisions else (80, 180, 80)
-    draw.rectangle(
-        [bar_x0 + px_lo, bar_y, bar_x0 + px_hi, bar_y + bar_h],
-        fill=bar_color,
-    )
-    # Center tick
-    center_px = int(180 / 360 * bar_w)
-    draw.line(
-        [bar_x0 + center_px, bar_y, bar_x0 + center_px, bar_y + bar_h],
-        fill=(100, 100, 100),
-        width=1,
-    )
-
-    # Frames
-    for i, (frame, angle, has_col) in enumerate(
-        zip(result.frames, result.angles_deg, result.collisions)
-    ):
-        x = margin + i * (SWEEP_W + margin)
-        y = header_h
-
-        if has_col:
-            draw.rectangle(
-                [
-                    x - border_w,
-                    y - border_w,
-                    x + SWEEP_W + border_w,
-                    y + SWEEP_H + border_w,
-                ],
-                fill=(220, 40, 40),
-            )
-        else:
-            draw.rectangle(
-                [x - 1, y - 1, x + SWEEP_W, y + SWEEP_H],
-                outline=(0, 0, 0),
-                width=1,
-            )
-
-        canvas.paste(frame, (x, y))
-        color = (220, 40, 40) if has_col else (80, 80, 80)
-        draw.text((x, y + SWEEP_H + 2), f"{angle:+.0f}°", fill=color)
-
-    return canvas
