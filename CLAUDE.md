@@ -2,16 +2,21 @@
 
 Design robots from real components, train them in simulation, then build the physical thing.
 
+## Principles
+
+- Simple is beautiful
+- Composable modules
+
 ## Pipeline Philosophy
 
 The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 
-```
+```md
 Skeleton DSL (design.py)
-    ├─→ CAD assembly (STEP + per-body STLs for slicing)
-    ├─→ MuJoCo XML (references same STL meshes — no separate "sim geometry")
-    ├─→ validation renders (visual sanity checks before printing)
-    └─→ training pipeline (PPO, reward shaping, scene gen)
+├─→ CAD assembly (STEP + per-body STLs for slicing)
+├─→ MuJoCo XML (references same STL meshes — no separate "sim geometry")
+├─→ validation renders (visual sanity checks before printing)
+└─→ training pipeline (PPO, reward shaping, scene gen)
 ```
 
 **Key invariants:**
@@ -37,7 +42,7 @@ uv run mjpython main.py scene              # Scene gen preview
 
 ## Project Structure
 
-```
+```txt
 ├── main.py                   # Single entry point for all modes
 ├── botcad/                   # Parametric bot CAD system
 │   ├── skeleton.py           # Kinematic tree DSL (Bot, Body, Joint)
@@ -72,7 +77,7 @@ Each bot's `design.py` calls `bot.solve()` then `bot.emit()` to produce: `assemb
 1. **Master stays stable.** Only small, safe changes land directly on master.
 2. **Experiments are focused.** `exp/YYMMDD-<name>` branches test one hypothesis. No drive-by refactors.
 3. **Tooling/infra changes are separate.** `infra/<name>` branches, not mixed into experiments.
-4. **Commit logs are a journal.** Explain *why*, not just *what*.
+4. **Commit logs are a journal.** Explain _why_, not just _what_.
 
 **Before any non-trivial change:** ensure working tree is clean, classify the change, use `make wt-new` for experiments/infra.
 
@@ -99,14 +104,14 @@ make renders-rom          # Subassembly ROM validation only
 
 Each stage produces both 3D renders (PNG/PDF) and 2D technical drawings (SVG):
 
-| Stage | 3D renders | 2D drawings |
-|-------|-----------|-------------|
-| Component | `botcad/components/test_*.png` — 6-view tear sheets | `botcad/components/drawing_*.svg` — section views at key planes |
-| Bracket | `botcad/components/test_{bracket,cradle,coupler}*.png` | `botcad/components/drawing_{pocket,coupler,cradle}*.svg` |
-| ROM validation | `botcad/components/test_rom_*.png` — sweep filmstrips | — |
-| Bot joints | `bots/*/test_sweep.png` — per-joint ROM filmstrip | `bots/*/drawings/drawing_joint_*.svg` — bracket-servo sections |
-| Bot assembly | `bots/*/assembly_visual.pdf`, `test_assembly.pdf` | — |
-| Bot overview | `bots/*/test_overview.png` | — |
+| Stage          | 3D renders                                             | 2D drawings                                                     |
+| -------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| Component      | `botcad/components/test_*.png` — 6-view tear sheets    | `botcad/components/drawing_*.svg` — section views at key planes |
+| Bracket        | `botcad/components/test_{bracket,cradle,coupler}*.png` | `botcad/components/drawing_{pocket,coupler,cradle}*.svg`        |
+| ROM validation | `botcad/components/test_rom_*.png` — sweep filmstrips  | —                                                               |
+| Bot joints     | `bots/*/test_sweep.png` — per-joint ROM filmstrip      | `bots/*/drawings/drawing_joint_*.svg` — bracket-servo sections  |
+| Bot assembly   | `bots/*/assembly_visual.pdf`, `test_assembly.pdf`      | —                                                               |
+| Bot overview   | `bots/*/test_overview.png`                             | —                                                               |
 
 For interactive debugging during development, use `botcad/debug_drawing.py`:
 
@@ -125,6 +130,7 @@ drawing.save_and_open("debug.svg")  # opens in browser
 All visual output flows through two centralized modules:
 
 **3D rendering** (`botcad/emit/render3d.py`):
+
 - `SceneBuilder` — declarative MuJoCo XML construction (replaces hand-rolled f-string XML)
 - `Renderer3D` — 3-pass pipeline: color → segmentation → depth, with post-processing (edge detection, SSAO, white background)
 - `Color` dataclass — single source for RGBA, derives MuJoCo string and PIL RGB
@@ -133,6 +139,7 @@ All visual output flows through two centralized modules:
 - Camera auto-centers on mesh geometry bounds, ignoring debug overlays
 
 **2D compositing** (`botcad/emit/composite.py`):
+
 - `grid()` — N×M view grid with title, color legend, view labels
 - `filmstrip()` — horizontal strip with collision indicators and ROM bar
 - Font pipeline: Input Sans Narrow Bold/Regular → DejaVu Sans → Arial → default
@@ -141,7 +148,7 @@ All visual output flows through two centralized modules:
 
 ## Development Notes
 
-- **Clean up before committing** — remove debug*.py, .rrd files, temp files
+- **Clean up before committing** — remove debug\*.py, .rrd files, temp files
 - **Bot changes require the checklist** — read `NEW_BOT_CHECKLIST.md` before committing bot XML changes
 
 ## Commit Message Format
