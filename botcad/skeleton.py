@@ -65,6 +65,7 @@ class Joint:
     pos: Vec3  # joint position relative to parent body origin
     range_rad: tuple[float, float] | None = None  # override servo default
     grip: bool = False  # force-limited gripper actuator
+    bracket_style: str = "pocket"  # "pocket" or "coupler"
     child: Body | None = None
 
     @property
@@ -208,11 +209,18 @@ class Body:
         pos: Vec3 = (0.0, 0.0, 0.0),
         range: tuple[float, float] | None = None,
         grip: bool = False,
+        bracket_style: str = "pocket",
     ) -> Joint:
         """Add a joint (with servo) connecting to a new child body."""
         axis_vec = _parse_axis(axis)
         j = Joint(
-            name=name, servo=servo, axis=axis_vec, pos=pos, range_rad=range, grip=grip
+            name=name,
+            servo=servo,
+            axis=axis_vec,
+            pos=pos,
+            range_rad=range,
+            grip=grip,
+            bracket_style=bracket_style,
         )
         self.joints.append(j)
         return j
@@ -300,11 +308,35 @@ class Bot:
         from botcad.packing import solve_packing
 
         self._collect_tree()
+        self._validate_bracket_rom()
         solve_packing(self)
 
         from botcad.routing import solve_routing
 
         self.wire_routes = solve_routing(self)
+
+    def _validate_bracket_rom(self) -> None:
+        """Warn if any joint's ROM exceeds its bracket style's safe range."""
+        import math
+        import warnings
+
+        for joint in self.all_joints:
+            if joint.bracket_style != "coupler":
+                continue
+
+            from botcad.bracket import coupler_max_rom_rad
+
+            max_rom = coupler_max_rom_rad(joint.servo)
+            lo, hi = joint.effective_range
+            if abs(lo) > max_rom or abs(hi) > max_rom:
+                requested = max(abs(lo), abs(hi))
+                warnings.warn(
+                    f"Joint '{joint.name}': coupler bracket safe ROM is "
+                    f"±{math.degrees(max_rom):.0f}° but joint requests "
+                    f"±{math.degrees(requested):.0f}°. "
+                    f"Reduce range_rad or use bracket_style='pocket'.",
+                    stacklevel=2,
+                )
 
     def emit(self, output_dir: str | None = None) -> None:
         """Generate all output files."""
@@ -345,6 +377,10 @@ class Bot:
         from botcad.emit.assembly_renders import emit_assembly_renders
 
         emit_assembly_renders(self, output_dir_path)
+
+        from botcad.emit.drawings import emit_drawings
+
+        emit_drawings(self, output_dir_path)
 
         # Per-module outputs (STEP, BOM, assembly guide)
         if self._modules:

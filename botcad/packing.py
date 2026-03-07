@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _POSITION_AXES: dict[str, Vec3] = {
+    # TODO: can we use a dataclass or enum here instead of special strings
     "top": (0.0, 0.0, 1.0),
     "bottom": (0.0, 0.0, -1.0),
     "front": (0.0, 1.0, 0.0),

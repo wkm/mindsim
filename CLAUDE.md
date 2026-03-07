@@ -78,9 +78,45 @@ Each bot's `design.py` calls `bot.solve()` then `bot.emit()` to produce: `assemb
 
 - **Structural validation (FEA):** Run finite-element analysis on generated meshes to validate printability before fabrication. The immediate smoke test is cross-section analysis (servo stall torque → minimum bridge cross-section at each bracket). The longer-term goal is mesh FEA using `solidspy` or `sfepy` — load each body with servo reaction forces and gravity, check peak stress vs. material yield strength. This would catch thin bridges, under-supported brackets, and other structural failures that the packing solver doesn't reason about.
 
+## Visual Regression Testing
+
+Test renders are committed screenshots of every component, bracket, and bot. Review them in `git diff` after geometry changes to catch regressions visually — they're the parametric CAD equivalent of screenshot tests.
+
+```bash
+make renders              # Regenerate everything (~90s)
+make renders-components   # Component & bracket tear sheets only
+make renders-bots         # Full bot builds only (STEP + STL + XML + renders)
+make renders-rom          # Subassembly ROM validation only
+```
+
+**After any geometry change**, run `make renders` and review the diffs:
+
+Each stage produces both 3D renders (PNG/PDF) and 2D technical drawings (SVG):
+
+| Stage | 3D renders | 2D drawings |
+|-------|-----------|-------------|
+| Component | `botcad/components/test_*.png` — 4-view tear sheets | `botcad/components/drawing_*.svg` — section views at key planes |
+| Bracket | `botcad/components/test_{bracket,cradle,coupler}*.png` | `botcad/components/drawing_{pocket,coupler,cradle}*.svg` |
+| ROM validation | `botcad/components/test_rom_*.png` — sweep filmstrips | — |
+| Bot joints | `bots/*/test_sweep.png` — per-joint ROM filmstrip | `bots/*/drawings/drawing_joint_*.svg` — bracket-servo sections |
+| Bot assembly | `bots/*/assembly_visual.pdf`, `test_assembly.pdf` | — |
+| Bot overview | `bots/*/test_overview.png` | — |
+
+For interactive debugging during development, use `botcad/debug_drawing.py`:
+
+```python
+from botcad.debug_drawing import DebugDrawing
+drawing = DebugDrawing("my_debug", scale=15.0)
+drawing.add_part("part_a", solid_a)
+drawing.add_part("part_b", solid_b)
+drawing.add_section("front", Plane.XY.offset(z))
+drawing.add_section("side", Plane.XZ)
+drawing.save_and_open("debug.svg")  # opens in browser
+```
+
 ## Development Notes
 
-- **Clean up before committing** — remove debug*.py, test*.py, .rrd files, temp files
+- **Clean up before committing** — remove debug*.py, .rrd files, temp files
 - **Bot changes require the checklist** — read `NEW_BOT_CHECKLIST.md` before committing bot XML changes
 
 ## Commit Message Format
