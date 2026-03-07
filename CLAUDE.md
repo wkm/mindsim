@@ -47,7 +47,13 @@ uv run mjpython main.py scene              # Scene gen preview
 │   ├── geometry.py           # Servo placement, quaternion math
 │   ├── packing.py            # Body dimension solver
 │   ├── routing.py            # Wire route solver
+│   ├── validation.py         # Subassembly ROM sweep + collision detection
 │   └── emit/                 # Output generators (cad, mujoco, bom, readme, renders)
+│       ├── render3d.py       # Centralized 3D rendering (SceneBuilder, Renderer3D, Color)
+│       ├── composite.py      # Image compositing (grid, filmstrip, fonts)
+│       ├── component_renders.py  # Component/bracket tear sheets
+│       ├── renders.py        # Bot-level overview, closeups, sweep filmstrips
+│       └── assembly_renders.py   # Assembly instruction PDFs
 ├── bots/                     # Bot definitions + generated outputs
 │   └── wheeler_arm/
 │       ├── design.py         # Bot definition (the source of truth)
@@ -95,7 +101,7 @@ Each stage produces both 3D renders (PNG/PDF) and 2D technical drawings (SVG):
 
 | Stage | 3D renders | 2D drawings |
 |-------|-----------|-------------|
-| Component | `botcad/components/test_*.png` — 4-view tear sheets | `botcad/components/drawing_*.svg` — section views at key planes |
+| Component | `botcad/components/test_*.png` — 6-view tear sheets | `botcad/components/drawing_*.svg` — section views at key planes |
 | Bracket | `botcad/components/test_{bracket,cradle,coupler}*.png` | `botcad/components/drawing_{pocket,coupler,cradle}*.svg` |
 | ROM validation | `botcad/components/test_rom_*.png` — sweep filmstrips | — |
 | Bot joints | `bots/*/test_sweep.png` — per-joint ROM filmstrip | `bots/*/drawings/drawing_joint_*.svg` — bracket-servo sections |
@@ -113,6 +119,25 @@ drawing.add_section("front", Plane.XY.offset(z))
 drawing.add_section("side", Plane.XZ)
 drawing.save_and_open("debug.svg")  # opens in browser
 ```
+
+## Rendering Architecture
+
+All visual output flows through two centralized modules:
+
+**3D rendering** (`botcad/emit/render3d.py`):
+- `SceneBuilder` — declarative MuJoCo XML construction (replaces hand-rolled f-string XML)
+- `Renderer3D` — 3-pass pipeline: color → segmentation → depth, with post-processing (edge detection, SSAO, white background)
+- `Color` dataclass — single source for RGBA, derives MuJoCo string and PIL RGB
+- Orthographic projection, CAD-style lighting (high ambient, low specular), multisampled
+- Standard view presets: `VIEWS_6` (front/back/left/right/top/iso), `VIEWS_4`
+- Camera auto-centers on mesh geometry bounds, ignoring debug overlays
+
+**2D compositing** (`botcad/emit/composite.py`):
+- `grid()` — N×M view grid with title, color legend, view labels
+- `filmstrip()` — horizontal strip with collision indicators and ROM bar
+- Font pipeline: Input Sans Narrow Bold/Regular → DejaVu Sans → Arial → default
+
+**Usage pattern**: build a `SceneBuilder`, call `to_xml()`, create `Renderer3D`, call `render_views()` or `render_frame()`, composite with `grid()` or `filmstrip()`.
 
 ## Development Notes
 
