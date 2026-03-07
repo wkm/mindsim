@@ -277,12 +277,16 @@
   </g>
   <text x="0.024100" y="-0.026681" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">A-A</text>
   <text x="0.024100" y="-0.023181" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">front_horn</text>
+  <line x1="0.000000" y1="0.016000" x2="0.000000" y2="0.019000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.048200" y1="0.016000" x2="0.048200" y2="0.019000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.000000" y1="0.017400" x2="0.000000" y2="0.019000" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.048200" y1="0.017400" x2="0.048200" y2="0.019000" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.000000" y1="0.018200" x2="0.048200" y2="0.018200" stroke="#555" stroke-width="0.000200"/>
   <polygon points="0.000000,0.018200 0.001500,0.017600 0.001500,0.018800" fill="#555"/>
   <polygon points="0.048200,0.018200 0.046700,0.017600 0.046700,0.018800" fill="#555"/>
-  <text x="0.024100" y="0.016400" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">48.2</text>
+  <text x="0.024100" y="0.017000" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">48.2</text>
+  <line x1="0.049000" y1="-0.015200" x2="0.052000" y2="-0.015200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.049000" y1="0.015200" x2="0.052000" y2="0.015200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.050400" y1="-0.015200" x2="0.052000" y2="-0.015200" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.050400" y1="0.015200" x2="0.052000" y2="0.015200" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.051200" y1="-0.015200" x2="0.051200" y2="0.015200" stroke="#555" stroke-width="0.000200"/>
@@ -291,12 +295,16 @@
   <text x="0.052700" y="-0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.052700 -0.000000)">30.4</text>
   <text x="0.072600" y="-0.026681" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">B-B</text>
   <text x="0.072600" y="-0.023181" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">mid_body</text>
+  <line x1="0.056200" y1="0.016000" x2="0.056200" y2="0.019000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.089000" y1="0.016000" x2="0.089000" y2="0.019000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.056200" y1="0.017400" x2="0.056200" y2="0.019000" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.089000" y1="0.017400" x2="0.089000" y2="0.019000" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.056200" y1="0.018200" x2="0.089000" y2="0.018200" stroke="#555" stroke-width="0.000200"/>
   <polygon points="0.056200,0.018200 0.057700,0.017600 0.057700,0.018800" fill="#555"/>
   <polygon points="0.089000,0.018200 0.087500,0.017600 0.087500,0.018800" fill="#555"/>
-  <text x="0.072600" y="0.016400" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">32.8</text>
+  <text x="0.072600" y="0.017000" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">32.8</text>
+  <line x1="0.089800" y1="-0.015200" x2="0.092800" y2="-0.015200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.089800" y1="0.015200" x2="0.092800" y2="0.015200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.091200" y1="-0.015200" x2="0.092800" y2="-0.015200" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.091200" y1="0.015200" x2="0.092800" y2="0.015200" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.092000" y1="-0.015200" x2="0.092000" y2="0.015200" stroke="#555" stroke-width="0.000200"/>
@@ -304,12 +312,16 @@
   <polygon points="0.092000,0.015200 0.091400,0.013700 0.092600,0.013700" fill="#555"/>
   <text x="0.093500" y="-0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.093500 -0.000000)">30.4</text>
   <text x="0.120051" y="-0.026681" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">side_XZ</text>
+  <line x1="0.097000" y1="0.021199" x2="0.097000" y2="0.024199" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.143102" y1="0.021199" x2="0.143102" y2="0.024199" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.097000" y1="0.022599" x2="0.097000" y2="0.024199" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.143102" y1="0.022599" x2="0.143102" y2="0.024199" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.097000" y1="0.023399" x2="0.143102" y2="0.023399" stroke="#555" stroke-width="0.000200"/>
   <polygon points="0.097000,0.023399 0.098500,0.022799 0.098500,0.023999" fill="#555"/>
   <polygon points="0.143102,0.023399 0.141602,0.022799 0.141602,0.023999" fill="#555"/>
-  <text x="0.120051" y="0.021599" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">46.1</text>
+  <text x="0.120051" y="0.022199" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">46.1</text>
+  <line x1="0.143902" y1="-0.021006" x2="0.146902" y2="-0.021006" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.143902" y1="0.020399" x2="0.146902" y2="0.020399" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.145302" y1="-0.021006" x2="0.146902" y2="-0.021006" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.145302" y1="0.020399" x2="0.146902" y2="0.020399" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.146102" y1="-0.021006" x2="0.146102" y2="0.020399" stroke="#555" stroke-width="0.000200"/>
@@ -317,25 +329,29 @@
   <polygon points="0.146102,0.020399 0.145502,0.018899 0.146702,0.018899" fill="#555"/>
   <text x="0.147602" y="-0.000303" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.147602 -0.000303)">41.4</text>
   <text x="0.166302" y="-0.026681" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">side_YZ</text>
+  <line x1="0.151102" y1="0.020968" x2="0.151102" y2="0.023968" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.181502" y1="0.020968" x2="0.181502" y2="0.023968" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.151102" y1="0.022368" x2="0.151102" y2="0.023968" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.181502" y1="0.022368" x2="0.181502" y2="0.023968" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.151102" y1="0.023168" x2="0.181502" y2="0.023168" stroke="#555" stroke-width="0.000200"/>
   <polygon points="0.151102,0.023168 0.152602,0.022568 0.152602,0.023768" fill="#555"/>
   <polygon points="0.181502,0.023168 0.180002,0.022568 0.180002,0.023768" fill="#555"/>
-  <text x="0.166302" y="0.021368" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">30.4</text>
+  <text x="0.166302" y="0.021968" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">30.4</text>
+  <line x1="0.182302" y1="-0.020750" x2="0.185302" y2="-0.020750" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.182302" y1="0.020168" x2="0.185302" y2="0.020168" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
   <line x1="0.183702" y1="-0.020750" x2="0.185302" y2="-0.020750" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.183702" y1="0.020168" x2="0.185302" y2="0.020168" stroke="#555" stroke-width="0.000200"/>
   <line x1="0.184502" y1="-0.020750" x2="0.184502" y2="0.020168" stroke="#555" stroke-width="0.000200"/>
   <polygon points="0.184502,-0.020750 0.183902,-0.019250 0.185102,-0.019250" fill="#555"/>
   <polygon points="0.184502,0.020168 0.183902,0.018668 0.185102,0.018668" fill="#555"/>
   <text x="0.186002" y="-0.000291" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.186002 -0.000291)">40.9</text>
-  <text x="-0.001175" y="0.024074" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.003500" font-weight="bold" fill="#222">cradle</text>
-  <line x1="-0.001175" y1="0.028074" x2="0.008825" y2="0.028074" stroke="#333" stroke-width="0.000350"/>
-  <line x1="-0.001175" y1="0.027074" x2="-0.001175" y2="0.029074" stroke="#333" stroke-width="0.000250"/>
-  <line x1="0.008825" y1="0.027074" x2="0.008825" y2="0.029074" stroke="#333" stroke-width="0.000250"/>
-  <text x="0.010325" y="0.028774" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">10 mm</text>
-  <rect x="0.028825" y="0.021574" width="0.004000" height="0.002500" fill="url(#hatch_servo)" stroke="rgb(60,60,60)" stroke-width="0.000300"/>
-  <text x="0.034325" y="0.023574" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="rgb(60,60,60)">servo</text>
-  <rect x="0.028825" y="0.025074" width="0.004000" height="0.002500" fill="url(#hatch_cradle)" stroke="rgb(50,120,190)" stroke-width="0.000300"/>
-  <text x="0.034325" y="0.027074" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="rgb(50,120,190)">cradle</text>
+  <text x="-0.001175" y="0.028574" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.003500" font-weight="bold" fill="#222">cradle</text>
+  <line x1="-0.001175" y1="0.032574" x2="0.008825" y2="0.032574" stroke="#333" stroke-width="0.000350"/>
+  <line x1="-0.001175" y1="0.031574" x2="-0.001175" y2="0.033574" stroke="#333" stroke-width="0.000250"/>
+  <line x1="0.008825" y1="0.031574" x2="0.008825" y2="0.033574" stroke="#333" stroke-width="0.000250"/>
+  <text x="0.010325" y="0.033274" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">10 mm</text>
+  <rect x="0.028825" y="0.026074" width="0.004000" height="0.002500" fill="url(#hatch_servo)" stroke="rgb(60,60,60)" stroke-width="0.000300"/>
+  <text x="0.034325" y="0.028074" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="rgb(60,60,60)">servo</text>
+  <rect x="0.028825" y="0.029574" width="0.004000" height="0.002500" fill="url(#hatch_cradle)" stroke="rgb(50,120,190)" stroke-width="0.000300"/>
+  <text x="0.034325" y="0.031574" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="rgb(50,120,190)">cradle</text>
 </svg>

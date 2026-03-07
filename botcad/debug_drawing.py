@@ -84,23 +84,44 @@ def _mm(mm: float) -> float:
 
 
 def _dim_line_h(
-    x1: float, x2: float, y: float, label: str, above: bool = True
+    x1: float,
+    x2: float,
+    y: float,
+    label: str,
+    geo_y: float | None = None,
 ) -> list[str]:
     """SVG elements for a horizontal dimension line with arrows and label.
 
     All coordinates in viewBox units (meters). Renders:
-    - Extension ticks at x1 and x2
+    - Extension lines from geo_y to dim line (if geo_y provided)
     - Horizontal line with arrowheads
-    - Centered label text
+    - Centered label text (above the line)
+
+    Args:
+        geo_y: Y coordinate of geometry edge to draw extension lines from.
     """
     lw = _mm(DIM_LINE_WEIGHT_MM)
+    ext_lw = _mm(DIM_LINE_WEIGHT_MM * 0.7)
     arrow = _mm(DIM_ARROW_MM)
     tick = _mm(DIM_TICK_MM)
+    gap = _mm(0.8)  # gap between geometry and extension line
     fs = _mm(1.6)
-    sign = -1 if above else 1
 
     els: list[str] = []
-    # Extension ticks
+
+    # Extension lines from geometry to dimension line
+    if geo_y is not None:
+        ext_start = geo_y + gap if y > geo_y else geo_y - gap
+        ext_end = y + tick
+        for x in [x1, x2]:
+            els.append(
+                f'  <line x1="{x:.6f}" y1="{ext_start:.6f}" '
+                f'x2="{x:.6f}" y2="{ext_end:.6f}" '
+                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+                f'stroke-opacity="0.5"/>'
+            )
+
+    # Ticks at dimension line
     for x in [x1, x2]:
         els.append(
             f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
@@ -115,23 +136,21 @@ def _dim_line_h(
     )
     # Arrowheads (simple triangles)
     ah = arrow * 0.4  # half-height
-    # Left arrow (pointing left)
     els.append(
         f'  <polygon points="{x1:.6f},{y:.6f} '
         f"{x1 + arrow:.6f},{y - ah:.6f} "
         f'{x1 + arrow:.6f},{y + ah:.6f}" '
         f'fill="{DIM_COLOR}"/>'
     )
-    # Right arrow (pointing right)
     els.append(
         f'  <polygon points="{x2:.6f},{y:.6f} '
         f"{x2 - arrow:.6f},{y - ah:.6f} "
         f'{x2 - arrow:.6f},{y + ah:.6f}" '
         f'fill="{DIM_COLOR}"/>'
     )
-    # Label
+    # Label (above the line)
     cx = (x1 + x2) / 2
-    text_y = y + sign * _mm(1.8)
+    text_y = y - _mm(1.2)
     els.append(
         f'  <text x="{cx:.6f}" y="{text_y:.6f}" '
         f'text-anchor="middle" '
@@ -143,19 +162,41 @@ def _dim_line_h(
 
 
 def _dim_line_v(
-    y1: float, y2: float, x: float, label: str, right: bool = True
+    y1: float,
+    y2: float,
+    x: float,
+    label: str,
+    geo_x: float | None = None,
 ) -> list[str]:
     """SVG elements for a vertical dimension line with arrows and label.
 
     y1 < y2 (y1 is top, y2 is bottom in viewBox Y-down coordinates).
+
+    Args:
+        geo_x: X coordinate of geometry edge to draw extension lines from.
     """
     lw = _mm(DIM_LINE_WEIGHT_MM)
+    ext_lw = _mm(DIM_LINE_WEIGHT_MM * 0.7)
     arrow = _mm(DIM_ARROW_MM)
     tick = _mm(DIM_TICK_MM)
+    gap = _mm(0.8)
     fs = _mm(1.6)
 
     els: list[str] = []
-    # Extension ticks
+
+    # Extension lines from geometry to dimension line
+    if geo_x is not None:
+        ext_start = geo_x + gap
+        ext_end = x + tick
+        for y in [y1, y2]:
+            els.append(
+                f'  <line x1="{ext_start:.6f}" y1="{y:.6f}" '
+                f'x2="{ext_end:.6f}" y2="{y:.6f}" '
+                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+                f'stroke-opacity="0.5"/>'
+            )
+
+    # Ticks at dimension line
     for y in [y1, y2]:
         els.append(
             f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
@@ -170,23 +211,21 @@ def _dim_line_v(
     )
     # Arrowheads
     ah = arrow * 0.4
-    # Top arrow (pointing up)
     els.append(
         f'  <polygon points="{x:.6f},{y1:.6f} '
         f"{x - ah:.6f},{y1 + arrow:.6f} "
         f'{x + ah:.6f},{y1 + arrow:.6f}" '
         f'fill="{DIM_COLOR}"/>'
     )
-    # Bottom arrow (pointing down)
     els.append(
         f'  <polygon points="{x:.6f},{y2:.6f} '
         f"{x - ah:.6f},{y2 - arrow:.6f} "
         f'{x + ah:.6f},{y2 - arrow:.6f}" '
         f'fill="{DIM_COLOR}"/>'
     )
-    # Label (rotated 90° beside the line)
+    # Label (rotated 90° to the right of the line)
     cy = (y1 + y2) / 2
-    text_x = x + (_mm(1.5) if right else -_mm(1.5))
+    text_x = x + _mm(1.5)
     els.append(
         f'  <text x="{text_x:.6f}" y="{cy:.6f}" '
         f'text-anchor="middle" dominant-baseline="central" '
@@ -595,6 +634,7 @@ class DebugDrawing:
         label_y = geo_top - _mm(5.5)
 
         dim_offset = _mm(DIM_OFFSET_MM)
+        prev_dims: tuple[str, str] | None = None
 
         for i, (
             (col_name, is_section, _data),
@@ -637,19 +677,30 @@ class DebugDrawing:
             col_w = xmax - xmin
             col_h = ymax - ymin
 
+            # Deduplicate: round to 0.1mm and skip if same as previous
+            w_label = _fmt_mm(col_w)
+            h_label = _fmt_mm(col_h)
+            dims_key = (w_label, h_label)
+            show_dims = dims_key != prev_dims
+            prev_dims = dims_key
+
             # Width dimension (below geometry)
-            if col_w > 1e-6:
+            if col_w > 1e-6 and show_dims:
                 wd_y = vb_bottom + dim_offset
-                elements.extend(_dim_line_h(vb_left, vb_right, wd_y, _fmt_mm(col_w)))
+                elements.extend(
+                    _dim_line_h(vb_left, vb_right, wd_y, w_label, geo_y=vb_bottom)
+                )
 
             # Height dimension (right of geometry)
-            if col_h > 1e-6:
+            if col_h > 1e-6 and show_dims:
                 hd_x = vb_right + dim_offset
-                elements.extend(_dim_line_v(vb_top, vb_bottom, hd_x, _fmt_mm(col_h)))
+                elements.extend(
+                    _dim_line_v(vb_top, vb_bottom, hd_x, h_label, geo_x=vb_right)
+                )
 
         # --- Title block (below geometry in viewBox = positive Y direction) ---
         title_x = new_x + _mm(2)
-        title_y = geo_bottom + _mm(3.5)
+        title_y = geo_bottom + dim_offset + _mm(5)
 
         elements.append(
             f'  <text x="{title_x:.6f}" y="{title_y:.6f}" '
