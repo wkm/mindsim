@@ -25,9 +25,11 @@ from pathlib import Path
 from build123d import (
     Color,
     Compound,
+    Edge,
     ExportSVG,
     Location,
     Plane,
+    ShapeList,
     Solid,
     Unit,
     section,
@@ -35,6 +37,7 @@ from build123d import (
 from build123d.exporters import LineType
 
 RGB = tuple[int, int, int]
+Vec3 = tuple[float, float, float]
 
 # Default color palette — visually distinct, colorblind-friendly
 PALETTE: list[RGB] = [
@@ -87,20 +90,36 @@ class _Section:
 
 
 @dataclass
-class DebugDrawing:
-    """Accumulates parts and section planes, then exports a single SVG.
+class _Projection:
+    """A 2D projection view with visible/hidden line separation."""
 
-    All sections are laid out side-by-side in one SVG file with:
+    name: str
+    origin: Vec3  # camera position
+    up: Vec3  # up direction
+
+
+# A view is either a cross-section or a projection
+_View = _Section | _Projection
+
+
+@dataclass
+class DebugDrawing:
+    """Accumulates parts and views (sections + projections), exports SVG.
+
+    All views are laid out side-by-side in one SVG file with:
     - Cross-hatched section fills (ISO 45° pattern per part)
-    - Section labels (A-A, B-B, ...)
+    - Projection views with visible (solid) and hidden (dashed) lines
+    - Section/view labels (A-A, B-B, ...)
     - Title text with scale indicator and part legend
     """
 
     title: str
     parts: list[_Part] = field(default_factory=list)
     sections: list[_Section] = field(default_factory=list)
+    projections: list[tuple[int, _Projection]] = field(default_factory=list)
     scale: float = DEFAULT_SCALE
     line_weight: float = LINE_WEIGHT_THICK
+    _view_order: list[_View] = field(default_factory=list)
 
     def add_part(
         self,
@@ -116,7 +135,26 @@ class DebugDrawing:
 
     def add_section(self, name: str, plane: Plane) -> DebugDrawing:
         """Add a named section plane."""
-        self.sections.append(_Section(name=name, plane=plane))
+        sec = _Section(name=name, plane=plane)
+        self.sections.append(sec)
+        self._view_order.append(sec)
+        return self
+
+    def add_projection(
+        self,
+        name: str,
+        origin: Vec3,
+        up: Vec3 = (0, 0, 1),
+    ) -> DebugDrawing:
+        """Add a 2D projection view with visible/hidden line separation.
+
+        Args:
+            name: View label (e.g., "front", "side").
+            origin: Camera position — projects toward the origin of the parts.
+            up: Camera up direction.
+        """
+        proj = _Projection(name=name, origin=origin, up=up)
+        self._view_order.append(proj)
         return self
 
     def save(self, path: str | Path) -> Path:
@@ -126,42 +164,62 @@ class DebugDrawing:
         return path
 
     def _export_combined(self, out: Path) -> None:
-        """Section all parts at all planes and compose into one SVG."""
-        section_data: list[tuple[str, list[tuple[_Part, object]]]] = []
-        gap_m = _mm(SECTION_GAP_MM)
-
-        for sec in self.sections:
-            to_xy = sec.plane.location.inverse()
-            parts_cross = []
-            for part in self.parts:
-                try:
-                    cross = section(part.solid, section_by=sec.plane)
-                except Exception:
-                    continue
-                if cross is None or not cross.faces():
-                    continue
-                cross = cross.moved(to_xy)
-                parts_cross.append((part, cross))
-            if parts_cross:
-                section_data.append((sec.name, parts_cross))
-
-        if not section_data:
+        """Process all views (sections + projections) and compose into SVG."""
+        # If no explicit view order, fall back to sections only
+        views = self._view_order if self._view_order else list(self.sections)
+        if not views:
             return
 
-        # Compute bounding box for each section column (in meters)
+        # Process each view into column data:
+        #   (name, is_section, parts_data)
+        # For sections: parts_data = [(part, cross_compound)]
+        # For projections: parts_data = [(part, visible_edges, hidden_edges)]
+        ColumnData = tuple[str, bool, list]
+        columns: list[ColumnData] = []
+
+        for view in views:
+            if isinstance(view, _Section):
+                parts_cross = self._process_section(view)
+                if parts_cross:
+                    columns.append((view.name, True, parts_cross))
+            elif isinstance(view, _Projection):
+                parts_proj = self._process_projection(view)
+                if parts_proj:
+                    columns.append((view.name, False, parts_proj))
+
+        if not columns:
+            return
+
+        gap_m = _mm(SECTION_GAP_MM)
+
+        # Compute bounding box for each column (in meters)
         col_bounds: list[tuple[float, float, float, float]] = []
-        for _name, parts_cross in section_data:
+        for _name, is_section, parts_data in columns:
             xmin = ymin = float("inf")
             xmax = ymax = float("-inf")
-            for _part, cross in parts_cross:
-                bb = cross.bounding_box()
-                xmin = min(xmin, bb.min.X)
-                ymin = min(ymin, bb.min.Y)
-                xmax = max(xmax, bb.max.X)
-                ymax = max(ymax, bb.max.Y)
-            col_bounds.append((xmin, ymin, xmax, ymax))
+            if is_section:
+                for _part, cross in parts_data:
+                    bb = cross.bounding_box()
+                    xmin = min(xmin, bb.min.X)
+                    ymin = min(ymin, bb.min.Y)
+                    xmax = max(xmax, bb.max.X)
+                    ymax = max(ymax, bb.max.Y)
+            else:
+                for _part, vis, hid in parts_data:
+                    all_edges = list(vis) + list(hid)
+                    if all_edges:
+                        c = Compound(children=all_edges)
+                        bb = c.bounding_box()
+                        xmin = min(xmin, bb.min.X)
+                        ymin = min(ymin, bb.min.Y)
+                        xmax = max(xmax, bb.max.X)
+                        ymax = max(ymax, bb.max.Y)
+            if xmin < float("inf"):
+                col_bounds.append((xmin, ymin, xmax, ymax))
+            else:
+                col_bounds.append((0, 0, 0, 0))
 
-        # Compute X offsets to tile columns side by side (meters)
+        # Compute X offsets to tile columns side by side
         x_offsets: list[float] = []
         cursor_x = 0.0
         for xmin, _ymin, xmax, _ymax in col_bounds:
@@ -169,7 +227,7 @@ class DebugDrawing:
             x_offsets.append(cursor_x - xmin)
             cursor_x += col_w + gap_m
 
-        # Build SVG with build123d ExportSVG
+        # Build SVG
         svg = ExportSVG(
             unit=Unit.MM,
             scale=self.scale,
@@ -197,25 +255,70 @@ class DebugDrawing:
                 line_type=LineType.ISO_DASH,
             )
 
-        for (_sec_name, parts_cross), x_off in zip(section_data, x_offsets):
+        # Add shapes per column
+        for (_col_name, is_section, parts_data), x_off in zip(columns, x_offsets):
             offset_loc = Location((x_off, 0, 0))
-            for part, cross in parts_cross:
-                moved = cross.moved(offset_loc)
-                for face in moved.faces():
-                    svg.add_shape(face, layer=f"{part.name}_fill")
-                    for edge in face.edges():
-                        svg.add_shape(edge, layer=part.name)
+            if is_section:
+                for part, cross in parts_data:
+                    moved = cross.moved(offset_loc)
+                    for face in moved.faces():
+                        svg.add_shape(face, layer=f"{part.name}_fill")
+                        for edge in face.edges():
+                            svg.add_shape(edge, layer=part.name)
+            else:
+                for part, vis, hid in parts_data:
+                    for edge in vis:
+                        if edge.length > 1e-6:
+                            svg.add_shape(edge.moved(offset_loc), layer=part.name)
+                    for edge in hid:
+                        if edge.length > 1e-6:
+                            svg.add_shape(
+                                edge.moved(offset_loc),
+                                layer=f"{part.name}_hidden",
+                            )
 
         svg.write(str(out))
 
         # Post-process: hatching, annotations, expanded viewBox
-        self._postprocess_svg(out, section_data, col_bounds, x_offsets)
+        self._postprocess_svg(out, columns, col_bounds, x_offsets)
         print(f"  drawing: {out}")
+
+    def _process_section(self, sec: _Section) -> list[tuple[_Part, Compound]]:
+        """Section all parts at the given plane."""
+        to_xy = sec.plane.location.inverse()
+        parts_cross = []
+        for part in self.parts:
+            try:
+                cross = section(part.solid, section_by=sec.plane)
+            except Exception:
+                continue
+            if cross is None or not cross.faces():
+                continue
+            cross = cross.moved(to_xy)
+            parts_cross.append((part, cross))
+        return parts_cross
+
+    def _process_projection(
+        self, proj: _Projection
+    ) -> list[tuple[_Part, ShapeList[Edge], ShapeList[Edge]]]:
+        """Project all parts from the given viewpoint."""
+        parts_proj = []
+        for part in self.parts:
+            try:
+                visible, hidden = part.solid.project_to_viewport(
+                    viewport_origin=proj.origin,
+                    viewport_up=proj.up,
+                )
+            except Exception:
+                continue
+            if visible or hidden:
+                parts_proj.append((part, visible, hidden))
+        return parts_proj
 
     def _postprocess_svg(
         self,
         svg_path: Path,
-        section_data: list[tuple[str, list]],
+        columns: list[tuple[str, bool, list]],
         col_bounds: list[tuple[float, float, float, float]],
         x_offsets: list[float],
     ) -> None:
@@ -281,7 +384,7 @@ class DebugDrawing:
 
         # Build annotations outside the flipped group
         annotations = self._build_annotations(
-            section_data,
+            columns,
             col_bounds,
             x_offsets,
             geo_top,
@@ -334,7 +437,7 @@ class DebugDrawing:
 
     def _build_annotations(
         self,
-        section_data: list[tuple[str, list]],
+        columns: list[tuple[str, bool, list]],
         col_bounds: list[tuple[float, float, float, float]],
         x_offsets: list[float],
         geo_top: float,
@@ -350,23 +453,28 @@ class DebugDrawing:
         """
         elements = []
         label_letters = list(string.ascii_uppercase)
+        section_idx = 0  # separate counter for section A-A labels
 
-        # Font sizes in viewBox units (meters) — these will render at
-        # the right physical size because viewBox maps to the mm dimensions.
         fs_title = _mm(3.5)
         fs_label = _mm(2.5)
         fs_small = _mm(1.8)
-        # --- Section labels (above geometry in viewBox = more negative Y) ---
-        # geo_top is the most negative Y. Labels go above that with enough room.
+
         sublabel_y = geo_top - _mm(2)
         label_y = geo_top - _mm(5.5)
 
-        for i, ((sec_name, _parts), (xmin, _ymin, xmax, _ymax), x_off) in enumerate(
-            zip(section_data, col_bounds, x_offsets)
-        ):
+        for i, (
+            (col_name, is_section, _data),
+            (xmin, _ymin, xmax, _ymax),
+            x_off,
+        ) in enumerate(zip(columns, col_bounds, x_offsets)):
             cx = (xmin + xmax) / 2 + x_off
-            letter = label_letters[i % len(label_letters)]
-            label = f"{letter}-{letter}"
+
+            if is_section:
+                letter = label_letters[section_idx % len(label_letters)]
+                label = f"{letter}-{letter}"
+                section_idx += 1
+            else:
+                label = col_name  # projections use their name directly
 
             elements.append(
                 f'  <text x="{cx:.6f}" y="{label_y:.6f}" '
@@ -375,13 +483,16 @@ class DebugDrawing:
                 f'font-size="{fs_label:.6f}" font-weight="bold" '
                 f'fill="#333">{label}</text>'
             )
-            elements.append(
-                f'  <text x="{cx:.6f}" y="{sublabel_y:.6f}" '
-                f'text-anchor="middle" '
-                f'font-family="{FONT_FAMILY}" '
-                f'font-size="{fs_small:.6f}" '
-                f'fill="#888">{sec_name}</text>'
-            )
+            # Sublabel: section name for sections (A-A already has the letter);
+            # skip for projections since label already IS the name.
+            if is_section:
+                elements.append(
+                    f'  <text x="{cx:.6f}" y="{sublabel_y:.6f}" '
+                    f'text-anchor="middle" '
+                    f'font-family="{FONT_FAMILY}" '
+                    f'font-size="{fs_small:.6f}" '
+                    f'fill="#888">{col_name}</text>'
+                )
 
         # --- Title block (below geometry in viewBox = positive Y direction) ---
         title_x = new_x + _mm(2)
