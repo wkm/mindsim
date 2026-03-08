@@ -1,6 +1,6 @@
 {
   "_comment": "ROM baseline \u2014 auto-generated, human-approved. Update with --update-rom-baseline.",
-  "_generated": "2026-03-08T18:36:16Z",
+  "_generated": "2026-03-08T18:48:45Z",
   "_sweep_resolution": 91,
   "joints": {
     "thigh_joint": {
