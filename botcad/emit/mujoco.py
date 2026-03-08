@@ -179,7 +179,19 @@ def _emit_body_tree(
             ground_clearance = _estimate_ground_clearance(body, bot)
             attribs["pos"] = f"0 0 {ground_clearance:.4f}"
     elif parent_joint is not None:
-        attribs["pos"] = _fmt_vec3(parent_joint.pos)
+        if parent_joint.servo.continuous and body.shape == "cylinder":
+            # Wheel child body: offset outward from servo along joint axis
+            # so the wheel clears the servo body + shaft boss.
+            wheel_offset = _wheel_outboard_offset(parent_joint, body)
+            ax, ay, az = parent_joint.axis
+            child_pos = (
+                parent_joint.pos[0] + ax * wheel_offset,
+                parent_joint.pos[1] + ay * wheel_offset,
+                parent_joint.pos[2] + az * wheel_offset,
+            )
+            attribs["pos"] = _fmt_vec3(child_pos)
+        else:
+            attribs["pos"] = _fmt_vec3(parent_joint.pos)
 
     body_el = SubElement(parent_el, "body", **attribs)
 
@@ -206,10 +218,21 @@ def _emit_body_tree(
             damping = 0.01
         else:
             damping = parent_joint.servo.damping
+        # For wheel bodies offset outward, the joint anchor must point back
+        # to the shaft position (compensate the body offset).
+        if parent_joint.servo.continuous and body.shape == "cylinder":
+            wheel_offset = _wheel_outboard_offset(parent_joint, body)
+            ax, ay, az = parent_joint.axis
+            joint_pos = _fmt_vec3(
+                (-ax * wheel_offset, -ay * wheel_offset, -az * wheel_offset)
+            )
+        else:
+            joint_pos = "0 0 0"
+
         joint_attribs: dict[str, str] = {
             "name": parent_joint.name,
             "type": "hinge",
-            "pos": "0 0 0",
+            "pos": joint_pos,
             "axis": _fmt_vec3(parent_joint.axis),
             "damping": f"{damping:.4f}",
         }
@@ -527,6 +550,17 @@ def _add_imu_sensors(sensor_el: Element, bot: Bot) -> None:
     """Add IMU sensors (gyro + accelerometer) on the base body."""
     SubElement(sensor_el, "gyro", name="imu_gyro", site="imu")
     SubElement(sensor_el, "accelerometer", name="imu_accel", site="imu")
+
+
+def _wheel_outboard_offset(joint: Joint, child: Body) -> float:
+    """Compute how far a wheel child body sits outboard from the joint (shaft).
+
+    The wheel hub mates with the servo shaft boss, so the wheel's inner face
+    is approximately at the boss tip. Offset = boss_height + half_wheel_width.
+    """
+    boss_h = joint.servo.shaft_boss_height or 0.0
+    half_w = (child.width or child.dimensions[2]) / 2
+    return boss_h + half_w
 
 
 def _estimate_ground_clearance(root_body: Body, bot: Bot) -> float:
