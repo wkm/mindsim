@@ -68,6 +68,7 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.04),
         range=(-1.5, 1.5),
+        bracket_style="coupler",
     )
     turntable = shoulder_yaw.body(
         "turntable", shape="cylinder", radius=0.03, height=0.02, module=arm_mod
@@ -80,6 +81,7 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.02),
         range=(-1.5, 1.5),
+        bracket_style="coupler",
     )
     upper_arm = shoulder_pitch.body(
         "upper_arm", shape="tube", length=0.12, outer_r=0.018
@@ -91,7 +93,8 @@ def build() -> Bot:
         servo=STS3215(),
         axis="x",
         pos=(0.0, 0.0, 0.12),
-        range=(-2.0, 0.0),
+        range=(-1.92, 0.0),
+        bracket_style="coupler",
     )
     forearm = elbow.body("forearm", shape="tube", length=0.10, outer_r=0.016)
 
@@ -102,6 +105,7 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.10),
         range=(-1.5, 1.5),
+        bracket_style="coupler",
     )
     hand = wrist.body("hand", shape="box", dimensions=(0.04, 0.04, 0.03))
     hand.mount(OV5647(), position="front", label="camera")

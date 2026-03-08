@@ -65,35 +65,35 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
-   - Mount RaspberryPiZero2W (pi) at center position
+   - Mount RaspberryPiZero2W (pi) at center position using 4x M2.5
    - Mount LiPo2S-1000 (battery) at bottom position
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
-   - Screw servo into base bracket using M3 mounting screws
-   - Attach left_rim bracket to servo horn using M2.5 horn screws
-   - Mount Pololu 90x10mm Wheel (wheel) at center position
+   - Screw servo into base bracket using 6x M3 screws through mounting ears
+   - Attach left_rim coupler to servo horn using 8x M2.5 screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 5. **Attach right_rim** to base via STS3215 at joint `right_wheel` (axis: roll):
-   - Screw servo into base bracket using M3 mounting screws
-   - Attach right_rim bracket to servo horn using M2.5 horn screws
-   - Mount Pololu 90x10mm Wheel (wheel) at center position
+   - Screw servo into base bracket using 6x M3 screws through mounting ears
+   - Attach right_rim coupler to servo horn using 8x M2.5 screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 6. **Attach turntable** to base via STS3215 at joint `shoulder_yaw` (axis: vertical):
-   - Screw servo into base bracket using M3 mounting screws
-   - Attach turntable bracket to servo horn using M2.5 horn screws
+   - Screw servo into base bracket using 6x M3 screws through mounting ears
+   - Attach turntable coupler to servo horn using 8x M2.5 screws
 
 7. **Attach upper_arm** to turntable via STS3215 at joint `shoulder_pitch` (axis: roll):
-   - Screw servo into turntable bracket using M3 mounting screws
-   - Attach upper_arm bracket to servo horn using M2.5 horn screws
+   - Screw servo into turntable bracket using 6x M3 screws through mounting ears
+   - Attach upper_arm coupler to servo horn using 8x M2.5 screws
 
 8. **Attach forearm** to upper_arm via STS3215 at joint `elbow` (axis: roll):
-   - Screw servo into upper_arm bracket using M3 mounting screws
-   - Attach forearm bracket to servo horn using M2.5 horn screws
+   - Screw servo into upper_arm bracket using 6x M3 screws through mounting ears
+   - Attach forearm coupler to servo horn using 8x M2.5 screws
 
 9. **Attach hand** to forearm via STS3215 at joint `wrist` (axis: vertical):
-   - Screw servo into forearm bracket using M3 mounting screws
-   - Attach hand bracket to servo horn using M2.5 horn screws
-   - Mount OV5647 (camera) at front position
+   - Screw servo into forearm bracket using 6x M3 screws through mounting ears
+   - Attach hand coupler to servo horn using 8x M2.5 screws
+   - Mount OV5647 (camera) at front position using 2x M2
 
 10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 

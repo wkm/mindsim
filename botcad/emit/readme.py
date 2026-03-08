@@ -206,10 +206,18 @@ def _emit_assembly_steps(
     if is_root:
         lines.append(f"{step[0]}. **Assemble base** (`{body.name}`):")
         for mount in body.mounts:
-            lines.append(
-                f"   - Mount {mount.component.name} ({mount.label}) "
-                f"at {mount.position} position"
-            )
+            mps = mount.component.mounting_points
+            if mps:
+                ft = mps[0].fastener_type or "screw"
+                lines.append(
+                    f"   - Mount {mount.component.name} ({mount.label}) "
+                    f"at {mount.position} position using {len(mps)}x {ft}"
+                )
+            else:
+                lines.append(
+                    f"   - Mount {mount.component.name} ({mount.label}) "
+                    f"at {mount.position} position"
+                )
         if not body.mounts:
             lines.append(f"   - Base plate body ({body.shape})")
         lines.append("")
@@ -220,25 +228,50 @@ def _emit_assembly_steps(
             continue
         child = joint.child
 
-        # Describe the attachment
+        # Describe the attachment with specific fastener counts
+        n_ears = len(joint.servo.mounting_ears)
+        ear_ft = (
+            joint.servo.mounting_ears[0].fastener_type
+            if joint.servo.mounting_ears
+            else "M3"
+        )
+        n_horn = len(joint.servo.horn_mounting_points) + len(
+            joint.servo.rear_horn_mounting_points
+        )
+        horn_ft = (
+            joint.servo.horn_mounting_points[0].fastener_type
+            if joint.servo.horn_mounting_points
+            else "M2.5"
+        )
+
         lines.append(
             f"{step[0]}. **Attach {child.name}** to {body.name} "
             f"via {joint.servo.name} at joint `{joint.name}` "
             f"(axis: {_axis_label(joint.axis)}):"
         )
         lines.append(
-            f"   - Screw servo into {body.name} bracket using M3 mounting screws"
+            f"   - Screw servo into {body.name} bracket "
+            f"using {n_ears}x {ear_ft} screws through mounting ears"
         )
         lines.append(
-            f"   - Attach {child.name} bracket to servo horn using M2.5 horn screws"
+            f"   - Attach {child.name} coupler to servo horn "
+            f"using {n_horn}x {horn_ft} screws"
         )
 
-        # Mention any mounted components
+        # Mention any mounted components with fastener details
         for mount in child.mounts:
-            lines.append(
-                f"   - Mount {mount.component.name} ({mount.label}) "
-                f"at {mount.position} position"
-            )
+            mps = mount.component.mounting_points
+            if mps:
+                ft = mps[0].fastener_type or "screw"
+                lines.append(
+                    f"   - Mount {mount.component.name} ({mount.label}) "
+                    f"at {mount.position} position using {len(mps)}x {ft}"
+                )
+            else:
+                lines.append(
+                    f"   - Mount {mount.component.name} ({mount.label}) "
+                    f"at {mount.position} position"
+                )
         lines.append("")
         step[0] += 1
 

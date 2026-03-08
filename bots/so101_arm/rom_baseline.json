@@ -1,0 +1,73 @@
+{
+  "_comment": "ROM baseline \u2014 auto-generated, human-approved. Update with --update-rom-baseline.",
+  "_generated": "2026-03-08T18:36:15Z",
+  "_sweep_resolution": 91,
+  "joints": {
+    "shoulder_pan": {
+      "declared_range_deg": [
+        -110.0,
+        110.0
+      ],
+      "collision_free_range_deg": [
+        -110.0,
+        110.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "shoulder_lift": {
+      "declared_range_deg": [
+        -100.0,
+        100.0
+      ],
+      "collision_free_range_deg": [
+        -100.0,
+        100.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "elbow_flex": {
+      "declared_range_deg": [
+        -96.8,
+        96.8
+      ],
+      "collision_free_range_deg": [
+        -96.8,
+        96.8
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "wrist_flex": {
+      "declared_range_deg": [
+        -95.0,
+        95.0
+      ],
+      "collision_free_range_deg": [
+        -95.0,
+        95.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "wrist_roll": {
+      "declared_range_deg": [
+        -157.2,
+        162.8
+      ],
+      "collision_free_range_deg": [
+        -157.2,
+        162.8
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "gripper": {
+      "declared_range_deg": [
+        -10.0,
+        100.0
+      ],
+      "collision_free_range_deg": [
+        -10.0,
+        100.0
+      ],
+      "collision_free_fraction": 1.0
+    }
+  }
+}
