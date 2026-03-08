@@ -245,6 +245,39 @@ def _fmt_mm(meters: float) -> str:
     return f"{mm:.2f}"
 
 
+def _project_offset(offset_3d: Vec3, origin: Vec3, up: Vec3) -> tuple[float, float]:
+    """Project a 3D translation into 2D viewport coordinates.
+
+    Given a viewport defined by origin (camera position, looking toward world
+    origin) and up direction, compute the 2D (right, up) displacement that
+    corresponds to the 3D offset.
+    """
+    import math
+
+    # View direction: from origin toward world origin
+    ox, oy, oz = origin
+    mag = math.sqrt(ox * ox + oy * oy + oz * oz)
+    vx, vy, vz = -ox / mag, -oy / mag, -oz / mag
+
+    # Right = view_dir × up
+    ux, uy, uz = up
+    rx = vy * uz - vz * uy
+    ry = vz * ux - vx * uz
+    rz = vx * uy - vy * ux
+    rmag = math.sqrt(rx * rx + ry * ry + rz * rz)
+    rx, ry, rz = rx / rmag, ry / rmag, rz / rmag
+
+    # Re-orthogonalize up = right × view_dir
+    ux = ry * vz - rz * vy
+    uy = rz * vx - rx * vz
+    uz = rx * vy - ry * vx
+
+    dx, dy, dz = offset_3d
+    proj_x = dx * rx + dy * ry + dz * rz
+    proj_y = dx * ux + dy * uy + dz * uz
+    return (proj_x, proj_y)
+
+
 @dataclass
 class _Part:
     name: str
@@ -340,21 +373,21 @@ class DebugDrawing:
             return
 
         # Process each view into column data:
-        #   (name, is_section, parts_data)
+        #   (name, is_section, parts_data, view)
         # For sections: parts_data = [(part, cross_compound)]
         # For projections: parts_data = [(part, visible_edges, hidden_edges)]
-        ColumnData = tuple[str, bool, list]
+        ColumnData = tuple[str, bool, list, _View]
         columns: list[ColumnData] = []
 
         for view in views:
             if isinstance(view, _Section):
                 parts_cross = self._process_section(view)
                 if parts_cross:
-                    columns.append((view.name, True, parts_cross))
+                    columns.append((view.name, True, parts_cross, view))
             elif isinstance(view, _Projection):
                 parts_proj = self._process_projection(view)
                 if parts_proj:
-                    columns.append((view.name, False, parts_proj))
+                    columns.append((view.name, False, parts_proj, view))
 
         if not columns:
             return
@@ -363,7 +396,7 @@ class DebugDrawing:
 
         # Compute bounding box for each column (in meters)
         col_bounds: list[tuple[float, float, float, float]] = []
-        for _name, is_section, parts_data in columns:
+        for _name, is_section, parts_data, _view in columns:
             xmin = ymin = float("inf")
             xmax = ymax = float("-inf")
             if is_section:
@@ -425,7 +458,9 @@ class DebugDrawing:
             )
 
         # Add shapes per column
-        for (_col_name, is_section, parts_data), x_off in zip(columns, x_offsets):
+        for (_col_name, is_section, parts_data, _view), x_off in zip(
+            columns, x_offsets
+        ):
             offset_loc = Location((x_off, 0, 0))
             if is_section:
                 for part, cross in parts_data:
@@ -470,7 +505,12 @@ class DebugDrawing:
     def _process_projection(
         self, proj: _Projection
     ) -> list[tuple[_Part, ShapeList[Edge], ShapeList[Edge]]]:
-        """Project all parts from the given viewpoint."""
+        """Project all parts from the given viewpoint.
+
+        build123d's project_to_viewport re-centers each shape's projection
+        at its center of mass. We compensate by shifting the 2D edges back
+        to the shape's actual world position.
+        """
         parts_proj = []
         for part in self.parts:
             try:
@@ -480,6 +520,17 @@ class DebugDrawing:
                 )
             except Exception:
                 continue
+
+            # project_to_viewport centers output at the shape's COM.
+            # Shift edges so each shape appears at its true world position.
+            com = part.solid.center()
+            dx, dy, dz = float(com.X), float(com.Y), float(com.Z)
+            if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
+                offset_2d = _project_offset((dx, dy, dz), proj.origin, proj.up)
+                shift = Location((*offset_2d, 0))
+                visible = ShapeList([e.moved(shift) for e in visible])
+                hidden = ShapeList([e.moved(shift) for e in hidden])
+
             if visible or hidden:
                 parts_proj.append((part, visible, hidden))
         return parts_proj
@@ -608,7 +659,7 @@ class DebugDrawing:
 
     def _build_annotations(
         self,
-        columns: list[tuple[str, bool, list]],
+        columns: list[tuple[str, bool, list, _View]],
         col_bounds: list[tuple[float, float, float, float]],
         x_offsets: list[float],
         geo_top: float,
@@ -636,8 +687,11 @@ class DebugDrawing:
         dim_offset = _mm(DIM_OFFSET_MM)
         prev_dims: tuple[str, str] | None = None
 
+        # Collect section info for cutting lines on projections
+        section_info: list[tuple[str, float]] = []  # (letter, Z value)
+
         for i, (
-            (col_name, is_section, _data),
+            (col_name, is_section, _data, view),
             (xmin, ymin, xmax, ymax),
             x_off,
         ) in enumerate(zip(columns, col_bounds, x_offsets)):
@@ -646,6 +700,10 @@ class DebugDrawing:
             if is_section:
                 letter = label_letters[section_idx % len(label_letters)]
                 label = f"{letter}-{letter}"
+                # Extract the section plane Z offset for cutting lines
+                sec_view: _Section = view  # type: ignore[assignment]
+                sec_z = float(sec_view.plane.origin.Z)
+                section_info.append((letter, sec_z))
                 section_idx += 1
             else:
                 label = col_name  # projections use their name directly
@@ -697,6 +755,43 @@ class DebugDrawing:
                 elements.extend(
                     _dim_line_v(vb_top, vb_bottom, hd_x, h_label, geo_x=vb_right)
                 )
+
+            # --- Section cutting lines on projection views ---
+            if not is_section and section_info:
+                overhang = _mm(3)  # extend past geometry edges
+                cut_lw = _mm(0.25)
+                dash = f"{_mm(2.5):.6f},{_mm(0.8):.6f},{_mm(0.5):.6f},{_mm(0.8):.6f}"
+                fs_cut = _mm(2.0)
+
+                for letter, sec_z in section_info:
+                    # Section at world Z = sec_z → viewBox Y = -sec_z
+                    cut_y = -sec_z
+                    # Only draw if within the column's vertical extent
+                    if cut_y < vb_top - overhang or cut_y > vb_bottom + overhang:
+                        continue
+
+                    line_left = vb_left - overhang
+                    line_right = vb_right + overhang
+
+                    # Chain-dash cutting line
+                    elements.append(
+                        f'  <line x1="{line_left:.6f}" y1="{cut_y:.6f}" '
+                        f'x2="{line_right:.6f}" y2="{cut_y:.6f}" '
+                        f'stroke="#555" stroke-width="{cut_lw:.6f}" '
+                        f'stroke-dasharray="{dash}"/>'
+                    )
+                    # Letter labels at both ends
+                    for lx, anchor in [
+                        (line_left - _mm(1.5), "end"),
+                        (line_right + _mm(1.5), "start"),
+                    ]:
+                        elements.append(
+                            f'  <text x="{lx:.6f}" y="{cut_y + _mm(0.6):.6f}" '
+                            f'text-anchor="{anchor}" '
+                            f'font-family="{FONT_FAMILY}" '
+                            f'font-size="{fs_cut:.6f}" font-weight="bold" '
+                            f'fill="#555">{letter}</text>'
+                        )
 
         # --- Title block (below geometry in viewBox = positive Y direction) ---
         title_x = new_x + _mm(2)
