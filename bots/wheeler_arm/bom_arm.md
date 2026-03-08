@@ -17,3 +17,11 @@
 |----------|-------------|-------------|-----------|
 | STS3215 x3 | 12.0 | ~2.5 | ~29.4 |
 | **Total** | | | **~29.4** |
+
+## Fasteners
+
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2 | 2 | 2x for OV5647 |
+| M2.5 | 24 | 8x per horn coupler (3 joints) |
+| M3 | 18 | 6x per joint bracket (3 joints) |

@@ -31,6 +31,7 @@ from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
+from botcad.component import CameraSpec
 from botcad.geometry import servo_placement
 
 if TYPE_CHECKING:
@@ -344,6 +345,63 @@ def _bool_cut(shape, tool):
     return _to_compound(result)
 
 
+def _cut_camera_features(shell, mount, body_dims, solved_dims):
+    """Cut lens aperture and ribbon cable exit for a camera mount.
+
+    - Lens aperture: cylinder through the body wall along the insertion axis
+    - Ribbon slot: rectangular cutout for CSI ribbon cable to exit the body
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    cd = mount.component.dimensions
+    pos = mount.resolved_pos
+    ins = mount.resolved_insertion_axis  # outward normal of the mounting face
+
+    # Lens aperture — 8mm diameter cylinder punched through the body wall.
+    aperture_r = 0.004  # 4mm radius (covers Pi camera lens module)
+    wall_depth = max(solved_dims) + 0.002  # long enough to cut through any wall
+
+    # Euler angles to rotate cylinder (default Z-axis) to insertion axis
+    ax, ay, az = ins
+    if abs(ax) > 0.5:
+        euler = (0, 90, 0)  # Z→X
+    elif abs(ay) > 0.5:
+        euler = (90, 0, 0)  # Z→Y
+    else:
+        euler = (0, 0, 0)  # already Z
+
+    aperture = Cylinder(aperture_r, wall_depth, align=C)
+    aperture = aperture.locate(Location((0, 0, 0), euler))
+    aperture = aperture.locate(Location(pos))
+    shell = shell - aperture
+
+    # Ribbon cable exit slot — CSI ribbon is ~16mm wide x 1mm thick.
+    ribbon_w = 0.017  # 17mm wide (16mm ribbon + clearance)
+    ribbon_h = 0.002  # 2mm tall (1mm ribbon + clearance)
+
+    # CSI port offset relative to camera center (from wire_ports)
+    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type == "csi"]
+    if csi_ports:
+        wp = csi_ports[0]
+        slot_pos = (pos[0] + wp.pos[0], pos[1] + wp.pos[1], pos[2] + wp.pos[2])
+    else:
+        slot_pos = (pos[0], pos[1], pos[2] - cd[1] / 2)
+
+    # Slot oriented so the long dimension cuts through the body wall
+    if abs(ax) > 0.5:
+        ribbon_slot = Box(wall_depth, ribbon_w, ribbon_h, align=C)
+    elif abs(ay) > 0.5:
+        ribbon_slot = Box(ribbon_w, wall_depth, ribbon_h, align=C)
+    else:
+        ribbon_slot = Box(ribbon_w, ribbon_h, wall_depth, align=C)
+
+    ribbon_slot = ribbon_slot.locate(Location(slot_pos))
+    shell = shell - ribbon_slot
+
+    return shell
+
+
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
 ):
@@ -425,6 +483,10 @@ def _make_body_solid(
             )
             pocket = pocket.locate(Location(mount.resolved_pos))
             shell = shell - pocket
+
+            # Camera-specific cuts: lens aperture + ribbon cable exit
+            if isinstance(mount.component, CameraSpec):
+                shell = _cut_camera_features(shell, mount, body.dimensions, dims)
 
     # Union coupler onto child body for coupler-style joints.
     # The coupler is built in servo-local frame; place it so the shaft

@@ -22,6 +22,14 @@
 | RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~61.8** |
 
+## Fasteners
+
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2 | 2 | 2x for OV5647 |
+| M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
+| M3 | 48 | 6x per joint bracket (6 joints); 6x for Pololu 90x10mm Wheel |
+
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |

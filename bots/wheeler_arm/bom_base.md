@@ -20,3 +20,10 @@
 | STS3215 x3 | 12.0 | ~2.5 | ~29.4 |
 | RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~32.4** |
+
+## Fasteners
+
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2.5 | 28 | 8x per horn coupler (3 joints); 4x for RaspberryPiZero2W |
+| M3 | 30 | 6x per joint bracket (3 joints); 6x for Pololu 90x10mm Wheel |
