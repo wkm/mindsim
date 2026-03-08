@@ -44,7 +44,7 @@ def _solve_body(body: Body) -> None:
     internal_items: list[tuple[str, Vec3, float]] = []
     for mount in body.mounts:
         internal_items.append(
-            (mount.label, mount.component.dimensions, mount.component.mass)
+            (mount.label, mount.placed_dimensions, mount.component.mass)
         )
 
     # Child joint positions — the body needs structural material reaching
@@ -70,7 +70,7 @@ def _solve_body(body: Body) -> None:
     dims = body.dimensions
     for mount in body.mounts:
         mount.resolved_pos = _resolve_position(
-            mount.position, mount.component.dimensions, dims
+            mount.position, mount.placed_dimensions, dims
         )
         mount.resolved_insertion_axis = _resolve_insertion_axis(
             mount.position, mount.insertion_axis
@@ -189,7 +189,7 @@ def _compute_mass_inertia(body: Body) -> None:
     for mount in body.mounts:
         m = mount.component.mass
         p = mount.resolved_pos
-        d = mount.component.dimensions
+        d = mount.placed_dimensions
         mass_items.append((p, m, d))
         total_mass += m
         com_x += p[0] * m
@@ -303,7 +303,7 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
 
     # Mounted components — resolved_pos is the center, dims are axis-aligned
     for mount in body.mounts:
-        d = mount.component.dimensions
+        d = mount.placed_dimensions
         half = (d[0] / 2, d[1] / 2, d[2] / 2)
         items.append((mount.label, mount.resolved_pos, half))
 

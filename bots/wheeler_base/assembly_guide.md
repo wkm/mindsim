@@ -30,6 +30,7 @@ Battery (LiPo 2S, 7.4V)
 
 Raspberry Pi Zero 2W
   ├── GPIO 14 (TX) → Servo bus UART (via level shifter to 5V)
+  └── CSI connector → Camera ribbon cable → OV5647
 
 Servo Daisy Chain:
   Pi UART → ID1(left_wheel) → ID2(right_wheel)
@@ -41,7 +42,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| base | `meshes/base.stl` | box | 89.0 x 51.0 x 50.0 |
+| base | `meshes/base.stl` | box | 51.0 x 89.0 x 45.0 |
 | left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 
@@ -52,8 +53,9 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 2. **Print structural parts** — Print all 3 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
-   - Mount RaspberryPiZero2W (pi) at center position using 4x M2.5
    - Mount LiPo2S-1000 (battery) at bottom position
+   - Mount OV5647 (camera) at front position using 2x M2
+   - Mount RaspberryPiZero2W (pi) at top position using 4x M2.5
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
    - Screw servo into base bracket using 6x M3 screws through mounting ears
@@ -69,6 +71,8 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 7. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
 
-8. **Test** — Power on and verify all servo IDs respond. 
-   Run `sts3215_scan.py` to verify servos.
+8. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
+
+9. **Test** — Power on and verify all servo IDs respond. 
+   Run `sts3215_scan.py` to verify servos, test camera with `rpicam-hello`.
 

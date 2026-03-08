@@ -352,6 +352,7 @@ All visual output flows through two centralized modules:
 
 ## Development Notes
 
+- **Run `make validate` after every major step** - This runs lint, tests, and regenerates all renders. Do this after any change to bot designs, skeleton DSL, packing, geometry, brackets, or emitters. Review render diffs before committing. If validation fails, fix the issue before moving on.
 - **Clean up before committing** - Remove debug scripts (debug*\*.py, test*\*.py created during dev), temporary files, and .rrd recordings before making commits
 - **Bot changes require the checklist** - When creating a new bot or modifying bot XML (geometry, actuators, damping, sensors), read and follow `NEW_BOT_CHECKLIST.md` before committing. Common mistakes it catches: unrealistic joint speeds from wrong damping, gait phase period copied from a different-sized robot, feet not touching the floor, missing contact exclusions.
 - **TUI changes require snapshot tests** - After modifying any TUI screen code (`tui/screens/`, `main.py` screen classes), run: `uv run pytest tests/test_tui_snapshots.py -v`. If UI changes are intentional, update baselines with `--snapshot-update`. Snapshot driver apps live in `tests/snapshot_drivers/`.

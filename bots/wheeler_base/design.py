@@ -18,6 +18,7 @@ from botcad.components import (
     PololuWheel90mm,
     RaspberryPiZero2W,
 )
+from botcad.components.camera import OV5647
 from botcad.skeleton import Bot
 
 
@@ -25,29 +26,36 @@ def build() -> Bot:
     """Define the wheeler_base robot."""
     bot = Bot("wheeler_base")
 
-    # Base body — houses electronics, battery on bottom, Pi in center
+    # Base body — houses electronics + camera.
+    # Pi and battery rotated 90° so their long axis runs front-to-back (Y),
+    # keeping X extent narrow to clear wheel servos at ±65mm.
+    # Minimum height 45mm to stack battery (bottom) + camera + Pi (top)
+    # without Z-axis overlap.
     base = bot.body("base", shape="box", padding=0.008)
-    base.mount(RaspberryPiZero2W(), position="center", label="pi")
-    base.mount(LiPo2S(1000), position="bottom", label="battery")
+    base.height = 0.045
+    base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
+    base.mount(OV5647(), position="front", label="camera")
+    base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)
 
     # --- Wheels (STS3215 in continuous rotation mode) ---
+    # Joints at ±65mm to clear rotated electronics with margin.
 
-    # Left wheel: servo at left side of base, axis = X (rolls forward on Y)
+    # Left wheel: servo at left side of base, axis = -X (rolls forward on Y)
     left_joint = base.joint(
         "left_wheel",
         servo=STS3215(continuous=True),
         axis="-x",
-        pos=(-0.06, 0.0, 0.0),
+        pos=(-0.065, 0.0, 0.0),
     )
     left_rim = left_joint.body("left_rim", shape="cylinder", radius=0.045, width=0.010)
     left_rim.mount(PololuWheel90mm(), label="wheel")
 
-    # Right wheel: servo at right side of base, axis = X (opposite direction)
+    # Right wheel: servo at right side of base, axis = +X
     right_joint = base.joint(
         "right_wheel",
         servo=STS3215(continuous=True),
         axis="x",
-        pos=(0.06, 0.0, 0.0),
+        pos=(0.065, 0.0, 0.0),
     )
     right_rim = right_joint.body(
         "right_rim", shape="cylinder", radius=0.045, width=0.010
