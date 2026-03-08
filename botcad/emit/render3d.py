@@ -121,10 +121,8 @@ class SceneBuilder:
     _geoms: list[str] = field(default_factory=list)
     _legends: list[tuple[str, tuple[int, int, int]]] = field(default_factory=list)
     _mesh_dir: str = ""
-    _bodies: list[tuple[str, str, list[str]]] = field(
-        default_factory=list
-    )  # (name, pos_str, geom_strs)
-    _joints: list[str] = field(default_factory=list)  # raw joint XML for moving bodies
+    # (name, pos_str, geom_strs, joint_strs)
+    _bodies: list[tuple[str, str, list[str], list[str]]] = field(default_factory=list)
 
     def set_mesh_dir(self, path: str | Path) -> None:
         self._mesh_dir = str(path)
@@ -179,7 +177,7 @@ class SceneBuilder:
         geoms: list[str] | None = None,
     ) -> None:
         """Add a child body (for multi-body scenes like ROM validation)."""
-        self._bodies.append((name, f"{pos[0]} {pos[1]} {pos[2]}", geoms or []))
+        self._bodies.append((name, f"{pos[0]} {pos[1]} {pos[2]}", geoms or [], []))
 
     def add_hinge(
         self,
@@ -188,9 +186,11 @@ class SceneBuilder:
         range_rad: tuple[float, float],
     ) -> None:
         """Add a hinge joint to the last added body."""
+        if not self._bodies:
+            raise ValueError("add_hinge requires add_body() before add_hinge()")
         lo, hi = range_rad
         ax, ay, az = axis
-        self._joints.append(
+        self._bodies[-1][3].append(
             f'<joint name="{name}" type="hinge"'
             f' axis="{ax} {ay} {az}"'
             f' range="{lo} {hi}" limited="true"/>'
@@ -215,22 +215,13 @@ class SceneBuilder:
         if self._bodies:
             # Multi-body scene (e.g., ROM validation with fixed + moving)
             body_xml_parts = []
-            for bname, bpos, bgeoms in self._bodies:
-                inner = "\n          ".join(bgeoms)
-                joints = "\n          ".join(self._joints) if bgeoms else ""
-                if joints:
-                    body_xml_parts.append(
-                        f'    <body name="{bname}" pos="{bpos}">\n'
-                        f"          {joints}\n"
-                        f"          {inner}\n"
-                        f"        </body>"
-                    )
-                else:
-                    body_xml_parts.append(
-                        f'    <body name="{bname}" pos="{bpos}">\n'
-                        f"          {inner}\n"
-                        f"        </body>"
-                    )
+            for bname, bpos, bgeoms, bjoints in self._bodies:
+                inner = "\n          ".join([*bgeoms, *bjoints])
+                body_xml_parts.append(
+                    f'    <body name="{bname}" pos="{bpos}">\n'
+                    f"          {inner}\n"
+                    f"        </body>"
+                )
             bodies_str = "\n".join(body_xml_parts)
             worldbody_content = f"""
     <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.6 0.6 0.6" specular="0.05 0.05 0.05"/>

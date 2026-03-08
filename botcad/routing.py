@@ -329,12 +329,8 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
 
     parent_map = _build_parent_map(bot)
 
-    current_pos = pi_uart_pos
-    current_body = bot.root.name
-
-    def _walk(body: Body) -> None:
-        nonlocal current_pos, current_body
-
+    def _walk(body: Body, current_pos: Vec3, current_body: str) -> None:
+        """Walk one subtree and emit servo bus segments."""
         for joint in body.joints:
             servo_body = body.name  # servo is mounted on joint's parent body
             connector_pos = _servo_connector_local(joint)
@@ -351,7 +347,25 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
                 )
             else:
                 # Cross-body transition — find the joint connecting them
-                crossing_joint, _parent = parent_map[servo_body]
+                crossing = parent_map.get(servo_body)
+                if crossing is None:
+                    # Defensive fallback: if ancestry map is missing (shouldn't
+                    # happen for tree-shaped bots), route within current body.
+                    route.segments.extend(
+                        _expand_segment(
+                            bot,
+                            current_pos,
+                            connector_pos,
+                            current_body,
+                        )
+                    )
+                    current_pos = connector_pos
+                    current_body = servo_body
+                    if joint.child is not None:
+                        _walk(joint.child, _joint_entry_local(), joint.child.name)
+                    continue
+
+                crossing_joint, _parent = crossing
 
                 # Segment on old body: current_pos → cable exit
                 route.segments.extend(
@@ -378,11 +392,11 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
             current_pos = connector_pos
             current_body = servo_body
 
-            # Recurse into child body
+            # Recurse into child body; child bodies always start at joint entry.
             if joint.child is not None:
-                _walk(joint.child)
+                _walk(joint.child, _joint_entry_local(), joint.child.name)
 
-    _walk(bot.root)
+    _walk(bot.root, current_pos=pi_uart_pos, current_body=bot.root.name)
     return route
 
 
