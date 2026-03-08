@@ -34,6 +34,65 @@ def _group_ears_by_y_side(ears) -> dict[str, list]:
     return sides
 
 
+def _ear_bottom_z(servo: ServoSpec, wall: float) -> float:
+    """Compute the lowest Z extent of the bracket due to mounting ears."""
+    body_z = servo.effective_body_dims[2]
+    bottom = -body_z / 2
+    if servo.mounting_ears:
+        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
+        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
+        bottom = min_ear_z - max_hole_d / 2 - wall
+    return bottom
+
+
+def _all_horn_points(servo: ServoSpec) -> list:
+    """Collect all horn mounting points (front + rear)."""
+    return list(servo.horn_mounting_points or []) + list(
+        servo.rear_horn_mounting_points or []
+    )
+
+
+def _body_collision_half_y(servo: ServoSpec) -> float:
+    """Half-width of the servo collision envelope including ear flanges."""
+    body_half_y = servo.effective_body_dims[1] / 2
+    if servo.mounting_ears:
+        max_ear_y = max(
+            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
+        )
+        body_half_y = max(body_half_y, max_ear_y)
+    return body_half_y
+
+
+def _horn_clip_radius(servo: ServoSpec, spec: BracketSpec) -> float:
+    """Compute the horn disc clip radius, constrained by ear clearance.
+
+    Used by coupler_solid, coupler_sweep_radius, and coupler_max_rom_rad
+    to ensure consistent geometry.
+    """
+    import math
+
+    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    hole_margin = 0.002
+    all_horn = _all_horn_points(servo)
+    if not all_horn:
+        return 0.0
+
+    horn_r = max(
+        math.sqrt((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) for mp in all_horn
+    )
+    clip_r = horn_r + hole_margin + spec.wall
+    if servo.mounting_ears:
+        min_ear_r = min(
+            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
+            - ear.diameter / 2
+            - spec.tolerance
+            - 0.001
+            for ear in servo.mounting_ears
+        )
+        clip_r = min(clip_r, min_ear_r)
+    return clip_r
+
+
 @dataclass(frozen=True)
 class BracketSpec:
     """Parameters controlling bracket geometry around a servo."""
@@ -62,12 +121,7 @@ def _bracket_outer(
     tol = spec.tolerance
     wall = spec.wall
 
-    # --- Ear geometry ---
-    ear_bottom_z = -body_z / 2
-    if servo.mounting_ears:
-        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
-        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
-        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+    ear_bottom_z = _ear_bottom_z(servo, wall)
 
     # --- Outer box dimensions ---
     # Boss clearance extends the top face so the bracket wall covers the
@@ -406,12 +460,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     wall = spec.wall
     sx, sy, _sz = servo.shaft_offset
 
-    # --- Ear geometry ---
-    ear_bottom_z = -body_z / 2
-    if servo.mounting_ears:
-        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
-        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
-        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+    ear_bottom_z = _ear_bottom_z(servo, wall)
 
     # --- Cradle extent in X ---
     # Wraps from the -X body edge (with wall) up to a safe boundary
@@ -511,11 +560,7 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     wall = spec.wall
     sx = servo.shaft_offset[0]
 
-    ear_bottom_z = -body_z / 2
-    if servo.mounting_ears:
-        min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
-        max_hole_d = max(ear.diameter for ear in servo.mounting_ears)
-        ear_bottom_z = min_ear_z - max_hole_d / 2 - wall
+    ear_bottom_z = _ear_bottom_z(servo, wall)
 
     cradle_min_x = -body_x / 2 - tol - wall
     # Extend +X 200mm for insertion clearance through parent shell
@@ -555,40 +600,19 @@ def coupler_sweep_radius(servo: ServoSpec, spec: BracketSpec | None = None) -> f
         spec = BracketSpec()
     plate_t = spec.coupler_thickness
     hole_margin = 0.002
-    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    sx = servo.shaft_offset[0]
     body_x = servo.effective_body_dims[0]
 
-    all_horn = list(servo.horn_mounting_points or []) + list(
-        servo.rear_horn_mounting_points or []
-    )
+    all_horn = _all_horn_points(servo)
     if not all_horn:
         return 0.0
 
-    # Horn circle clip radius (must match coupler_solid logic)
-    horn_r = max(
-        math.sqrt((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) for mp in all_horn
-    )
-    horn_clip_r = horn_r + hole_margin + spec.wall
-    # Constrain to ear clearance (must match coupler_solid)
-    if servo.mounting_ears:
-        min_ear_r = min(
-            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
-            - ear.diameter / 2
-            - spec.tolerance
-            - 0.001
-            for ear in servo.mounting_ears
-        )
-        horn_clip_r = min(horn_clip_r, min_ear_r)
+    horn_clip_r = _horn_clip_radius(servo, spec)
 
     # Wall position
     holes_x = [mp.pos[0] - sx for mp in all_horn]
     body_plus_x = body_x / 2 - sx
-    body_half_y = servo.effective_body_dims[1] / 2
-    if servo.mounting_ears:
-        max_ear_y = max(
-            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
-        )
-        body_half_y = max(body_half_y, max_ear_y)
+    body_half_y = _body_collision_half_y(servo)
     body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
     wall_clear_x = body_diag + 0.001
     plate_max_x = max(
@@ -625,21 +649,14 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
     # Body envelope from shaft center (including ear flanges)
     body_plus_x = body_x / 2 - sx
     body_minus_x = body_x / 2 + sx
-    body_half_y = body_y / 2
-    if servo.mounting_ears:
-        max_ear_y = max(
-            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
-        )
-        body_half_y = max(body_half_y, max_ear_y)
+    body_half_y = _body_collision_half_y(servo)
 
-    # Wall geometry (must match coupler_solid — uses plate_t for all margins)
+    # Wall geometry
     plate_t = spec.coupler_thickness
     body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
     wall_clear_x = body_diag + 0.001
     hole_margin = 0.002
-    all_horn = list(servo.horn_mounting_points or []) + list(
-        servo.rear_horn_mounting_points or []
-    )
+    all_horn = _all_horn_points(servo)
     if not all_horn:
         return 0.0
     holes_x = [mp.pos[0] - sx for mp in all_horn]
@@ -649,22 +666,7 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
     )
     wall_inner = plate_max_x - plate_t
 
-    # Wall strip matches disc width (2 * horn_clip_r) for PLA strength
-    sy = servo.shaft_offset[1]
-    horn_r = max(
-        math.sqrt((mp.pos[0] - sx) ** 2 + (mp.pos[1] - sy) ** 2) for mp in all_horn
-    )
-    horn_clip_r = horn_r + hole_margin + spec.wall
-    # Constrain to ear clearance (must match coupler_solid)
-    if servo.mounting_ears:
-        min_ear_r = min(
-            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
-            - ear.diameter / 2
-            - spec.tolerance
-            - 0.001
-            for ear in servo.mounting_ears
-        )
-        horn_clip_r = min(horn_clip_r, min_ear_r)
+    horn_clip_r = _horn_clip_radius(servo, spec)
     wall_half_y = horn_clip_r
 
     # Wall corners in coupler local frame (XY only)
@@ -751,23 +753,14 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     rear_z = rear_holes[0][2]  # rear horn face Z
 
     # --- Plate extent in XY: cover all horn holes + material margin ---
-    # The side wall on +X must clear the servo body at ALL rotation
-    # angles. The worst case is the body's XY diagonal from shaft center.
-    # Wall inner radius must exceed this diagonal.
     import math
 
     body_plus_x = body_x / 2 - sx  # body +X edge from shaft
-    # Use the full collision envelope including ear flanges (wider than body)
-    body_half_y = body_y / 2
-    if servo.mounting_ears:
-        max_ear_y = max(
-            abs(ear.pos[1]) + ear.diameter / 2 + 0.001 for ear in servo.mounting_ears
-        )
-        body_half_y = max(body_half_y, max_ear_y)
+    body_half_y = _body_collision_half_y(servo)
     body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
     wall_clear_x = body_diag + 0.001  # 1mm clearance for mesh tolerance
 
-    plate_t = spec.coupler_thickness  # wall thickness in X matches plate thickness
+    plate_t = spec.coupler_thickness
     hole_margin = 0.002  # 2mm material around each hole
     plate_min_x = min(h[0] for h in all_holes) - hole_margin - plate_t
     plate_max_x = max(
@@ -786,27 +779,7 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         servo.shaft_boss_radius + tol + 0.001 if servo.shaft_boss_radius > 0 else 0
     )
 
-    # --- Plate thickness ---
-    plate_t = spec.coupler_thickness  # 10mm for PLA rigidity
-
-    # --- Horn circle clip radius ---
-    # The horns are round — plates only need to cover the bolt circle, not
-    # extend to full rectangular corners. Clip both plates to a circle
-    # (horn radius + material margin) plus a rectangular strip on +X for
-    # the wall connection. This dramatically shrinks the sweep envelope.
-    front_horn_r = max(math.sqrt(h[0] ** 2 + h[1] ** 2) for h in front_holes)
-    rear_horn_r = max(math.sqrt(h[0] ** 2 + h[1] ** 2) for h in rear_holes)
-    horn_clip_r = max(front_horn_r, rear_horn_r) + hole_margin + spec.wall
-    # Constrain to ear clearance so all parts (discs, wing, wall) match
-    if servo.mounting_ears:
-        min_ear_r = min(
-            math.sqrt((ear.pos[0] - sx) ** 2 + (ear.pos[1] - sy) ** 2)
-            - ear.diameter / 2
-            - tol
-            - 0.001
-            for ear in servo.mounting_ears
-        )
-        horn_clip_r = min(horn_clip_r, min_ear_r)
+    horn_clip_r = _horn_clip_radius(servo, spec)
 
     def _clip_plate_to_horn_circle(plate, clip_r, z_base, z_align_max):
         """Clip a plate to a D-shape: semicircle (-X) + rectangle (+X).

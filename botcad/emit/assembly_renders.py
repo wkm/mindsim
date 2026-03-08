@@ -25,12 +25,12 @@ import numpy as np
 from fpdf import FPDF
 from PIL import Image
 
+from botcad.emit.render3d import white_background
 from botcad.emit.renders import (
     _configure_spec,
     _joint_name,
     _servo_geom_id,
     _sweepable_joints,
-    white_background,
 )
 
 # ── Config ──

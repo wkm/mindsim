@@ -37,17 +37,14 @@ import mujoco
 import numpy as np
 from PIL import Image
 
-from botcad.emit.composite import filmstrip
+from botcad.component import Vec3
+from botcad.emit.composite import PNG_DPI, filmstrip
 from botcad.emit.render3d import Color, Renderer3D, SceneBuilder
-
-Vec3 = tuple[float, float, float]
 
 # ── Config ──
 
 SWEEP_W, SWEEP_H = 600, 600
 SWEEP_FRAMES = 12
-PNG_DPI = (150, 150)
-
 
 # ── Public API ──
 

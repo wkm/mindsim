@@ -20,22 +20,21 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw
 
-from botcad.emit.composite import _FONT_LABEL, _FONT_TITLE, filmstrip
-from botcad.emit.render3d import white_background  # re-exported for dependents
+from botcad.emit.composite import (  # noqa: F401
+    FONT_LABEL,
+    FONT_TITLE,
+    PNG_DPI,
+    filmstrip,
+)
+from botcad.emit.render3d import VIEWS_4, white_background  # noqa: F401
 
 # ── Config ──
 
 VIEW_W, VIEW_H = 1000, 1000  # per-view resolution for overview/closeups
 SWEEP_W, SWEEP_H = 600, 600  # per-frame resolution for sweeps
-PNG_DPI = (150, 150)  # DPI metadata for saved PNGs
 SWEEP_FRAMES = 9
 
-OVERVIEW_VIEWS = {
-    "front (+Y)": {"azimuth": 90, "elevation": 0},
-    "right (+X)": {"azimuth": 0, "elevation": 0},
-    "top (+Z)": {"azimuth": 90, "elevation": -90},
-    "three-quarter": {"azimuth": 135, "elevation": -30},
-}
+OVERVIEW_VIEWS = VIEWS_4
 
 CLOSEUP_VIEWS = {
     "front": {"azimuth": 90, "elevation": 0},
@@ -182,7 +181,7 @@ def render_overview(
         (margin, margin),
         f"Bot overview — {output_dir.name}",
         fill=(0, 0, 0),
-        font=_FONT_TITLE,
+        font=FONT_TITLE,
     )
 
     for idx, (img, label) in enumerate(zip(images, labels)):
@@ -190,7 +189,7 @@ def render_overview(
         row = idx // cols
         x = margin + col * (VIEW_W + margin)
         y = title_h + margin + row * (VIEW_H + label_h + margin)
-        draw.text((x, y), label, fill=(80, 80, 80), font=_FONT_LABEL)
+        draw.text((x, y), label, fill=(80, 80, 80), font=FONT_LABEL)
         img_y = y + label_h
         draw.rectangle(
             [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
@@ -283,13 +282,13 @@ def render_closeups(
         (margin, margin),
         f"Servo closeups — {output_dir.name}",
         fill=(0, 0, 0),
-        font=_FONT_TITLE,
+        font=FONT_TITLE,
     )
 
     for sec_idx, (jname, imgs, lbls) in enumerate(sections):
         sec_y = title_h + sec_idx * section_h
         draw.text(
-            (margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0), font=_FONT_LABEL
+            (margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0), font=FONT_LABEL
         )
 
         for idx, (img, label) in enumerate(zip(imgs, lbls)):
@@ -297,7 +296,7 @@ def render_closeups(
             row = idx // cols
             x = margin + col * (VIEW_W + margin)
             y = sec_y + header_h + margin + row * (VIEW_H + label_h + margin)
-            draw.text((x, y), label, fill=(80, 80, 80), font=_FONT_LABEL)
+            draw.text((x, y), label, fill=(80, 80, 80), font=FONT_LABEL)
             img_y = y + label_h
             draw.rectangle(
                 [x - 1, img_y - 1, x + VIEW_W, img_y + VIEW_H],
@@ -495,7 +494,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
         (margin, margin),
         f"Joint sweeps — {output_dir.name}",
         fill=(0, 0, 0),
-        font=_FONT_TITLE,
+        font=FONT_TITLE,
     )
 
     y = title_h

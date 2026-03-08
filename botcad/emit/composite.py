@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -24,24 +25,24 @@ PNG_DPI = (150, 150)
 # Title: large bold-ish text for sheet headers
 # Label: medium text for view labels, legend entries, angle labels
 # Use DejaVu Sans which ships with Pillow on most systems; fall back to default.
-_FONT_TITLE: ImageFont.FreeTypeFont | ImageFont.ImageFont
-_FONT_LABEL: ImageFont.FreeTypeFont | ImageFont.ImageFont
+FONT_TITLE: ImageFont.FreeTypeFont | ImageFont.ImageFont
+FONT_LABEL: ImageFont.FreeTypeFont | ImageFont.ImageFont
 _FONT_PATHS = [
-    # Preferred: Input Sans Narrow (installed locally)
+    # Preferred: Input Sans Narrow (user font dir)
     (
-        "/Users/wkm/Library/Fonts/InputSansNarrow-Bold.ttf",
-        "/Users/wkm/Library/Fonts/InputSansNarrow-Regular.ttf",
+        str(Path.home() / "Library/Fonts/InputSansNarrow-Bold.ttf"),
+        str(Path.home() / "Library/Fonts/InputSansNarrow-Regular.ttf"),
     ),
     # Fallbacks
     ("DejaVuSans-Bold", "DejaVuSans"),
     ("Arial Bold", "Arial"),
 ]
-_FONT_TITLE = ImageFont.load_default()
-_FONT_LABEL = ImageFont.load_default()
-for bold_path, regular_path in _FONT_PATHS:
+FONT_TITLE = ImageFont.load_default()
+FONT_LABEL = ImageFont.load_default()
+for _bold_path, _regular_path in _FONT_PATHS:
     try:
-        _FONT_TITLE = ImageFont.truetype(bold_path, 18)
-        _FONT_LABEL = ImageFont.truetype(regular_path, 14)
+        FONT_TITLE = ImageFont.truetype(_bold_path, 18)
+        FONT_LABEL = ImageFont.truetype(_regular_path, 14)
         break
     except OSError:
         continue
@@ -79,7 +80,7 @@ def grid(
     canvas = Image.new("RGB", (grid_w, grid_h), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    draw.text((margin, margin), title, fill=(0, 0, 0), font=_FONT_TITLE)
+    draw.text((margin, margin), title, fill=(0, 0, 0), font=FONT_TITLE)
 
     # Deduplicated legend
     seen = set()
@@ -96,10 +97,10 @@ def grid(
             [x_off, legend_y, x_off + _SWATCH, legend_y + _SWATCH], fill=color
         )
         draw.text(
-            (x_off + _SWATCH + 4, legend_y - 1), text, fill=(0, 0, 0), font=_FONT_LABEL
+            (x_off + _SWATCH + 4, legend_y - 1), text, fill=(0, 0, 0), font=FONT_LABEL
         )
         # Measure actual text width for proper spacing
-        bbox = draw.textbbox((0, 0), text, font=_FONT_LABEL)
+        bbox = draw.textbbox((0, 0), text, font=FONT_LABEL)
         text_w = bbox[2] - bbox[0]
         x_off += _SWATCH + 4 + text_w + 12
 
@@ -108,7 +109,7 @@ def grid(
         row = idx // cols
         x = margin + col * (cell_w + margin)
         y = title_h + margin + row * (cell_h + label_h + margin)
-        draw.text((x, y), label, fill=(0, 0, 0), font=_FONT_LABEL)
+        draw.text((x, y), label, fill=(0, 0, 0), font=FONT_LABEL)
         img_y = y + label_h
         draw.rectangle(
             [x - 1, img_y - 1, x + cell_w, img_y + cell_h],
@@ -166,7 +167,7 @@ def filmstrip(
     col_text = "  COLLISIONS DETECTED" if has_collisions else ""
     time_text = f"  ({elapsed:.1f}s)" if elapsed > 0 else ""
     header = f"ROM sweep: {title}  [{lo:+.0f}° .. {hi:+.0f}°]{time_text}{col_text}"
-    draw.text((margin, margin), header, fill=(0, 0, 0), font=_FONT_LABEL)
+    draw.text((margin, margin), header, fill=(0, 0, 0), font=FONT_LABEL)
 
     # ROM bar
     _draw_rom_bar(
@@ -204,7 +205,7 @@ def filmstrip(
 
         canvas.paste(frame, (x, y))
         color = (220, 40, 40) if has_col else (80, 80, 80)
-        draw.text((x, y + cell_h + 2), f"{angle:+.0f}°", fill=color, font=_FONT_LABEL)
+        draw.text((x, y + cell_h + 2), f"{angle:+.0f}°", fill=color, font=FONT_LABEL)
 
     return canvas
 
