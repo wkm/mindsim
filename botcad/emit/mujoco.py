@@ -370,7 +370,7 @@ def _emit_mounted_components(
             "geom",
             name=f"comp_{body.name}_{mount.label}",
             type="box",
-            size=_half_dims(comp.dimensions),
+            size=_half_dims(mount.placed_dimensions),
             pos=_fmt_vec3(mount.resolved_pos),
             rgba=f"{r} {g} {b} {a}",
             contype="0",
@@ -439,7 +439,7 @@ def _emit_mounting_hardware(
     # Component mount points (screw holes on mounted components)
     for mount in body.mounts:
         for mp in mount.component.mounting_points:
-            pos = _add_vec3(mount.resolved_pos, mp.pos)
+            pos = _add_vec3(mount.resolved_pos, mount.rotate_point(mp.pos))
             SubElement(
                 body_el,
                 "geom",

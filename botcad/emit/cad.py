@@ -474,7 +474,7 @@ def _make_body_solid(
     is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
     if not is_wheel_body:
         for mount in body.mounts:
-            cd = mount.component.dimensions
+            cd = mount.placed_dimensions
             pocket = Box(
                 cd[0] + 0.0005,
                 cd[1] + 0.0005,

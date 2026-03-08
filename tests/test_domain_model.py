@@ -335,18 +335,36 @@ class TestPackingOverlaps:
         bot.solve()
         return bot
 
+    @pytest.mark.parametrize(
+        "design_path,module_name",
+        [
+            ("bots/wheeler_base/design.py", "wb_overlap_test"),
+        ],
+    )
+    def test_no_packing_overlaps(self, design_path, module_name):
+        from botcad.packing import find_internal_overlaps
+
+        bot = self._build_bot(design_path, module_name)
+        all_overlaps = []
+        for body in bot.all_bodies:
+            for a, b, extent in find_internal_overlaps(body):
+                all_overlaps.append(
+                    f"{body.name}: {a} vs {b} "
+                    f"({extent[0] * 1000:.1f}x{extent[1] * 1000:.1f}x{extent[2] * 1000:.1f}mm)"
+                )
+        assert not all_overlaps, "Packing overlaps found:\n" + "\n".join(all_overlaps)
+
     @pytest.mark.xfail(
         reason="Known packing overlaps — designs need rework", strict=True
     )
     @pytest.mark.parametrize(
         "design_path,module_name",
         [
-            ("bots/wheeler_base/design.py", "wb_overlap_test"),
             ("bots/wheeler_arm/design.py", "wa_overlap_test"),
             ("bots/so101_arm/design.py", "so_overlap_test"),
         ],
     )
-    def test_no_packing_overlaps(self, design_path, module_name):
+    def test_no_packing_overlaps_xfail(self, design_path, module_name):
         from botcad.packing import find_internal_overlaps
 
         bot = self._build_bot(design_path, module_name)

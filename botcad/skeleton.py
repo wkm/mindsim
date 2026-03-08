@@ -51,8 +51,23 @@ class Mount:
     insertion_axis: Vec3 | None = (
         None  # explicit override, or None = derive from position
     )
+    rotate_z: bool = False  # if True, swap X/Y dimensions (90° around Z)
     resolved_pos: Vec3 = (0.0, 0.0, 0.0)  # filled by packing solver
     resolved_insertion_axis: Vec3 = (0.0, 0.0, 1.0)  # filled by packing solver
+
+    @property
+    def placed_dimensions(self) -> Vec3:
+        """Component dimensions in the body frame (X/Y swapped if rotate_z)."""
+        d = self.component.dimensions
+        if self.rotate_z:
+            return (d[1], d[0], d[2])
+        return d
+
+    def rotate_point(self, p: Vec3) -> Vec3:
+        """Rotate a component-local point into the body frame."""
+        if self.rotate_z:
+            return (-p[1], p[0], p[2])
+        return p
 
 
 @dataclass
@@ -188,8 +203,14 @@ class Body:
         position: Position | Vec3 = "center",
         label: str = "",
         insertion_axis: Vec3 | None = None,
+        rotate_z: bool = False,
     ) -> Mount:
-        """Mount a component inside this body."""
+        """Mount a component inside this body.
+
+        rotate_z: if True, component is rotated 90° around Z (swaps X/Y dims).
+        Use this when the component's long axis should run along Y (e.g. Pi
+        board running front-to-back in a wheeler chassis).
+        """
         if not label:
             label = component.name.lower()
         m = Mount(
@@ -197,6 +218,7 @@ class Body:
             label=label,
             position=position,
             insertion_axis=insertion_axis,
+            rotate_z=rotate_z,
         )
         self.mounts.append(m)
         return m

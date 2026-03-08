@@ -38,7 +38,7 @@
         180.0
       ],
       "pos": [
-        -0.06,
+        -0.065,
         0.0,
         0.0
       ],
@@ -63,7 +63,7 @@
         180.0
       ],
       "pos": [
-        0.06,
+        0.065,
         0.0,
         0.0
       ],
@@ -78,15 +78,19 @@
       "body": "base",
       "components": [
         {
-          "label": "pi",
-          "component": "RaspberryPiZero2W"
-        },
-        {
           "label": "battery",
           "component": "LiPo2S-1000"
+        },
+        {
+          "label": "camera",
+          "component": "OV5647"
+        },
+        {
+          "label": "pi",
+          "component": "RaspberryPiZero2W"
         }
       ],
-      "description": "Base structure \u2014 mount pi, battery"
+      "description": "Base structure \u2014 mount battery, camera, pi"
     },
     {
       "step": 2,
