@@ -48,9 +48,9 @@ def _solve_body(body: Body) -> None:
         )
 
     # Child joint positions — the body needs structural material reaching
-    # to each joint, but the servos themselves sit at the joint boundary,
-    # not packed inside the body.
-    joint_positions: list[Vec3] = [j.pos for j in body.joints if not j.servo.continuous]
+    # to each joint. This includes continuous (wheel) joints: the chassis
+    # must physically span from servo to servo.
+    joint_positions: list[Vec3] = [j.pos for j in body.joints]
 
     if not internal_items and not joint_positions and body.explicit_dimensions is None:
         _compute_mass_inertia(body)
