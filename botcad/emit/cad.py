@@ -250,11 +250,23 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
         positions[body.name] = parent_world_pos
         for joint in body.joints:
             if joint.child is not None:
-                child_pos = (
-                    parent_world_pos[0] + joint.pos[0],
-                    parent_world_pos[1] + joint.pos[1],
-                    parent_world_pos[2] + joint.pos[2],
-                )
+                child = joint.child
+                # Wheel bodies are offset outward from the joint along the axis
+                has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+                if has_wheel and child.shape == "cylinder":
+                    offset = _wheel_outboard_offset(joint, child)
+                    ax, ay, az = joint.axis
+                    child_pos = (
+                        parent_world_pos[0] + joint.pos[0] + ax * offset,
+                        parent_world_pos[1] + joint.pos[1] + ay * offset,
+                        parent_world_pos[2] + joint.pos[2] + az * offset,
+                    )
+                else:
+                    child_pos = (
+                        parent_world_pos[0] + joint.pos[0],
+                        parent_world_pos[1] + joint.pos[1],
+                        parent_world_pos[2] + joint.pos[2],
+                    )
                 _walk(joint.child, child_pos)
 
     if bot.root:
@@ -515,31 +527,18 @@ def _make_body_solid(
         )
         euler = _quat_to_euler(quat)
 
-        # Wheel joints: cut pocket only, no bracket union.
-        # Solid body material provides structural support; adding bracket
-        # walls would protrude past the body surface and collide with the wheel.
-        child_has_wheel = joint.child is not None and any(
-            "Wheel" in m.component.name for m in joint.child.mounts
-        )
-
         if joint.bracket_style == "coupler":
             envelope = cradle_envelope(servo, bracket_spec)
             envelope = envelope.locate(Location(center, euler))
-            if child_has_wheel:
-                shell = shell - envelope
-            else:
-                cradle = cradle_solid(servo, bracket_spec)
-                cradle = cradle.locate(Location(center, euler))
-                shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
+            cradle = cradle_solid(servo, bracket_spec)
+            cradle = cradle.locate(Location(center, euler))
+            shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
         else:
             envelope = bracket_envelope(servo, bracket_spec)
             envelope = envelope.locate(Location(center, euler))
-            if child_has_wheel:
-                shell = shell - envelope
-            else:
-                bracket = bracket_solid(servo, bracket_spec)
-                bracket = bracket.locate(Location(center, euler))
-                shell = (shell - envelope) + bracket
+            bracket = bracket_solid(servo, bracket_spec)
+            bracket = bracket.locate(Location(center, euler))
+            shell = (shell - envelope) + bracket
 
     # Cut clearance volumes for rotating child bodies
     for joint in body.joints:
@@ -679,6 +678,17 @@ def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
     return solid.moved(Location((0, 0, 0), euler))
 
 
+def _wheel_outboard_offset(joint: Joint, child: Body) -> float:
+    """Compute how far a wheel sits outboard from the joint (shaft).
+
+    The wheel hub mates with the servo shaft boss, so the wheel's inner face
+    is approximately at the boss tip. Offset = boss_height + half_wheel_width.
+    """
+    boss_h = joint.servo.shaft_boss_height or 0.0
+    half_w = (child.width or child.dimensions[2]) / 2
+    return boss_h + half_w
+
+
 def _child_clearance_volume(child: Body, joint: Joint):
     """Compute the volume swept by a child body through its joint range.
 
@@ -708,8 +718,19 @@ def _child_clearance_volume(child: Body, joint: Joint):
             rotated = _rotate_solid(envelope, joint.axis, angle)
             clearance = clearance + rotated  # boolean union
 
-    # Position at joint.pos in parent frame
-    return clearance.moved(Location(joint.pos))
+    # Position at joint.pos in parent frame, offset outboard for wheels
+    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+    if has_wheel and child.shape == "cylinder":
+        offset = _wheel_outboard_offset(joint, child)
+        ax, ay, az = joint.axis
+        pos = (
+            joint.pos[0] + ax * offset,
+            joint.pos[1] + ay * offset,
+            joint.pos[2] + az * offset,
+        )
+    else:
+        pos = joint.pos
+    return clearance.moved(Location(pos))
 
 
 def _make_wheel_solid(radius: float, width: float):
