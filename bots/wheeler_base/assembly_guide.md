@@ -52,18 +52,18 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 2. **Print structural parts** — Print all 3 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
-   - Mount RaspberryPiZero2W (pi) at center position
+   - Mount RaspberryPiZero2W (pi) at center position using 4x M2.5
    - Mount LiPo2S-1000 (battery) at bottom position
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
-   - Screw servo into base bracket using M3 mounting screws
-   - Attach left_rim bracket to servo horn using M2.5 horn screws
-   - Mount Pololu 90x10mm Wheel (wheel) at center position
+   - Screw servo into base bracket using 6x M3 screws through mounting ears
+   - Attach left_rim coupler to servo horn using 8x M2.5 screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 5. **Attach right_rim** to base via STS3215 at joint `right_wheel` (axis: roll):
-   - Screw servo into base bracket using M3 mounting screws
-   - Attach right_rim bracket to servo horn using M2.5 horn screws
-   - Mount Pololu 90x10mm Wheel (wheel) at center position
+   - Screw servo into base bracket using 6x M3 screws through mounting ears
+   - Attach right_rim coupler to servo horn using 8x M2.5 screws
+   - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 6. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 
