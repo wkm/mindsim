@@ -13,6 +13,8 @@ Servo local frame convention:
 
 from __future__ import annotations
 
+import math
+
 from botcad.component import MountingEar, MountPoint, ServoSpec, WirePort
 
 # ── Feetech STS3215 (C018, 12V variant) ─────────────────────────────
@@ -31,7 +33,7 @@ from botcad.component import MountingEar, MountPoint, ServoSpec, WirePort
 #
 # Output shaft center at X=+12.5, Y=0, Z=+15.9 (body top face)
 # Rear (blind) shaft at same XY, support bearing in -Z
-# Connector (PA2.0 4-pin) on bottom face, toward -X (back) end
+# Connector (5264-2.54 3-pin) on bottom face, toward -X (back) end
 
 # Overall envelope (with ears, per datasheet)
 _STS3215_DIMS = (0.0452, 0.0247, 0.035)
@@ -41,7 +43,10 @@ _STS3215_BODY_DIMS = (0.0454, 0.0248, 0.0318)
 
 _STS3215_MASS = 0.055  # kg
 _STS3215_STALL_TORQUE = 2.942  # N-m (30 kg-cm @ 12V)
-_STS3215_NO_LOAD_SPEED = 4.71  # rad/s (0.222s/60° → 270°/s)
+_STS3215_NO_LOAD_SPEED_60DEG_S = 0.222  # s/60° @ 12V
+_STS3215_NO_LOAD_SPEED = (math.pi / 3) / _STS3215_NO_LOAD_SPEED_60DEG_S  # rad/s
+_STS3215_GEAR_RATIO = 345.0  # 1:345 total reduction
+_STS3215_TYPICAL_CURRENT = 0.180  # A (no-load current at 12V)
 _STS3215_VOLTAGE = 12.0
 
 # Output shaft offset from body center (meters)
@@ -66,20 +71,23 @@ def STS3215(continuous: bool = False) -> ServoSpec:
 
     Dual-axis design with 25T spline output shaft and blind support shaft.
     Mounting ears on the body sides with M3 clearance holes for bracket
-    attachment.  PA2.0 4-pin daisy-chain connector on the bottom face.
+    attachment.  5264-2.54 3-pin daisy-chain connector on the bottom face.
 
     Args:
         continuous: If True, servo is in continuous rotation mode (for wheels).
     """
-    range_rad = (-3.14159, 3.14159) if continuous else (-2.618, 2.618)  # ±150° std
+    range_rad = (
+        -math.pi,
+        math.pi,
+    )  # STS3215 runs 360° (position mode reports 0–4096 over one rotation)
 
     return ServoSpec(
         name="STS3215",
         dimensions=_STS3215_DIMS,
         mass=_STS3215_MASS,
         wire_ports=(
-            # PA2.0 4-pin connector on bottom face, toward back (-X) end
-            # Also has 5264/2.54 3P terminal nearby; 15cm cable
+            # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
+            # Also has a short 5264/2.54 pigtail lead (~15cm)
             WirePort(
                 "uart_bus",
                 pos=(-0.0080, 0.0, -0.0159),
@@ -96,11 +104,12 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         stall_torque=_STS3215_STALL_TORQUE,
         no_load_speed=_STS3215_NO_LOAD_SPEED,
         voltage=_STS3215_VOLTAGE,
+        typical_current=_STS3215_TYPICAL_CURRENT,
         bus_type="uart_half_duplex",
         shaft_offset=_STS3215_SHAFT_OFFSET,
         shaft_axis=(0.0, 0.0, 1.0),
         range_rad=range_rad,
-        gear_ratio=1.0,
+        gear_ratio=_STS3215_GEAR_RATIO,
         continuous=continuous,
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
@@ -151,6 +160,6 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             )
             for i, (x, y) in enumerate(_HORN_XY)
         ),
-        # PA2.0 connector on bottom face, toward back (-X) end
+        # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
         connector_pos=(-0.0080, 0.0, -0.0159),
     )
