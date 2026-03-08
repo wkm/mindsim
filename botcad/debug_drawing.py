@@ -37,8 +37,9 @@ from build123d import (
 )
 from build123d.exporters import LineType
 
+from botcad.component import Vec3
+
 RGB = tuple[int, int, int]
-Vec3 = tuple[float, float, float]
 
 # Default color palette — visually distinct, colorblind-friendly
 PALETTE: list[RGB] = [
@@ -877,24 +878,3 @@ class DebugDrawing:
         out = self.save(path)
         subprocess.Popen(["open", str(out)])
         return out
-
-
-# ── Convenience: standard section sets ──
-
-
-def xy_sections(
-    z_values: dict[str, float],
-) -> list[_Section]:
-    """Create a list of XY section planes at named Z heights."""
-    return [
-        _Section(name=name, plane=Plane.XY.offset(z)) for name, z in z_values.items()
-    ]
-
-
-def standard_sections() -> list[_Section]:
-    """The three principal planes — useful starting point."""
-    return [
-        _Section("XY", Plane.XY),
-        _Section("XZ", Plane.XZ),
-        _Section("YZ", Plane.YZ),
-    ]
