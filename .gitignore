@@ -34,6 +34,14 @@ runs/
 # ComfyUI generated assets
 comfyui/output/
 
+# Node (viewer tests)
+node_modules/
+package-lock.json
+
+# Viewer artifacts
+viewer/test_screenshots/
+viewer/.cdn_cache/
+
 # Claude Code (track settings.json, ignore everything else)
 .claude/*
 !.claude/settings.json

@@ -1,0 +1,306 @@
+{
+  "bot_name": "wheeler_arm",
+  "bodies": [
+    {
+      "name": "base",
+      "mesh": "base.stl",
+      "parent": null
+    },
+    {
+      "name": "left_rim",
+      "mesh": "left_rim.stl",
+      "parent": "base",
+      "joint": "left_wheel"
+    },
+    {
+      "name": "right_rim",
+      "mesh": "right_rim.stl",
+      "parent": "base",
+      "joint": "right_wheel"
+    },
+    {
+      "name": "turntable",
+      "mesh": "turntable.stl",
+      "parent": "base",
+      "joint": "shoulder_yaw"
+    },
+    {
+      "name": "upper_arm",
+      "mesh": "upper_arm.stl",
+      "parent": "turntable",
+      "joint": "shoulder_pitch"
+    },
+    {
+      "name": "forearm",
+      "mesh": "forearm.stl",
+      "parent": "upper_arm",
+      "joint": "elbow"
+    },
+    {
+      "name": "hand",
+      "mesh": "hand.stl",
+      "parent": "forearm",
+      "joint": "wrist"
+    }
+  ],
+  "joints": [
+    {
+      "name": "left_wheel",
+      "parent_body": "base",
+      "child_body": "left_rim",
+      "axis": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -3.14159,
+        3.14159
+      ],
+      "range_deg": [
+        -180.0,
+        180.0
+      ],
+      "pos": [
+        -0.06,
+        0.0,
+        0.0
+      ],
+      "servo": "STS3215",
+      "continuous": true
+    },
+    {
+      "name": "right_wheel",
+      "parent_body": "base",
+      "child_body": "right_rim",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -3.14159,
+        3.14159
+      ],
+      "range_deg": [
+        -180.0,
+        180.0
+      ],
+      "pos": [
+        0.06,
+        0.0,
+        0.0
+      ],
+      "servo": "STS3215",
+      "continuous": true
+    },
+    {
+      "name": "shoulder_yaw",
+      "parent_body": "base",
+      "child_body": "turntable",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -1.5,
+        1.5
+      ],
+      "range_deg": [
+        -85.9,
+        85.9
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.04
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "shoulder_pitch",
+      "parent_body": "turntable",
+      "child_body": "upper_arm",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -1.5,
+        1.5
+      ],
+      "range_deg": [
+        -85.9,
+        85.9
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.02
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "elbow",
+      "parent_body": "upper_arm",
+      "child_body": "forearm",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -2.0,
+        0.0
+      ],
+      "range_deg": [
+        -114.6,
+        0.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.12
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "wrist",
+      "parent_body": "forearm",
+      "child_body": "hand",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -1.5,
+        1.5
+      ],
+      "range_deg": [
+        -85.9,
+        85.9
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.1
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    }
+  ],
+  "assembly_steps": [
+    {
+      "step": 1,
+      "title": "base",
+      "body": "base",
+      "components": [
+        {
+          "label": "pi",
+          "component": "RaspberryPiZero2W"
+        },
+        {
+          "label": "battery",
+          "component": "LiPo2S-1000"
+        }
+      ],
+      "description": "Base structure \u2014 mount pi, battery"
+    },
+    {
+      "step": 2,
+      "title": "left_rim",
+      "body": "left_rim",
+      "components": [
+        {
+          "label": "wheel",
+          "component": "Pololu 90x10mm Wheel"
+        }
+      ],
+      "servo": {
+        "joint": "left_wheel",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint left_wheel"
+    },
+    {
+      "step": 3,
+      "title": "right_rim",
+      "body": "right_rim",
+      "components": [
+        {
+          "label": "wheel",
+          "component": "Pololu 90x10mm Wheel"
+        }
+      ],
+      "servo": {
+        "joint": "right_wheel",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint right_wheel"
+    },
+    {
+      "step": 4,
+      "title": "turntable",
+      "body": "turntable",
+      "servo": {
+        "joint": "shoulder_yaw",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_yaw"
+    },
+    {
+      "step": 5,
+      "title": "upper_arm",
+      "body": "upper_arm",
+      "servo": {
+        "joint": "shoulder_pitch",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_pitch"
+    },
+    {
+      "step": 6,
+      "title": "forearm",
+      "body": "forearm",
+      "servo": {
+        "joint": "elbow",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint elbow"
+    },
+    {
+      "step": 7,
+      "title": "hand",
+      "body": "hand",
+      "components": [
+        {
+          "label": "camera",
+          "component": "OV5647"
+        }
+      ],
+      "servo": {
+        "joint": "wrist",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint wrist"
+    }
+  ],
+  "ik_chains": [
+    {
+      "name": "chain_0",
+      "joints": [
+        "shoulder_yaw",
+        "shoulder_pitch",
+        "elbow",
+        "wrist"
+      ],
+      "end_effector": "hand"
+    }
+  ]
+}
