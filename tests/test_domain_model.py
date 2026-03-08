@@ -208,6 +208,17 @@ class TestComponentCatalog:
             assert mp.axis == (0.0, 0.0, 1.0)
             assert mp.fastener_type == "M2.5"
 
+    def test_sts3215_specs_match_datasheet(self):
+        from botcad.components.servo import STS3215
+
+        servo = STS3215()
+        assert math.isclose(servo.stall_torque, 2.942, rel_tol=1e-3)
+        assert math.isclose(servo.no_load_speed, (math.pi / 3) / 0.222, rel_tol=1e-6)
+        assert servo.gear_ratio == 345.0
+        assert math.isclose(servo.typical_current, 0.18, rel_tol=1e-3)
+        lo, hi = servo.range_rad
+        assert math.isclose(hi - lo, 2 * math.pi, rel_tol=1e-6)
+
     def test_rear_horn_mounting_points_axis(self):
         from botcad.components.servo import STS3215
 
