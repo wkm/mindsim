@@ -1,44 +1,66 @@
-# MindSim - 2-Wheeler Robot Simulation
+# MindSim - Parametric Robot Design → Sim → Fabrication
 
-Simple 2-wheeler robot with camera for training neural networks in MuJoCo.
+Design robots from real components, train them in simulation, then build the physical thing.
+
+## Principles
+
+- Simple is beautiful
+- Composable modules
+
+## Pipeline Philosophy
+
+The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
+
+```md
+Skeleton DSL (design.py)
+├─→ CAD assembly (STEP + per-body STLs for slicing)
+├─→ MuJoCo XML (references same STL meshes — no separate "sim geometry")
+├─→ validation renders (visual sanity checks before printing)
+└─→ training pipeline (PPO, reward shaping, scene gen)
+```
+
+**Key invariants:**
+
+- **CAD geometry = sim geometry.** MuJoCo references the same STLs you'd send to a slicer.
+- **Rigid sub-chains become single printed parts.** Servos are the mechanical separation points.
+- **Purchased components get pockets, not models.** Assembly guide says what to insert where.
+- **Sim fidelity matters.** Geometry, mass, and actuation should match physical reality.
 
 ## Quick Start
 
-**Single entry point — always use `main.py` via `mjpython`:**
-
 ```bash
 uv run mjpython main.py                    # Interactive TUI (default)
-uv run mjpython main.py scene              # Scene gen preview (procedural furniture)
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
-uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]  # Play trained policy
-uv run mjpython main.py train [--smoketest] [--bot NAME] [--resume REF] [--num-workers N]
-uv run mjpython main.py smoketest          # Alias for train --smoketest
-uv run mjpython main.py quicksim           # Rerun debug vis
-uv run mjpython main.py visualize [--bot NAME] [--steps N]
-uv run mjpython main.py validate-rewards [--bot NAME]  # Validate reward hierarchy
+uv run mjpython main.py train [--smoketest] [--bot NAME]
+uv run mjpython main.py play [CHECKPOINT] [--bot NAME] [--run RUN_NAME]
+uv run mjpython main.py scene              # Scene gen preview
 ```
 
-`--bot NAME` accepts a bot directory name (e.g., `simplebiped`, `simple2wheeler`). Default: `simple2wheeler`.
+`--bot NAME`: bot directory name (e.g., `wheeler_arm`). Make shortcuts: `make`, `make view`, `make train`.
 
-`--run RUN_NAME` resolves the latest checkpoint from a specific run directory (e.g., `--run s2w-lstm-0218-1045`).
-
-Or use Make shortcuts: `make`, `make view`, `make play`, `make train`, `make smoketest`.
-
-**Worktree management:**
-
-```bash
-make wt-new NAME=my-experiment              # exp/YYMMDD-my-experiment branch
-make wt-new NAME=better-tui TYPE=infra      # infra/better-tui branch
-make wt-new DESC='implement PPO'            # Claude suggests a branch name
-make wt-ls                                  # List all worktrees
-make wt-rm NAME=my-experiment               # Remove worktree (keeps branch)
-```
+**Worktrees:** `make wt-new NAME=foo`, `make wt-new NAME=bar TYPE=infra`, `make wt-ls`, `make wt-rm NAME=foo`
 
 ## Project Structure
 
 ```txt
 mindsim/
 ├── main.py                      # Entry point + TUI app (MindSimApp)
+│
+├── botcad/                      # Parametric bot CAD system
+│   ├── skeleton.py              # Kinematic tree DSL (Bot, Body, Joint)
+│   ├── component.py             # Component base classes (ServoSpec, etc.)
+│   ├── components/              # Real component catalog (STS3215, RPi, wheels, etc.)
+│   ├── bracket.py               # Parametric servo bracket geometry
+│   ├── geometry.py              # Servo placement, quaternion math
+│   ├── packing.py               # Body dimension solver
+│   ├── routing.py               # Wire route solver
+│   ├── validation.py            # Subassembly ROM sweep + collision detection
+│   └── emit/                    # Output generators (cad, mujoco, bom, readme, renders)
+│       ├── render3d.py          # Centralized 3D rendering (SceneBuilder, Renderer3D, Color)
+│       ├── composite.py         # Image compositing (grid, filmstrip, fonts)
+│       ├── component_renders.py # Component/bracket tear sheets
+│       ├── renders.py           # Bot-level overview, closeups, sweep filmstrips
+│       └── assembly_renders.py  # Assembly instruction PDFs
 │
 ├── training/                    # RL training loop
 │   ├── train.py                 # Main training orchestration
@@ -90,11 +112,14 @@ mindsim/
 │   ├── composer.py              # SceneComposer, placement
 │   └── concepts/                # Parametric furniture (auto-discovered)
 │
-├── bots/                        # Bot definitions
-│   └── simple2wheeler/
-│       ├── bot.xml              # Robot: bodies, joints, cameras, meshes
-│       ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
-│       └── meshes/*.stl         # Visual geometry
+├── bots/                        # Bot definitions + generated outputs
+│   ├── simple2wheeler/
+│   │   ├── bot.xml              # Robot: bodies, joints, cameras, meshes
+│   │   ├── scene.xml            # Thin wrapper: timestep + bot.xml + room.xml
+│   │   └── meshes/*.stl         # Visual geometry
+│   └── wheeler_arm/
+│       ├── design.py            # Bot definition (the source of truth)
+│       └── meshes/*.stl         # Generated meshes (used by sim + slicer)
 │
 ├── worlds/
 │   └── room.xml                 # Standalone arena (floor, curbs, target)
@@ -112,6 +137,8 @@ mindsim/
     └── replays/                 # Downloaded recordings
         └── <run_name>/
 ```
+
+Each bot's `design.py` calls `bot.solve()` then `bot.emit()` to produce: `assembly.step`, `meshes/*.stl`, `bot.xml`, `scene.xml`, `bom.md`, `assembly_guide.md`, and validation renders.
 
 ## Environment API
 
@@ -251,86 +278,77 @@ Current algorithm: **PPO** (Proximal Policy Optimization with GAE)
 
 ## Branching & Change Philosophy
 
-### Guiding principles
+1. **Master stays stable.** Only small, safe changes land directly on master.
+2. **Experiments are focused.** `exp/YYMMDD-<name>` branches test one hypothesis. No drive-by refactors.
+3. **Tooling/infra changes are separate.** `infra/<name>` branches, not mixed into experiments.
+4. **Commit logs are a journal.** Explain _why_, not just _what_.
 
-1. **Master stays stable.** Only small, safe changes land directly on master: hyperparameter tweaks, minor bugfixes, config changes. No big refactors, no risky rewrites.
-2. **Experiments are focused.** An `exp/` branch tests a hypothesis — it should not also reorganize the codebase or refactor tooling. Keep the diff reviewable and the intent clear.
-3. **Tooling/infra changes are separate.** Improvements to the training pipeline, TUI, visualization, build system, etc. go on `infra/` branches, not mixed into experiments.
-4. **Commit logs are a journal.** Every commit should tell a reader *why* the change was made, what was tried, and what was learned. The git log is the project's memory.
+**Before any non-trivial change:** ensure working tree is clean, classify the change, use `make wt-new` for experiments/infra.
 
-### Before ANY non-trivial change
+**Experiment workflow:** `make wt-new NAME=foo` → work on branch → add entry to `EXPERIMENTS.md` → merge or abandon.
 
-**Always bookmark your starting point before writing code.** You must be able to get back to a known-good state.
+**Tracking:** `EXPERIMENTS.md` records branch, hypothesis, status, outcome, W&B links.
 
-1. **Ensure the working tree is clean.** Run `git status` to verify. Commit or stash first.
-2. **Classify the change** — decide which category it falls into (see below).
+## Future Directions
 
-### Change categories
+- **Structural validation (FEA):** Run finite-element analysis on generated meshes to validate printability before fabrication. The immediate smoke test is cross-section analysis (servo stall torque → minimum bridge cross-section at each bracket). The longer-term goal is mesh FEA using `solidspy` or `sfepy` — load each body with servo reaction forces and gravity, check peak stress vs. material yield strength. This would catch thin bridges, under-supported brackets, and other structural failures that the packing solver doesn't reason about.
 
-**Hyperparameter tweaks / minor bugfixes** → Commit directly on master
+## Visual Regression Testing
 
-- Learning rate, batch size, reward coefficients, small bugfixes, config changes.
-- Working tree must be clean before starting.
-- Keep changes small and low-risk.
-
-**Experiments** → `exp/YYMMDD-<name>` branch via worktree
-
-- New algorithms, architecture changes, reward structures, training approaches — anything where the outcome is uncertain.
-- **Stay focused**: only make changes that serve the experiment's hypothesis. No drive-by refactors, no structural changes.
-- Workflow:
-  1. Ensure working tree is clean (committed on master).
-  2. Create a worktree: `make wt-new NAME=<descriptive-name>`
-     - This creates `../mindsim-<name>/` on branch `exp/YYMMDD-<name>` (date auto-prefixed)
-  3. `cd ../mindsim-<name>/ && claude` to start a Claude Code session in the worktree.
-  4. Add an entry to `EXPERIMENTS.md` on the branch.
-  5. Now begin writing code.
-- If the experiment succeeds, merge to master: `git merge exp/YYMMDD-<name>`
-- Clean up: `make wt-rm NAME=<name>` (then `git branch -d exp/YYMMDD-<name>` if merged)
-- If it fails, remove the worktree — the branch stays as a record.
-
-**Tooling / infrastructure improvements** → `infra/<name>` branch via worktree
-
-- TUI improvements, visualization changes, build system updates, training pipeline refactors, new CLI features.
-- Workflow:
-  1. Ensure working tree is clean.
-  2. Create a worktree: `make wt-new NAME=<name> TYPE=infra`
-     - This creates `../mindsim-<name>/` on branch `infra/<name>`
-  3. Work, commit, merge back to master when done.
-- These can be larger structural changes — that's fine, just keep them separate from experiments.
-
-### Parallel experiments with worktrees
-
-Worktrees let you run multiple experiments simultaneously, each with its own Claude Code session:
+Test renders are committed screenshots of every component, bracket, and bot. Review them in `git diff` after geometry changes to catch regressions visually — they're the parametric CAD equivalent of screenshot tests.
 
 ```bash
-# From the main repo (on master), spin up parallel experiments
-make wt-new NAME=ppo-baseline
-make wt-new NAME=reward-shaping-v2
-
-# Infra work in parallel
-make wt-new NAME=better-tui TYPE=infra
-
-# Each gets its own isolated directory + Claude session
-cd ../mindsim-ppo-baseline && claude
-cd ../mindsim-reward-shaping-v2 && claude    # (in another terminal)
-
-# Main repo stays clean on master — you can train/view/etc. uninterrupted
-make wt-ls
+make renders              # Regenerate everything (~90s)
+make renders-components   # Component & bracket tear sheets only
+make renders-bots         # Full bot builds only (STEP + STL + XML + renders)
+make renders-rom          # Subassembly ROM validation only
 ```
 
-- Each worktree is a full working copy with its own branch — no file conflicts between sessions.
-- `CLAUDE.md` and all project files are available in each worktree (checked into git).
-- Worktrees share the same `.git` database, so branches/history are shared.
+**After any geometry change**, run `make renders` and review the diffs:
 
-### Tracking experiments
+Each stage produces both 3D renders (PNG/PDF) and 2D technical drawings (SVG):
 
-Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
+| Stage          | 3D renders                                             | 2D drawings                                                     |
+| -------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| Component      | `botcad/components/test_*.png` — 6-view tear sheets    | `botcad/components/drawing_*.svg` — section views at key planes |
+| Bracket        | `botcad/components/test_{bracket,cradle,coupler}*.png` | `botcad/components/drawing_{pocket,coupler,cradle}*.svg`        |
+| ROM validation | `botcad/components/test_rom_*.png` — sweep filmstrips  | —                                                               |
+| Bot joints     | `bots/*/test_sweep.png` — per-joint ROM filmstrip      | `bots/*/drawings/drawing_joint_*.svg` — bracket-servo sections  |
+| Bot assembly   | `bots/*/assembly_visual.pdf`, `test_assembly.pdf`      | —                                                               |
+| Bot overview   | `bots/*/test_overview.png`                             | —                                                               |
 
-- Branch name (including date prefix)
-- Hypothesis (what you're testing and why)
-- Status (in-progress / succeeded / failed / partially worked / merged to main)
-- Outcome notes (what was learned)
-- Link to relevant W&B runs
+For interactive debugging during development, use `botcad/debug_drawing.py`:
+
+```python
+from botcad.debug_drawing import DebugDrawing
+drawing = DebugDrawing("my_debug", scale=15.0)
+drawing.add_part("part_a", solid_a)
+drawing.add_part("part_b", solid_b)
+drawing.add_section("front", Plane.XY.offset(z))
+drawing.add_section("side", Plane.XZ)
+drawing.save_and_open("debug.svg")  # opens in browser
+```
+
+## Rendering Architecture
+
+All visual output flows through two centralized modules:
+
+**3D rendering** (`botcad/emit/render3d.py`):
+
+- `SceneBuilder` — declarative MuJoCo XML construction (replaces hand-rolled f-string XML)
+- `Renderer3D` — 3-pass pipeline: color → segmentation → depth, with post-processing (edge detection, SSAO, white background)
+- `Color` dataclass — single source for RGBA, derives MuJoCo string and PIL RGB
+- Orthographic projection, CAD-style lighting (high ambient, low specular), multisampled
+- Standard view presets: `VIEWS_6` (front/back/left/right/top/iso), `VIEWS_4`
+- Camera auto-centers on mesh geometry bounds, ignoring debug overlays
+
+**2D compositing** (`botcad/emit/composite.py`):
+
+- `grid()` — N×M view grid with title, color legend, view labels
+- `filmstrip()` — horizontal strip with collision indicators and ROM bar
+- Font pipeline: Input Sans Narrow Bold/Regular → DejaVu Sans → Arial → default
+
+**Usage pattern**: build a `SceneBuilder`, call `to_xml()`, create `Renderer3D`, call `render_views()` or `render_frame()`, composite with `grid()` or `filmstrip()`.
 
 ## Development Notes
 
@@ -340,22 +358,11 @@ Maintain `EXPERIMENTS.md` in main (and on experiment branches) with:
 
 ## Commit Message Format
 
-The git log is the project's journal. Each commit should be useful to a future reader trying to understand *why* things are the way they are.
+```
+Short summary (imperative mood, <72 chars)
 
-```text
-Short summary (imperative mood, one line)
-
-What changed and why. Not just "updated X" — explain the motivation, the
-problem being solved, or the hypothesis being tested. Include context that
-won't be obvious from the diff alone: what alternatives were considered,
-what failed first, what tradeoffs were made.
-
-For experiment branches, note observations: did the change help? What
-metrics moved? What surprised you?
+Why this change was made. Context, reasoning, alternatives considered,
+observations. The git log is the project's journal.
 
 Session: <link to Claude session>
 ```
-
-- **First line**: Concise summary (imperative mood, <72 chars)
-- **Body**: The "journal entry" — context, reasoning, observations. Use markdown. Be generous with detail; a too-verbose commit message is far better than a cryptic one.
-- **Session link**: Link to the Claude Code session (when applicable)

@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play wt-new wt-ls wt-rm setup lint
+.PHONY: tui train quick-sim test smoketest view play renders wt-new wt-ls wt-rm setup lint
 
 tui:
 	uv run mjpython main.py
@@ -32,6 +32,18 @@ view:
 
 play:
 	uv run mjpython main.py play
+
+renders:
+	uv run mjpython scripts/regen_test_renders.py
+
+renders-components:
+	uv run mjpython scripts/regen_test_renders.py --components
+
+renders-bots:
+	uv run mjpython scripts/regen_test_renders.py --bots
+
+renders-rom:
+	uv run mjpython scripts/regen_test_renders.py --rom
 
 lint:
 	uv run ruff check --fix .

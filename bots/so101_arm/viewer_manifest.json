@@ -1,0 +1,296 @@
+{
+  "bot_name": "so101_arm",
+  "bodies": [
+    {
+      "name": "base",
+      "mesh": "base.stl",
+      "parent": null
+    },
+    {
+      "name": "turntable",
+      "mesh": "turntable.stl",
+      "parent": "base",
+      "joint": "shoulder_pan"
+    },
+    {
+      "name": "upper_arm",
+      "mesh": "upper_arm.stl",
+      "parent": "turntable",
+      "joint": "shoulder_lift"
+    },
+    {
+      "name": "forearm",
+      "mesh": "forearm.stl",
+      "parent": "upper_arm",
+      "joint": "elbow_flex"
+    },
+    {
+      "name": "wrist",
+      "mesh": "wrist.stl",
+      "parent": "forearm",
+      "joint": "wrist_flex"
+    },
+    {
+      "name": "wrist_roll",
+      "mesh": "wrist_roll.stl",
+      "parent": "wrist",
+      "joint": "wrist_roll"
+    },
+    {
+      "name": "jaw",
+      "mesh": "jaw.stl",
+      "parent": "wrist_roll",
+      "joint": "gripper"
+    }
+  ],
+  "joints": [
+    {
+      "name": "shoulder_pan",
+      "parent_body": "base",
+      "child_body": "turntable",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -1.92,
+        1.92
+      ],
+      "range_deg": [
+        -110.0,
+        110.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.031
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "shoulder_lift",
+      "parent_body": "turntable",
+      "child_body": "upper_arm",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -1.745,
+        1.745
+      ],
+      "range_deg": [
+        -100.0,
+        100.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.02
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "elbow_flex",
+      "parent_body": "upper_arm",
+      "child_body": "forearm",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -1.69,
+        1.69
+      ],
+      "range_deg": [
+        -96.8,
+        96.8
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.116
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "wrist_flex",
+      "parent_body": "forearm",
+      "child_body": "wrist",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -1.658,
+        1.658
+      ],
+      "range_deg": [
+        -95.0,
+        95.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.135
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "wrist_roll",
+      "parent_body": "wrist",
+      "child_body": "wrist_roll",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -2.744,
+        2.841
+      ],
+      "range_deg": [
+        -157.2,
+        162.8
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.032
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    },
+    {
+      "name": "gripper",
+      "parent_body": "wrist_roll",
+      "child_body": "jaw",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -0.175,
+        1.745
+      ],
+      "range_deg": [
+        -10.0,
+        100.0
+      ],
+      "pos": [
+        0.0,
+        0.0,
+        0.018
+      ],
+      "servo": "STS3215",
+      "continuous": false
+    }
+  ],
+  "assembly_steps": [
+    {
+      "step": 1,
+      "title": "base",
+      "body": "base",
+      "components": [
+        {
+          "label": "pi",
+          "component": "RaspberryPiZero2W"
+        },
+        {
+          "label": "battery",
+          "component": "LiPo2S-1000"
+        }
+      ],
+      "description": "Base structure \u2014 mount pi, battery"
+    },
+    {
+      "step": 2,
+      "title": "turntable",
+      "body": "turntable",
+      "servo": {
+        "joint": "shoulder_pan",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_pan"
+    },
+    {
+      "step": 3,
+      "title": "upper_arm",
+      "body": "upper_arm",
+      "servo": {
+        "joint": "shoulder_lift",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint shoulder_lift"
+    },
+    {
+      "step": 4,
+      "title": "forearm",
+      "body": "forearm",
+      "servo": {
+        "joint": "elbow_flex",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint elbow_flex"
+    },
+    {
+      "step": 5,
+      "title": "wrist",
+      "body": "wrist",
+      "servo": {
+        "joint": "wrist_flex",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint wrist_flex"
+    },
+    {
+      "step": 6,
+      "title": "wrist_roll",
+      "body": "wrist_roll",
+      "components": [
+        {
+          "label": "camera",
+          "component": "PiCamera2"
+        }
+      ],
+      "servo": {
+        "joint": "wrist_roll",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint wrist_roll"
+    },
+    {
+      "step": 7,
+      "title": "jaw",
+      "body": "jaw",
+      "servo": {
+        "joint": "gripper",
+        "model": "STS3215"
+      },
+      "description": "Attach via STS3215 at joint gripper"
+    }
+  ],
+  "ik_chains": [
+    {
+      "name": "chain_0",
+      "joints": [
+        "shoulder_pan",
+        "shoulder_lift",
+        "elbow_flex",
+        "wrist_flex",
+        "wrist_roll",
+        "gripper"
+      ],
+      "end_effector": "jaw"
+    }
+  ]
+}
