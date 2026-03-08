@@ -1,6 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mujoco model="wheeler_arm_scene">
-  <option timestep="0.002"/>
-  <include file="bot.xml"/>
-  <include file="../../worlds/room.xml"/>
-</mujoco>
