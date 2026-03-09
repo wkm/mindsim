@@ -5,8 +5,8 @@
 ## Parts in this module
 
 - **turntable** (box, 60.0 x 40.0 x 40.0 mm)
-- **upper_arm** (tube, 36.0 x 36.0 x 131.0 mm)
-- **forearm** (tube, 32.0 x 32.0 x 150.0 mm)
+- **upper_arm** (tube, 36.0 x 36.0 x 143.5 mm)
+- **forearm** (tube, 32.0 x 32.0 x 162.5 mm)
 - **wrist** (box, 40.0 x 35.0 x 64.0 mm)
 - **wrist_roll** (box, 35.0 x 35.0 x 37.0 mm)
 - **jaw** (jaw, 30.0 x 5.0 x 40.0 mm)

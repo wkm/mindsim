@@ -64,22 +64,27 @@ def _build_bot_xml(bot: Bot) -> str:
     if bot.root is not None:
         _emit_body_tree(worldbody, bot.root, bot, is_root=True)
 
-    # Contact excludes — adjacent bodies (parent-child) and near-adjacent
-    # (grandparent-grandchild, 2 joints apart) to prevent false collisions
-    # in compact mechanisms like grippers.
+    # Contact excludes — bodies within 3 joints of each other collide due to
+    # bracket/coupler geometry, not real contact. Exclude up to 3 joints apart
+    # to cover compact mechanisms like wrist-roll + gripper chains.
     contact = SubElement(root, "contact")
     exclude_pairs: set[tuple[str, str]] = set()
     for body in bot.all_bodies:
-        for joint in body.joints:
-            if joint.child is not None:
-                # Direct parent-child
-                pair = (body.name, joint.child.name)
-                exclude_pairs.add(pair)
-                # Grandparent-grandchild (2 joints apart)
-                for sub_joint in joint.child.joints:
-                    if sub_joint.child is not None:
-                        pair2 = (body.name, sub_joint.child.name)
-                        exclude_pairs.add(pair2)
+        for j1 in body.joints:
+            if j1.child is None:
+                continue
+            # 1 joint apart
+            exclude_pairs.add((body.name, j1.child.name))
+            for j2 in j1.child.joints:
+                if j2.child is None:
+                    continue
+                # 2 joints apart
+                exclude_pairs.add((body.name, j2.child.name))
+                for j3 in j2.child.joints:
+                    if j3.child is None:
+                        continue
+                    # 3 joints apart
+                    exclude_pairs.add((body.name, j3.child.name))
     for b1, b2 in sorted(exclude_pairs):
         SubElement(contact, "exclude", body1=b1, body2=b2)
 

@@ -6,6 +6,7 @@ Use arrow keys to move the target cube; the robot will chase it.
 """
 
 import time
+from enum import Enum
 
 import mujoco
 import mujoco.viewer
@@ -26,6 +27,13 @@ KEY_MINUS = 45  # '-'
 KEY_EQUAL = 61  # '='
 
 SPEED_OPTIONS = [1, 2, 4, 8]
+
+
+class PlayIntent(str, Enum):
+    MOVE = "move"
+    RANDOMIZE = "randomize"
+    SPEED_UP = "speed_up"
+    SPEED_DOWN = "speed_down"
 
 
 def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"):
@@ -80,19 +88,19 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
 
     def key_callback(keycode):
         if keycode == KEY_UP:
-            pending_intents.append(("move", 1, target_step))  # +Y (forward)
+            pending_intents.append((PlayIntent.MOVE, 1, target_step))  # +Y (forward)
         elif keycode == KEY_DOWN:
-            pending_intents.append(("move", 1, -target_step))  # -Y (backward)
+            pending_intents.append((PlayIntent.MOVE, 1, -target_step))  # -Y (backward)
         elif keycode == KEY_RIGHT:
-            pending_intents.append(("move", 0, target_step))  # +X (right)
+            pending_intents.append((PlayIntent.MOVE, 0, target_step))  # +X (right)
         elif keycode == KEY_LEFT:
-            pending_intents.append(("move", 0, -target_step))  # -X (left)
+            pending_intents.append((PlayIntent.MOVE, 0, -target_step))  # -X (left)
         elif keycode == KEY_SLASH:
-            pending_intents.append(("randomize",))
+            pending_intents.append((PlayIntent.RANDOMIZE,))
         elif keycode == KEY_EQUAL:
-            pending_intents.append(("speed_up",))
+            pending_intents.append((PlayIntent.SPEED_UP,))
         elif keycode == KEY_MINUS:
-            pending_intents.append(("speed_down",))
+            pending_intents.append((PlayIntent.SPEED_DOWN,))
 
     # Launch passive viewer
     viewer = mujoco.viewer.launch_passive(model, data, key_callback=key_callback)
@@ -124,26 +132,26 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
                 pending_intents.clear()
 
                 for intent in intents:
-                    if intent[0] == "move":
+                    if intent[0] == PlayIntent.MOVE:
                         axis, delta = intent[1], intent[2]
-                        pos = model.body_pos[env.target_body_id].copy()
+                        pos = data.mocap_pos[env.target_mocap_id].copy()
                         pos[axis] = np.clip(
                             pos[axis] + delta, -arena_bound, arena_bound
                         )
-                        model.body_pos[env.target_body_id] = pos
+                        data.mocap_pos[env.target_mocap_id] = pos
                         reset_hidden = True
-                    elif intent[0] == "randomize":
+                    elif intent[0] == PlayIntent.RANDOMIZE:
                         angle = np.random.uniform(0, 2 * np.pi)
                         dist = np.random.uniform(1.0, 3.5)
-                        model.body_pos[env.target_body_id] = [
+                        data.mocap_pos[env.target_mocap_id] = [
                             dist * np.cos(angle),
                             dist * np.sin(angle),
                             0.08,
                         ]
                         reset_hidden = True
-                    elif intent[0] == "speed_up":
+                    elif intent[0] == PlayIntent.SPEED_UP:
                         speed_idx = min(speed_idx + 1, len(SPEED_OPTIONS) - 1)
-                    elif intent[0] == "speed_down":
+                    elif intent[0] == PlayIntent.SPEED_DOWN:
                         speed_idx = max(speed_idx - 1, 0)
 
                 if reset_hidden:
@@ -183,13 +191,19 @@ def run_play(checkpoint_ref="latest", scene_path="bots/simple2wheeler/scene.xml"
             distance = env.get_distance_to_target()
             speed = SPEED_OPTIONS[speed_idx]
 
+            motor_parts = [
+                f"{env.actuator_names[i]}={action[i]:+.2f}"
+                for i in range(env.num_actuators)
+            ]
+            motor_str = "Motors: " + "  ".join(motor_parts)
+
             viewer.set_texts(
                 [
                     (
                         mujoco.mjtFontScale.mjFONTSCALE_150,
                         mujoco.mjtGridPos.mjGRID_TOPLEFT,
                         f"Distance: {distance:.2f}m",
-                        f"Motors: L={action[0]:+.2f}  R={action[1]:+.2f}",
+                        motor_str,
                     ),
                     (
                         mujoco.mjtFontScale.mjFONTSCALE_100,

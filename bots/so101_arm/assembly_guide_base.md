@@ -4,7 +4,7 @@
 
 ## Parts in this module
 
-- **base** (box, 89.0 x 51.0 x 56.0 mm)
+- **base** (box, 89.0 x 51.0 x 50.0 mm)
 
 ## Joints
 

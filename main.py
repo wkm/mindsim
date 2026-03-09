@@ -323,8 +323,27 @@ class MindSimApp(App):
                 scene_path=self._scene_path,
                 resume=self._resume,
             )
+        except KeyboardInterrupt:
+            log.warning("Training interrupted by user")
+            try:
+                self.call_from_thread(
+                    self.log_message,
+                    "[bold yellow]Training interrupted by user[/bold yellow]",
+                )
+            except Exception:
+                pass
         except Exception:
             log.exception("Training crashed in TUI worker thread")
+            try:
+                import traceback
+
+                err = traceback.format_exc().splitlines()[-1]
+                self.call_from_thread(
+                    self.log_message,
+                    f"[bold red]Training crashed![/bold red] {err}",
+                )
+            except Exception:
+                pass
         finally:
             # Remove TUI log handler to avoid stale references
             if hasattr(self, "_tui_log_handler"):

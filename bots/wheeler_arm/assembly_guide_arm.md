@@ -4,9 +4,9 @@
 
 ## Parts in this module
 
-- **turntable** (cylinder, 60.0 x 60.0 x 35.0 mm)
-- **upper_arm** (tube, 36.0 x 36.0 x 135.0 mm)
-- **forearm** (tube, 32.0 x 32.0 x 115.0 mm)
+- **turntable** (cylinder, 60.0 x 60.0 x 47.5 mm)
+- **upper_arm** (tube, 36.0 x 36.0 x 147.5 mm)
+- **forearm** (tube, 32.0 x 32.0 x 100.0 mm)
 - **hand** (box, 40.0 x 40.0 x 30.0 mm)
 
 ## Joints
