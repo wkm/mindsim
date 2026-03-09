@@ -447,11 +447,11 @@ class TestGripJoint:
 
 class TestJawShape:
     def test_jaw_dimensions(self):
-        from botcad.skeleton import Body
+        from botcad.skeleton import Body, BodyShape
 
         b = Body(
             name="jaw",
-            shape="jaw",
+            shape=BodyShape.JAW,
             jaw_length=0.04,
             jaw_width=0.03,
             jaw_thickness=0.005,
@@ -460,9 +460,9 @@ class TestJawShape:
         assert dims == (0.03, 0.005, 0.04)  # X=width, Y=thickness, Z=length
 
     def test_jaw_defaults(self):
-        from botcad.skeleton import Body
+        from botcad.skeleton import Body, BodyShape
 
-        b = Body(name="jaw", shape="jaw")
+        b = Body(name="jaw", shape=BodyShape.JAW)
         dims = b.dimensions
         assert dims[0] == 0.03  # default width
         assert dims[1] == 0.005  # default thickness

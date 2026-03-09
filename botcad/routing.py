@@ -23,8 +23,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from botcad.bracket import BracketSpec
-from botcad.component import Vec3
+from botcad.component import BusType, Vec3
 from botcad.geometry import rotate_vec, servo_placement
+from botcad.skeleton import BodyShape
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -57,7 +58,7 @@ class WireRoute:
     """A complete wire route from source to destination."""
 
     label: str  # e.g. "servo_bus", "camera_csi", "power"
-    bus_type: str
+    bus_type: BusType
     segments: list[WireSegment] = field(default_factory=list)
 
     @property
@@ -143,14 +144,14 @@ def _joint_entry_local() -> Vec3:
     return (0.0, 0.0, 0.0)
 
 
-def _wireport_local(body: Body, bus_type: str) -> Vec3 | None:
+def _wireport_local(body: Body, bus_type: BusType) -> Vec3 | None:
     """Find a wire port of the given bus type on a body.
 
     Returns the port position in body-local frame, or None if not found.
     """
     for mount in body.mounts:
         for port in mount.component.wire_ports:
-            if port.bus_type == bus_type:
+            if port.bus_type is bus_type:
                 return _add_vec3(mount.resolved_pos, port.pos)
     return None
 
@@ -246,13 +247,13 @@ def _expand_segment(
 
 def _body_waypoints(body: Body, start: Vec3, end: Vec3) -> list[Vec3]:
     """Generate intermediate waypoints that route through body interior."""
-    if body.shape == "tube":
+    if body.shape is BodyShape.TUBE:
         return _tube_waypoints(start, end)
-    if body.shape == "cylinder":
+    if body.shape is BodyShape.CYLINDER:
         return _tube_waypoints(start, end)
-    if body.shape == "box":
+    if body.shape is BodyShape.BOX:
         return _box_waypoints(start, end)
-    if body.shape == "jaw":
+    if body.shape is BodyShape.JAW:
         return []  # jaw is a leaf — no internal routing
     return []
 
@@ -317,7 +318,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
     different bodies, the wire crosses a joint — producing a segment on each
     side of the crossing.
     """
-    route = WireRoute(label="servo_bus", bus_type="uart_half_duplex")
+    route = WireRoute(label="servo_bus", bus_type=BusType.UART_HALF_DUPLEX)
 
     if bot.root is None:
         return route
@@ -406,7 +407,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
     Walks back through the kinematic tree from the camera body to the root,
     generating body-local segments at each joint crossing.
     """
-    route = WireRoute(label="camera_csi", bus_type="csi")
+    route = WireRoute(label="camera_csi", bus_type=BusType.CSI)
 
     if bot.root is None:
         return route
@@ -425,7 +426,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         for mount in body.mounts:
             if isinstance(mount.component, CameraSpec):
                 for port in mount.component.wire_ports:
-                    if port.bus_type == "csi":
+                    if port.bus_type is BusType.CSI:
                         camera_body = body
                         camera_pos = _add_vec3(mount.resolved_pos, port.pos)
                         return
@@ -496,7 +497,7 @@ def _route_power(bot: Bot) -> WireRoute:
     Both components are on the root body, so this is a single segment
     in body-local coordinates.
     """
-    route = WireRoute(label="power", bus_type="power")
+    route = WireRoute(label="power", bus_type=BusType.POWER)
 
     if bot.root is None:
         return route
@@ -507,12 +508,12 @@ def _route_power(bot: Bot) -> WireRoute:
     for mount in bot.root.mounts:
         if "LiPo" in mount.component.name or "battery" in mount.label:
             for port in mount.component.wire_ports:
-                if port.bus_type == "power":
+                if port.bus_type is BusType.POWER:
                     battery_pos = _add_vec3(mount.resolved_pos, port.pos)
                     break
         if "Pi" in mount.component.name or "pi" in mount.label:
             for port in mount.component.wire_ports:
-                if port.bus_type == "usb":
+                if port.bus_type is BusType.USB:
                     pi_pos = _add_vec3(mount.resolved_pos, port.pos)
                     break
 

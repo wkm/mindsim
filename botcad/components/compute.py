@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from botcad.component import Component, MountPoint, WirePort
+from botcad.component import BusType, Component, MountPoint, WirePort
 
 
 def RaspberryPiZero2W() -> Component:
@@ -13,13 +13,15 @@ def RaspberryPiZero2W() -> Component:
         mass=0.010,
         wire_ports=(
             # GPIO header (40-pin, along one long edge)
-            WirePort("gpio", pos=(0.0, 0.013, 0.0025), bus_type="gpio"),
+            WirePort("gpio", pos=(0.0, 0.013, 0.0025), bus_type=BusType.GPIO),
             # USB micro (power input)
-            WirePort("usb_power", pos=(-0.0325, 0.0, 0.0), bus_type="usb"),
+            WirePort("usb_power", pos=(-0.0325, 0.0, 0.0), bus_type=BusType.USB),
             # CSI camera connector
-            WirePort("csi", pos=(0.016, 0.0, 0.0025), bus_type="csi"),
+            WirePort("csi", pos=(0.016, 0.0, 0.0025), bus_type=BusType.CSI),
             # UART (on GPIO pins 8/10)
-            WirePort("uart", pos=(-0.01, 0.013, 0.0025), bus_type="uart_half_duplex"),
+            WirePort(
+                "uart", pos=(-0.01, 0.013, 0.0025), bus_type=BusType.UART_HALF_DUPLEX
+            ),
         ),
         mounting_points=(
             # Four M2.5 holes at standard Pi Zero locations

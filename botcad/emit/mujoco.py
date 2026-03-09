@@ -17,8 +17,10 @@ from typing import TYPE_CHECKING
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
 from botcad.geometry import rotate_vec, rotation_between, servo_placement
+from botcad.skeleton import BaseType, BodyShape
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -171,7 +173,7 @@ def _emit_body_tree(
     attribs: dict[str, str] = {"name": body.name}
 
     if is_root:
-        if bot.base_type == "fixed":
+        if bot.base_type is BaseType.FIXED:
             # Fixed base: sit on ground plane (half body height + small gap)
             base_z = body.dimensions[2] / 2 + 0.001
             attribs["pos"] = f"0 0 {base_z:.4f}"
@@ -179,7 +181,7 @@ def _emit_body_tree(
             ground_clearance = _estimate_ground_clearance(body, bot)
             attribs["pos"] = f"0 0 {ground_clearance:.4f}"
     elif parent_joint is not None:
-        if parent_joint.servo.continuous and body.shape == "cylinder":
+        if parent_joint.servo.continuous and body.shape is BodyShape.CYLINDER:
             # Wheel child body: offset outward from servo along joint axis
             # so the wheel clears the servo body + shaft boss.
             wheel_offset = _wheel_outboard_offset(parent_joint, body)
@@ -196,7 +198,7 @@ def _emit_body_tree(
     body_el = SubElement(parent_el, "body", **attribs)
 
     # Root gets a freejoint (unless fixed base)
-    if is_root and bot.base_type != "fixed":
+    if is_root and bot.base_type is not BaseType.FIXED:
         SubElement(body_el, "freejoint", name="root")
 
     # Inertial
@@ -220,7 +222,7 @@ def _emit_body_tree(
             damping = parent_joint.servo.damping
         # For wheel bodies offset outward, the joint anchor must point back
         # to the shaft position (compensate the body offset).
-        if parent_joint.servo.continuous and body.shape == "cylinder":
+        if parent_joint.servo.continuous and body.shape is BodyShape.CYLINDER:
             wheel_offset = _wheel_outboard_offset(parent_joint, body)
             ax, ay, az = parent_joint.axis
             joint_pos = _fmt_vec3(
@@ -502,14 +504,14 @@ def _emit_camera(parent_el: Element, body: Body) -> None:
 
 
 _WIRE_COLORS = {
-    "uart_half_duplex": "0.2 0.4 1.0 0.9",  # blue — servo daisy-chain
-    "csi": "1.0 0.8 0.0 0.9",  # yellow — camera ribbon
-    "power": "0.9 0.2 0.2 0.9",  # red — power
+    BusType.UART_HALF_DUPLEX: "0.2 0.4 1.0 0.9",  # blue — servo daisy-chain
+    BusType.CSI: "1.0 0.8 0.0 0.9",  # yellow — camera ribbon
+    BusType.POWER: "0.9 0.2 0.2 0.9",  # red — power
 }
 _WIRE_RADIUS = {
-    "uart_half_duplex": "0.0009",  # 0.9mm — servo bus (channel is 1.5mm)
-    "csi": "0.0018",  # 1.8mm — CSI ribbon (channel is 3mm)
-    "power": "0.0012",  # 1.2mm — power cable (channel is 2mm)
+    BusType.UART_HALF_DUPLEX: "0.0009",  # 0.9mm — servo bus (channel is 1.5mm)
+    BusType.CSI: "0.0018",  # 1.8mm — CSI ribbon (channel is 3mm)
+    BusType.POWER: "0.0012",  # 1.2mm — power cable (channel is 2mm)
 }
 
 
@@ -592,14 +594,14 @@ def _build_scene_xml(bot: Bot) -> str:
     has_wheels = any(j.servo.continuous for j in bot.all_joints)
     if has_wheels:
         timestep = "0.002"
-    elif bot.base_type == "fixed":
+    elif bot.base_type is BaseType.FIXED:
         timestep = "0.005"  # 200 Hz — good for position-controlled arms
     else:
         timestep = "0.02"
     SubElement(root, "option", timestep=timestep)
     SubElement(root, "include", file="bot.xml")
     # Fixed-base arms use tabletop scene if available, else room
-    if bot.base_type == "fixed":
+    if bot.base_type is BaseType.FIXED:
         SubElement(root, "include", file="../../worlds/tabletop.xml")
     else:
         SubElement(root, "include", file="../../worlds/room.xml")
@@ -614,11 +616,11 @@ def _body_color(body: Body) -> str:
 
 def _body_color_rgb(body: Body) -> tuple[float, float, float]:
     """Shape-based body color. Shared between CAD and MuJoCo emitters."""
-    if body.shape == "cylinder" and body.radius and body.radius > 0.03:
+    if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
         return (0.15, 0.15, 0.15)  # dark gray: wheels
-    if body.shape == "tube":
+    if body.shape is BodyShape.TUBE:
         return (0.7, 0.7, 0.7)  # light gray: structural tubes
-    if body.shape == "jaw":
+    if body.shape is BodyShape.JAW:
         return (0.85, 0.85, 0.85)  # light gray: gripper jaw
     return (0.9, 0.9, 0.9)  # off-white: default
 

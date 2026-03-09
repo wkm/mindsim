@@ -19,7 +19,7 @@ from botcad.components import (
     PiCamera2,
     RaspberryPiZero2W,
 )
-from botcad.skeleton import Bot
+from botcad.skeleton import BodyShape, Bot, BracketStyle
 
 
 def build() -> Bot:
@@ -29,7 +29,7 @@ def build() -> Bot:
     arm_mod = bot.module("arm")
 
     # Base body — houses Pi and battery
-    base = base_mod.body("base", shape="box", padding=0.008)
+    base = base_mod.body("base", shape=BodyShape.BOX, padding=0.008)
     base.mount(RaspberryPiZero2W(), position="center", label="pi")
     base.mount(LiPo2S(1000), position="bottom", label="battery")
 
@@ -42,11 +42,11 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.031),
         range=(-1.92, 1.92),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
     turntable = shoulder_pan.body(
         "turntable",
-        shape="box",
+        shape=BodyShape.BOX,
         dimensions=(0.06, 0.04, 0.04),
         module=arm_mod,
     )
@@ -58,10 +58,10 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.02),
         range=(-1.745, 1.745),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
     upper_arm = shoulder_lift.body(
-        "upper_arm", shape="tube", length=0.116, outer_r=0.018
+        "upper_arm", shape=BodyShape.TUBE, length=0.116, outer_r=0.018
     )
 
     # Elbow: bends the forearm, axis = X
@@ -71,9 +71,11 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.116),
         range=(-1.69, 1.69),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
-    forearm = elbow_flex.body("forearm", shape="tube", length=0.135, outer_r=0.016)
+    forearm = elbow_flex.body(
+        "forearm", shape=BodyShape.TUBE, length=0.135, outer_r=0.016
+    )
 
     # Wrist flex: bends the wrist, axis = X
     wrist_flex = forearm.joint(
@@ -82,9 +84,11 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.135),
         range=(-1.658, 1.658),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
-    wrist = wrist_flex.body("wrist", shape="box", dimensions=(0.04, 0.035, 0.064))
+    wrist = wrist_flex.body(
+        "wrist", shape=BodyShape.BOX, dimensions=(0.04, 0.035, 0.064)
+    )
 
     # Wrist roll: rotates the end effector, axis = Z
     wrist_roll = wrist.joint(
@@ -95,7 +99,7 @@ def build() -> Bot:
         range=(-2.744, 2.841),
     )
     wrist_roll_body = wrist_roll.body(
-        "wrist_roll", shape="box", dimensions=(0.035, 0.035, 0.037)
+        "wrist_roll", shape=BodyShape.BOX, dimensions=(0.035, 0.035, 0.037)
     )
 
     # Eye-in-hand camera
@@ -109,11 +113,11 @@ def build() -> Bot:
         pos=(0.0, 0.0, 0.018),
         range=(-0.175, 1.745),
         grip=True,
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
     gripper.body(
         "jaw",
-        shape="jaw",
+        shape=BodyShape.JAW,
         jaw_length=0.04,
         jaw_width=0.03,
         jaw_thickness=0.005,

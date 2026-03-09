@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from botcad.component import Component, WirePort
+from botcad.component import BusType, Component, WirePort
 
 
 def LiPo2S(capacity_mah: int = 1000) -> Component:
@@ -25,9 +25,9 @@ def LiPo2S(capacity_mah: int = 1000) -> Component:
         mass=mass,
         wire_ports=(
             # XT30 power connector on one end
-            WirePort("power", pos=(length / 2, 0.0, 0.0), bus_type="power"),
+            WirePort("power", pos=(length / 2, 0.0, 0.0), bus_type=BusType.POWER),
             # Balance lead
-            WirePort("balance", pos=(length / 2, 0.01, 0.0), bus_type="balance"),
+            WirePort("balance", pos=(length / 2, 0.01, 0.0), bus_type=BusType.BALANCE),
         ),
         color=(0.2, 0.2, 0.8, 1.0),  # battery blue
     )

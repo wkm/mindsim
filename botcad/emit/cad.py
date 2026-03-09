@@ -32,8 +32,9 @@ from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
-from botcad.component import CameraSpec
+from botcad.component import BusType, CameraSpec
 from botcad.geometry import servo_placement
+from botcad.skeleton import BodyShape, BracketStyle
 
 log = logging.getLogger(__name__)
 
@@ -389,7 +390,7 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
                 child = joint.child
                 # Wheel bodies are offset outward from the joint along the axis
                 has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-                if has_wheel and child.shape == "cylinder":
+                if has_wheel and child.shape is BodyShape.CYLINDER:
                     offset = _wheel_outboard_offset(joint, child)
                     ax, ay, az = joint.axis
                     child_pos = (
@@ -458,16 +459,34 @@ def _as_solid(shape):
 
 
 def _ensure_solid(shape):
-    """Keep only the largest solid when a boolean op fragments the body."""
-    from build123d import Solid
+    """Discard tiny sliver fragments from boolean ops, keep all substantial pieces.
+
+    Boolean operations can produce tiny degenerate slivers at near-tangent
+    intersections.  We discard fragments smaller than 1% of the total volume
+    but keep all substantial disconnected pieces (e.g. body halves split by
+    servo pockets).
+    """
+    from build123d import Compound, Solid
 
     if isinstance(shape, Solid):
         return shape
-    # Compound or ShapeList — pick the largest piece by volume
+    # Compound or ShapeList — filter out tiny slivers
     solids = shape.solids() if hasattr(shape, "solids") else list(shape)
     if not solids:
         return shape
-    return max(solids, key=lambda s: abs(s.volume))
+    if len(solids) == 1:
+        return solids[0]
+    vols = [(s, abs(s.volume)) for s in solids]
+    total_vol = sum(v for _, v in vols)
+    if total_vol < 1e-15:
+        return shape
+    threshold = total_vol * 0.01
+    kept = [s for s, v in vols if v > threshold]
+    if len(kept) == 1:
+        return kept[0]
+    if not kept:
+        return max(vols, key=lambda sv: sv[1])[0]
+    return Compound(children=kept)
 
 
 def _to_compound(shape):
@@ -480,6 +499,22 @@ def _to_compound(shape):
         return Compound(children=[shape])
     # ShapeList or other iterable
     return Compound(children=list(shape))
+
+
+def _bboxes_overlap(a, b) -> bool:
+    """Check if the bounding boxes of two shapes overlap."""
+    if not (hasattr(a, "bounding_box") and hasattr(b, "bounding_box")):
+        return True  # unknown type — assume overlap to be safe
+    ab = a.bounding_box()
+    bb = b.bounding_box()
+    return (
+        ab.min.X < bb.max.X
+        and ab.max.X > bb.min.X
+        and ab.min.Y < bb.max.Y
+        and ab.max.Y > bb.min.Y
+        and ab.min.Z < bb.max.Z
+        and ab.max.Z > bb.min.Z
+    )
 
 
 def _bool_cut(shape, tool):
@@ -529,7 +564,7 @@ def _cut_camera_features(shell, mount, body_dims, solved_dims):
     ribbon_h = 0.002  # 2mm tall (1mm ribbon + clearance)
 
     # CSI port offset relative to camera center (from wire_ports)
-    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type == "csi"]
+    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type is BusType.CSI]
     if csi_ports:
         wp = csi_ports[0]
         slot_pos = (pos[0] + wp.pos[0], pos[1] + wp.pos[1], pos[2] + wp.pos[2])
@@ -570,7 +605,7 @@ def _make_body_solid(
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = body.dimensions
 
-    if body.shape == "cylinder":
+    if body.shape is BodyShape.CYLINDER:
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
 
@@ -589,17 +624,17 @@ def _make_body_solid(
         if parent_joint is not None:
             shell = _orient_z_to_axis(shell, parent_joint.axis)
 
-    elif body.shape == "tube":
+    elif body.shape is BodyShape.TUBE:
         r = body.outer_r or dims[0] / 2
         length = body.length or dims[2]
         shell = Cylinder(r, length, align=C)
         shell = shell.locate(Location((0, 0, length / 2)))
 
-    elif body.shape == "sphere":
+    elif body.shape is BodyShape.SPHERE:
         r = body.radius or dims[0] / 2
         shell = Sphere(r)
 
-    elif body.shape == "jaw":
+    elif body.shape is BodyShape.JAW:
         jw = body.jaw_width or dims[0]
         jt = body.jaw_thickness or dims[1]
         jl = body.jaw_length or dims[2]
@@ -640,7 +675,7 @@ def _make_body_solid(
     # The coupler is built in servo-local frame; place it so the shaft
     # center lands at the child body origin (joint point).
     bracket_spec = BracketSpec()
-    if parent_joint is not None and parent_joint.bracket_style == "coupler":
+    if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
         # servo_placement with joint_pos=(0,0,0) gives the transform that
         # puts servo-local geometry into child body frame with shaft at origin.
@@ -663,7 +698,7 @@ def _make_body_solid(
         )
         euler = _quat_to_euler(quat)
 
-        if joint.bracket_style == "coupler":
+        if joint.bracket_style is BracketStyle.COUPLER:
             envelope = cradle_envelope(servo, bracket_spec)
             envelope = envelope.locate(Location(center, euler))
             cradle = cradle_solid(servo, bracket_spec)
@@ -680,7 +715,7 @@ def _make_body_solid(
     for joint in body.joints:
         if joint.child is not None:
             clearance = _child_clearance_volume(joint.child, joint)
-            if clearance is not None:
+            if clearance is not None and _bboxes_overlap(shell, clearance):
                 shell = _bool_cut(shell, clearance)
                 shell = _ensure_solid(shell)
 
@@ -688,7 +723,7 @@ def _make_body_solid(
     if wire_segments:
         for seg, bus_type in wire_segments:
             channel = _wire_channel(seg, bus_type)
-            if channel is not None:
+            if channel is not None and _bboxes_overlap(shell, channel):
                 shell = _bool_cut(shell, channel)
                 shell = _ensure_solid(shell)
 
@@ -697,13 +732,13 @@ def _make_body_solid(
 
 # Channel radii for wire routing (matches MuJoCo rendering radii)
 _CHANNEL_RADIUS = {
-    "uart_half_duplex": 0.0015,  # 1.5mm — servo bus
-    "csi": 0.003,  # 3mm — CSI ribbon
-    "power": 0.002,  # 2mm — power cable
+    BusType.UART_HALF_DUPLEX: 0.0015,  # 1.5mm — servo bus
+    BusType.CSI: 0.003,  # 3mm — CSI ribbon
+    BusType.POWER: 0.002,  # 2mm — power cable
 }
 
 
-def _wire_channel(seg, bus_type: str):
+def _wire_channel(seg, bus_type: BusType):
     """Create a cylindrical channel solid along a wire segment.
 
     The channel uses the full cable radius so the wire fits inside.
@@ -765,7 +800,7 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
     # Other child bodies just need FDM fit clearance.
     tol = 0.005 if has_wheel else 0.0005  # 5mm wheels, 0.5mm otherwise
 
-    if child.shape == "cylinder":
+    if child.shape is BodyShape.CYLINDER:
         r = (child.radius or dims[0] / 2) + tol
         nominal_h = child.width or child.height or dims[2]
         if has_wheel:
@@ -782,17 +817,17 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
             outer = outer.locate(Location((0, 0, h / 2)))
         return _orient_z_to_axis(outer, parent_joint.axis)
 
-    elif child.shape == "tube":
+    elif child.shape is BodyShape.TUBE:
         r = (child.outer_r or dims[0] / 2) + tol
         length = (child.length or dims[2]) + tol
         outer = Cylinder(r, length, align=C)
         return outer.locate(Location((0, 0, length / 2)))  # z=0 at joint end
 
-    elif child.shape == "sphere":
+    elif child.shape is BodyShape.SPHERE:
         r = (child.radius or dims[0] / 2) + tol
         return Sphere(r)
 
-    elif child.shape == "jaw":
+    elif child.shape is BodyShape.JAW:
         jw = (child.jaw_width or dims[0]) + 2 * tol
         jt = (child.jaw_thickness or dims[1]) * 2 + 2 * tol  # knuckle is 2x thickness
         jl = (child.jaw_length or dims[2]) + tol
@@ -805,9 +840,9 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
 
 def _is_axially_symmetric(child: Body, joint: Joint) -> bool:
     """Check if child body is rotationally symmetric around the joint axis."""
-    if child.shape == "sphere":
+    if child.shape is BodyShape.SPHERE:
         return True
-    if child.shape == "cylinder":
+    if child.shape is BodyShape.CYLINDER:
         # Cylinder gets oriented along parent_joint.axis via _orient_z_to_axis,
         # which is the same as the joint axis — so it's symmetric.
         return True
@@ -867,7 +902,7 @@ def _child_clearance_volume(child: Body, joint: Joint):
 
     # Position at joint.pos in parent frame, offset outboard for wheels
     has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-    if has_wheel and child.shape == "cylinder":
+    if has_wheel and child.shape is BodyShape.CYLINDER:
         offset = _wheel_outboard_offset(joint, child)
         ax, ay, az = joint.axis
         pos = (
