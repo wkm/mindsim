@@ -9,10 +9,10 @@
 | STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: left_wheel, right_wheel, shoulder_yaw, shoulder_pitch, elbow, wrist |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 15 | wheel, wheel |
+| Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 219 | PLA/PETG frame |
-| **Total** | | | **647** | |
+| Structural (printed) | — | — | 220 | PLA/PETG frame |
+| **Total** | | | **662** | |
 
 ## Power Budget
 
