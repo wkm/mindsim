@@ -4,7 +4,7 @@
 
 ## Parts in this module
 
-- **base** (box, 89.0 x 51.0 x 65.0 mm)
+- **base** (box, 136.0 x 51.0 x 65.0 mm)
 - **left_rim** (cylinder, 100.0 x 100.0 x 20.0 mm)
 - **right_rim** (cylinder, 100.0 x 100.0 x 20.0 mm)
 

@@ -17,6 +17,7 @@ shaft clearance, screw holes, and cable exit.
 
 from __future__ import annotations
 
+import logging
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -34,10 +35,144 @@ from botcad.bracket import (
 from botcad.component import CameraSpec
 from botcad.geometry import servo_placement
 
+log = logging.getLogger(__name__)
+
+# PLA plastic density (kg/m³)
+_PLA_DENSITY = 1200.0
+
 if TYPE_CHECKING:
-    from botcad.component import Component
+    from botcad.component import Component, Vec3
     from botcad.geometry import Quat
     from botcad.skeleton import Body, Bot, Joint
+
+
+def _update_mass_from_solid(body: Body, solid) -> None:
+    """Compute mass, COM, and inertia from the actual CAD solid + component masses.
+
+    Structural mass uses an FDM print model: 2 perimeter walls + 20% infill.
+    This matches real print settings better than solid volume × density.
+    The solid's geometric properties (center, inertia) capture the actual shape
+    including brackets, pockets, and clearance cuts.
+
+    Component masses (battery, Pi, servos) are added via parallel axis theorem
+    since they are purchased parts with known masses at known positions.
+    """
+    # --- Structural properties from actual geometry ---
+    vol = solid.volume
+    if vol <= 0:
+        return  # degenerate solid, keep packing solver estimates
+
+    # FDM print mass model: perimeter walls + sparse infill
+    line_width = 0.0004  # 0.4mm nozzle
+    n_walls = 2
+    infill_fraction = 0.20
+    wall_thickness = n_walls * line_width  # 0.8mm total perimeter
+    wall_volume = solid.area * wall_thickness
+    infill_volume = max(0.0, vol - wall_volume) * infill_fraction
+    struct_mass = (wall_volume + infill_volume) * _PLA_DENSITY
+
+    struct_com = solid.center()  # geometric centroid
+    # matrix_of_inertia returns volumetric inertia about centroid.
+    # Scale by effective_density (= struct_mass / vol) to get mass inertia
+    # that accounts for the shape while using the correct total mass.
+    mi = solid.matrix_of_inertia  # 3x3 list of lists
+    effective_density = struct_mass / vol
+    struct_ixx = mi[0][0] * effective_density
+    struct_iyy = mi[1][1] * effective_density
+    struct_izz = mi[2][2] * effective_density
+    struct_ixy = mi[0][1] * effective_density
+    struct_ixz = mi[0][2] * effective_density
+    struct_iyz = mi[1][2] * effective_density
+
+    # --- Component masses at their positions ---
+    # (pos, mass, dims) for each component + servo
+    mass_items: list[tuple[Vec3, float, Vec3]] = []
+
+    for mount in body.mounts:
+        mass_items.append(
+            (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
+        )
+
+    # Servo mass at servo body center (not shaft/joint position)
+    for joint in body.joints:
+        center, _quat = servo_placement(
+            joint.servo.shaft_offset,
+            joint.servo.shaft_axis,
+            joint.axis,
+            joint.pos,
+        )
+        mass_items.append((center, joint.servo.mass, joint.servo.dimensions))
+
+    # --- Composite mass ---
+    total_mass = struct_mass + sum(m for _, m, _ in mass_items)
+    if total_mass <= 0:
+        total_mass = 0.01
+
+    # --- Composite COM ---
+    com_x = struct_com.X * struct_mass
+    com_y = struct_com.Y * struct_mass
+    com_z = struct_com.Z * struct_mass
+    for pos, mass, _dims in mass_items:
+        com_x += pos[0] * mass
+        com_y += pos[1] * mass
+        com_z += pos[2] * mass
+    com_x /= total_mass
+    com_y /= total_mass
+    com_z /= total_mass
+
+    # --- Composite inertia about composite COM ---
+    # Start with structural inertia, shifted from structural centroid to composite COM
+    sx = struct_com.X - com_x
+    sy = struct_com.Y - com_y
+    sz = struct_com.Z - com_z
+    ixx = struct_ixx + struct_mass * (sy**2 + sz**2)
+    iyy = struct_iyy + struct_mass * (sx**2 + sz**2)
+    izz = struct_izz + struct_mass * (sx**2 + sy**2)
+    ixy = struct_ixy + struct_mass * sx * sy
+    ixz = struct_ixz + struct_mass * sx * sz
+    iyz = struct_iyz + struct_mass * sy * sz
+
+    # Add each component's inertia (box approximation shifted to composite COM)
+    for pos, mass, dims in mass_items:
+        if mass <= 0:
+            continue
+        dx, dy, dz = dims
+        # Box inertia about own center
+        ix = mass * (dy**2 + dz**2) / 12.0
+        iy = mass * (dx**2 + dz**2) / 12.0
+        iz = mass * (dx**2 + dy**2) / 12.0
+        # Parallel axis shift to composite COM
+        rx = pos[0] - com_x
+        ry = pos[1] - com_y
+        rz = pos[2] - com_z
+        ixx += ix + mass * (ry**2 + rz**2)
+        iyy += iy + mass * (rx**2 + rz**2)
+        izz += iz + mass * (rx**2 + ry**2)
+        ixy += mass * rx * ry
+        ixz += mass * rx * rz
+        iyz += mass * ry * rz
+
+    # Ensure minimum inertia (MuJoCo needs positive values)
+    min_i = 1e-8
+    ixx = max(ixx, min_i)
+    iyy = max(iyy, min_i)
+    izz = max(izz, min_i)
+
+    # Store results (overrides packing solver estimates)
+    body.solved_mass = total_mass
+    body.solved_com = (com_x, com_y, com_z)
+    # fullinertia format: Ixx Iyy Izz Ixy Ixz Iyz
+    body.solved_inertia = (ixx, iyy, izz, -ixy, -ixz, -iyz)
+
+    log.info(
+        "Mass from geometry: %s — %.1fg (struct %.1fg), COM (%.1f, %.1f, %.1f)mm",
+        body.name,
+        total_mass * 1000,
+        struct_mass * 1000,
+        com_x * 1000,
+        com_y * 1000,
+        com_z * 1000,
+    )
 
 
 def make_component_solid(component: Component):
@@ -130,6 +265,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
         if solid is not None:
             body_solids[body.name] = solid
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
+            _update_mass_from_solid(body, solid)
 
     # --- STEP assembly (printable parts, positioned + colored) ---
     assembly_parts = []
@@ -622,15 +758,26 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
     from build123d import Align, Box, Cylinder, Location, Sphere
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    tol = 0.0005  # 0.5mm clearance per side
     dims = child.dimensions
+
+    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+    # Wheels need generous clearance for print tolerance, wobble, and debris.
+    # Other child bodies just need FDM fit clearance.
+    tol = 0.005 if has_wheel else 0.0005  # 5mm wheels, 0.5mm otherwise
 
     if child.shape == "cylinder":
         r = (child.radius or dims[0] / 2) + tol
-        h = (child.width or child.height or dims[2]) + 2 * tol
-        has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-        outer = Cylinder(r, h, align=C)
-        if not has_wheel:
+        nominal_h = child.width or child.height or dims[2]
+        if has_wheel:
+            # Only extend clearance outboard (away from bracket), not inboard.
+            # Adding width tolerance inboard eats into the servo bracket.
+            h = nominal_h + tol
+            outer = Cylinder(r, h, align=C)
+            # Shift outboard so inboard face stays at -nominal_h/2
+            outer = outer.locate(Location((0, 0, tol / 2)))
+        else:
+            h = nominal_h + 2 * tol
+            outer = Cylinder(r, h, align=C)
             # Match _make_body_solid: bottom face at origin for child cylinders
             outer = outer.locate(Location((0, 0, h / 2)))
         return _orient_z_to_axis(outer, parent_joint.axis)
@@ -877,23 +1024,35 @@ def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
     """Convert quaternion (w, x, y, z) to Euler angles (rx, ry, rz) in degrees.
 
     Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
+    Handles gimbal lock at pitch = ±90° (where naive conversion loses the
+    yaw component).
     """
     w, x, y, z = q
 
-    # Roll (X)
-    sinr_cosp = 2.0 * (w * x + y * z)
-    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-    rx = math.atan2(sinr_cosp, cosr_cosp)
-
-    # Pitch (Y)
+    # Pitch (Y) — check first for gimbal lock
     sinp = 2.0 * (w * y - z * x)
     sinp = max(-1.0, min(1.0, sinp))
-    ry = math.asin(sinp)
 
-    # Yaw (Z)
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    rz = math.atan2(siny_cosp, cosy_cosp)
+    if abs(sinp) > 0.9999:
+        # Gimbal lock: pitch ≈ ±90°.  Roll and yaw are coupled;
+        # assign all rotation to yaw (rz), set roll (rx) = 0.
+        ry = math.copysign(math.pi / 2, sinp)
+        rx = 0.0
+        rz = 2.0 * math.atan2(x, w)
+        if sinp < 0:
+            rz = -rz
+    else:
+        ry = math.asin(sinp)
+
+        # Roll (X)
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        rx = math.atan2(sinr_cosp, cosr_cosp)
+
+        # Yaw (Z)
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        rz = math.atan2(siny_cosp, cosy_cosp)
 
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
 
