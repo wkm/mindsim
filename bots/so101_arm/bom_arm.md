@@ -17,3 +17,11 @@
 |----------|-------------|-------------|-----------|
 | STS3215 x5 | 12.0 | ~4.1 | ~49.0 |
 | **Total** | | | **~49.0** |
+
+## Fasteners
+
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2 | 2 | 2x for PiCamera2 |
+| M2.5 | 40 | 8x per horn coupler (5 joints) |
+| M3 | 30 | 6x per joint bracket (5 joints) |

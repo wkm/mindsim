@@ -37,7 +37,7 @@ def OV5647() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=(0.1, 0.6, 0.1, 1.0),  # PCB green
+        color=(0.85, 0.75, 0.1, 1.0),  # yellow — distinct from PCB green
     )
 
 
@@ -69,5 +69,5 @@ def PiCamera2() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=(0.1, 0.6, 0.1, 1.0),
+        color=(0.85, 0.75, 0.1, 1.0),  # yellow — distinct from PCB green
     )

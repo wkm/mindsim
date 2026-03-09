@@ -17,6 +17,7 @@ shaft clearance, screw holes, and cable exit.
 
 from __future__ import annotations
 
+import logging
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,12 +32,147 @@ from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
+from botcad.component import CameraSpec
 from botcad.geometry import servo_placement
 
+log = logging.getLogger(__name__)
+
+# PLA plastic density (kg/m³)
+_PLA_DENSITY = 1200.0
+
 if TYPE_CHECKING:
-    from botcad.component import Component
+    from botcad.component import Component, Vec3
     from botcad.geometry import Quat
     from botcad.skeleton import Body, Bot, Joint
+
+
+def _update_mass_from_solid(body: Body, solid) -> None:
+    """Compute mass, COM, and inertia from the actual CAD solid + component masses.
+
+    Structural mass uses an FDM print model: 2 perimeter walls + 20% infill.
+    This matches real print settings better than solid volume × density.
+    The solid's geometric properties (center, inertia) capture the actual shape
+    including brackets, pockets, and clearance cuts.
+
+    Component masses (battery, Pi, servos) are added via parallel axis theorem
+    since they are purchased parts with known masses at known positions.
+    """
+    # --- Structural properties from actual geometry ---
+    vol = solid.volume
+    if vol <= 0:
+        return  # degenerate solid, keep packing solver estimates
+
+    # FDM print mass model: perimeter walls + sparse infill
+    line_width = 0.0004  # 0.4mm nozzle
+    n_walls = 2
+    infill_fraction = 0.20
+    wall_thickness = n_walls * line_width  # 0.8mm total perimeter
+    wall_volume = solid.area * wall_thickness
+    infill_volume = max(0.0, vol - wall_volume) * infill_fraction
+    struct_mass = (wall_volume + infill_volume) * _PLA_DENSITY
+
+    struct_com = solid.center()  # geometric centroid
+    # matrix_of_inertia returns volumetric inertia about centroid.
+    # Scale by effective_density (= struct_mass / vol) to get mass inertia
+    # that accounts for the shape while using the correct total mass.
+    mi = solid.matrix_of_inertia  # 3x3 list of lists
+    effective_density = struct_mass / vol
+    struct_ixx = mi[0][0] * effective_density
+    struct_iyy = mi[1][1] * effective_density
+    struct_izz = mi[2][2] * effective_density
+    struct_ixy = mi[0][1] * effective_density
+    struct_ixz = mi[0][2] * effective_density
+    struct_iyz = mi[1][2] * effective_density
+
+    # --- Component masses at their positions ---
+    # (pos, mass, dims) for each component + servo
+    mass_items: list[tuple[Vec3, float, Vec3]] = []
+
+    for mount in body.mounts:
+        mass_items.append(
+            (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
+        )
+
+    # Servo mass at servo body center (not shaft/joint position)
+    for joint in body.joints:
+        center, _quat = servo_placement(
+            joint.servo.shaft_offset,
+            joint.servo.shaft_axis,
+            joint.axis,
+            joint.pos,
+        )
+        mass_items.append((center, joint.servo.mass, joint.servo.dimensions))
+
+    # --- Composite mass ---
+    total_mass = struct_mass + sum(m for _, m, _ in mass_items)
+    if total_mass <= 0:
+        total_mass = 0.01
+
+    # --- Composite COM ---
+    com_x = struct_com.X * struct_mass
+    com_y = struct_com.Y * struct_mass
+    com_z = struct_com.Z * struct_mass
+    for pos, mass, _dims in mass_items:
+        com_x += pos[0] * mass
+        com_y += pos[1] * mass
+        com_z += pos[2] * mass
+    com_x /= total_mass
+    com_y /= total_mass
+    com_z /= total_mass
+
+    # --- Composite inertia about composite COM ---
+    # Start with structural inertia, shifted from structural centroid to composite COM
+    sx = struct_com.X - com_x
+    sy = struct_com.Y - com_y
+    sz = struct_com.Z - com_z
+    ixx = struct_ixx + struct_mass * (sy**2 + sz**2)
+    iyy = struct_iyy + struct_mass * (sx**2 + sz**2)
+    izz = struct_izz + struct_mass * (sx**2 + sy**2)
+    ixy = struct_ixy + struct_mass * sx * sy
+    ixz = struct_ixz + struct_mass * sx * sz
+    iyz = struct_iyz + struct_mass * sy * sz
+
+    # Add each component's inertia (box approximation shifted to composite COM)
+    for pos, mass, dims in mass_items:
+        if mass <= 0:
+            continue
+        dx, dy, dz = dims
+        # Box inertia about own center
+        ix = mass * (dy**2 + dz**2) / 12.0
+        iy = mass * (dx**2 + dz**2) / 12.0
+        iz = mass * (dx**2 + dy**2) / 12.0
+        # Parallel axis shift to composite COM
+        rx = pos[0] - com_x
+        ry = pos[1] - com_y
+        rz = pos[2] - com_z
+        ixx += ix + mass * (ry**2 + rz**2)
+        iyy += iy + mass * (rx**2 + rz**2)
+        izz += iz + mass * (rx**2 + ry**2)
+        ixy += mass * rx * ry
+        ixz += mass * rx * rz
+        iyz += mass * ry * rz
+
+    # Ensure minimum inertia (MuJoCo needs positive values)
+    min_i = 1e-8
+    ixx = max(ixx, min_i)
+    iyy = max(iyy, min_i)
+    izz = max(izz, min_i)
+
+    # Store results (overrides packing solver estimates)
+    body.solved_mass = total_mass
+    body.solved_com = (com_x, com_y, com_z)
+    # fullinertia format: Ixx Iyy Izz Ixy Ixz Iyz
+    body.solved_inertia = (ixx, iyy, izz, -ixy, -ixz, -iyz)
+
+    log.info(
+        "Mass from geometry: %s — %.1fg (struct %.1fg), COM (%.1f, %.1f, %.1f)mm",
+        body.name,
+        total_mass * 1000,
+        struct_mass * 1000,
+        com_x * 1000,
+        com_y * 1000,
+        com_z * 1000,
+    )
 
 
 def make_component_solid(component: Component):
@@ -129,6 +265,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
         if solid is not None:
             body_solids[body.name] = solid
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
+            _update_mass_from_solid(body, solid)
 
     # --- STEP assembly (printable parts, positioned + colored) ---
     assembly_parts = []
@@ -249,11 +386,23 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
         positions[body.name] = parent_world_pos
         for joint in body.joints:
             if joint.child is not None:
-                child_pos = (
-                    parent_world_pos[0] + joint.pos[0],
-                    parent_world_pos[1] + joint.pos[1],
-                    parent_world_pos[2] + joint.pos[2],
-                )
+                child = joint.child
+                # Wheel bodies are offset outward from the joint along the axis
+                has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+                if has_wheel and child.shape == "cylinder":
+                    offset = _wheel_outboard_offset(joint, child)
+                    ax, ay, az = joint.axis
+                    child_pos = (
+                        parent_world_pos[0] + joint.pos[0] + ax * offset,
+                        parent_world_pos[1] + joint.pos[1] + ay * offset,
+                        parent_world_pos[2] + joint.pos[2] + az * offset,
+                    )
+                else:
+                    child_pos = (
+                        parent_world_pos[0] + joint.pos[0],
+                        parent_world_pos[1] + joint.pos[1],
+                        parent_world_pos[2] + joint.pos[2],
+                    )
                 _walk(joint.child, child_pos)
 
     if bot.root:
@@ -344,6 +493,63 @@ def _bool_cut(shape, tool):
     return _to_compound(result)
 
 
+def _cut_camera_features(shell, mount, body_dims, solved_dims):
+    """Cut lens aperture and ribbon cable exit for a camera mount.
+
+    - Lens aperture: cylinder through the body wall along the insertion axis
+    - Ribbon slot: rectangular cutout for CSI ribbon cable to exit the body
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    cd = mount.component.dimensions
+    pos = mount.resolved_pos
+    ins = mount.resolved_insertion_axis  # outward normal of the mounting face
+
+    # Lens aperture — 8mm diameter cylinder punched through the body wall.
+    aperture_r = 0.004  # 4mm radius (covers Pi camera lens module)
+    wall_depth = max(solved_dims) + 0.002  # long enough to cut through any wall
+
+    # Euler angles to rotate cylinder (default Z-axis) to insertion axis
+    ax, ay, az = ins
+    if abs(ax) > 0.5:
+        euler = (0, 90, 0)  # Z→X
+    elif abs(ay) > 0.5:
+        euler = (90, 0, 0)  # Z→Y
+    else:
+        euler = (0, 0, 0)  # already Z
+
+    aperture = Cylinder(aperture_r, wall_depth, align=C)
+    aperture = aperture.locate(Location((0, 0, 0), euler))
+    aperture = aperture.locate(Location(pos))
+    shell = shell - aperture
+
+    # Ribbon cable exit slot — CSI ribbon is ~16mm wide x 1mm thick.
+    ribbon_w = 0.017  # 17mm wide (16mm ribbon + clearance)
+    ribbon_h = 0.002  # 2mm tall (1mm ribbon + clearance)
+
+    # CSI port offset relative to camera center (from wire_ports)
+    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type == "csi"]
+    if csi_ports:
+        wp = csi_ports[0]
+        slot_pos = (pos[0] + wp.pos[0], pos[1] + wp.pos[1], pos[2] + wp.pos[2])
+    else:
+        slot_pos = (pos[0], pos[1], pos[2] - cd[1] / 2)
+
+    # Slot oriented so the long dimension cuts through the body wall
+    if abs(ax) > 0.5:
+        ribbon_slot = Box(wall_depth, ribbon_w, ribbon_h, align=C)
+    elif abs(ay) > 0.5:
+        ribbon_slot = Box(ribbon_w, wall_depth, ribbon_h, align=C)
+    else:
+        ribbon_slot = Box(ribbon_w, ribbon_h, wall_depth, align=C)
+
+    ribbon_slot = ribbon_slot.locate(Location(slot_pos))
+    shell = shell - ribbon_slot
+
+    return shell
+
+
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
 ):
@@ -416,7 +622,7 @@ def _make_body_solid(
     is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
     if not is_wheel_body:
         for mount in body.mounts:
-            cd = mount.component.dimensions
+            cd = mount.placed_dimensions
             pocket = Box(
                 cd[0] + 0.0005,
                 cd[1] + 0.0005,
@@ -425,6 +631,10 @@ def _make_body_solid(
             )
             pocket = pocket.locate(Location(mount.resolved_pos))
             shell = shell - pocket
+
+            # Camera-specific cuts: lens aperture + ribbon cable exit
+            if isinstance(mount.component, CameraSpec):
+                shell = _cut_camera_features(shell, mount, body.dimensions, dims)
 
     # Union coupler onto child body for coupler-style joints.
     # The coupler is built in servo-local frame; place it so the shaft
@@ -453,31 +663,18 @@ def _make_body_solid(
         )
         euler = _quat_to_euler(quat)
 
-        # Wheel joints: cut pocket only, no bracket union.
-        # Solid body material provides structural support; adding bracket
-        # walls would protrude past the body surface and collide with the wheel.
-        child_has_wheel = joint.child is not None and any(
-            "Wheel" in m.component.name for m in joint.child.mounts
-        )
-
         if joint.bracket_style == "coupler":
             envelope = cradle_envelope(servo, bracket_spec)
             envelope = envelope.locate(Location(center, euler))
-            if child_has_wheel:
-                shell = shell - envelope
-            else:
-                cradle = cradle_solid(servo, bracket_spec)
-                cradle = cradle.locate(Location(center, euler))
-                shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
+            cradle = cradle_solid(servo, bracket_spec)
+            cradle = cradle.locate(Location(center, euler))
+            shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
         else:
             envelope = bracket_envelope(servo, bracket_spec)
             envelope = envelope.locate(Location(center, euler))
-            if child_has_wheel:
-                shell = shell - envelope
-            else:
-                bracket = bracket_solid(servo, bracket_spec)
-                bracket = bracket.locate(Location(center, euler))
-                shell = (shell - envelope) + bracket
+            bracket = bracket_solid(servo, bracket_spec)
+            bracket = bracket.locate(Location(center, euler))
+            shell = (shell - envelope) + bracket
 
     # Cut clearance volumes for rotating child bodies
     for joint in body.joints:
@@ -561,15 +758,26 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
     from build123d import Align, Box, Cylinder, Location, Sphere
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    tol = 0.0005  # 0.5mm clearance per side
     dims = child.dimensions
+
+    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+    # Wheels need generous clearance for print tolerance, wobble, and debris.
+    # Other child bodies just need FDM fit clearance.
+    tol = 0.005 if has_wheel else 0.0005  # 5mm wheels, 0.5mm otherwise
 
     if child.shape == "cylinder":
         r = (child.radius or dims[0] / 2) + tol
-        h = (child.width or child.height or dims[2]) + 2 * tol
-        has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-        outer = Cylinder(r, h, align=C)
-        if not has_wheel:
+        nominal_h = child.width or child.height or dims[2]
+        if has_wheel:
+            # Only extend clearance outboard (away from bracket), not inboard.
+            # Adding width tolerance inboard eats into the servo bracket.
+            h = nominal_h + tol
+            outer = Cylinder(r, h, align=C)
+            # Shift outboard so inboard face stays at -nominal_h/2
+            outer = outer.locate(Location((0, 0, tol / 2)))
+        else:
+            h = nominal_h + 2 * tol
+            outer = Cylinder(r, h, align=C)
             # Match _make_body_solid: bottom face at origin for child cylinders
             outer = outer.locate(Location((0, 0, h / 2)))
         return _orient_z_to_axis(outer, parent_joint.axis)
@@ -617,6 +825,17 @@ def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
     return solid.moved(Location((0, 0, 0), euler))
 
 
+def _wheel_outboard_offset(joint: Joint, child: Body) -> float:
+    """Compute how far a wheel sits outboard from the joint (shaft).
+
+    The wheel hub mates with the servo shaft boss, so the wheel's inner face
+    is approximately at the boss tip. Offset = boss_height + half_wheel_width.
+    """
+    boss_h = joint.servo.shaft_boss_height or 0.0
+    half_w = (child.width or child.dimensions[2]) / 2
+    return boss_h + half_w
+
+
 def _child_clearance_volume(child: Body, joint: Joint):
     """Compute the volume swept by a child body through its joint range.
 
@@ -646,8 +865,19 @@ def _child_clearance_volume(child: Body, joint: Joint):
             rotated = _rotate_solid(envelope, joint.axis, angle)
             clearance = clearance + rotated  # boolean union
 
-    # Position at joint.pos in parent frame
-    return clearance.moved(Location(joint.pos))
+    # Position at joint.pos in parent frame, offset outboard for wheels
+    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
+    if has_wheel and child.shape == "cylinder":
+        offset = _wheel_outboard_offset(joint, child)
+        ax, ay, az = joint.axis
+        pos = (
+            joint.pos[0] + ax * offset,
+            joint.pos[1] + ay * offset,
+            joint.pos[2] + az * offset,
+        )
+    else:
+        pos = joint.pos
+    return clearance.moved(Location(pos))
 
 
 def _make_wheel_solid(radius: float, width: float):
@@ -794,23 +1024,35 @@ def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
     """Convert quaternion (w, x, y, z) to Euler angles (rx, ry, rz) in degrees.
 
     Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
+    Handles gimbal lock at pitch = ±90° (where naive conversion loses the
+    yaw component).
     """
     w, x, y, z = q
 
-    # Roll (X)
-    sinr_cosp = 2.0 * (w * x + y * z)
-    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-    rx = math.atan2(sinr_cosp, cosr_cosp)
-
-    # Pitch (Y)
+    # Pitch (Y) — check first for gimbal lock
     sinp = 2.0 * (w * y - z * x)
     sinp = max(-1.0, min(1.0, sinp))
-    ry = math.asin(sinp)
 
-    # Yaw (Z)
-    siny_cosp = 2.0 * (w * z + x * y)
-    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-    rz = math.atan2(siny_cosp, cosy_cosp)
+    if abs(sinp) > 0.9999:
+        # Gimbal lock: pitch ≈ ±90°.  Roll and yaw are coupled;
+        # assign all rotation to yaw (rz), set roll (rx) = 0.
+        ry = math.copysign(math.pi / 2, sinp)
+        rx = 0.0
+        rz = 2.0 * math.atan2(x, w)
+        if sinp < 0:
+            rz = -rz
+    else:
+        ry = math.asin(sinp)
+
+        # Roll (X)
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        rx = math.atan2(sinr_cosp, cosr_cosp)
+
+        # Yaw (Z)
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        rz = math.atan2(siny_cosp, cosy_cosp)
 
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
 

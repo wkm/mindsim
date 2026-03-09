@@ -101,12 +101,47 @@ def servo_placement(
     The servo's output shaft must coincide with the joint position, and
     the servo's shaft axis must align with the joint's rotation axis.
 
+    For opposite axis signs (e.g. left wheel axis=-X, right wheel axis=+X),
+    produces symmetric placement: the servo is rotated 180° around the
+    vertical axis to face the other way, NOT flipped upside down.  This
+    matches how you'd physically mount identical servos on opposite sides.
+
     Returns (center_pos, orientation_quat) where:
     - center_pos: where the servo geometric center goes in the parent body frame
     - orientation_quat: rotation to apply to the servo (w, x, y, z)
     """
-    # Rotation that takes servo shaft_axis -> joint axis
-    q = rotation_between(servo_shaft_axis, joint_axis)
+    ax, ay, az = _normalize(joint_axis)
+
+    # Detect negative principal axis — compute rotation for the positive
+    # direction, then compose with a 180° flip that keeps the servo
+    # right-side up (rotate around Z for horizontal axes, around Y for
+    # vertical axes).
+    is_negative = False
+    if abs(ax) > 0.5 and ax < 0:
+        is_negative = True
+        positive_axis = (-ax, -ay, -az)
+    elif abs(ay) > 0.5 and ay < 0:
+        is_negative = True
+        positive_axis = (-ax, -ay, -az)
+    elif abs(az) > 0.5 and az < 0:
+        is_negative = True
+        positive_axis = (-ax, -ay, -az)
+    else:
+        positive_axis = (ax, ay, az)
+
+    # Rotation that takes servo shaft_axis -> positive joint axis direction
+    q = rotation_between(servo_shaft_axis, positive_axis)
+
+    if is_negative:
+        # Flip 180° around a perpendicular axis to reverse shaft direction
+        # while keeping the servo body "upright" (same vertical orientation).
+        if abs(az) > 0.5:
+            # Vertical joint: flip around Y
+            q_flip: Quat = (0.0, 0.0, 1.0, 0.0)
+        else:
+            # Horizontal joint (X or Y): flip around Z
+            q_flip = (0.0, 0.0, 0.0, 1.0)
+        q = quat_multiply(q_flip, q)
 
     # Rotate the shaft offset into the joint frame
     rotated_offset = rotate_vec(q, servo_shaft_offset)

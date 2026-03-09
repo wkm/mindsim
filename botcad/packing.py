@@ -44,13 +44,21 @@ def _solve_body(body: Body) -> None:
     internal_items: list[tuple[str, Vec3, float]] = []
     for mount in body.mounts:
         internal_items.append(
-            (mount.label, mount.component.dimensions, mount.component.mass)
+            (mount.label, mount.placed_dimensions, mount.component.mass)
         )
 
-    # Child joint positions — the body needs structural material reaching
-    # to each joint, but the servos themselves sit at the joint boundary,
-    # not packed inside the body.
-    joint_positions: list[Vec3] = [j.pos for j in body.joints if not j.servo.continuous]
+    # Servo center positions — the body needs structural material reaching
+    # to each servo center (not the shaft/joint position). The bracket
+    # protrudes from the body edge to hold the servo, so the body only
+    # needs to reach where the bracket starts.
+    from botcad.geometry import servo_placement
+
+    joint_positions: list[Vec3] = []
+    for j in body.joints:
+        center, _quat = servo_placement(
+            j.servo.shaft_offset, j.servo.shaft_axis, j.axis, j.pos
+        )
+        joint_positions.append(center)
 
     if not internal_items and not joint_positions and body.explicit_dimensions is None:
         _compute_mass_inertia(body)
@@ -70,12 +78,13 @@ def _solve_body(body: Body) -> None:
     dims = body.dimensions
     for mount in body.mounts:
         mount.resolved_pos = _resolve_position(
-            mount.position, mount.component.dimensions, dims
+            mount.position, mount.placed_dimensions, dims
         )
         mount.resolved_insertion_axis = _resolve_insertion_axis(
             mount.position, mount.insertion_axis
         )
 
+    _check_internal_overlaps(body)
     _compute_mass_inertia(body)
 
 
@@ -188,7 +197,7 @@ def _compute_mass_inertia(body: Body) -> None:
     for mount in body.mounts:
         m = mount.component.mass
         p = mount.resolved_pos
-        d = mount.component.dimensions
+        d = mount.placed_dimensions
         mass_items.append((p, m, d))
         total_mass += m
         com_x += p[0] * m
@@ -266,3 +275,92 @@ def _compute_mass_inertia(body: Body) -> None:
 
     # fullinertia format: Ixx Iyy Izz Ixy Ixz Iyz
     body.solved_inertia = (ixx, iyy, izz, -ixy, -ixz, -iyz)
+
+
+# ── Internal overlap detection ──
+
+
+def _check_internal_overlaps(body: Body) -> None:
+    """Check for AABB overlaps between all items inside a body and log warnings."""
+    for a, b, overlap in find_internal_overlaps(body):
+        log.warning(
+            "Packing overlap in body '%s': %s and %s overlap by "
+            "%.1fmm x %.1fmm x %.1fmm",
+            body.name,
+            a,
+            b,
+            overlap[0] * 1000,
+            overlap[1] * 1000,
+            overlap[2] * 1000,
+        )
+
+
+def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
+    """Find AABB overlaps between all items inside a body.
+
+    Items include mounted components (Pi, battery, camera) and servo bodies
+    from child joints.  An overlap means the design can't be physically
+    assembled — components would occupy the same space.
+
+    Returns list of (label_a, label_b, overlap_extent) tuples.
+    """
+    from botcad.geometry import rotate_vec, servo_placement
+
+    # Build list of (label, center, half_extents) for every internal item
+    items: list[tuple[str, Vec3, Vec3]] = []
+
+    # Mounted components — resolved_pos is the center, dims are axis-aligned
+    for mount in body.mounts:
+        d = mount.placed_dimensions
+        half = (d[0] / 2, d[1] / 2, d[2] / 2)
+        items.append((mount.label, mount.resolved_pos, half))
+
+    # Servo bodies from child joints
+    for joint in body.joints:
+        servo = joint.servo
+        center, quat = servo_placement(
+            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
+        )
+        # Compute AABB of the rotated servo box by rotating the 8 corners
+        # and taking min/max per axis.
+        bd = servo.effective_body_dims
+        hx, hy, hz = bd[0] / 2, bd[1] / 2, bd[2] / 2
+        corners = [
+            (sx * hx, sy * hy, sz * hz)
+            for sx in (-1, 1)
+            for sy in (-1, 1)
+            for sz in (-1, 1)
+        ]
+        rotated = [rotate_vec(quat, c) for c in corners]
+        aabb_half = (
+            max(abs(r[0]) for r in rotated),
+            max(abs(r[1]) for r in rotated),
+            max(abs(r[2]) for r in rotated),
+        )
+        items.append((f"{joint.name} servo", center, aabb_half))
+
+    # Pairwise AABB overlap check
+    overlaps: list[tuple[str, str, Vec3]] = []
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            label_a, pos_a, half_a = items[i]
+            label_b, pos_b, half_b = items[j]
+            if _aabb_overlap(pos_a, half_a, pos_b, half_b):
+                extent = _overlap_extent(pos_a, half_a, pos_b, half_b)
+                overlaps.append((label_a, label_b, extent))
+    return overlaps
+
+
+def _aabb_overlap(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> bool:
+    """Check if two axis-aligned bounding boxes overlap."""
+    for i in range(3):
+        if abs(pos_a[i] - pos_b[i]) >= half_a[i] + half_b[i]:
+            return False
+    return True
+
+
+def _overlap_extent(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> Vec3:
+    """Compute overlap extent per axis (assumes boxes do overlap)."""
+    return tuple(  # type: ignore[return-value]
+        max(0.0, (half_a[i] + half_b[i]) - abs(pos_a[i] - pos_b[i])) for i in range(3)
+    )

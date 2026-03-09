@@ -1,0 +1,73 @@
+{
+  "_comment": "ROM baseline \u2014 auto-generated, human-approved. Update with --update-rom-baseline.",
+  "_generated": "2026-03-08T18:48:45Z",
+  "_sweep_resolution": 91,
+  "joints": {
+    "thigh_joint": {
+      "declared_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "leg_joint": {
+      "declared_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "foot_joint": {
+      "declared_range_deg": [
+        -45.0,
+        45.0
+      ],
+      "collision_free_range_deg": [
+        -45.0,
+        45.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "thigh_left_joint": {
+      "declared_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "leg_left_joint": {
+      "declared_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_range_deg": [
+        -150.0,
+        0.0
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "foot_left_joint": {
+      "declared_range_deg": [
+        -45.0,
+        45.0
+      ],
+      "collision_free_range_deg": [
+        -45.0,
+        45.0
+      ],
+      "collision_free_fraction": 1.0
+    }
+  }
+}

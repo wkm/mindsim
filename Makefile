@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play renders wt-new wt-ls wt-rm setup lint
+.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint
 
 tui:
 	uv run mjpython main.py
@@ -44,6 +44,10 @@ renders-bots:
 
 renders-rom:
 	uv run mjpython scripts/regen_test_renders.py --rom
+
+validate: lint test renders
+	@echo ""
+	@echo "Validation complete. Review render diffs with: git diff --stat"
 
 lint:
 	uv run ruff check --fix .
