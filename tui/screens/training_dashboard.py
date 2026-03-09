@@ -20,6 +20,7 @@ from textual.widgets import (
 )
 
 from training.dashboard import _fmt_int, _fmt_pct, _fmt_time
+from training.train import Cmd
 
 log = logging.getLogger(__name__)
 
@@ -158,6 +159,7 @@ class TrainingDashboard(Screen):
         self._header_parts: list[str] = ["MindSim"]
         self._paused = False
         self._wandb_url: str | None = None
+        self._last_curriculum_cmd: float = 0.0
 
     def compose(self) -> ComposeResult:
         yield Static("MindSim", id="header-bar")
@@ -392,49 +394,57 @@ class TrainingDashboard(Screen):
     def action_toggle_pause(self) -> None:
         self._paused = not self._paused
         if self._paused:
-            self.app.send_command("pause")
+            self.app.send_command(Cmd.PAUSE)
             self.log_message("[bold yellow]Paused[/bold yellow]")
             log.info("Paused")
         else:
-            self.app.send_command("unpause")
+            self.app.send_command(Cmd.UNPAUSE)
             self.log_message("[bold green]Resumed[/bold green]")
             log.info("Resumed")
 
     def action_step_batch(self) -> None:
-        self.app.send_command("step")
+        self.app.send_command(Cmd.STEP)
         self.log_message("Stepping one batch...")
         log.info("Stepping one batch")
 
     def action_checkpoint(self) -> None:
-        self.app.send_command("checkpoint")
+        self.app.send_command(Cmd.CHECKPOINT)
         self.log_message(
             "[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)"
         )
 
     def action_send_rerun(self) -> None:
-        self.app.send_command("log_rerun")
+        self.app.send_command(Cmd.LOG_RERUN)
         self.log_message(
             "[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)"
         )
 
     def action_advance_curriculum(self) -> None:
-        self.app.send_command("advance_curriculum")
+        now = time.monotonic()
+        if now - self._last_curriculum_cmd < 0.3:
+            return  # Debounce: ignore key repeats within 300ms
+        self._last_curriculum_cmd = now
+        self.app.send_command(Cmd.ADVANCE_CURRICULUM)
         self.log_message("Advancing curriculum...")
 
     def action_regress_curriculum(self) -> None:
-        self.app.send_command("regress_curriculum")
+        now = time.monotonic()
+        if now - self._last_curriculum_cmd < 0.3:
+            return  # Debounce: ignore key repeats within 300ms
+        self._last_curriculum_cmd = now
+        self.app.send_command(Cmd.REGRESS_CURRICULUM)
         self.log_message("Regressing curriculum...")
 
     def action_rerun_freq_down(self) -> None:
-        self.app.send_command("rerun_freq_down")
+        self.app.send_command(Cmd.RERUN_FREQ_DOWN)
         self.log_message("Decreasing Rerun recording interval (more frequent)...")
 
     def action_rerun_freq_up(self) -> None:
-        self.app.send_command("rerun_freq_up")
+        self.app.send_command(Cmd.RERUN_FREQ_UP)
         self.log_message("Increasing Rerun recording interval (less frequent)...")
 
     def action_ai_commentary(self) -> None:
-        self.app.send_command("ai_commentary")
+        self.app.send_command(Cmd.AI_COMMENTARY)
         self.log_message("Generating AI commentary...")
 
     def action_open_wandb(self) -> None:
@@ -444,7 +454,7 @@ class TrainingDashboard(Screen):
             webbrowser.open(self._wandb_url)
 
     def action_quit_app(self) -> None:
-        self.app.send_command("stop")
+        self.app.send_command(Cmd.STOP)
         self.app.exit()
 
     def _tick_elapsed(self) -> None:

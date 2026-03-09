@@ -34,6 +34,5 @@
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 17.7 | 0.0 |
-| camera_csi | csi | 0.0 | 0.0 |
+| servo_bus | uart_half_duplex | 16.1 | 0.0 |
 | power | power | 10.2 | 0.0 |

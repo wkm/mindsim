@@ -15,6 +15,7 @@ from textual.widgets import Footer, OptionList, Static
 from training.run_manager import (
     BOT_DISPLAY_NAMES,
     RunInfo,
+    RunStatus,
     bot_display_name,
     discover_local_runs,
     discover_wandb_runs,
@@ -89,11 +90,7 @@ class RunBrowserScreen(Screen):
             for run_dir, info in self._provided_runs:
                 date_str = info.created_at[:10] if info.created_at else "?"
                 display_name = bot_display_name(info.bot_name)
-                status_str = {
-                    "running": "RUN",
-                    "completed": "OK ",
-                    "failed": "ERR",
-                }.get(info.status, "???")
+                status_str = RunStatus.label(info.status)
                 batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
                 source = "LOCAL" if run_dir is not None else "CLOUD"
                 label = f"{source}  {status_str}  {info.name}  {display_name}  {date_str}  {batch_str}"
@@ -116,11 +113,7 @@ class RunBrowserScreen(Screen):
             for run_dir, info in discover_local_runs():
                 date_str = info.created_at[:10] if info.created_at else "?"
                 display_name = bot_display_name(info.bot_name)
-                status_str = {
-                    "running": "RUN",
-                    "completed": "OK ",
-                    "failed": "ERR",
-                }.get(info.status, "???")
+                status_str = RunStatus.label(info.status)
                 batch_str = f"b{info.batch_idx}" if info.batch_idx else ""
                 label = f"LOCAL  {status_str}  {info.name}  {display_name}  {date_str}  {batch_str}"
                 sort_key = info.created_at or ""
@@ -139,12 +132,7 @@ class RunBrowserScreen(Screen):
                 if wr["id"] in local_wandb_ids:
                     continue
                 date_str = wr["created_at"][:10] if wr.get("created_at") else "?"
-                state_str = {
-                    "running": "RUN",
-                    "finished": "OK ",
-                    "failed": "ERR",
-                    "crashed": "ERR",
-                }.get(wr.get("state", ""), "???")
+                state_str = RunStatus.label(wr.get("state", ""))
                 tags_str = " ".join(wr.get("tags", []))
                 label = f"CLOUD  {state_str}  {wr['name']}  {tags_str}  {date_str}"
                 bot_name = ""

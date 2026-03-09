@@ -8,8 +8,8 @@
 |------|-----|-----------------|----------|-------|
 | STS3215 | 5 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 94 | PLA/PETG frame |
-| **Total** | | | **372** | |
+| Structural (printed) | — | — | 153 | PLA/PETG frame |
+| **Total** | | | **431** | |
 
 ## Power Budget
 

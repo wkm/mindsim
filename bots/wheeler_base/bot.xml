@@ -57,12 +57,11 @@
       <geom name="mount_base_pi_m2" type="cylinder" size="0.0013 0.001" pos="0.011500 0.029000 0.020000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="mount_base_pi_m3" type="cylinder" size="0.0013 0.001" pos="-0.011500 -0.029000 0.020000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="mount_base_pi_m4" type="cylinder" size="0.0013 0.001" pos="-0.011500 0.029000 0.020000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
-      <geom name="wire_servo_bus_base_0" type="capsule" fromto="-0.010000 0.013000 0.022500 -0.010000 0.013000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_base_1" type="capsule" fromto="-0.010000 0.013000 0.000000 -0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_base_2" type="capsule" fromto="-0.033200 0.000000 0.000000 -0.033200 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_base_3" type="capsule" fromto="-0.033200 0.000000 0.020500 -0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_base_4" type="capsule" fromto="-0.033200 0.000000 0.000000 0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_base_5" type="capsule" fromto="0.033200 0.000000 0.000000 0.033200 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_0" type="capsule" fromto="0.000000 0.000000 0.000000 -0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_1" type="capsule" fromto="-0.033200 0.000000 0.000000 -0.033200 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_2" type="capsule" fromto="-0.033200 0.000000 0.020500 -0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_3" type="capsule" fromto="-0.033200 0.000000 0.000000 0.033200 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_4" type="capsule" fromto="0.033200 0.000000 0.000000 0.033200 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_0" type="capsule" fromto="0.036500 0.000000 -0.013500 0.036500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="capsule" fromto="0.036500 0.000000 0.000000 -0.032500 0.000000 0.000000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_2" type="capsule" fromto="-0.032500 0.000000 0.000000 -0.032500 0.000000 0.020000" size="0.0012" rgba="0.9 0.2 0.2 0.9" contype="0" conaffinity="0" group="2"/>

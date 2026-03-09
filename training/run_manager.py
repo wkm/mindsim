@@ -12,6 +12,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 import wandb
@@ -19,6 +20,32 @@ import wandb
 log = logging.getLogger(__name__)
 
 RUNS_DIR = Path("runs")
+
+
+class RunStatus(str, Enum):
+    """Status of a training run. str mixin keeps JSON serialization trivial."""
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+
+    @staticmethod
+    def label(status: str) -> str:
+        """3-char display label for a status string (tolerates raw strings)."""
+        return _STATUS_LABELS.get(status, "???")
+
+
+_STATUS_LABELS: dict[str, str] = {
+    # Local run statuses
+    RunStatus.RUNNING: "RUN",
+    RunStatus.COMPLETED: "OK ",
+    RunStatus.FAILED: "ERR",
+    RunStatus.INTERRUPTED: "INT",
+    # W&B-specific states (different vocabulary)
+    "finished": "OK ",
+    "crashed": "ERR",
+}
 
 # Short abbreviations for bot names used in run naming
 BOT_ABBREVIATIONS: dict[str, str] = {
@@ -94,7 +121,7 @@ class RunInfo:
     policy_type: str
     algorithm: str
     scene_path: str
-    status: str = "running"  # running, completed, failed
+    status: str = RunStatus.RUNNING
     wandb_id: str | None = None
     wandb_url: str | None = None
     git_branch: str | None = None
@@ -106,6 +133,7 @@ class RunInfo:
     episode_count: int = 0
     curriculum_stage: int = 1
     best_eval_success_rate: float = 0.0
+    error_message: str | None = None
     tags: list[str] = field(default_factory=list)
 
 
@@ -128,6 +156,27 @@ def load_run_info(run_dir: Path) -> RunInfo | None:
         )
     except (json.JSONDecodeError, KeyError, TypeError):
         return None
+
+
+def mark_run_finished(
+    run_dir: Path,
+    status: str = RunStatus.FAILED,
+    error_msg: str | None = None,
+) -> None:
+    """Best-effort: persist terminal state to run_info.json (and crash.txt on failure)."""
+    try:
+        run_dir = Path(run_dir)
+        info = load_run_info(run_dir)
+        if info is not None:
+            info.status = status
+            info.finished_at = datetime.now().isoformat()
+            if error_msg:
+                info.error_message = error_msg.splitlines()[0][:200]
+            save_run_info(run_dir, info)
+        if status != RunStatus.COMPLETED:
+            (run_dir / "crash.txt").write_text(error_msg or status)
+    except Exception:
+        pass  # Never mask the original error
 
 
 def discover_local_runs() -> list[tuple[Path, RunInfo]]:

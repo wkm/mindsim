@@ -7,11 +7,13 @@ and training algorithms (REINFORCE, PPO) in algorithms.py.
 
 import logging
 import os
+import platform
 import subprocess
 import sys
 import time
 from collections import deque
 from datetime import datetime
+from enum import Enum
 from queue import Empty, Queue
 
 import numpy as np
@@ -41,11 +43,13 @@ from training.policies import (  # noqa: F401 — re-export
 )
 from training.run_manager import (
     RunInfo,
+    RunStatus,
     bot_display_name,
     bot_name_from_scene_path,
     create_run_dir,
     generate_run_name,
     init_wandb_for_run,
+    mark_run_finished,
     save_run_info,
 )
 from training.tweaks import apply_tweaks, load_tweaks
@@ -237,7 +241,6 @@ def set_terminal_progress(percent):
 
 def notify_completion(run_name, message=None):
     """Show macOS notification and play sound when training completes."""
-    import platform
 
     if platform.system() != "Darwin":
         return
@@ -363,6 +366,24 @@ def _run_commentary(commentator, app, dashboard, batch, metrics, elapsed_secs):
 ### Re-exported above for backward compatibility.
 
 
+class Cmd(str, Enum):
+    """Commands sent from TUI to training loop."""
+
+    # Flow-control (handled by wait_if_paused)
+    PAUSE = "pause"
+    UNPAUSE = "unpause"
+    STEP = "step"
+    STOP = "stop"
+    # Action commands (handled by drain_actions)
+    CHECKPOINT = "checkpoint"
+    LOG_RERUN = "log_rerun"
+    ADVANCE_CURRICULUM = "advance_curriculum"
+    REGRESS_CURRICULUM = "regress_curriculum"
+    RERUN_FREQ_DOWN = "rerun_freq_down"
+    RERUN_FREQ_UP = "rerun_freq_up"
+    AI_COMMENTARY = "ai_commentary"
+
+
 class CommandChannel:
     """Thread-safe command channel between TUI and training loop.
 
@@ -372,7 +393,7 @@ class CommandChannel:
     action queue.  No put-back logic needed.
     """
 
-    _FLOW = frozenset({"pause", "unpause", "step", "stop"})
+    _FLOW = frozenset({Cmd.PAUSE, Cmd.UNPAUSE, Cmd.STEP, Cmd.STOP})
 
     def __init__(self):
         self._flow: Queue[str] = Queue()
@@ -395,13 +416,13 @@ class CommandChannel:
                 cmd = self._flow.get_nowait()
             except Empty:
                 break
-            if cmd == "pause":
+            if cmd == Cmd.PAUSE:
                 paused = True
-            elif cmd == "unpause":
+            elif cmd == Cmd.UNPAUSE:
                 paused = False
-            elif cmd == "step":
+            elif cmd == Cmd.STEP:
                 return False
-            elif cmd == "stop":
+            elif cmd == Cmd.STOP:
                 return True
 
         # Block until un-paused, stepped, or stopped
@@ -412,11 +433,11 @@ class CommandChannel:
                     cmd = self._flow.get_nowait()
                 except Empty:
                     break
-                if cmd == "unpause":
+                if cmd == Cmd.UNPAUSE:
                     paused = False
-                elif cmd == "step":
+                elif cmd == Cmd.STEP:
                     return False
-                elif cmd == "stop":
+                elif cmd == Cmd.STOP:
                     return True
 
         return False
@@ -508,8 +529,16 @@ def _train_loop(
             is_tui,
             _verbose,
         )
+    except KeyboardInterrupt:
+        log.warning("Training run %s interrupted by user", run_name)
+        mark_run_finished(run_dir, RunStatus.INTERRUPTED, "KeyboardInterrupt")
+        raise
     except Exception:
+        import traceback
+
+        tb = traceback.format_exc()
         log.exception("Training run %s crashed", run_name)
+        mark_run_finished(run_dir, RunStatus.FAILED, tb)
         raise
     finally:
         logging.getLogger().removeHandler(run_log_handler)
@@ -533,6 +562,21 @@ def _train_loop_body(
     _verbose,
 ):
     """Inner body of the training loop, called with run log handler active."""
+    import resource as resource_mod
+
+    # Startup diagnostic banner (invaluable for post-mortem)
+    rss_mb = resource_mod.getrusage(resource_mod.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+    log.info(
+        "Startup: Python %s | %s %s | torch %s | MPS=%s CUDA=%s | PID=%d | RSS=%.0fMB",
+        platform.python_version(),
+        platform.system(),
+        platform.machine(),
+        torch.__version__,
+        torch.backends.mps.is_available(),
+        torch.cuda.is_available(),
+        os.getpid(),
+        rss_mb,
+    )
     log_fn(f"Run: {run_name}")
 
     # Generate run notes using Claude (summarizes git changes)
@@ -569,7 +613,7 @@ def _train_loop_body(
         policy_type=cfg.policy.policy_type,
         algorithm=cfg.training.algorithm,
         scene_path=cfg.env.scene_path,
-        status="running",
+        status=RunStatus.RUNNING,
         wandb_id=wandb.run.id if wandb.run else None,
         wandb_url=wandb_url,
         git_branch=get_git_branch(),
@@ -682,7 +726,12 @@ def _train_loop_body(
         log_fn("AI commentary enabled (every 5 min, press 'a' for manual)")
 
     # Create policy from config
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     policy = cfg.build_policy(device=device)
     optimizer = cfg.build_optimizer(policy)
 
@@ -850,44 +899,48 @@ def _train_loop_body(
         # Drain TUI action commands
         pending_save = None  # (trigger, aliases) or None
         force_rerun = False
+        curriculum_net = 0  # Collapse multiple advance/regress into one
         for cmd in commands.drain_actions() if commands else []:
-            if cmd == "checkpoint":
+            if cmd == Cmd.CHECKPOINT:
                 pending_save = ("manual", [])
                 dashboard.message("Checkpoint will be saved after this batch")
-            elif cmd == "log_rerun":
+            elif cmd == Cmd.LOG_RERUN:
                 force_rerun = True
                 dashboard.message("Rerun recording queued for next eval")
-            elif cmd == "advance_curriculum":
-                old = stage_progress
-                stage_progress = min(1.0, stage_progress + 0.1)
-                dashboard.message(
-                    f"Curriculum advanced: {old:.2f} -> {stage_progress:.2f}"
-                )
-            elif cmd == "regress_curriculum":
-                old = stage_progress
-                stage_progress = max(0.0, stage_progress - 0.1)
-                dashboard.message(
-                    f"Curriculum regressed: {old:.2f} -> {stage_progress:.2f}"
-                )
-            elif cmd == "rerun_freq_down":
+            elif cmd == Cmd.ADVANCE_CURRICULUM:
+                curriculum_net += 1
+            elif cmd == Cmd.REGRESS_CURRICULUM:
+                curriculum_net -= 1
+            elif cmd == Cmd.RERUN_FREQ_DOWN:
                 old = log_rerun_every
                 log_rerun_every = max(batch_size, log_rerun_every // 2)
                 cfg.training.log_rerun_every = log_rerun_every
                 dashboard.message(
                     f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
                 )
-            elif cmd == "rerun_freq_up":
+            elif cmd == Cmd.RERUN_FREQ_UP:
                 old = log_rerun_every
                 log_rerun_every = log_rerun_every * 2
                 cfg.training.log_rerun_every = log_rerun_every
                 dashboard.message(
                     f"Rerun recording interval: {old} -> {log_rerun_every} episodes"
                 )
-            elif cmd == "ai_commentary":
+            elif cmd == Cmd.AI_COMMENTARY:
                 force_commentary = True
-            elif cmd == "stop":
+            elif cmd == Cmd.STOP:
                 stop_requested = True
                 dashboard.message("Stopping after this batch...")
+
+        # Apply collapsed curriculum adjustment (prevents key-repeat flooding)
+        if curriculum_net != 0:
+            old = stage_progress
+            delta = curriculum_net * 0.1
+            stage_progress = max(0.0, min(1.0, stage_progress + delta))
+            direction = "advanced" if curriculum_net > 0 else "regressed"
+            dashboard.message(
+                f"Curriculum {direction}: {old:.2f} -> {stage_progress:.2f}"
+                f" ({abs(curriculum_net)} steps)"
+            )
 
         # Overall progress: (stage-1 + progress) / num_stages
         overall_progress = (curriculum_stage - 1 + stage_progress) / curr.num_stages
@@ -1316,6 +1369,27 @@ def _train_loop_body(
         batch_idx += 1
         batches_this_session += 1
 
+        # Periodic heartbeat: update run_info.json every 10 batches so a
+        # crashed run's metadata tells you where it got to.
+        if batch_idx % 10 == 0:
+            try:
+                run_info.batch_idx = batch_idx
+                run_info.episode_count = episode_count
+                run_info.curriculum_stage = curriculum_stage
+                save_run_info(run_dir, run_info)
+                rss_mb = resource_mod.getrusage(resource_mod.RUSAGE_SELF).ru_maxrss / (
+                    1024 * 1024
+                )
+                log.info(
+                    "Heartbeat: batch=%d episodes=%d stage=%d RSS=%.0fMB",
+                    batch_idx,
+                    episode_count,
+                    curriculum_stage,
+                    rss_mb,
+                )
+            except Exception:
+                pass  # Best-effort, don't interrupt training
+
         # Save checkpoints (milestone/final take priority over periodic)
         try:
             if pending_save:
@@ -1394,7 +1468,7 @@ def _train_loop_body(
         )
 
     # Update run_info with final state
-    run_info.status = "completed"
+    run_info.status = RunStatus.COMPLETED
     run_info.finished_at = datetime.now().isoformat()
     run_info.batch_idx = batch_idx
     run_info.episode_count = episode_count

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from textual.app import App
 
-from training.run_manager import RunInfo
+from training.run_manager import RunInfo, RunStatus
 from tui.screens.run_action import RunActionScreen
 
 MOCK_RUN_INFO = RunInfo(
@@ -13,7 +13,7 @@ MOCK_RUN_INFO = RunInfo(
     policy_type="lstm",
     algorithm="ppo",
     scene_path="bots/simple2wheeler/scene.xml",
-    status="completed",
+    status=RunStatus.COMPLETED,
     batch_idx=5000,
     episode_count=12000,
     curriculum_stage=3,

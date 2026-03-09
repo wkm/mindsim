@@ -2,7 +2,7 @@
 
 from textual.app import App
 
-from training.run_manager import RunInfo
+from training.run_manager import RunInfo, RunStatus
 from tui.screens.run_action import RunActionScreen
 
 MOCK_RUN_INFO = RunInfo(
@@ -11,7 +11,7 @@ MOCK_RUN_INFO = RunInfo(
     policy_type="lstm",
     algorithm="ppo",
     scene_path="",
-    status="running",
+    status=RunStatus.RUNNING,
     created_at="2026-02-28T09:30:00",
     wandb_id="def456",
     wandb_url="https://wandb.ai/mindsim/s2w-lstm-0228-0930",

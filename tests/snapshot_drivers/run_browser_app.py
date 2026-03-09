@@ -4,7 +4,7 @@ from pathlib import Path
 
 from textual.app import App
 
-from training.run_manager import RunInfo
+from training.run_manager import RunInfo, RunStatus
 from tui.screens.run_browser import RunBrowserScreen
 
 MOCK_RUNS = [
@@ -16,7 +16,7 @@ MOCK_RUNS = [
             policy_type="lstm",
             algorithm="ppo",
             scene_path="bots/simple2wheeler/scene.xml",
-            status="completed",
+            status=RunStatus.COMPLETED,
             batch_idx=5000,
             episode_count=12000,
             curriculum_stage=3,
@@ -33,7 +33,7 @@ MOCK_RUNS = [
             policy_type="lstm",
             algorithm="ppo",
             scene_path="",
-            status="running",
+            status=RunStatus.RUNNING,
             created_at="2026-02-28T09:30:00",
             wandb_id="def456",
         ),
@@ -46,7 +46,7 @@ MOCK_RUNS = [
             policy_type="mlp",
             algorithm="ppo",
             scene_path="bots/simplebiped/scene.xml",
-            status="failed",
+            status=RunStatus.FAILED,
             batch_idx=200,
             episode_count=500,
             curriculum_stage=1,
