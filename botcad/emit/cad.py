@@ -922,17 +922,17 @@ def _make_wheel_solid(radius: float, width: float):
     for the 90x10mm servo wheel. Proportions are parameterized by radius
     and width so the same function works for other wheel sizes.
 
-    Cross-section profile (from STEP face analysis):
-        Tire:   r=0.89R–R,   full width    (silicone rubber outer ring)
-        Rim:    r=0.76R–0.89R, full width   (plastic rim, tire seats here)
-        Spokes: r=0.27R–0.76R, 50% width   (6 spokes, narrower than rim)
-        Hub:    r=bore–0.27R, 68% width     (center disc with spline bore)
+    Features:
+        - 25T spline center bore (5.8mm)
+        - 6x M3 mounting holes (1x 12.7mm pair, 2x 19.1mm pairs)
+        - 6x M2 accessory slots in spokes
+        - Tire treads (horizontal grooves)
     """
-    from build123d import Align, Box, Cylinder, Location
+    from build123d import Align, Axis, Box, Cylinder, Location
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
 
-    # Radial dimensions (proportional to wheel radius)
+    # Radial dimensions (proportional to wheel radius R)
     tire_r = radius  # outer tire surface
     rim_outer_r = radius * 0.889  # tire inner / rim outer
     rim_inner_r = radius * 0.756  # rim inner / spoke outer
@@ -940,20 +940,26 @@ def _make_wheel_solid(radius: float, width: float):
     hub_r = spoke_inner_r
     bore_r = 0.0029  # 5.8mm diameter (25T spline)
 
-    # Axial widths (from STEP X-extent analysis)
-    tire_w = width  # full width
-    rim_w = width  # rim also full width
-    spoke_w = width * 0.5  # spokes narrower
-    hub_w = width * 0.68  # hub disc slightly wider than spokes
-
-    # Spoke cross-section
-    spoke_tangential = radius * 0.16  # ~7mm for 90mm wheel
-    spoke_length = rim_inner_r - spoke_inner_r + 0.004  # +2mm overlap each end
+    # Axial widths
+    tire_w = width
+    rim_w = width
+    spoke_w = width * 0.5
+    hub_w = width * 0.68
 
     # --- Tire ring (silicone rubber) ---
     tire = Cylinder(tire_r, tire_w, align=C) - Cylinder(
         rim_outer_r, tire_w + 0.001, align=C
     )
+
+    # --- Add Treads (horizontal grooves) ---
+    n_treads = 60
+    tread_w = 0.0015  # 1.5mm wide
+    tread_depth = 0.0008  # 0.8mm deep
+    for i in range(n_treads):
+        angle = i * (360 / n_treads)
+        tread = Box(tread_depth * 2, tire_w + 0.001, tread_w, align=C)
+        tread = tread.locate(Location((radius, 0, 0), (0, angle, 0)))
+        tire = tire - tread
 
     # --- Rim ring (plastic, tire seats on this) ---
     rim = Cylinder(rim_outer_r, rim_w, align=C) - Cylinder(
@@ -961,11 +967,26 @@ def _make_wheel_solid(radius: float, width: float):
     )
 
     # --- Hub disc ---
-    hub = Cylinder(hub_r, hub_w, align=C) - Cylinder(bore_r, hub_w + 0.001, align=C)
+    hub = Cylinder(hub_r, hub_w, align=C)
+
+    # --- Mounting Holes (6x M3) ---
+    m3_r = 0.0016  # 3.2mm diameter
+    for i in range(6):
+        angle_rad = i * math.pi / 3
+        # Alternate between 12.7mm and 19.1mm BCD (1 pair 12.7, 2 pairs 19.1)
+        r_bcd = 0.00635 if (i % 3 == 0) else 0.00955
+        mx = r_bcd * math.cos(angle_rad)
+        my = r_bcd * math.sin(angle_rad)
+        hole = Cylinder(m3_r, hub_w + 0.002, align=C)
+        hole = hole.locate(Location((mx, my, 0)))
+        hub = hub - hole
 
     # --- 6 spokes connecting hub to rim ---
-    spokes = None
+    spoke_tangential = radius * 0.16
+    spoke_length = rim_inner_r - spoke_inner_r + 0.004
     mid_r = (spoke_inner_r + rim_inner_r) / 2
+
+    spokes = None
     for i in range(6):
         angle_rad = i * math.pi / 3
         angle_deg = math.degrees(angle_rad)
@@ -975,6 +996,28 @@ def _make_wheel_solid(radius: float, width: float):
         spoke = Box(spoke_length, spoke_tangential, spoke_w, align=C)
         spoke = spoke.locate(Location((cx, cy, 0), (0, 0, angle_deg)))
 
+        # --- Accessory Slot (M2) in spoke ---
+        slot_r_start = spoke_inner_r + 0.006
+        slot_r_end = rim_inner_r - 0.004
+        slot_dia = 0.0022  # 2.2mm for M2 clearance
+        slot_len = slot_r_end - slot_r_start
+        slot_thick = spoke_w + 0.002
+        slot_mid = (slot_r_start + slot_r_end) / 2
+
+        # 3D Slot (Box + 2 Cylinders)
+        s_box = Box(slot_len - slot_dia, slot_dia, slot_thick, align=C)
+        c1 = Cylinder(slot_dia / 2, slot_thick, align=C).locate(
+            Location(((slot_len - slot_dia) / 2, 0, 0))
+        )
+        c2 = Cylinder(slot_dia / 2, slot_thick, align=C).locate(
+            Location((-(slot_len - slot_dia) / 2, 0, 0))
+        )
+        slot = s_box + c1 + c2
+
+        slot = slot.locate(Location((slot_mid, 0, 0)))
+        slot = slot.rotate(Axis.Z, angle_deg)
+        spoke = spoke - slot
+
         if spokes is None:
             spokes = spoke
         else:
@@ -983,8 +1026,7 @@ def _make_wheel_solid(radius: float, width: float):
     # --- Bore through full width ---
     bore = Cylinder(bore_r, width + 0.002, align=C)
 
-    # Union order matters: each step must add geometry that touches the
-    # previous result. Hub→spokes→rim→tire (inside out).
+    # Union order: hub + spokes + rim + tire - bore
     wheel = hub + spokes + rim + tire - bore
     return _as_solid(wheel)
 
