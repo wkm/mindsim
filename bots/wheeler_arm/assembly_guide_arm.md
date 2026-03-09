@@ -12,6 +12,6 @@
 ## Joints
 
 - **shoulder_pitch** — STS3215, -86° to 86°
-- **elbow** — STS3215, -115° to 0°
+- **elbow** — STS3215, -110° to 0°
 - **wrist** — STS3215, -86° to 86°
 

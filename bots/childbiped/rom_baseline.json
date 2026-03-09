@@ -1,0 +1,139 @@
+{
+  "_comment": "ROM baseline \u2014 auto-generated, human-approved. Update with --update-rom-baseline.",
+  "_generated": "2026-03-08T18:48:45Z",
+  "_sweep_resolution": 91,
+  "joints": {
+    "waist_tilt": {
+      "declared_range_deg": [
+        -17.2,
+        17.2
+      ],
+      "collision_free_range_deg": [
+        -17.2,
+        17.2
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "waist_twist": {
+      "declared_range_deg": [
+        -17.2,
+        17.2
+      ],
+      "collision_free_range_deg": [
+        -17.2,
+        17.2
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "left_hip_abd": {
+      "declared_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "left_hip_flex": {
+      "declared_range_deg": [
+        -57.3,
+        45.8
+      ],
+      "collision_free_range_deg": [
+        -57.3,
+        45.8
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "left_hip_rot": {
+      "declared_range_deg": [
+        -22.9,
+        22.9
+      ],
+      "collision_free_range_deg": [
+        -22.9,
+        22.9
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "left_knee": {
+      "declared_range_deg": [
+        0.0,
+        114.6
+      ],
+      "collision_free_range_deg": [
+        0.0,
+        114.6
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "left_ankle": {
+      "declared_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "right_hip_abd": {
+      "declared_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "right_hip_flex": {
+      "declared_range_deg": [
+        -57.3,
+        45.8
+      ],
+      "collision_free_range_deg": [
+        -57.3,
+        45.8
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "right_hip_rot": {
+      "declared_range_deg": [
+        -22.9,
+        22.9
+      ],
+      "collision_free_range_deg": [
+        -22.9,
+        22.9
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "right_knee": {
+      "declared_range_deg": [
+        0.0,
+        114.6
+      ],
+      "collision_free_range_deg": [
+        0.0,
+        114.6
+      ],
+      "collision_free_fraction": 1.0
+    },
+    "right_ankle": {
+      "declared_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_range_deg": [
+        -28.6,
+        28.6
+      ],
+      "collision_free_fraction": 1.0
+    }
+  }
+}

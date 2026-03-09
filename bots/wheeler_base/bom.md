@@ -7,11 +7,12 @@
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
 | STS3215 | 2 | 45.2 x 24.7 x 35.0 | 55 | Joints: left_wheel, right_wheel |
-| RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
+| OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
+| RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 15 | wheel, wheel |
-| Structural (printed) | — | — | 95 | PLA/PETG frame |
-| **Total** | | | **300** | |
+| Structural (printed) | — | — | 156 | PLA/PETG frame |
+| **Total** | | | **364** | |
 
 ## Power Budget
 
@@ -21,9 +22,18 @@
 | RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
 | **Total** | | | **~22.6** |
 
+## Fasteners
+
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2 | 2 | 2x for OV5647 |
+| M2.5 | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
+| M3 | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
+
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 14.0 | 0.0 |
-| power | power | 8.5 | 0.0 |
+| servo_bus | uart_half_duplex | 17.7 | 0.0 |
+| camera_csi | csi | 0.0 | 0.0 |
+| power | power | 10.2 | 0.0 |
