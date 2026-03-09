@@ -12,7 +12,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 
-from training.run_manager import bot_display_name
+from training.run_manager import RunStatus, bot_display_name
 
 
 class RunActionScreen(Screen):
@@ -78,7 +78,7 @@ class RunActionScreen(Screen):
             meta_lines = [
                 f"  Bot: {display_name} ({info.bot_name})",
                 f"  Algorithm: {info.algorithm}  |  Policy: {info.policy_type}",
-                f"  Status: {info.status}  |  Created: {info.created_at or '?'}",
+                f"  Status: {RunStatus.label(info.status)}  |  Created: {info.created_at or '?'}",
             ]
             if not self._cloud_only:
                 meta_lines.insert(
@@ -92,17 +92,17 @@ class RunActionScreen(Screen):
             self._action_map = []
             if not self._cloud_only:
                 options += [
-                    "[p] Play checkpoint",
-                    "[r] Resume training",
-                    "[v] View in MuJoCo",
+                    "\\[p] Play checkpoint",
+                    "\\[r] Resume training",
+                    "\\[v] View in MuJoCo",
                 ]
                 self._action_map += ["play_run", "resume_run", "view_run"]
-            options.append("[d] Download recordings")
+            options.append("\\[d] Download recordings")
             self._action_map.append("download_recordings")
             if info.wandb_url:
-                options.append("[w] Open W&B")
+                options.append("\\[w] Open W&B")
                 self._action_map.append("open_wandb")
-            options.append("[Esc] Back")
+            options.append("\\[Esc] Back")
             self._action_map.append("go_back")
             yield OptionList(*options, id="action-list")
         yield Footer()

@@ -51,13 +51,13 @@ class MainMenuScreen(Screen):
         with Vertical(id="menu-box"):
             yield Static("MindSim", id="menu-title")
             yield OptionList(
-                "[s] Smoketest",
-                "[n] New training run",
-                "[g] Scene gen preview",
-                "[v] View bot",
-                "[b] Browse runs",
-                "[c] GCP instances",
-                "[q] Quit",
+                "\\[s] Smoketest",
+                "\\[n] New training run",
+                "\\[g] Scene gen preview",
+                "\\[v] View bot",
+                "\\[b] Browse runs",
+                "\\[c] GCP instances",
+                "\\[q] Quit",
                 id="menu-list",
             )
         yield Footer()

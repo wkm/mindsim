@@ -65,9 +65,9 @@ class DirtyTreeScreen(Screen):
             yield Static("Uncommitted Changes", id="dirty-title")
             yield Static(self._status_lines, id="dirty-status")
             yield OptionList(
-                "[c] Commit with Claude",
-                "[s] Start anyway",
-                "[Esc] Back",
+                "\\[c] Commit with Claude",
+                "\\[s] Start anyway",
+                "\\[Esc] Back",
                 id="dirty-actions",
             )
         yield Footer()
