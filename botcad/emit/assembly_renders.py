@@ -33,6 +33,28 @@ from botcad.emit.renders import (
     _sweepable_joints,
 )
 
+
+class DeterministicFPDF(FPDF):
+    """FPDF subclass with deterministic file identifier for git-friendly output."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._custom_file_id = None
+
+    def set_custom_file_id(self, file_id: str):
+        self._custom_file_id = file_id
+
+    def file_id(self):
+        if self._custom_file_id:
+            import hashlib
+
+            # PDF ID must be two 16-byte hex strings.
+            # We hash the provided string and return it twice.
+            h = hashlib.md5(self._custom_file_id.encode()).hexdigest().upper()
+            return f"{h}{h}"
+        return super().file_id()
+
+
 # ── Config ──
 
 FRAME_W, FRAME_H = 1200, 1200  # 2x resolution for crisp PDF embedding
@@ -697,7 +719,7 @@ def _composite_collision_pdf(strips, output_dir: Path) -> Path:
     row_label_h = 8
     row_spacing = 6
 
-    pdf = FPDF(orientation="P", unit="mm", format="Letter")
+    pdf = DeterministicFPDF(orientation="P", unit="mm", format="Letter")
     pdf.set_auto_page_break(auto=False)
 
     # Title page
@@ -771,6 +793,10 @@ def _composite_collision_pdf(strips, output_dir: Path) -> Path:
                 y += frame_h + row_spacing + 4
 
     out = output_dir / "test_assembly.pdf"
+    from datetime import datetime
+
+    pdf.set_creation_date(datetime(2026, 1, 1))
+    pdf.set_custom_file_id(f"static-id-{out.name}")
     pdf.output(str(out))
     return out
 
@@ -1175,7 +1201,7 @@ def _composite_instructions_pdf(
 
     minimap_mm = 35  # minimap size in mm
 
-    pdf = FPDF(orientation="P", unit="mm", format="Letter")
+    pdf = DeterministicFPDF(orientation="P", unit="mm", format="Letter")
     pdf.set_auto_page_break(auto=False)
 
     step_num = 0  # global step counter
@@ -1278,6 +1304,10 @@ def _composite_instructions_pdf(
                 y += frame_h + 6
 
     out = output_dir / "assembly_visual.pdf"
+    from datetime import datetime
+
+    pdf.set_creation_date(datetime(2026, 1, 1))
+    pdf.set_custom_file_id(f"static-id-{out.name}")
     pdf.output(str(out))
     return out
 

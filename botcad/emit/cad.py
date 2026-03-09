@@ -364,7 +364,11 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
 
     if assembly_parts:
         assembly = Compound(label=bot.name, children=assembly_parts)
-        export_step(assembly, str(output_dir / "assembly.step"))
+        export_step(
+            assembly,
+            str(output_dir / "assembly.step"),
+            timestamp="2026-01-01T00:00:00",
+        )
         print(
             f"CAD: wrote assembly.step ({len(assembly_parts) - servo_count} printed "
             f"+ {servo_count} servo parts) + {len(body_solids)} STLs to {output_dir}"
@@ -1148,5 +1152,9 @@ def emit_cad_for_module(bot: Bot, module_name: str, output_dir: Path) -> None:
     if module_parts:
         assembly = Compound(label=f"{bot.name}_{module_name}", children=module_parts)
         filename = f"assembly_{module_name}.step"
-        export_step(assembly, str(output_dir / filename))
+        export_step(
+            assembly,
+            str(output_dir / filename),
+            timestamp="2026-01-01T00:00:00",
+        )
         print(f"CAD: wrote {filename} ({len(module_parts)} parts)")
