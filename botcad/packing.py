@@ -47,10 +47,18 @@ def _solve_body(body: Body) -> None:
             (mount.label, mount.placed_dimensions, mount.component.mass)
         )
 
-    # Child joint positions — the body needs structural material reaching
-    # to each joint. This includes continuous (wheel) joints: the chassis
-    # must physically span from servo to servo.
-    joint_positions: list[Vec3] = [j.pos for j in body.joints]
+    # Servo center positions — the body needs structural material reaching
+    # to each servo center (not the shaft/joint position). The bracket
+    # protrudes from the body edge to hold the servo, so the body only
+    # needs to reach where the bracket starts.
+    from botcad.geometry import servo_placement
+
+    joint_positions: list[Vec3] = []
+    for j in body.joints:
+        center, _quat = servo_placement(
+            j.servo.shaft_offset, j.servo.shaft_axis, j.axis, j.pos
+        )
+        joint_positions.append(center)
 
     if not internal_items and not joint_positions and body.explicit_dimensions is None:
         _compute_mass_inertia(body)
