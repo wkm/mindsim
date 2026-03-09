@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from botcad.component import CameraSpec, MountPoint, WirePort
+from botcad.component import BusType, CameraSpec, MountPoint, WirePort
 
 
 def OV5647() -> CameraSpec:
@@ -18,7 +18,7 @@ def OV5647() -> CameraSpec:
         resolution=(2592, 1944),
         wire_ports=(
             # CSI ribbon cable at bottom edge
-            WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type="csi"),
+            WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type=BusType.CSI),
         ),
         mounting_points=(
             # Two M2 mounting holes
@@ -52,7 +52,7 @@ def PiCamera2() -> CameraSpec:
         mass=0.003,
         fov_deg=62.2,
         resolution=(3280, 2464),
-        wire_ports=(WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type="csi"),),
+        wire_ports=(WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type=BusType.CSI),),
         mounting_points=(
             MountPoint(
                 "m1",

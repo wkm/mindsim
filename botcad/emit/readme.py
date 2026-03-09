@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from botcad.component import CameraSpec
+from botcad.skeleton import BaseType
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot
@@ -167,7 +168,7 @@ def emit_assembly_guide(bot: Bot, output_dir: Path) -> None:
         step[0] += 1
 
     # Fixed-base mounting
-    if bot.base_type == "fixed":
+    if bot.base_type is BaseType.FIXED:
         lines.append(
             f"{step[0]}. **Mount to table** — Secure the base plate to a flat "
             "surface using table clamps (150mm+ opening recommended) or M4 "

@@ -19,11 +19,36 @@ and speed determine the joint's geometry, control limits, and damping.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Literal
 
 from botcad.component import Component, ServoSpec, Vec3
 
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
+
+
+class BodyShape(StrEnum):
+    """Geometric shape of a rigid body."""
+
+    BOX = "box"
+    CYLINDER = "cylinder"
+    TUBE = "tube"
+    SPHERE = "sphere"
+    JAW = "jaw"
+
+
+class BracketStyle(StrEnum):
+    """Servo bracket mounting style."""
+
+    POCKET = "pocket"
+    COUPLER = "coupler"
+
+
+class BaseType(StrEnum):
+    """How the robot root is attached to the world."""
+
+    FREE = "free"
+    FIXED = "fixed"
 
 
 @dataclass
@@ -33,7 +58,7 @@ class Module:
     name: str
     _bot: Bot = field(repr=False)
 
-    def body(self, name: str, shape: str = "box", **kwargs) -> Body:
+    def body(self, name: str, shape: BodyShape = BodyShape.BOX, **kwargs) -> Body:
         """Create a body in this module. First body created becomes bot root."""
         b = Body(name=name, shape=shape, module=self, **kwargs)
         if self._bot.root is None:
@@ -80,7 +105,7 @@ class Joint:
     pos: Vec3  # joint position relative to parent body origin
     range_rad: tuple[float, float] | None = None  # override servo default
     grip: bool = False  # force-limited gripper actuator
-    bracket_style: str = "pocket"  # "pocket" or "coupler"
+    bracket_style: BracketStyle = BracketStyle.POCKET
     child: Body | None = None
 
     @property
@@ -92,7 +117,7 @@ class Joint:
     def body(
         self,
         name: str,
-        shape: str = "box",
+        shape: BodyShape = BodyShape.BOX,
         *,
         radius: float = 0.0,
         width: float = 0.0,
@@ -135,7 +160,7 @@ class Body:
     """
 
     name: str
-    shape: str = "box"  # box, cylinder, tube, sphere, jaw
+    shape: BodyShape = BodyShape.BOX
     radius: float = 0.0
     width: float = 0.0
     height: float = 0.0
@@ -174,18 +199,18 @@ class Body:
         return self._shape_default_dimensions()
 
     def _shape_default_dimensions(self) -> Vec3:
-        if self.shape == "cylinder":
+        if self.shape is BodyShape.CYLINDER:
             r = self.radius or 0.02
             h = self.width or self.height or 0.01
             return (r * 2, r * 2, h)
-        if self.shape == "tube":
+        if self.shape is BodyShape.TUBE:
             r = self.outer_r or 0.02
             ln = self.length or 0.1
             return (r * 2, r * 2, ln)
-        if self.shape == "sphere":
+        if self.shape is BodyShape.SPHERE:
             r = self.radius or 0.02
             return (r * 2, r * 2, r * 2)
-        if self.shape == "jaw":
+        if self.shape is BodyShape.JAW:
             jl = self.jaw_length or 0.04
             jw = self.jaw_width or 0.03
             jt = self.jaw_thickness or 0.005
@@ -231,7 +256,7 @@ class Body:
         pos: Vec3 = (0.0, 0.0, 0.0),
         range: tuple[float, float] | None = None,
         grip: bool = False,
-        bracket_style: str = "pocket",
+        bracket_style: BracketStyle = BracketStyle.POCKET,
     ) -> Joint:
         """Add a joint (with servo) connecting to a new child body."""
         axis_vec = _parse_axis(axis)
@@ -263,9 +288,7 @@ class Bot:
 
     name: str
     root: Body | None = None
-    base_type: Literal["free", "fixed"] = (
-        "free"  # free = freejoint, fixed = bolted down
-    )
+    base_type: BaseType = BaseType.FREE
 
     # Populated by solve()
     all_bodies: list[Body] = field(default_factory=list)
@@ -283,7 +306,7 @@ class Bot:
     def body(
         self,
         name: str,
-        shape: str = "box",
+        shape: BodyShape = BodyShape.BOX,
         *,
         padding: float = 0.01,
         dimensions: Vec3 | None = None,
@@ -343,7 +366,7 @@ class Bot:
         import warnings
 
         for joint in self.all_joints:
-            if joint.bracket_style != "coupler":
+            if joint.bracket_style is not BracketStyle.COUPLER:
                 continue
 
             from botcad.bracket import coupler_max_rom_rad

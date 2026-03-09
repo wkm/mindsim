@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from botcad.component import MountingEar, MountPoint, ServoSpec, WirePort
+from botcad.component import BusType, MountingEar, MountPoint, ServoSpec, WirePort
 
 # ── Feetech STS3215 (C018, 12V variant) ─────────────────────────────
 #
@@ -91,7 +91,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             WirePort(
                 "uart_bus",
                 pos=(-0.0080, 0.0, -0.0159),
-                bus_type="uart_half_duplex",
+                bus_type=BusType.UART_HALF_DUPLEX,
             ),
         ),
         mounting_points=tuple(
@@ -105,7 +105,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         no_load_speed=_STS3215_NO_LOAD_SPEED,
         voltage=_STS3215_VOLTAGE,
         typical_current=_STS3215_TYPICAL_CURRENT,
-        bus_type="uart_half_duplex",
+        bus_type=BusType.UART_HALF_DUPLEX,
         shaft_offset=_STS3215_SHAFT_OFFSET,
         shaft_axis=(0.0, 0.0, 1.0),
         range_rad=range_rad,

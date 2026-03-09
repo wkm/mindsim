@@ -7,9 +7,22 @@ with real-world dimensions, mass, wire ports, and mounting points.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 Vec3 = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
+
+
+class BusType(StrEnum):
+    """Wire bus protocol type."""
+
+    UART_HALF_DUPLEX = "uart_half_duplex"
+    PWM = "pwm"
+    CSI = "csi"
+    POWER = "power"
+    USB = "usb"
+    GPIO = "gpio"
+    BALANCE = "balance"
 
 
 @dataclass(frozen=True)
@@ -18,7 +31,7 @@ class WirePort:
 
     label: str  # e.g. "uart_in", "uart_out", "power", "csi"
     pos: Vec3  # position relative to component origin (meters)
-    bus_type: str  # "uart_half_duplex", "pwm", "csi", "power", "usb"
+    bus_type: BusType
 
 
 @dataclass(frozen=True)
@@ -88,7 +101,7 @@ class ServoSpec(Component):
     stall_torque: float = 0.0  # N-m
     no_load_speed: float = 0.0  # rad/s
     voltage: float = 0.0  # V
-    bus_type: str = "pwm"  # "uart_half_duplex", "pwm", etc.
+    bus_type: BusType = BusType.PWM
     shaft_offset: Vec3 = (0.0, 0.0, 0.0)  # output shaft center relative to body origin
     shaft_axis: Vec3 = (0.0, 0.0, 1.0)  # rotation axis (in servo local frame)
     range_rad: tuple[float, float] = (-3.14159, 3.14159)  # angular range

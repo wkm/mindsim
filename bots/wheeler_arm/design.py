@@ -21,7 +21,7 @@ from botcad.components import (
     PololuWheel90mm,
     RaspberryPiZero2W,
 )
-from botcad.skeleton import Bot
+from botcad.skeleton import BodyShape, Bot, BracketStyle
 
 
 def build() -> Bot:
@@ -31,7 +31,7 @@ def build() -> Bot:
     arm_mod = bot.module("arm")
 
     # Base body — houses electronics, battery on bottom, Pi in center
-    base = base_mod.body("base", shape="box", padding=0.008)
+    base = base_mod.body("base", shape=BodyShape.BOX, padding=0.008)
     base.mount(RaspberryPiZero2W(), position="center", label="pi")
     base.mount(LiPo2S(1000), position="bottom", label="battery")
 
@@ -44,7 +44,9 @@ def build() -> Bot:
         axis="-x",
         pos=(-0.06, 0.0, 0.0),
     )
-    left_rim = left_joint.body("left_rim", shape="cylinder", radius=0.045, width=0.010)
+    left_rim = left_joint.body(
+        "left_rim", shape=BodyShape.CYLINDER, radius=0.045, width=0.010
+    )
     left_rim.mount(PololuWheel90mm(), label="wheel")
 
     # Right wheel: servo at right side of base, axis = X (opposite direction)
@@ -55,7 +57,7 @@ def build() -> Bot:
         pos=(0.06, 0.0, 0.0),
     )
     right_rim = right_joint.body(
-        "right_rim", shape="cylinder", radius=0.045, width=0.010
+        "right_rim", shape=BodyShape.CYLINDER, radius=0.045, width=0.010
     )
     right_rim.mount(PololuWheel90mm(), label="wheel")
 
@@ -68,10 +70,10 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.04),
         range=(-1.5, 1.5),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
     turntable = shoulder_yaw.body(
-        "turntable", shape="cylinder", radius=0.03, height=0.02, module=arm_mod
+        "turntable", shape=BodyShape.CYLINDER, radius=0.03, height=0.02, module=arm_mod
     )
 
     # Shoulder pitch: tilts the arm up/down, axis = X
@@ -81,10 +83,10 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.02),
         range=(-1.5, 1.5),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
     upper_arm = shoulder_pitch.body(
-        "upper_arm", shape="tube", length=0.12, outer_r=0.018
+        "upper_arm", shape=BodyShape.TUBE, length=0.12, outer_r=0.018
     )
 
     # Elbow: bends the forearm, axis = X
@@ -94,9 +96,9 @@ def build() -> Bot:
         axis="x",
         pos=(0.0, 0.0, 0.12),
         range=(-1.92, 0.0),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
-    forearm = elbow.body("forearm", shape="tube", length=0.10, outer_r=0.016)
+    forearm = elbow.body("forearm", shape=BodyShape.TUBE, length=0.10, outer_r=0.016)
 
     # Wrist: rotates the hand/camera, axis = Z
     wrist = forearm.joint(
@@ -105,9 +107,9 @@ def build() -> Bot:
         axis="z",
         pos=(0.0, 0.0, 0.10),
         range=(-1.5, 1.5),
-        bracket_style="coupler",
+        bracket_style=BracketStyle.COUPLER,
     )
-    hand = wrist.body("hand", shape="box", dimensions=(0.04, 0.04, 0.03))
+    hand = wrist.body("hand", shape=BodyShape.BOX, dimensions=(0.04, 0.04, 0.03))
     hand.mount(OV5647(), position="front", label="camera")
 
     return bot

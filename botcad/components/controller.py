@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from botcad.component import Component, MountPoint, WirePort
+from botcad.component import BusType, Component, MountPoint, WirePort
 
 
 def WaveshareSerialBus() -> Component:
@@ -19,11 +19,11 @@ def WaveshareSerialBus() -> Component:
         dimensions=(0.055, 0.025, 0.012),
         mass=0.015,
         wire_ports=(
-            WirePort("usb_c", pos=(-0.0275, 0.0, 0.0), bus_type="usb"),
+            WirePort("usb_c", pos=(-0.0275, 0.0, 0.0), bus_type=BusType.USB),
             WirePort(
                 "servo_bus",
                 pos=(0.0275, 0.0, 0.0),
-                bus_type="uart_half_duplex",
+                bus_type=BusType.UART_HALF_DUPLEX,
             ),
         ),
         mounting_points=(

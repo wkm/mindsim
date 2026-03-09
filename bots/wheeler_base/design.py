@@ -19,7 +19,7 @@ from botcad.components import (
     RaspberryPiZero2W,
 )
 from botcad.components.camera import OV5647
-from botcad.skeleton import Bot
+from botcad.skeleton import BodyShape, Bot
 
 
 def build() -> Bot:
@@ -31,7 +31,7 @@ def build() -> Bot:
     # keeping X extent narrow to clear wheel servos at ±65mm.
     # Minimum height 45mm to stack battery (bottom) + camera + Pi (top)
     # without Z-axis overlap.
-    base = bot.body("base", shape="box", padding=0.008)
+    base = bot.body("base", shape=BodyShape.BOX, padding=0.008)
     base.height = 0.045
     base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
     base.mount(OV5647(), position="front", label="camera")
@@ -47,7 +47,9 @@ def build() -> Bot:
         axis="-x",
         pos=(-0.065, 0.0, 0.0),
     )
-    left_rim = left_joint.body("left_rim", shape="cylinder", radius=0.045, width=0.010)
+    left_rim = left_joint.body(
+        "left_rim", shape=BodyShape.CYLINDER, radius=0.045, width=0.010
+    )
     left_rim.mount(PololuWheel90mm(), label="wheel")
 
     # Right wheel: servo at right side of base, axis = +X
@@ -58,7 +60,7 @@ def build() -> Bot:
         pos=(0.065, 0.0, 0.0),
     )
     right_rim = right_joint.body(
-        "right_rim", shape="cylinder", radius=0.045, width=0.010
+        "right_rim", shape=BodyShape.CYLINDER, radius=0.045, width=0.010
     )
     right_rim.mount(PololuWheel90mm(), label="wheel")
 
