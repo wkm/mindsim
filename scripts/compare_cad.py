@@ -6,42 +6,22 @@ Compares a parametrically generated component against a reference STEP file.
 Outputs numerical metrics and generates 'diff' visuals for LLM analysis.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import build123d as b3d
-from build123d import (
-    Compound,
-    Location,
-    ShapeList,
-    Solid,
-    export_stl,
-    import_step,
-)
-from PIL import Image, ImageDraw
-
-from botcad.emit.composite import FONT_LABEL, FONT_TITLE, PNG_DPI
-
-# MindSim imports
-from botcad.emit.render3d import (
-    COLOR_BRACKET,
-    VIEWS_4,
-    Color,
-    Renderer3D,
-    SceneBuilder,
-)
-
-# Custom colors for diff
-COLOR_GEN = COLOR_BRACKET  # Blueish
-COLOR_REF = Color(0.7, 0.7, 0.7, 0.5, "reference (gray)")
-COLOR_EXTRA = Color(1.0, 0.2, 0.2, 1.0, "extra (red)")
-COLOR_MISSING = Color(1.0, 0.9, 0.2, 1.0, "missing (yellow)")
+if TYPE_CHECKING:
+    import build123d as b3d
 
 
 def _as_solid(shape):
+    from build123d import Compound, ShapeList, Solid
+
     """Extract a single Solid from a boolean result or shape list."""
     if isinstance(shape, ShapeList):
         if len(shape) == 1:
@@ -73,6 +53,21 @@ class DiffMetrics:
 
 def render_diff_sheet(output_dir: Path, name: str, artifacts: dict[str, Path]):
     """Generates a composite PNG showing the diff from multiple angles."""
+    from PIL import Image, ImageDraw
+
+    from botcad.emit.composite import FONT_LABEL, FONT_TITLE, PNG_DPI
+    from botcad.emit.render3d import (
+        COLOR_BRACKET,
+        VIEWS_4,
+        Color,
+        Renderer3D,
+        SceneBuilder,
+    )
+
+    # Custom colors for diff
+    COLOR_GEN = COLOR_BRACKET  # Blueish
+    COLOR_EXTRA = Color(1.0, 0.2, 0.2, 1.0, "extra (red)")
+    COLOR_MISSING = Color(1.0, 0.9, 0.2, 1.0, "missing (yellow)")
 
     # 1. Build Scene
     scene = SceneBuilder(width=1000, height=1000)
@@ -136,6 +131,8 @@ def compare_solids(
     gen_solid: b3d.Shape, ref_solid: b3d.Shape, name: str, output_dir: Path
 ):
     """Aligns and diffs two solids."""
+    from build123d import Location, export_stl
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Basic properties
@@ -269,6 +266,9 @@ def main():
     )
     args = parser.parse_args()
 
+    import build123d as b3d
+    from build123d import Compound, import_step
+
     # Load component
     if args.component == "STS3215":
         from botcad.bracket import servo_solid
@@ -287,9 +287,7 @@ def main():
         solids = ref_shape.solids()
         if len(solids) > 1:
             print(f"Reference has {len(solids)} solids. Fusing for comparison...")
-            ref_solid = solids[0]
-            for s in solids[1:]:
-                ref_solid = _as_solid(ref_solid.fuse(s))
+            ref_solid = _as_solid(solids[0].fuse(*solids[1:]))
         else:
             ref_solid = solids[0]
     else:

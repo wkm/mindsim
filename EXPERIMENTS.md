@@ -18,3 +18,4 @@ Tracking experimental branches and their outcomes.
 | `exp/ppo-architecture-baseline` | PPO architecture comparison baseline | Abandoned (no unique changes) | - |
 | `exp/walls-exploration` | Adding walls to the environment encourages more directed exploration | Abandoned (no unique changes) | - |
 | `exp/260221-scene-gen` | Procedural scene generation: parametric furniture concepts (table, chair, shelf) composed from MuJoCo primitives, placed at random per episode. Phase 1 = primitives with `@lru_cache`, future phases add STL mesh generation with disk caching. Goal: visual diversity + physical obstacles for richer training. Scale progression: room -> apartment -> house -> village. | In progress | - |
+| `exp/260309-perf-cad` | Optimize scripts.compare_cad performance | In progress | - |
