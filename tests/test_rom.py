@@ -13,10 +13,10 @@ The baseline file `rom_baseline.json` lives in each bot's directory and is
 committed alongside test renders. After reviewing the discovered ROM, run
 with `--update-rom-baseline` to write/update it.
 
-Usage:
-    PYTHONPATH=. uv run pytest tests/test_rom.py -v
-    PYTHONPATH=. uv run pytest tests/test_rom.py -v --update-rom-baseline
-    PYTHONPATH=. uv run pytest tests/test_rom.py -v -k wheeler_arm
+Example:
+    uv run pytest tests/test_rom.py -v
+    uv run pytest tests/test_rom.py -v --update-rom-baseline
+    uv run pytest tests/test_rom.py -v -k wheeler_arm
 """
 
 from __future__ import annotations
