@@ -18,3 +18,6 @@ Tracking experimental branches and their outcomes.
 | `exp/ppo-architecture-baseline` | PPO architecture comparison baseline | Abandoned (no unique changes) | - |
 | `exp/walls-exploration` | Adding walls to the environment encourages more directed exploration | Abandoned (no unique changes) | - |
 | `exp/260221-scene-gen` | Procedural scene generation: parametric furniture concepts (table, chair, shelf) composed from MuJoCo primitives, placed at random per episode. Phase 1 = primitives with `@lru_cache`, future phases add STL mesh generation with disk caching. Goal: visual diversity + physical obstacles for richer training. Scale progression: room -> apartment -> house -> village. | In progress | - |
+### 260309-pi-zero-accurate
+- Replaced box approximation of RaspberryPiZero2W with an exact parametric solid (65x30x1.5mm PCB, corner radii, precise M2.5 mounting holes, and component clearances).
+- Passed `make validate` rendering the new geometry into CAD assemblies and simulation collision meshes.
