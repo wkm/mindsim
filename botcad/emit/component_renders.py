@@ -12,7 +12,7 @@ ServoSpec components get additional detail: shaft, horn disc, horn holes,
 rear holes, and mounting ears.
 
 Called as part of Bot.emit() pipeline, or standalone:
-    PYTHONPATH=. uv run python -m botcad.emit.component_renders [bot_dir]
+    uv run python -m botcad.emit.component_renders [bot_dir]
 """
 
 from __future__ import annotations

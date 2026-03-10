@@ -143,17 +143,22 @@ def regen_bot_outputs() -> None:
     Each design.py calls bot.solve() + bot.emit(), which produces
     STEP, STL, MuJoCo XML, renders, PDFs, and joint section drawings.
     """
+    import os
     import subprocess
 
     bots_dir = Path("bots")
+    env = os.environ.copy()
+    # Ensure project root is on path for child processes
+    env["PYTHONPATH"] = f".{os.pathsep}{env.get('PYTHONPATH', '')}"
+
     for design_py in sorted(bots_dir.glob("*/design.py")):
         bot_name = design_py.parent.name
         print(f"  bot: {bot_name} ...")
         result = subprocess.run(
             [sys.executable, str(design_py)],
-            env={**__import__("os").environ, "PYTHONPATH": "."},
             capture_output=True,
             text=True,
+            env=env,
         )
         if result.returncode != 0:
             print(f"  FAILED: {bot_name}")

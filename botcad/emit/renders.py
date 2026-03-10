@@ -6,7 +6,7 @@ Generates three PNGs in the bot output directory:
   - test_sweep.png      — per-joint filmstrip across range of motion
 
 Called as part of Bot.emit() pipeline, or standalone:
-    PYTHONPATH=. uv run python -m botcad.emit.renders [bot_dir]
+    uv run python -m botcad.emit.renders [bot_dir]
 """
 
 from __future__ import annotations

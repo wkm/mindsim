@@ -8,7 +8,7 @@ Both use IKEA-style rendering: solid target bodies, wireframe context, orange
 insertion arrows. Camera perpendicular to insertion axis.
 
 Called as part of Bot.emit() pipeline, or standalone:
-    PYTHONPATH=. uv run python -m botcad.emit.assembly_renders [bot_dir]
+    uv run python -m botcad.emit.assembly_renders [bot_dir]
 """
 
 from __future__ import annotations
