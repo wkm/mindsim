@@ -48,3 +48,4 @@ viewer/.cdn_cache/
 # Claude Code (track settings.json, ignore everything else)
 .claude/*
 !.claude/settings.json
+\n# Component reference files\nreferences/components/
