@@ -10,10 +10,11 @@ Follow standard CAD reverse-engineering practices: **Macro to Micro**.
 ## Phase 1: Ground Truth Acquisition
 1.  **Search for Official Specs:** Find the manufacturer's datasheet and dimensions online.
 2.  **Acquire Reference CAD:** Find the official manufacturer STEP file (often on GrabCAD, Printables, or GitHub repos).
-3.  **Download:** Download the reference STEP file to a temporary location (e.g., `tmp/reference.step`). Verify the file format.
+3.  **Store Reference:** Save the reference STEP file in `references/components/<name>.step`. This folder is ignored by git but used for local `compare_cad` sessions.
+4.  **Link in Code:** In the component's Python file (e.g., `botcad/components/servo.py`), add a docstring comment linking to the reference source (URL and local path).
 
 ## Phase 2: Interrogation (Measure Twice, Cut Once)
-Before writing any parametric geometry, write a temporary Python script (e.g., `inspect_step.py`) using `build123d` to interrogate the reference STEP file.
+Before writing any parametric geometry, write a temporary Python script (e.g., `inspect_step.py`) using `build123d` to interrogate the reference STEP file in `references/components/`.
 Extract precise measurements:
 1.  **The Envelope:** Get the exact bounding box (`ref_solid.bounding_box()`).
 2.  **Primary Planes:** Find the major structural planes. For example, group faces by their normals (X, Y, Z) and sort by area to find the exact Z-heights where the top cap, middle body, and bottom cap meet.
@@ -29,7 +30,7 @@ In `botcad/components/`, build the parametric solid (`servo_solid()`, etc.) iter
 ## Phase 4: Physical Diff Validation
 1.  **Run Diff:** Execute the comparison script:
     ```bash
-    uv run python -m scripts.compare_cad --component <NAME> --ref tmp/reference.step
+    uv run python -m scripts.compare_cad --component <NAME> --ref references/components/<name>.step
     ```
     *Ensure the script aligns the solids appropriately (e.g., by bounding box center or specific faces) without artificially offsetting them.*
 2.  **Visual Inspection (The True Test):** Open the generated `diff_results/<NAME>/<NAME>_diff_overview.png`.
@@ -40,4 +41,10 @@ In `botcad/components/`, build the parametric solid (`servo_solid()`, etc.) iter
 
 ## Phase 5: Cleanup & Integration
 1.  **Validate Project:** Run `make validate` to ensure your new geometry doesn't break bracket envelopes, collision checks, or tests.
-2.  **Clean up:** Remove the temporary STEP file, inspection scripts, and the `diff_results` directory.
+2.  **Specific Component Validation:** If you modified an existing component, run:
+    ```bash
+    make renders-components
+    make renders-rom
+    ```
+    Review the updated renders in `botcad/components/test_*.png` for visual regressions.
+3.  **Clean up:** Remove any temporary inspection scripts and the `diff_results` directory. Keep the reference STEP in `references/components/` for future developers.

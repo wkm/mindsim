@@ -389,21 +389,22 @@ def servo_solid(servo: ServoSpec):
     """Build a detailed solid representing the physical servo body.
 
     Pass 11: Absolute precision matching. Using the exact bounding planes
-    measured from the official reference CAD.
+    measured from the official reference CAD. Centered on body center (0,0,0).
     """
     from build123d import Align, Axis, Box, Cylinder, Location, fillet
 
     # Exact extents from reference CAD interrogation
     body_x = 0.0454
     body_y = 0.0248
+    body_z = 0.0326
     r = 0.0040  # Match the large molded corner radii
 
-    # Z-Planes (Relative to top cap surface at Z=0)
-    z_datum = 0.0170
-    z_mid_top = 0.0144 - z_datum
-    z_mid_bot = -0.0144 - z_datum
-    z_cap_top = 0.0
-    z_cap_bot = -0.0156 - z_datum
+    # Z-Planes (Relative to body center at Z=0)
+    # Body spans Z = [-16.3, +16.3] mm
+    z_top_surface = body_z / 2  # +16.3mm
+    z_mid_top = z_top_surface - 0.0026  # +13.7mm
+    z_mid_bot = z_mid_top - 0.0288  # -15.1mm
+    z_cap_bot = z_mid_bot - 0.0012  # -16.3mm (body bottom)
 
     # 1. Middle Section (Aluminum)
     mid_h = z_mid_top - z_mid_bot
@@ -414,23 +415,23 @@ def servo_solid(servo: ServoSpec):
     middle = _as_solid(fillet(middle.edges().filter_by(Axis.Z), r))
 
     # 2. Top Cap (Plastic)
-    top_h = z_cap_top - z_mid_top
+    top_h = z_top_surface - z_mid_top
     top_cap = Box(body_x, body_y, top_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
     top_cap = top_cap.locate(Location((0, 0, z_mid_top)))
     top_cap = _as_solid(fillet(top_cap.edges().filter_by(Axis.Z), r))
 
     # Raised pill step
-    step_h = 0.0187 - 0.0170
+    step_h = 0.0017
     step = Box(0.0200, 0.0200, step_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    step = step.locate(Location((0.0125, 0, z_cap_top)))
+    step = step.locate(Location((0.0125, 0, z_top_surface)))
     step = _as_solid(fillet(step.edges().filter_by(Axis.Z), 0.002))
     top_cap = _as_solid(top_cap.fuse(step))
 
     # Output shaft boss
     sx, sy, _sz = servo.shaft_offset
-    boss_h = 0.0202 - 0.0187
+    boss_h = 0.0015
     boss = Cylinder(0.0045, boss_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    boss = boss.locate(Location((sx, sy, 0.0187 - z_datum)))
+    boss = boss.locate(Location((sx, sy, z_top_surface + step_h)))
     top_cap = _as_solid(top_cap.fuse(boss))
 
     # 3. Bottom Cap & Flanges
@@ -444,8 +445,8 @@ def servo_solid(servo: ServoSpec):
     # Mounting Flanges
     f_lx = 0.0404
     f_cx = -0.0005
-    f_z_top = -0.0156 - z_datum
-    f_z_bot = -0.0177 - z_datum  # full depth
+    f_z_top = z_cap_bot
+    f_z_bot = f_z_top - 0.0021
     f_h = f_z_top - f_z_bot
 
     if servo.mounting_ears:
@@ -462,7 +463,7 @@ def servo_solid(servo: ServoSpec):
 
     # Support bearing boss
     rear_boss = Cylinder(0.003, 0.0013, align=(Align.CENTER, Align.CENTER, Align.MAX))
-    rear_boss = rear_boss.locate(Location((sx, sy, -0.0156 - z_datum)))
+    rear_boss = rear_boss.locate(Location((sx, sy, z_cap_bot)))
     bottom_cap = _as_solid(bottom_cap.fuse(rear_boss))
 
     # Final Union

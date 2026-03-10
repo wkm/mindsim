@@ -1,8 +1,9 @@
 """Servo motor components with real-world specs.
 
-Geometry extracted from the official Feetech STS3215 STEP model
-(SO-ARM100 repo: STEP/SO100/STS3215_03a.step) and the translated
-datasheet (core-electronics.com.au).
+Geometry extracted from the official Feetech STS3215 STEP model.
+Reference: https://github.com/sk-t/so-arm100/blob/main/STEP/SO100/STS3215_03a.step
+Local: references/components/STS3215_03a.step
+Datasheet: https://core-electronics.com.au/files/attachments/STS3215%20Serial%20Bus%20Servo%20User%20Manual.pdf
 
 Servo local frame convention:
     X = long axis (length direction, 45.2mm)
@@ -35,11 +36,11 @@ from botcad.component import BusType, MountingEar, MountPoint, ServoSpec, WirePo
 # Rear (blind) shaft at same XY, support bearing in -Z
 # Connector (5264-2.54 3-pin) on bottom face, toward -X (back) end
 
-# Overall envelope (with ears, per datasheet)
-_STS3215_DIMS = (0.0452, 0.0247, 0.035)
+# Overall envelope (with ears and shaft boss, per refined CAD)
+_STS3215_DIMS = (0.0454, 0.0248, 0.0379)
 
 # Main body only (no ears, no horn — the solid rectangular block)
-_STS3215_BODY_DIMS = (0.0454, 0.0248, 0.0318)
+_STS3215_BODY_DIMS = (0.0454, 0.0248, 0.0326)
 
 _STS3215_MASS = 0.055  # kg
 _STS3215_STALL_TORQUE = 2.942  # N-m (30 kg-cm @ 12V)
@@ -50,8 +51,8 @@ _STS3215_TYPICAL_CURRENT = 0.180  # A (no-load current at 12V)
 _STS3215_VOLTAGE = 12.0
 
 # Output shaft offset from body center (meters)
-# Shaft is at X=+12.5mm along the long axis, at the +Z face
-_STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0159)
+# Shaft is at X=+12.5mm along the long axis, at the +Z face (16.3mm from center)
+_STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0163)
 
 # Horn mount XY coordinates (4x M2.5 pattern around shaft center)
 # Spacing: 9.9mm x 9.9mm; shared between front horn and rear horn
@@ -61,8 +62,8 @@ _HORN_XY = (
     (+0.00755, -0.00495),
     (+0.01745, -0.00495),
 )
-_HORN_FRONT_Z = +0.0187  # output face
-_HORN_REAR_Z = -0.0190  # blind/rear face
+_HORN_FRONT_Z = +0.0180  # output face (1.7mm above body top)
+_HORN_REAR_Z = -0.0176  # blind/rear face (1.3mm below body bottom)
 _HORN_HOLE_DIA = 0.0025  # M2.5
 
 
@@ -90,7 +91,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             # Also has a short 5264/2.54 pigtail lead (~15cm)
             WirePort(
                 "uart_bus",
-                pos=(-0.0080, 0.0, -0.0159),
+                pos=(-0.0080, 0.0, -0.0163),
                 bus_type=BusType.UART_HALF_DUPLEX,
             ),
         ),
@@ -113,31 +114,31 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         continuous=continuous,
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
-        shaft_boss_radius=0.004,  # 4mm radius (8mm OD bearing housing)
-        shaft_boss_height=0.0028,  # 2.8mm protrusion above body top
+        shaft_boss_radius=0.0045,  # 4.5mm radius
+        shaft_boss_height=0.0032,  # 3.2mm protrusion above body top
         mounting_ears=(
             # 6x M3 clearance holes (ø4.2mm) in mounting flanges below body
-            # Flanges extend 3.2mm below body bottom (Z=-15.9mm)
-            # Screw hole centers at Z=-17.5mm (midpoint of flange)
+            # Flanges extend 2.1mm below body bottom (Z=-16.3mm)
+            # Screw hole centers at Z=-17.35mm (midpoint of flange)
             # Y=±10.25mm (inside body width), 3 X positions per side
             MountingEar(
-                "ear_1", pos=(+0.0042, -0.01025, -0.0175), hole_diameter=0.0042
+                "ear_1", pos=(+0.0042, -0.01025, -0.01735), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_2", pos=(-0.0165, -0.01025, -0.0175), hole_diameter=0.0042
+                "ear_2", pos=(-0.0165, -0.01025, -0.01735), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_3", pos=(+0.0042, +0.01025, -0.0175), hole_diameter=0.0042
+                "ear_3", pos=(+0.0042, +0.01025, -0.01735), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_4", pos=(-0.0165, +0.01025, -0.0175), hole_diameter=0.0042
+                "ear_4", pos=(-0.0165, +0.01025, -0.01735), hole_diameter=0.0042
             ),
             # Additional pair at far back end (X=-20.3mm)
             MountingEar(
-                "ear_5", pos=(-0.0203, -0.01025, -0.0175), hole_diameter=0.0042
+                "ear_5", pos=(-0.0203, -0.01025, -0.01735), hole_diameter=0.0042
             ),
             MountingEar(
-                "ear_6", pos=(-0.0203, +0.01025, -0.0175), hole_diameter=0.0042
+                "ear_6", pos=(-0.0203, +0.01025, -0.01735), hole_diameter=0.0042
             ),
         ),
         horn_mounting_points=tuple(
@@ -161,5 +162,5 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             for i, (x, y) in enumerate(_HORN_XY)
         ),
         # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
-        connector_pos=(-0.0080, 0.0, -0.0159),
+        connector_pos=(-0.0080, 0.0, -0.0163),
     )
