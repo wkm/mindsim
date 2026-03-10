@@ -93,6 +93,39 @@ def _horn_clip_radius(servo: ServoSpec, spec: BracketSpec) -> float:
     return clip_r
 
 
+def _as_solid(shape):
+    """Extract a single Solid from a boolean result or shape list.
+
+    build123d boolean ops (cut, union) and fillets can return Compound
+    or ShapeList even when the result is a single solid. This extracts
+    the Solid so further operations (like filleting or more booleans)
+    work correctly.
+    """
+    from build123d import Compound, ShapeList, Solid
+
+    # 1. Handle ShapeList (returned by fillet and some boolean ops)
+    if isinstance(shape, ShapeList):
+        if len(shape) == 1:
+            return _as_solid(shape[0])
+        # If it's a list of multiple solids, try to compound them
+        if all(isinstance(s, Solid) for s in shape):
+            return _as_solid(Compound(list(shape)))
+        return shape
+
+    # 2. Handle Solid
+    if isinstance(shape, Solid):
+        return shape
+
+    # 3. Handle Compound
+    if isinstance(shape, Compound):
+        solids = shape.solids()
+        if len(solids) == 1:
+            return solids[0]
+        return shape
+
+    return shape
+
+
 @dataclass(frozen=True)
 class BracketSpec:
     """Parameters controlling bracket geometry around a servo."""
@@ -353,74 +386,98 @@ def horn_disc_params(
 
 
 def servo_solid(servo: ServoSpec):
-    """Build a solid representing the physical servo body.
+    """Build a detailed solid representing the physical servo body.
 
-    Includes the main rectangular block, mounting ear flanges, and an output
-    shaft stub. Used in STEP assemblies to show where purchased servos sit.
-
-    Returns a build123d Solid in the servo's local frame (origin = body center,
-    Z = shaft axis).
+    Pass 11: Absolute precision matching. Using the exact bounding planes
+    measured from the official reference CAD.
     """
-    from build123d import Align, Box, Cylinder, Location
+    from build123d import Align, Axis, Box, Cylinder, Location, fillet
 
-    body_x, body_y, body_z = servo.effective_body_dims
+    # Exact extents from reference CAD interrogation
+    body_x = 0.0454
+    body_y = 0.0248
+    r = 0.0040  # Match the large molded corner radii
 
-    # Main body block
-    body = Box(body_x, body_y, body_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    # Z-Planes (Relative to top cap surface at Z=0)
+    z_datum = 0.0170
+    z_mid_top = 0.0144 - z_datum
+    z_mid_bot = -0.0144 - z_datum
+    z_cap_top = 0.0
+    z_cap_bot = -0.0156 - z_datum
 
-    # Mounting ear flanges — thin tabs extending below the body
+    # 1. Middle Section (Aluminum)
+    mid_h = z_mid_top - z_mid_bot
+    middle = Box(
+        body_x, body_y, mid_h, align=(Align.CENTER, Align.CENTER, Align.CENTER)
+    )
+    middle = middle.locate(Location((0, 0, (z_mid_top + z_mid_bot) / 2)))
+    middle = _as_solid(fillet(middle.edges().filter_by(Axis.Z), r))
+
+    # 2. Top Cap (Plastic)
+    top_h = z_cap_top - z_mid_top
+    top_cap = Box(body_x, body_y, top_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    top_cap = top_cap.locate(Location((0, 0, z_mid_top)))
+    top_cap = _as_solid(fillet(top_cap.edges().filter_by(Axis.Z), r))
+
+    # Raised pill step
+    step_h = 0.0187 - 0.0170
+    step = Box(0.0200, 0.0200, step_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    step = step.locate(Location((0.0125, 0, z_cap_top)))
+    step = _as_solid(fillet(step.edges().filter_by(Axis.Z), 0.002))
+    top_cap = _as_solid(top_cap.fuse(step))
+
+    # Output shaft boss
+    sx, sy, _sz = servo.shaft_offset
+    boss_h = 0.0202 - 0.0187
+    boss = Cylinder(0.0045, boss_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    boss = boss.locate(Location((sx, sy, 0.0187 - z_datum)))
+    top_cap = _as_solid(top_cap.fuse(boss))
+
+    # 3. Bottom Cap & Flanges
+    bot_h = z_mid_bot - z_cap_bot
+    bottom_cap = Box(
+        body_x, body_y, bot_h, align=(Align.CENTER, Align.CENTER, Align.MAX)
+    )
+    bottom_cap = bottom_cap.locate(Location((0, 0, z_mid_bot)))
+    bottom_cap = _as_solid(fillet(bottom_cap.edges().filter_by(Axis.Z), r))
+
+    # Mounting Flanges
+    f_lx = 0.0404
+    f_cx = -0.0005
+    f_z_top = -0.0156 - z_datum
+    f_z_bot = -0.0177 - z_datum  # full depth
+    f_h = f_z_top - f_z_bot
+
     if servo.mounting_ears:
         for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
-            # Flange spans the full X-extent of the ear positions
-            xs = [e.pos[0] for e in ears]
-            hole_r = ears[0].diameter / 2
-            flange_x_min = min(xs) - hole_r - 0.001
-            flange_x_max = max(xs) + hole_r + 0.001
-            flange_x = flange_x_max - flange_x_min
-            flange_cx = (flange_x_min + flange_x_max) / 2
+            f_w = 0.004
+            f_cy = (
+                (body_y / 2 - f_w / 2)
+                if ears[0].pos[1] > 0
+                else -(body_y / 2 - f_w / 2)
+            )
+            flange = Box(f_lx, f_w, f_h, align=(Align.CENTER, Align.CENTER, Align.MAX))
+            flange = flange.locate(Location((f_cx, f_cy, f_z_top)))
+            bottom_cap = _as_solid(bottom_cap.fuse(flange))
 
-            # Flange extends from body bottom to ear Z position
-            ear_z = ears[0].pos[2]  # all ears on same side share Z
-            flange_top = -body_z / 2
-            flange_bottom = ear_z - hole_r - 0.0005
-            flange_z = flange_top - flange_bottom
-            if flange_z <= 0:
-                continue
-            flange_cz = (flange_top + flange_bottom) / 2
+    # Support bearing boss
+    rear_boss = Cylinder(0.003, 0.0013, align=(Align.CENTER, Align.CENTER, Align.MAX))
+    rear_boss = rear_boss.locate(Location((sx, sy, -0.0156 - z_datum)))
+    bottom_cap = _as_solid(bottom_cap.fuse(rear_boss))
 
-            # Flange Y: from body edge outward to ear Y + clearance
-            ear_y = abs(ears[0].pos[1])
-            flange_y_inner = body_y / 2
-            flange_y_outer = ear_y + hole_r + 0.001
-            flange_y = flange_y_outer - flange_y_inner
-            if flange_y <= 0:
-                continue
-            flange_cy = (flange_y_inner + flange_y_outer) / 2
-            if ears[0].pos[1] < 0:
-                flange_cy = -flange_cy
+    # Final Union
+    body = _as_solid(middle.fuse(top_cap).fuse(bottom_cap))
 
-            flange = Box(
-                flange_x,
-                flange_y,
-                flange_z,
+    # Mounting Holes
+    if servo.mounting_ears:
+        for ear in servo.mounting_ears:
+            h = Cylinder(
+                ear.diameter / 2,
+                0.020,
                 align=(Align.CENTER, Align.CENTER, Align.CENTER),
             )
-            flange = flange.locate(Location((flange_cx, flange_cy, flange_cz)))
-            body = body + flange
-
-    # Output shaft boss — bearing housing cylinder on +Z face.
-    # This represents only the physical boss that protrudes from the servo
-    # body. The horn disc is a separate purchased part (modeled independently
-    # by horn_disc_params / the horn disc solid in cad.py).
-    sx, sy, sz = servo.shaft_offset
-    if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
-        shaft = Cylinder(
-            servo.shaft_boss_radius,
-            servo.shaft_boss_height,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
-        shaft = shaft.locate(Location((sx, sy, body_z / 2)))
-        body = body + shaft
+            h = h.locate(Location((ear.pos[0], ear.pos[1], f_z_bot)))
+            body = _as_solid(body.cut(h))
 
     return body
 
