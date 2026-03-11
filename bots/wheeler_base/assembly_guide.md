@@ -54,7 +54,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 3. **Assemble base** (`base`):
    - Mount LiPo2S-1000 (battery) at bottom position
-   - Mount OV5647 (camera) at front position using 2x M2
+   - Mount OV5647 (camera) at front position using 4x M2
    - Mount RaspberryPiZero2W (pi) at top position using 4x M2.5
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):

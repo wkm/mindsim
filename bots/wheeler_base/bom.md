@@ -26,7 +26,7 @@
 
 | Fastener | Qty | Usage |
 |----------|-----|-------|
-| M2 | 2 | 2x for OV5647 |
+| M2 | 4 | 4x for OV5647 |
 | M2.5 | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
 | M3 | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
 

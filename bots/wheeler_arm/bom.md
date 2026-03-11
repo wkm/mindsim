@@ -11,8 +11,8 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 218 | PLA/PETG frame |
-| **Total** | | | **660** | |
+| Structural (printed) | — | — | 215 | PLA/PETG frame |
+| **Total** | | | **657** | |
 
 ## Power Budget
 
@@ -26,7 +26,7 @@
 
 | Fastener | Qty | Usage |
 |----------|-----|-------|
-| M2 | 2 | 2x for OV5647 |
+| M2 | 4 | 4x for OV5647 |
 | M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
 | M3 | 48 | 6x per joint bracket (6 joints); 6x for Pololu 90x10mm Wheel |
 

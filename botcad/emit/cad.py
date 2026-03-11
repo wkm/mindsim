@@ -203,6 +203,12 @@ def make_component_solid(component: Component):
 
         return servo_solid(component)
 
+    # Cameras: use detailed solid from camera module
+    if isinstance(component, CameraSpec):
+        from botcad.components.camera import camera_solid
+
+        return camera_solid(component)
+
     return Box(
         dims[0],
         dims[1],

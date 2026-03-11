@@ -93,7 +93,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 9. **Attach hand** to forearm via STS3215 at joint `wrist` (axis: vertical):
    - Screw servo into forearm bracket using 6x M3 screws through mounting ears
    - Attach hand coupler to servo horn using 8x M2.5 screws
-   - Mount OV5647 (camera) at front position using 2x M2
+   - Mount OV5647 (camera) at front position using 4x M2
 
 10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 

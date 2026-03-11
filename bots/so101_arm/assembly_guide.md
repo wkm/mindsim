@@ -87,7 +87,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 8. **Attach wrist_roll** to wrist via STS3215 at joint `wrist_roll` (axis: vertical):
    - Screw servo into wrist bracket using 6x M3 screws through mounting ears
    - Attach wrist_roll coupler to servo horn using 8x M2.5 screws
-   - Mount PiCamera2 (camera) at front position using 2x M2
+   - Mount PiCamera2 (camera) at front position using 4x M2
 
 9. **Attach jaw** to wrist_roll via STS3215 at joint `gripper` (axis: roll):
    - Screw servo into wrist_roll bracket using 6x M3 screws through mounting ears
