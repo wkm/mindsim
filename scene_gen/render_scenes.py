@@ -17,6 +17,7 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from botcad.emit.composite import save_png
 from scene_gen import SceneComposer
 from scene_gen.archetypes import list_archetypes
 from scene_gen.composer import describe_scene, scene_id
@@ -166,7 +167,7 @@ def render_scene_grid(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / out_name
-    grid.save(out_path)
+    save_png(grid, out_path)
     return out_path
 
 

@@ -25,7 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 from botcad.component import Component, ServoSpec
-from botcad.emit.composite import PNG_DPI, grid
+from botcad.emit.composite import grid, save_png
 from botcad.emit.render3d import (
     COLOR_BRACKET,
     COLOR_COUPLER,
@@ -469,7 +469,7 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
         img = render_component_views(comp, name)
         out_path = components_dir / filename
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"  {out_path}")
 
     # Render servo variants (position + continuous)
@@ -483,7 +483,7 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
             img = render_component_views(variant, display_name)
             out_path = components_dir / filename
-            img.save(out_path, optimize=True, dpi=PNG_DPI)
+            save_png(img, out_path)
             print(f"  {out_path}")
 
     # Render bracket assemblies for each servo
@@ -493,7 +493,7 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
         img = render_bracket_views(servo, name)
         out_path = components_dir / filename
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"  {out_path}")
 
     print(f"  component renders done ({time.perf_counter() - t0:.1f}s)")
@@ -507,6 +507,7 @@ if __name__ == "__main__":
         OV5647,
         STS3215,
         LiPo2S,
+        PiCamera2,
         PololuWheel90mm,
         RaspberryPiZero2W,
     )
@@ -519,6 +520,7 @@ if __name__ == "__main__":
         ("servo", "STS3215 (continuous)", STS3215(continuous=True)),
         ("wheel", "Pololu 90x10mm Wheel", PololuWheel90mm()),
         ("camera", "OV5647", OV5647()),
+        ("camera", "PiCamera2", PiCamera2()),
         ("battery", "LiPo2S-1000", LiPo2S(1000)),
         ("compute", "RaspberryPiZero2W", RaspberryPiZero2W()),
     ]
@@ -527,7 +529,7 @@ if __name__ == "__main__":
         img = render_component_views(comp, name)
         safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
         out_path = out_dir / f"test_{category}_{safe_name}.png"
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"Saved: {out_path}")
 
     # Bracket tear sheets
@@ -540,5 +542,5 @@ if __name__ == "__main__":
     ]:
         img = render_fn(servo, "STS3215")
         out_path = out_dir / f"test_{label}_sts3215.png"
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"Saved: {out_path}")

@@ -38,7 +38,7 @@ import numpy as np
 from PIL import Image
 
 from botcad.component import Vec3
-from botcad.emit.composite import PNG_DPI, filmstrip
+from botcad.emit.composite import filmstrip, save_png
 from botcad.emit.render3d import Color, Renderer3D, SceneBuilder
 
 # ── Config ──
@@ -91,13 +91,12 @@ class SweepResult:
             self.collisions,
             cell_w=SWEEP_W,
             cell_h=SWEEP_H,
-            elapsed=self.elapsed,
         )
 
     def save(self, path: str | Path) -> Path:
         """Save filmstrip to PNG."""
         out = Path(path)
-        self.image().save(out, optimize=True, dpi=PNG_DPI)
+        save_png(self.image(), out)
         return out
 
 

@@ -17,6 +17,7 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from botcad.emit.composite import save_png
 from scene_gen import SceneComposer, concepts
 from scene_gen.composer import PlacedObject
 from scene_gen.primitives import GeomType, Prim
@@ -227,7 +228,7 @@ def render_concept(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{concept_name}.png"
-    grid.save(out_path)
+    save_png(grid, out_path)
     return out_path
 
 

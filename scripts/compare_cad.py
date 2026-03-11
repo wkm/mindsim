@@ -55,7 +55,7 @@ def render_diff_sheet(output_dir: Path, name: str, artifacts: dict[str, Path]):
     """Generates a composite PNG showing the diff from multiple angles."""
     from PIL import Image, ImageDraw
 
-    from botcad.emit.composite import FONT_LABEL, FONT_TITLE, PNG_DPI
+    from botcad.emit.composite import FONT_LABEL, FONT_TITLE, save_png
     from botcad.emit.render3d import (
         COLOR_BRACKET,
         VIEWS_4,
@@ -123,7 +123,7 @@ def render_diff_sheet(output_dir: Path, name: str, artifacts: dict[str, Path]):
         canvas.paste(img, (x, y + label_h))
 
     out_path = output_dir / f"{name}_diff_overview.png"
-    canvas.save(out_path, optimize=True, dpi=PNG_DPI)
+    save_png(canvas, out_path)
     return out_path
 
 

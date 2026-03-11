@@ -25,6 +25,7 @@ import numpy as np
 from fpdf import FPDF
 from PIL import Image
 
+from botcad.emit.composite import save_png
 from botcad.emit.render3d import white_background
 from botcad.emit.renders import (
     _configure_spec,
@@ -40,6 +41,8 @@ class DeterministicFPDF(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._custom_file_id = None
+        self.set_producer("MindSim")
+        self.set_creator("MindSim BotCAD")
 
     def set_custom_file_id(self, file_id: str):
         self._custom_file_id = file_id
@@ -774,7 +777,7 @@ def _composite_collision_pdf(strips, output_dir: Path) -> Path:
                 for fi, (frame, label, has_col) in enumerate(zip(frames, labels, cols)):
                     x = MARGIN + fi * (frame_w + gap)
                     p = tmp / f"c_{jname}_{row_idx}_{fi}.png"
-                    frame.save(str(p))
+                    save_png(frame, p)
 
                     pdf.set_fill_color(*(COLLISION_COLOR if has_col else CLEAR_COLOR))
                     pdf.rect(
@@ -1147,8 +1150,8 @@ def _draw_before_after(pdf, tmp, prefix, before, after, frame_w, frame_h, gap, y
     """Draw a before/after frame pair with arrow between them."""
     p_before = tmp / f"{prefix}_before.png"
     p_after = tmp / f"{prefix}_after.png"
-    before.save(str(p_before))
-    after.save(str(p_after))
+    save_png(before, p_before)
+    save_png(after, p_after)
 
     x1 = MARGIN
     x2 = MARGIN + frame_w + gap
@@ -1225,7 +1228,7 @@ def _composite_instructions_pdf(
             overview_y = MARGIN + 26
 
             p_overview = tmp / "overview.png"
-            overview_frame.save(str(p_overview))
+            save_png(overview_frame, p_overview)
             pdf.set_draw_color(200, 200, 200)
             pdf.rect(
                 overview_x - 0.5,
@@ -1256,7 +1259,7 @@ def _composite_instructions_pdf(
                 minimap_x = page_w - MARGIN - minimap_mm
                 minimap_y = MARGIN
                 p_minimap = tmp / f"minimap_{strip.jname}.png"
-                strip.minimap.save(str(p_minimap))
+                save_png(strip.minimap, p_minimap)
                 pdf.set_draw_color(200, 200, 200)
                 pdf.rect(
                     minimap_x - 0.5,

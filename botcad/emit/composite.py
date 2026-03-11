@@ -128,7 +128,6 @@ def filmstrip(
     collisions: list[bool] | None = None,
     cell_w: int = 600,
     cell_h: int = 600,
-    elapsed: float = 0.0,
 ) -> Image.Image:
     """Composite a horizontal filmstrip with optional collision indicators.
 
@@ -139,7 +138,6 @@ def filmstrip(
         collisions: Per-frame collision flag (None = no collision checking).
         cell_w: Width of each frame cell.
         cell_h: Height of each frame cell.
-        elapsed: Render time for the header.
     """
     n = len(frames)
     if n == 0:
@@ -165,8 +163,7 @@ def filmstrip(
     lo = min(angles_deg) if angles_deg else 0
     hi = max(angles_deg) if angles_deg else 0
     col_text = "  COLLISIONS DETECTED" if has_collisions else ""
-    time_text = f"  ({elapsed:.1f}s)" if elapsed > 0 else ""
-    header = f"ROM sweep: {title}  [{lo:+.0f}° .. {hi:+.0f}°]{time_text}{col_text}"
+    header = f"ROM sweep: {title}  [{lo:+.0f}° .. {hi:+.0f}°]{col_text}"
     draw.text((margin, margin), header, fill=(0, 0, 0), font=FONT_LABEL)
 
     # ROM bar
@@ -242,3 +239,12 @@ def _draw_rom_bar(
         fill=(100, 100, 100),
         width=1,
     )
+
+
+def save_png(image: Image.Image, path: str | Path):
+    """Save PNG without metadata for deterministic output."""
+    from PIL import PngImagePlugin
+
+    info = PngImagePlugin.PngInfo()
+    # Explicitly clear any existing info that might contain timestamps
+    image.save(path, "PNG", optimize=True, pnginfo=info, dpi=PNG_DPI)
