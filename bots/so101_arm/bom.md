@@ -10,8 +10,8 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 196 | PLA/PETG frame |
-| **Total** | | | **594** | |
+| Structural (printed) | — | — | 191 | PLA/PETG frame |
+| **Total** | | | **589** | |
 
 ## Power Budget
 
@@ -25,7 +25,7 @@
 
 | Fastener | Qty | Usage |
 |----------|-----|-------|
-| M2 | 2 | 2x for PiCamera2 |
+| M2 | 4 | 4x for PiCamera2 |
 | M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
 | M3 | 36 | 6x per joint bracket (6 joints) |
 
