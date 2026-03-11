@@ -6,12 +6,12 @@
 
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
-| STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
+| STS3215 | 6 | 45.4 x 24.8 x 37.9 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 197 | PLA/PETG frame |
-| **Total** | | | **595** | |
+| Structural (printed) | — | — | 196 | PLA/PETG frame |
+| **Total** | | | **594** | |
 
 ## Power Budget
 
@@ -33,5 +33,5 @@
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 53.9 | 0.0 |
+| servo_bus | uart_half_duplex | 54.2 | 0.0 |
 | power | power | 8.5 | 0.0 |

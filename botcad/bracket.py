@@ -336,7 +336,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         slot = slot.locate(Location((slot_x, cy, cz)))
         shell = shell - slot
 
-    return shell
+    return _as_solid(shell)
 
 
 @dataclass(frozen=True)
@@ -599,7 +599,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         slot = slot.locate(Location((slot_x, cy, cz)))
         shell = shell - slot
 
-    return shell
+    return _as_solid(shell)
 
 
 def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
@@ -968,4 +968,4 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         hole = hole.locate(Location((hx, hy, rear_z + 0.001)))
         shell = shell - hole
 
-    return shell
+    return _as_solid(shell)
