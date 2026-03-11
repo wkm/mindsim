@@ -601,7 +601,9 @@ def _make_body_solid(
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = body.dimensions
 
-    if body.shape is BodyShape.CYLINDER:
+    if body.custom_solid is not None:
+        shell = _ensure_solid(body.custom_solid)
+    elif body.shape is BodyShape.CYLINDER:
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
 
