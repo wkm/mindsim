@@ -19,7 +19,7 @@
       <inertial pos="-0.002203 0.000000 0.006183" mass="0.288017" fullinertia="1.219413e-04 4.215734e-04 3.720717e-04 3.928541e-17 9.543170e-06 2.083242e-17"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
-      <geom name="comp_base_pi" type="box" size="0.032500 0.015000 0.002500" pos="0.000000 0.000000 0.000000" rgba="0.0 0.5 0.0 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_base_pi" type="box" size="0.032500 0.015000 0.002500" pos="0.000000 0.000000 0.000000" rgba="0.13 0.55 0.13 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="comp_base_battery" type="box" size="0.036500 0.017500 0.009000" pos="0.000000 0.000000 -0.016000" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.016300" pos="-0.043700 0.000000 0.012500" quat="0.000000 -0.707107 0.000000 0.707107" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
       <geom name="left_wheel_servo_boss" type="cylinder" size="0.004500 0.001600" pos="-0.061600 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
@@ -69,10 +69,10 @@
       <geom name="rear_shoulder_yaw_rear_2" type="cylinder" size="0.0013 0.001" pos="0.004950 0.004950 0.006100" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="rear_shoulder_yaw_rear_3" type="cylinder" size="0.0013 0.001" pos="-0.004950 -0.004950 0.006100" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="rear_shoulder_yaw_rear_4" type="cylinder" size="0.0013 0.001" pos="0.004950 -0.004950 0.006100" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_base_pi_m1" type="cylinder" size="0.0013 0.001" pos="-0.029000 -0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_base_pi_m2" type="cylinder" size="0.0013 0.001" pos="0.029000 -0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_base_pi_m3" type="cylinder" size="0.0013 0.001" pos="-0.029000 0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_base_pi_m4" type="cylinder" size="0.0013 0.001" pos="0.029000 0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_base_pi_m1" type="cylinder" size="0.0014 0.001" pos="-0.029000 -0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_base_pi_m2" type="cylinder" size="0.0014 0.001" pos="0.029000 -0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_base_pi_m3" type="cylinder" size="0.0014 0.001" pos="-0.029000 0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_base_pi_m4" type="cylinder" size="0.0014 0.001" pos="0.029000 0.011500 0.000000" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="wire_servo_bus_base_0" type="capsule" fromto="0.000000 0.000000 0.000000 -0.027400 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_servo_bus_base_1" type="capsule" fromto="-0.027400 0.000000 0.000000 -0.027400 0.000000 0.020500" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_servo_bus_base_2" type="capsule" fromto="-0.027400 0.000000 0.020500 -0.027400 0.000000 0.000000" size="0.0009" rgba="0.2 0.4 1.0 0.9" contype="0" conaffinity="0" group="2"/>
