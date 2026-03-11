@@ -191,6 +191,11 @@ def make_component_solid(component: Component):
 
     dims = component.dimensions
 
+    if component.name == "RaspberryPiZero2W":
+        from botcad.components.compute import raspberry_pi_zero_solid
+
+        return raspberry_pi_zero_solid()
+
     # Wheels: detailed tire/hub geometry
     if "Wheel" in component.name:
         r = dims[0] / 2
