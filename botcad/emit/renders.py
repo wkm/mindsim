@@ -25,6 +25,7 @@ from botcad.emit.composite import (  # noqa: F401
     FONT_TITLE,
     PNG_DPI,
     filmstrip,
+    save_png,
 )
 from botcad.emit.render3d import VIEWS_4, white_background  # noqa: F401
 
@@ -199,7 +200,7 @@ def render_overview(
         canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_overview.png"
-    canvas.save(out, optimize=True, dpi=PNG_DPI)
+    save_png(canvas, out)
     print(f"  overview: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 
@@ -306,7 +307,7 @@ def render_closeups(
             canvas.paste(img, (x, img_y))
 
     out = output_dir / "test_closeups.png"
-    canvas.save(out, optimize=True, dpi=PNG_DPI)
+    save_png(canvas, out)
     print(f"  closeups: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 
@@ -467,7 +468,6 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
     renderer.close()
 
     # Composite: one filmstrip per joint, stacked vertically
-    elapsed = time.perf_counter() - t0
     strip_images = []
     for jname, frames, frame_labels, collisions in strips:
         angles = [float(lbl.replace("°", "").replace("+", "")) for lbl in frame_labels]
@@ -478,7 +478,6 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
             collisions,
             cell_w=SWEEP_W,
             cell_h=SWEEP_H,
-            elapsed=elapsed / max(len(strips), 1),
         )
         strip_images.append(strip_img)
 
@@ -503,7 +502,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
         y += strip_img.height
 
     out = output_dir / "test_sweep.png"
-    canvas.save(out, optimize=True, dpi=PNG_DPI)
+    save_png(canvas, out)
     print(f"  sweeps: {out} ({time.perf_counter() - t0:.1f}s)")
     return out
 

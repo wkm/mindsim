@@ -45,13 +45,13 @@ def regen_component_renders() -> None:
         RaspberryPiZero2W,
     )
     from botcad.emit.component_renders import (
-        PNG_DPI,
         render_bracket_views,
         render_component_views,
         render_coupler_assembly_views,
         render_coupler_views,
         render_cradle_views,
     )
+    from botcad.emit.composite import save_png
     from botcad.emit.drawings import emit_component_drawings
 
     out_dir = Path("botcad/components")
@@ -71,7 +71,7 @@ def regen_component_renders() -> None:
         img = render_component_views(comp, name)
         safe_name = name.lower().replace(" ", "_").replace("(", "").replace(")", "")
         out_path = out_dir / f"test_{category}_{safe_name}.png"
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"  component: {out_path}")
 
     # Bracket tear sheets (3D renders)
@@ -84,7 +84,7 @@ def regen_component_renders() -> None:
     ]:
         img = render_fn(servo, "STS3215")
         out_path = out_dir / f"test_{label}_sts3215.png"
-        img.save(out_path, optimize=True, dpi=PNG_DPI)
+        save_png(img, out_path)
         print(f"  bracket: {out_path}")
 
     # Bracket technical drawings (2D section SVGs)
