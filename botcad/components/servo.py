@@ -30,7 +30,7 @@ from botcad.component import BusType, MountingEar, MountPoint, ServoSpec, WirePo
 #
 # Mounting flanges extend 3.2mm below body bottom (35.0 - 31.8 = 3.2mm)
 #   Flange bottom at Z = -19.1mm, screw holes at Z ≈ -17.5mm
-#   6x M3 clearance holes (ø4.2mm from STEP) at X: +4.2, -16.5, -20.3mm
+#   6x M3 clearance holes (ø3.2mm) at X: +17.0, 0.0, -17.0mm
 #
 # Output shaft center at X=+12.5, Y=0, Z=+15.9 (body top face)
 # Rear (blind) shaft at same XY, support bearing in -Z
@@ -117,28 +117,27 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         shaft_boss_radius=0.0045,  # 4.5mm radius
         shaft_boss_height=0.0032,  # 3.2mm protrusion above body top
         mounting_ears=(
-            # 6x M3 clearance holes (ø4.2mm) in mounting flanges below body
+            # 6x M3 clearance holes (ø3.2mm) in mounting flanges below body
             # Flanges extend 2.1mm below body bottom (Z=-16.3mm)
             # Screw hole centers at Z=-17.35mm (midpoint of flange)
-            # Y=±10.25mm (inside body width), 3 X positions per side
+            # Y=±10.25mm (inside body width), symmetric X positions
             MountingEar(
-                "ear_1", pos=(+0.0042, -0.01025, -0.01735), hole_diameter=0.0042
+                "ear_1", pos=(+0.0170, -0.01025, -0.01735), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_2", pos=(-0.0165, -0.01025, -0.01735), hole_diameter=0.0042
+                "ear_2", pos=(0.0000, -0.01025, -0.01735), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_3", pos=(+0.0042, +0.01025, -0.01735), hole_diameter=0.0042
+                "ear_3", pos=(+0.0170, +0.01025, -0.01735), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_4", pos=(-0.0165, +0.01025, -0.01735), hole_diameter=0.0042
-            ),
-            # Additional pair at far back end (X=-20.3mm)
-            MountingEar(
-                "ear_5", pos=(-0.0203, -0.01025, -0.01735), hole_diameter=0.0042
+                "ear_4", pos=(0.0000, +0.01025, -0.01735), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_6", pos=(-0.0203, +0.01025, -0.01735), hole_diameter=0.0042
+                "ear_5", pos=(-0.0170, -0.01025, -0.01735), hole_diameter=0.0032
+            ),
+            MountingEar(
+                "ear_6", pos=(-0.0170, +0.01025, -0.01735), hole_diameter=0.0032
             ),
         ),
         horn_mounting_points=tuple(

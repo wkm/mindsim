@@ -197,30 +197,11 @@ def make_component_solid(component: Component):
         w = dims[2]
         return _make_wheel_solid(r, w)
 
-    # Servos: use body_dimensions (without ears/horn) + shaft boss
+    # Servos: use detailed solid from bracket module
     if isinstance(component, ServoSpec):
-        dims = component.effective_body_dims
+        from botcad.bracket import servo_solid
 
-        body = Box(
-            dims[0], dims[1], dims[2], align=(Align.CENTER, Align.CENTER, Align.CENTER)
-        )
-
-        if component.shaft_boss_radius > 0 and component.shaft_boss_height > 0:
-            from build123d import Cylinder, Location
-
-            boss = Cylinder(
-                component.shaft_boss_radius,
-                component.shaft_boss_height,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
-            boss = boss.locate(
-                Location(
-                    (component.shaft_offset[0], component.shaft_offset[1], dims[2] / 2)
-                )
-            )
-            body = body + boss
-
-        return body
+        return servo_solid(component)
 
     return Box(
         dims[0],

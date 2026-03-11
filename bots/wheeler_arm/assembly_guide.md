@@ -50,7 +50,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| base | `meshes/base.stl` | box | 104.2 x 51.0 x 50.0 |
+| base | `meshes/base.stl` | box | 103.4 x 51.0 x 50.0 |
 | left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | turntable | `meshes/turntable.stl` | cylinder | 60.0 x 60.0 x 47.5 |
