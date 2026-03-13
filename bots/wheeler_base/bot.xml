@@ -8,6 +8,10 @@
     <mesh name="base_mesh" file="base.stl" scale="1 1 1"/>
     <mesh name="left_rim_mesh" file="left_rim.stl" scale="1 1 1"/>
     <mesh name="right_rim_mesh" file="right_rim.stl" scale="1 1 1"/>
+    <mesh name="comp_base_battery_mesh" file="comp_base_battery.stl" scale="1 1 1"/>
+    <mesh name="comp_base_camera_mesh" file="comp_base_camera.stl" scale="1 1 1"/>
+    <mesh name="comp_base_pi_mesh" file="comp_base_pi.stl" scale="1 1 1"/>
+    <mesh name="servo_STS3215_mesh" file="servo_STS3215.stl" scale="1 1 1"/>
   </asset>
   <worldbody>
     <body name="base" pos="0 0 0.0450">
@@ -16,13 +20,11 @@
       <geom type="mesh" mesh="base_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
       <camera name="camera_cam" fovy="72.0" pos="0.000000 0.028000 0.000000" euler="0 3.141592653589793 0"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
-      <geom name="comp_base_battery" type="box" size="0.017500 0.036500 0.009000" pos="0.000000 0.000000 -0.013500" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
-      <geom name="comp_base_camera" type="box" size="0.012500 0.012000 0.004500" pos="0.000000 0.028000 0.000000" rgba="0.1 0.4 0.15 1.0" contype="0" conaffinity="0" group="1"/>
-      <geom name="comp_base_pi" type="box" size="0.015000 0.032500 0.002500" pos="0.000000 0.000000 0.020000" rgba="0.13 0.55 0.13 1.0" contype="0" conaffinity="0" group="1"/>
-      <geom name="left_wheel_servo" type="box" size="0.022700 0.012400 0.016300" pos="-0.048700 0.000000 0.012500" quat="0.000000 -0.707107 0.000000 0.707107" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="left_wheel_servo_boss" type="cylinder" size="0.004500 0.001600" pos="-0.066600 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
-      <geom name="right_wheel_servo" type="box" size="0.022700 0.012400 0.016300" pos="0.048700 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1"/>
-      <geom name="right_wheel_servo_boss" type="cylinder" size="0.004500 0.001600" pos="0.066600 0.000000 0.000000" rgba="0.2 0.8 0.2 0.8" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+      <geom name="comp_base_battery" type="mesh" mesh="comp_base_battery_mesh" pos="0.000000 0.000000 -0.013500" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_base_camera" type="mesh" mesh="comp_base_camera_mesh" pos="0.000000 0.028000 0.000000" rgba="0.1 0.4 0.15 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_base_pi" type="mesh" mesh="comp_base_pi_mesh" pos="0.000000 0.000000 0.020000" rgba="0.13 0.55 0.13 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="left_wheel_servo" type="mesh" mesh="servo_STS3215_mesh" pos="-0.048700 0.000000 0.012500" quat="0.000000 -0.707107 0.000000 0.707107" rgba="0.15 0.15 0.15 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="right_wheel_servo" type="mesh" mesh="servo_STS3215_mesh" pos="0.048700 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.15 0.15 0.15 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_1" type="cylinder" size="0.0016 0.001" pos="-0.031350 0.010250 -0.004500" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_2" type="cylinder" size="0.0016 0.001" pos="-0.031350 0.010250 0.012500" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>
       <geom name="screw_left_wheel_ear_3" type="cylinder" size="0.0016 0.001" pos="-0.031350 -0.010250 -0.004500" rgba="0.7 0.7 0.7 0.9" contype="0" conaffinity="0" group="1"/>

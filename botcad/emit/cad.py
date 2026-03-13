@@ -260,6 +260,39 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
             _update_mass_from_solid(body, solid)
 
+    # --- Per-component STLs (for MuJoCo mesh geoms) ---
+    # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
+    comp_stl_count = 0
+    for body in bot.all_bodies:
+        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
+        if is_wheel_body:
+            continue  # wheel mesh already represents the component
+        for mount in body.mounts:
+            comp_solid = make_component_solid(mount.component)
+            if comp_solid is None:
+                continue
+            # If rotate_z, rotate the solid 90° around Z to match body frame
+            if mount.rotate_z:
+                comp_solid = comp_solid.locate(Location((0, 0, 0), (0, 0, 90)))
+            stl_name = f"comp_{body.name}_{mount.label}.stl"
+            export_stl(comp_solid, str(meshes_dir / stl_name))
+            comp_stl_count += 1
+
+    # --- Per-servo STLs (for MuJoCo mesh geoms) ---
+    # Each servo gets an STL at origin; MuJoCo positions via servo_placement().
+    servo_stl_cache: dict[str, str] = {}
+    servo_stl_count = 0
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            servo = joint.servo
+            # All servos of same model share the same base geometry
+            if servo.name not in servo_stl_cache:
+                s_solid = servo_solid(servo)
+                stl_name = f"servo_{servo.name}.stl"
+                export_stl(s_solid, str(meshes_dir / stl_name))
+                servo_stl_cache[servo.name] = stl_name
+                servo_stl_count += 1
+
     # --- STEP assembly (printable parts, positioned + colored) ---
     assembly_parts = []
     part_modules: list[str | None] = []  # parallel list: module name per part
