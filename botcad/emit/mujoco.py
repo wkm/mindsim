@@ -59,6 +59,34 @@ def _build_bot_xml(bot: Bot) -> str:
             scale="1 1 1",  # STL already in meters
         )
 
+    # Component mesh assets (Pi, battery, camera, etc.)
+    for body in bot.all_bodies:
+        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
+        if is_wheel_body:
+            continue
+        for mount in body.mounts:
+            mesh_name = f"comp_{body.name}_{mount.label}_mesh"
+            SubElement(
+                asset,
+                "mesh",
+                name=mesh_name,
+                file=f"comp_{body.name}_{mount.label}.stl",
+                scale="1 1 1",
+            )
+
+    # Servo mesh assets (one per unique servo model)
+    seen_servos: set[str] = set()
+    for joint in bot.all_joints:
+        if joint.servo.name not in seen_servos:
+            seen_servos.add(joint.servo.name)
+            SubElement(
+                asset,
+                "mesh",
+                name=f"servo_{joint.servo.name}_mesh",
+                file=f"servo_{joint.servo.name}.stl",
+                scale="1 1 1",
+            )
+
     # Worldbody
     worldbody = SubElement(root, "worldbody")
     if bot.root is not None:
@@ -322,10 +350,10 @@ def _emit_body_tree(
             size="0.005",
         )
 
-    # Mounted component visualization — boxes at resolved positions
+    # Mounted component visualization — meshes at resolved positions
     _emit_mounted_components(body_el, body, is_wheel=is_wheel)
 
-    # Servo visualization geoms — green boxes + shaft boss at each joint
+    # Servo visualization geoms — detailed mesh at each joint
     # Cache servo_placement per joint (also used by _emit_mounting_hardware).
     joint_placements: dict[str, tuple] = {}
     for joint in body.joints:
@@ -338,39 +366,15 @@ def _emit_body_tree(
             body_el,
             "geom",
             name=f"{joint.name}_servo",
-            type="box",
-            size=_half_dims(servo.effective_body_dims),
+            type="mesh",
+            mesh=f"servo_{servo.name}_mesh",
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
-            rgba="0.2 0.8 0.2 0.8",
+            rgba="0.15 0.15 0.15 1.0",
             contype="0",
             conaffinity="0",
             group="1",
         )
-
-        # Shaft boss cylinder on top of servo body
-        if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
-            boss_local = (
-                servo.shaft_offset[0],
-                servo.shaft_offset[1],
-                servo.body_dimensions[2] / 2 + servo.shaft_boss_height / 2,
-            )
-            boss_world = _add_vec3(center, rotate_vec(quat, boss_local))
-            boss_quat = _z_to_axis_quat(joint.axis)
-
-            boss_attribs: dict[str, str] = {
-                "name": f"{joint.name}_servo_boss",
-                "type": "cylinder",
-                "size": f"{servo.shaft_boss_radius:.6f} {servo.shaft_boss_height / 2:.6f}",
-                "pos": _fmt_vec3(boss_world),
-                "rgba": "0.2 0.8 0.2 0.8",
-                "contype": "0",
-                "conaffinity": "0",
-                "group": "1",
-            }
-            if boss_quat is not None:
-                boss_attribs["quat"] = _fmt_quat(boss_quat)
-            SubElement(body_el, "geom", **boss_attribs)
 
     # Mounting hardware visualization — screws at ear/mount positions
     _emit_mounting_hardware(body_el, body, joint_placements)
@@ -395,12 +399,13 @@ def _emit_mounted_components(
     for mount in body.mounts:
         comp = mount.component
         r, g, b, a = comp.color
+        mesh_name = f"comp_{body.name}_{mount.label}_mesh"
         SubElement(
             parent_el,
             "geom",
             name=f"comp_{body.name}_{mount.label}",
-            type="box",
-            size=_half_dims(mount.placed_dimensions),
+            type="mesh",
+            mesh=mesh_name,
             pos=_fmt_vec3(mount.resolved_pos),
             rgba=f"{r} {g} {b} {a}",
             contype="0",
