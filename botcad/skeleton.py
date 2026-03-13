@@ -129,6 +129,7 @@ class Joint:
         jaw_thickness: float = 0.0,
         padding: float = 0.005,
         dimensions: Vec3 | None = None,
+        custom_solid: object | None = None,
         module: Module | None = None,
     ) -> Body:
         """Create and attach a child body to this joint."""
@@ -145,6 +146,7 @@ class Joint:
             jaw_thickness=jaw_thickness,
             padding=padding,
             explicit_dimensions=dimensions,
+            custom_solid=custom_solid,
             module=module,
         )
         self.child = b
@@ -171,6 +173,7 @@ class Body:
     jaw_thickness: float = 0.0
     padding: float = 0.005  # clearance around components (meters)
     explicit_dimensions: Vec3 | None = None
+    custom_solid: object | None = None
     module: Module | None = None
 
     mounts: list[Mount] = field(default_factory=list)
@@ -196,6 +199,10 @@ class Body:
             return self.explicit_dimensions
         if self.solved_dimensions is not None:
             return self.solved_dimensions
+        if self.custom_solid is not None:
+            # Fall back to bounding box of custom solid if no dimensions explicitly given
+            ab = self.custom_solid.bounding_box()  # type: ignore
+            return (ab.size.X, ab.size.Y, ab.size.Z)
         return self._shape_default_dimensions()
 
     def _shape_default_dimensions(self) -> Vec3:
@@ -310,10 +317,15 @@ class Bot:
         *,
         padding: float = 0.01,
         dimensions: Vec3 | None = None,
+        custom_solid: object | None = None,
     ) -> Body:
         """Create the root body of the robot."""
         b = Body(
-            name=name, shape=shape, padding=padding, explicit_dimensions=dimensions
+            name=name,
+            shape=shape,
+            padding=padding,
+            explicit_dimensions=dimensions,
+            custom_solid=custom_solid,
         )
         self.root = b
         return b
