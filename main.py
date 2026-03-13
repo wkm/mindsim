@@ -19,6 +19,8 @@ Requires mjpython (not plain python) for MuJoCo viewer/play features.
 from __future__ import annotations
 
 import argparse
+import functools
+import http.server
 import logging
 import os
 import re
@@ -26,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import webbrowser
 from pathlib import Path
 
 from textual import work
@@ -398,6 +401,56 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
+def _run_web_viewer(bot_name: str, port: int = 8080):
+    """Launch a local HTTP server and open the 3D bot viewer in the browser."""
+    project_root = Path(__file__).parent
+    bot_dir = project_root / "bots" / bot_name
+
+    if not bot_dir.exists():
+        print(f"Error: Bot directory not found for {bot_name} at {bot_dir}")
+        sys.exit(1)
+
+    # Generate viewer_manifest.json if design.py is newer (or manifest missing)
+    design_py = bot_dir / "design.py"
+    manifest_json = bot_dir / "viewer_manifest.json"
+    needs_regen = design_py.exists() and (
+        not manifest_json.exists()
+        or design_py.stat().st_mtime > manifest_json.stat().st_mtime
+    )
+    if needs_regen:
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("design", design_py)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            bot = mod.build()
+            bot.solve()
+            from botcad.emit.viewer import emit_viewer_manifest
+
+            emit_viewer_manifest(bot, bot_dir)
+            print(f"Generated viewer_manifest.json for {bot_name}")
+        except Exception as e:
+            print(f"Warning: could not generate viewer manifest: {e}")
+
+    # Serve from project root so both /viewer/ and /bots/ are accessible
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler, directory=str(project_root)
+    )
+    url = f"http://localhost:{port}/viewer/?bot={bot_name}"
+    print(f"Serving {bot_name} viewer at {url}")
+    print("Press Ctrl+C to stop.")
+
+    webbrowser.open(url)
+
+    server = http.server.HTTPServer(("", port), handler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped.")
+        server.server_close()
+
+
 def _setup_logging() -> None:
     """Configure root logger level and install an excepthook.
 
@@ -445,6 +498,15 @@ def _build_parser() -> argparse.ArgumentParser:
         description="MindSim - single entry point for all modes",
     )
     sub = parser.add_subparsers(dest="command")
+
+    # web
+    p_web = sub.add_parser("web", help="Launch 3D bot viewer in browser")
+    p_web.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: wheeler_arm)"
+    )
+    p_web.add_argument(
+        "--port", type=int, default=8080, help="HTTP server port (default: 8080)"
+    )
 
     # scene
     sub.add_parser("scene", help="Scene gen preview (procedural furniture)")
@@ -602,6 +664,9 @@ def main():
     if args.command is None:
         # No subcommand → interactive TUI
         _run_tui()
+
+    elif args.command == "web":
+        _run_web_viewer(args.bot or "wheeler_arm", args.port)
 
     elif args.command == "scene":
         from sim.scene_preview import run_scene_preview
