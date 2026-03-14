@@ -77,6 +77,24 @@ class Component:
 
 
 @dataclass(frozen=True)
+class BatterySpec(Component):
+    """A battery pack with chemistries and cell counts."""
+
+    chemistry: str = "LiPo"
+    cells_s: int = 1
+    cells_p: int = 1
+
+
+@dataclass(frozen=True)
+class BearingSpec(Component):
+    """A ball bearing with dimensions and mounting type."""
+
+    od: float = 0.0  # outer diameter (meters)
+    id: float = 0.0  # inner diameter (meters)
+    width: float = 0.0  # thickness (meters)
+
+
+@dataclass(frozen=True)
 class CameraSpec(Component):
     """A camera module with optical parameters."""
 
