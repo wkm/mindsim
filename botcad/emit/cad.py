@@ -32,7 +32,7 @@ from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
-from botcad.component import BusType, CameraSpec
+from botcad.component import BearingSpec, BusType, CameraSpec
 from botcad.geometry import servo_placement
 from botcad.skeleton import BodyShape, BracketStyle
 
@@ -213,6 +213,18 @@ def make_component_solid(component: Component):
         from botcad.components.camera import camera_solid
 
         return camera_solid(component)
+
+    # Batteries: use detailed solid from battery module
+    from botcad.component import BatterySpec, BearingSpec
+
+    if isinstance(component, BatterySpec):
+        from botcad.components.battery import battery_solid
+
+        return battery_solid(component)
+
+    # Bearings: outer ring - inner bore
+    if isinstance(component, BearingSpec):
+        return _make_bearing_solid(component)
 
     return Box(
         dims[0],
@@ -755,12 +767,20 @@ def _make_body_solid(
     if not is_wheel_body:
         for mount in body.mounts:
             cd = mount.placed_dimensions
-            pocket = Box(
-                cd[0] + 0.0005,
-                cd[1] + 0.0005,
-                cd[2] + 0.0005,
-                align=(Align.CENTER, Align.CENTER, Align.CENTER),
-            )
+            if isinstance(mount.component, BearingSpec):
+                # Bearings: cylindrical pocket with tolerance
+                tol = 0.0005  # 0.5mm total diameter clearance
+                pocket_r = mount.component.od / 2 + tol / 2
+                pocket_h = mount.component.width + 0.001  # through-cut margin
+                pocket = Cylinder(pocket_r, pocket_h, align=C)
+            else:
+                # Default: box pocket
+                pocket = Box(
+                    cd[0] + 0.0005,
+                    cd[1] + 0.0005,
+                    cd[2] + 0.0005,
+                    align=C,
+                )
             pocket = pocket.locate(Location(mount.resolved_pos))
             shell = shell - pocket
 
@@ -1258,6 +1278,19 @@ def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
         rz = math.atan2(siny_cosp, cosy_cosp)
 
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
+
+
+def _make_bearing_solid(bearing: BearingSpec):
+    """Create a detailed solid for a ball bearing."""
+    from build123d import Align, Cylinder
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    # Outer ring
+    outer = Cylinder(bearing.od / 2, bearing.width, align=C)
+    # Inner bore
+    inner = Cylinder(bearing.id / 2, bearing.width + 0.001, align=C)
+
+    return _as_solid(outer - inner)
 
 
 def emit_cad_for_module(bot: Bot, module_name: str, output_dir: Path) -> None:

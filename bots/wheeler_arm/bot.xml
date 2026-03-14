@@ -49,7 +49,7 @@
       <geom type="mesh" mesh="base_mesh" rgba="0.9 0.9 0.9 1.0" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
       <geom name="comp_base_pi" type="mesh" mesh="comp_base_pi_mesh" pos="0.000000 0.000000 0.000000" rgba="0.13 0.55 0.13 1.0" contype="0" conaffinity="0" group="1"/>
-      <geom name="comp_base_battery" type="mesh" mesh="comp_base_battery_mesh" pos="0.000000 0.000000 -0.016000" rgba="0.2 0.2 0.8 1.0" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_base_battery" type="mesh" mesh="comp_base_battery_mesh" pos="0.000000 0.000000 -0.016000" rgba="0.1 0.1 0.8 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="left_wheel_servo" type="mesh" mesh="servo_STS3215_mesh" pos="-0.043700 0.000000 0.012500" quat="0.000000 -0.707107 0.000000 0.707107" rgba="0.15 0.15 0.15 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="right_wheel_servo" type="mesh" mesh="servo_STS3215_mesh" pos="0.043700 0.000000 0.012500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.15 0.15 0.15 1.0" contype="0" conaffinity="0" group="1"/>
       <geom name="shoulder_yaw_servo" type="mesh" mesh="servo_STS3215_mesh" pos="-0.012500 0.000000 0.023700" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.15 0.15 0.15 1.0" contype="0" conaffinity="0" group="1"/>
