@@ -59,6 +59,98 @@ def _build_bot_xml(bot: Bot) -> str:
             scale="1 1 1",  # STL already in meters
         )
 
+    # Component mesh assets (Pi, battery, camera, etc.)
+    for body in bot.all_bodies:
+        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
+        if is_wheel_body:
+            continue
+        for mount in body.mounts:
+            mesh_name = f"comp_{body.name}_{mount.label}_mesh"
+            SubElement(
+                asset,
+                "mesh",
+                name=mesh_name,
+                file=f"comp_{body.name}_{mount.label}.stl",
+                scale="1 1 1",
+            )
+
+    # Servo mesh assets (one per unique servo model)
+    seen_servos: set[str] = set()
+    for joint in bot.all_joints:
+        if joint.servo.name not in seen_servos:
+            seen_servos.add(joint.servo.name)
+            SubElement(
+                asset,
+                "mesh",
+                name=f"servo_{joint.servo.name}_mesh",
+                file=f"servo_{joint.servo.name}.stl",
+                scale="1 1 1",
+            )
+
+    # Hardware mesh assets (one per unique diameter)
+    seen_diameters: set[float] = set()
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            for ear in joint.servo.mounting_ears:
+                if ear.diameter not in seen_diameters:
+                    seen_diameters.add(ear.diameter)
+                    SubElement(
+                        asset,
+                        "mesh",
+                        name=f"hardware_{ear.diameter:.4f}_mesh",
+                        file=f"hardware_{ear.diameter:.4f}.stl",
+                        scale="1 1 1",
+                    )
+            for mp in joint.servo.horn_mounting_points:
+                if mp.diameter not in seen_diameters:
+                    seen_diameters.add(mp.diameter)
+                    SubElement(
+                        asset,
+                        "mesh",
+                        name=f"hardware_{mp.diameter:.4f}_mesh",
+                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        scale="1 1 1",
+                    )
+        for mount in body.mounts:
+            for mp in mount.component.mounting_points:
+                if mp.diameter not in seen_diameters:
+                    seen_diameters.add(mp.diameter)
+                    SubElement(
+                        asset,
+                        "mesh",
+                        name=f"hardware_{mp.diameter:.4f}_mesh",
+                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        scale="1 1 1",
+                    )
+
+    # Horn mesh assets
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            if not joint.servo.continuous:
+                from botcad.bracket import horn_disc_params
+
+                if horn_disc_params(joint.servo):
+                    SubElement(
+                        asset,
+                        "mesh",
+                        name=f"horn_{joint.name}_mesh",
+                        file=f"horn_{joint.name}.stl",
+                        scale="1 1 1",
+                    )
+
+    # Wire mesh assets
+    for route in bot.wire_routes:
+        for i, seg in enumerate(route.segments):
+            if seg.straight_length >= 0.001:
+                mesh_name = f"wire_{route.label}_{seg.body_name}_{i}_mesh"
+                SubElement(
+                    asset,
+                    "mesh",
+                    name=mesh_name,
+                    file=f"wire_{route.label}_{seg.body_name}_{i}.stl",
+                    scale="1 1 1",
+                )
+
     # Worldbody
     worldbody = SubElement(root, "worldbody")
     if bot.root is not None:
@@ -254,14 +346,15 @@ def _emit_body_tree(
 
         params = horn_disc_params(parent_joint.servo)
         if params is not None:
+            # Disc is exported at center; MuJoCo positions it with offset
             ax, ay, az = parent_joint.axis
             ht = params.thickness / 2
             disc_pos = (ax * ht, ay * ht, az * ht)
 
             disc_attribs: dict[str, str] = {
                 "name": f"{parent_joint.name}_horn_disc",
-                "type": "cylinder",
-                "size": f"{params.radius:.6f} {ht:.6f}",
+                "type": "mesh",
+                "mesh": f"horn_{parent_joint.name}_mesh",
                 "pos": _fmt_vec3(disc_pos),
                 "rgba": "0.85 0.85 0.88 0.9",
                 "contype": "0",
@@ -269,10 +362,12 @@ def _emit_body_tree(
                 "group": "1",
             }
 
-            quat = _z_to_axis_quat(parent_joint.axis)
-            if quat is not None:
-                disc_attribs["quat"] = _fmt_quat(quat)
-
+            # Rotation is already baked into the horn STL (it was oriented in cad.py)
+            # So we don't need quat here if we exported it pre-rotated.
+            # WAIT: I exported it pre-rotated in cad.py using _orient_z_to_axis.
+            # But MuJoCo mesh assets are just point-clouds.
+            # Actually, _orient_z_to_axis in cad.py returned the rotated solid.
+            # So the STL is already in the correct orientation relative to disc_pos=0.
             SubElement(body_el, "geom", **disc_attribs)
 
     # Visual geom (mesh) — for wheel bodies, mesh is visual-only;
@@ -322,10 +417,10 @@ def _emit_body_tree(
             size="0.005",
         )
 
-    # Mounted component visualization — boxes at resolved positions
+    # Mounted component visualization — meshes at resolved positions
     _emit_mounted_components(body_el, body, is_wheel=is_wheel)
 
-    # Servo visualization geoms — green boxes + shaft boss at each joint
+    # Servo visualization geoms — detailed mesh at each joint
     # Cache servo_placement per joint (also used by _emit_mounting_hardware).
     joint_placements: dict[str, tuple] = {}
     for joint in body.joints:
@@ -338,39 +433,15 @@ def _emit_body_tree(
             body_el,
             "geom",
             name=f"{joint.name}_servo",
-            type="box",
-            size=_half_dims(servo.effective_body_dims),
+            type="mesh",
+            mesh=f"servo_{servo.name}_mesh",
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
-            rgba="0.2 0.8 0.2 0.8",
+            rgba="0.15 0.15 0.15 1.0",
             contype="0",
             conaffinity="0",
             group="1",
         )
-
-        # Shaft boss cylinder on top of servo body
-        if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
-            boss_local = (
-                servo.shaft_offset[0],
-                servo.shaft_offset[1],
-                servo.body_dimensions[2] / 2 + servo.shaft_boss_height / 2,
-            )
-            boss_world = _add_vec3(center, rotate_vec(quat, boss_local))
-            boss_quat = _z_to_axis_quat(joint.axis)
-
-            boss_attribs: dict[str, str] = {
-                "name": f"{joint.name}_servo_boss",
-                "type": "cylinder",
-                "size": f"{servo.shaft_boss_radius:.6f} {servo.shaft_boss_height / 2:.6f}",
-                "pos": _fmt_vec3(boss_world),
-                "rgba": "0.2 0.8 0.2 0.8",
-                "contype": "0",
-                "conaffinity": "0",
-                "group": "1",
-            }
-            if boss_quat is not None:
-                boss_attribs["quat"] = _fmt_quat(boss_quat)
-            SubElement(body_el, "geom", **boss_attribs)
 
     # Mounting hardware visualization — screws at ear/mount positions
     _emit_mounting_hardware(body_el, body, joint_placements)
@@ -395,12 +466,13 @@ def _emit_mounted_components(
     for mount in body.mounts:
         comp = mount.component
         r, g, b, a = comp.color
+        mesh_name = f"comp_{body.name}_{mount.label}_mesh"
         SubElement(
             parent_el,
             "geom",
             name=f"comp_{body.name}_{mount.label}",
-            type="box",
-            size=_half_dims(mount.placed_dimensions),
+            type="mesh",
+            mesh=mesh_name,
             pos=_fmt_vec3(mount.resolved_pos),
             rgba=f"{r} {g} {b} {a}",
             contype="0",
@@ -412,9 +484,8 @@ def _emit_mounted_components(
 def _emit_mounting_hardware(
     body_el: Element, body: Body, joint_placements: dict[str, tuple]
 ) -> None:
-    """Emit small cylinder geoms at screw/mounting positions."""
+    """Emit mesh geoms at screw/mounting positions."""
     _SCREW_RGBA = "0.7 0.7 0.7 0.9"
-    _SCREW_HEIGHT = "0.001"  # 1mm half-height
 
     # Servo mounting ears (bracket screw holes on this body's joints)
     for joint in body.joints:
@@ -425,8 +496,8 @@ def _emit_mounting_hardware(
                 body_el,
                 "geom",
                 name=f"screw_{joint.name}_{ear.label}",
-                type="cylinder",
-                size=f"{ear.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                type="mesh",
+                mesh=f"hardware_{ear.diameter:.4f}_mesh",
                 pos=_fmt_vec3(world_pos),
                 rgba=_SCREW_RGBA,
                 contype="0",
@@ -441,8 +512,8 @@ def _emit_mounting_hardware(
                 body_el,
                 "geom",
                 name=f"horn_{joint.name}_{mp.label}",
-                type="cylinder",
-                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                type="mesh",
+                mesh=f"hardware_{mp.diameter:.4f}_mesh",
                 pos=_fmt_vec3(world_pos),
                 rgba=_SCREW_RGBA,
                 contype="0",
@@ -457,8 +528,8 @@ def _emit_mounting_hardware(
                 body_el,
                 "geom",
                 name=f"rear_{joint.name}_{mp.label}",
-                type="cylinder",
-                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                type="mesh",
+                mesh=f"hardware_{mp.diameter:.4f}_mesh",
                 pos=_fmt_vec3(world_pos),
                 rgba=_SCREW_RGBA,
                 contype="0",
@@ -474,8 +545,8 @@ def _emit_mounting_hardware(
                 body_el,
                 "geom",
                 name=f"mount_{body.name}_{mount.label}_{mp.label}",
-                type="cylinder",
-                size=f"{mp.diameter / 2:.4f} {_SCREW_HEIGHT}",
+                type="mesh",
+                mesh=f"hardware_{mp.diameter:.4f}_mesh",
                 pos=_fmt_vec3(pos),
                 rgba=_SCREW_RGBA,
                 contype="0",
@@ -529,23 +600,22 @@ def _emit_body_wires(body_el: Element, body: Body, bot: Bot) -> None:
     """
     for route in bot.wire_routes:
         color = _WIRE_COLORS.get(route.bus_type, "0.5 0.5 0.5 0.9")
-        radius = _WIRE_RADIUS.get(route.bus_type, "0.0015")
         for i, seg in enumerate(route.segments):
             if seg.body_name != body.name:
                 continue
             # Skip degenerate segments (endpoints too close)
             if seg.straight_length < 0.001:
                 continue
+
+            # Wires were exported at their coordinates in cad.py
+            # So MuJoCo geom pos should be 0,0,0
             SubElement(
                 body_el,
                 "geom",
                 name=f"wire_{route.label}_{body.name}_{i}",
-                type="capsule",
-                fromto=(
-                    f"{seg.start[0]:.6f} {seg.start[1]:.6f} {seg.start[2]:.6f} "
-                    f"{seg.end[0]:.6f} {seg.end[1]:.6f} {seg.end[2]:.6f}"
-                ),
-                size=radius,
+                type="mesh",
+                mesh=f"wire_{route.label}_{body.name}_{i}_mesh",
+                pos="0 0 0",
                 rgba=color,
                 contype="0",
                 conaffinity="0",

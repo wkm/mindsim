@@ -260,6 +260,105 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
             _update_mass_from_solid(body, solid)
 
+    # --- Per-component STLs (for MuJoCo mesh geoms) ---
+    # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
+    comp_stl_count = 0
+    for body in bot.all_bodies:
+        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
+        if is_wheel_body:
+            continue  # wheel mesh already represents the component
+        for mount in body.mounts:
+            comp_solid = make_component_solid(mount.component)
+            if comp_solid is None:
+                continue
+            # If rotate_z, rotate the solid 90° around Z to match body frame
+            if mount.rotate_z:
+                comp_solid = comp_solid.locate(Location((0, 0, 0), (0, 0, 90)))
+            stl_name = f"comp_{body.name}_{mount.label}.stl"
+            export_stl(comp_solid, str(meshes_dir / stl_name))
+            comp_stl_count += 1
+
+    # --- Per-servo STLs (for MuJoCo mesh geoms) ---
+    # Each servo gets an STL at origin; MuJoCo positions via servo_placement().
+    servo_stl_cache: dict[str, str] = {}
+    servo_stl_count = 0
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            servo = joint.servo
+            # All servos of same model share the same base geometry
+            if servo.name not in servo_stl_cache:
+                s_solid = servo_solid(servo)
+                stl_name = f"servo_{servo.name}.stl"
+                export_stl(s_solid, str(meshes_dir / stl_name))
+                servo_stl_cache[servo.name] = stl_name
+                servo_stl_count += 1
+
+    # --- Per-hardware STLs (for MuJoCo mesh geoms) ---
+    # Many screws/pins share the same diameter/geometry.
+    hardware_solids: dict[float, object] = {}
+    for body in bot.all_bodies:
+        # Hardware on joints
+        for joint in body.joints:
+            for ear in joint.servo.mounting_ears:
+                if ear.diameter not in hardware_solids:
+                    hardware_solids[ear.diameter] = _screw_solid(ear.diameter)
+                    export_stl(
+                        hardware_solids[ear.diameter],
+                        str(meshes_dir / f"hardware_{ear.diameter:.4f}.stl"),
+                    )
+            for mp in joint.servo.horn_mounting_points:
+                if mp.diameter not in hardware_solids:
+                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                    export_stl(
+                        hardware_solids[mp.diameter],
+                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
+                    )
+            for mp in joint.servo.rear_horn_mounting_points:
+                if mp.diameter not in hardware_solids:
+                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                    export_stl(
+                        hardware_solids[mp.diameter],
+                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
+                    )
+        # Hardware on components
+        for mount in body.mounts:
+            for mp in mount.component.mounting_points:
+                if mp.diameter not in hardware_solids:
+                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                    export_stl(
+                        hardware_solids[mp.diameter],
+                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
+                    )
+
+    # --- Per-horn STLs ---
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            if not joint.servo.continuous:
+                horn = _horn_solid(joint.servo)
+                if horn:
+                    export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
+
+    # --- Per-wire STLs ---
+    from botcad.component import BusType
+
+    bus_radii = {
+        BusType.UART_HALF_DUPLEX: 0.0009,
+        BusType.CSI: 0.0018,
+        BusType.POWER: 0.0012,
+    }
+    for route in bot.wire_routes:
+        radius = bus_radii.get(route.bus_type, 0.0015)
+        for i, seg in enumerate(route.segments):
+            if seg.straight_length < 0.001:
+                continue
+            wire_solid = _wire_segment_solid(seg.start, seg.end, radius)
+            if wire_solid:
+                # Wires are exported in their body-local frame
+                export_stl(
+                    wire_solid,
+                    str(meshes_dir / f"wire_{route.label}_{seg.body_name}_{i}.stl"),
+                )
+
     # --- STEP assembly (printable parts, positioned + colored) ---
     assembly_parts = []
     part_modules: list[str | None] = []  # parallel list: module name per part
@@ -1045,37 +1144,22 @@ def _horn_solid(servo):
 
 
 def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
-    """Rotate a solid from Z-up to align with the given axis.
-
-    Uses .moved() (not .locate()) so any existing z-offset on the solid
-    is preserved and composed with the rotation.
-    """
+    """Rotate a solid from Z-up to align with the given axis."""
     from build123d import Location
 
     ax, ay, az = axis
-    mag = math.sqrt(ax * ax + ay * ay + az * az)
-    if mag < 1e-9:
-        return solid
-    ax, ay, az = ax / mag, ay / mag, az / mag
-
-    # If already aligned with Z, no rotation needed
-    if abs(az) > 0.999:
-        if az < 0:
-            # 180° around X
-            return solid.moved(Location((0, 0, 0), (180, 0, 0)))
-        return solid
-
     # Compute rotation from Z to target axis
-    # Cross product of Z and target = rotation axis
-    # Z = (0,0,1), target = (ax,ay,az)
-    # cross = (-ay, ax, 0), angle = acos(az)
     angle_deg = math.degrees(math.acos(max(-1.0, min(1.0, az))))
-    # Rotation axis in XY plane
+    if angle_deg < 1e-4:
+        return solid
+
+    # Rotation axis in XY plane (cross product of Z=(0,0,1) and axis)
     rot_axis_x = -ay
     rot_axis_y = ax
     rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
     if rot_mag < 1e-9:
-        return solid
+        # Opposite direction (az = -1)
+        return solid.moved(Location((0, 0, 0), (180, 0, 0)))
 
     rot_axis_x /= rot_mag
     rot_axis_y /= rot_mag
@@ -1084,6 +1168,50 @@ def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
     quat = _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
     euler = _quat_to_euler(quat)
     return solid.moved(Location((0, 0, 0), euler))
+
+
+def _screw_solid(diameter: float):
+    """Build a premium-looking screw solid (cylinder + chamfered head)."""
+    from build123d import Align, Axis, Cylinder, chamfer
+
+    # Generic screw: 1mm head height, 1.8x diameter head
+    head_h = 0.001
+    head_d = diameter * 1.8
+    shank_h = 0.002  # just a nub for visualization
+
+    head = Cylinder(head_d / 2, head_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    # Select the top face (max Z) for the head chamfer
+    head_top_face = head.faces().sort_by(Axis.Z)[-1]
+    head = chamfer(head_top_face.edges(), 0.2 * head_h)
+
+    shank = Cylinder(
+        diameter / 2, shank_h, align=(Align.CENTER, Align.CENTER, Align.MAX)
+    )
+    return head + shank
+
+
+def _wire_segment_solid(start: Vec3, end: Vec3, radius: float):
+    """Build a wire segment solid (cylinder with spherical caps)."""
+    from build123d import Align, Cylinder, Location, Sphere
+
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    dz = end[2] - start[2]
+    length = math.sqrt(dx**2 + dy**2 + dz**2)
+    if length < 1e-6:
+        return None
+
+    axis = (dx / length, dy / length, dz / length)
+    mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2)
+
+    # Main cylinder
+    cyl = Cylinder(radius, length, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    # Spherical caps
+    cap1 = Sphere(radius).moved(Location((0, 0, -length / 2)))
+    cap2 = Sphere(radius).moved(Location((0, 0, length / 2)))
+
+    wire = cyl + cap1 + cap2
+    return _orient_z_to_axis(wire, axis).moved(Location(mid))
 
 
 def _axis_angle_to_quat(
