@@ -86,25 +86,25 @@
         <inertial pos="0.000000 0.000000 -0.000011" mass="0.042081" fullinertia="4.218287e-05 2.874418e-05 4.342972e-05 -2.127207e-23 2.525915e-21 -9.287670e-22"/>
         <joint name="left_wheel" type="hinge" pos="0.008200 -0.000000 -0.000000" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>
         <geom type="mesh" mesh="left_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
-        <geom type="cylinder" size="0.045 0.005" quat="0.7071068 0 0.7071068 0" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001"/>
-        <geom name="mount_left_rim_wheel_m1" type="mesh" mesh="hardware_0.0030_mesh" pos="0.006350 0.000000 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_left_rim_wheel_m2" type="mesh" mesh="hardware_0.0030_mesh" pos="0.004775 0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_left_rim_wheel_m3" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.004775 0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_left_rim_wheel_m4" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.006350 0.000000 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_left_rim_wheel_m5" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.004775 -0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_left_rim_wheel_m6" type="mesh" mesh="hardware_0.0030_mesh" pos="0.004775 -0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m1" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 0.000000 0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m2" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 0.008271 0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m3" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 0.008271 -0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m4" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 0.000000 -0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m5" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 -0.008271 -0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
+        <geom name="mount_left_rim_wheel_m6" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 -0.008271 0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
       </body>
       <body name="right_rim" pos="0.073200 0.000000 0.000000">
         <inertial pos="-0.000000 0.000000 0.000011" mass="0.042081" fullinertia="4.218287e-05 2.874418e-05 4.342972e-05 -2.002212e-23 -3.346068e-21 5.636464e-22"/>
         <joint name="right_wheel" type="hinge" pos="-0.008200 -0.000000 -0.000000" axis="1.000000 0.000000 0.000000" damping="0.0100"/>
         <geom type="mesh" mesh="right_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
-        <geom type="cylinder" size="0.045 0.005" quat="0.7071068 0 0.7071068 0" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001"/>
-        <geom name="mount_right_rim_wheel_m1" type="mesh" mesh="hardware_0.0030_mesh" pos="0.006350 0.000000 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_right_rim_wheel_m2" type="mesh" mesh="hardware_0.0030_mesh" pos="0.004775 0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_right_rim_wheel_m3" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.004775 0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_right_rim_wheel_m4" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.006350 0.000000 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_right_rim_wheel_m5" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.004775 -0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom name="mount_right_rim_wheel_m6" type="mesh" mesh="hardware_0.0030_mesh" pos="0.004775 -0.008271 0.000000" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m1" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 0.000000 -0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m2" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 0.008271 -0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m3" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 0.008271 0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m4" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 0.000000 0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m5" type="mesh" mesh="hardware_0.0030_mesh" pos="-0.000000 -0.008271 0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
+        <geom name="mount_right_rim_wheel_m6" type="mesh" mesh="hardware_0.0030_mesh" pos="0.000000 -0.008271 -0.004775" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>
       </body>
     </body>
   </worldbody>

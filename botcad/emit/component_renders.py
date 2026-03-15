@@ -17,6 +17,7 @@ Called as part of Bot.emit() pipeline, or standalone:
 
 from __future__ import annotations
 
+import math
 import shutil
 import tempfile
 import time
@@ -103,12 +104,57 @@ def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
     )
 
 
+def _axis_quat(axis: tuple[float, float, float]) -> str | None:
+    """MuJoCo quaternion (w x y z) rotating Z-up to *axis*. None if already Z-up."""
+    ax, ay, az = axis
+    length = math.sqrt(ax * ax + ay * ay + az * az)
+    if length < 1e-9:
+        return None
+    ax, ay, az = ax / length, ay / length, az / length
+
+    dot = az  # dot( (0,0,1), (ax,ay,az) )
+    if dot > 1.0 - 1e-8:
+        return None  # already aligned with +Z
+    if dot < -1.0 + 1e-8:
+        return "0 1 0 0"  # 180° around X
+
+    # cross( (0,0,1), (ax,ay,az) ) = (-ay, ax, 0)
+    cx, cy, cz = -ay, ax, 0.0
+    half_angle = math.acos(max(-1.0, min(1.0, dot))) / 2.0
+    s = math.sin(half_angle)
+    cl = math.sqrt(cx * cx + cy * cy + cz * cz)
+    cx, cy, cz = cx / cl * s, cy / cl * s, cz / cl * s
+    w = math.cos(half_angle)
+    return f"{w:.7f} {cx:.7f} {cy:.7f} {cz:.7f}"
+
+
 def _add_mounting_geoms(scene: SceneBuilder, component: Component) -> None:
-    """Blue spheres at each mounting_point — skip if none."""
+    """Oriented fastener cylinders at each mounting_point — skip if none.
+
+    Each fastener is a small cylinder aligned to the mount point's insertion
+    axis, with radius proportional to the hole diameter. This replaces the
+    old blue-sphere visualization and makes axis orientation readable.
+    """
     if not component.mounting_points:
         return
     for i, mp in enumerate(component.mounting_points):
-        scene.add_sphere(f"mount_{i}", pos=mp.pos, size=0.002, color=COLOR_MOUNTING)
+        radius = max(mp.diameter / 2, 0.001)  # at least 1mm for visibility
+        half_height = radius * 2.5  # screw-like proportions
+        # Offset along axis so the fastener protrudes from the surface
+        ax, ay, az = mp.axis
+        pos = (
+            mp.pos[0] + ax * half_height,
+            mp.pos[1] + ay * half_height,
+            mp.pos[2] + az * half_height,
+        )
+        scene.add_cylinder(
+            f"mount_{i}",
+            pos=pos,
+            radius=radius,
+            half_height=half_height,
+            color=COLOR_MOUNTING,
+            quat=_axis_quat(mp.axis),
+        )
 
 
 def _add_wire_port_geoms(scene: SceneBuilder, component: Component) -> None:
