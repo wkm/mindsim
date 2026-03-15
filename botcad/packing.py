@@ -54,9 +54,11 @@ def _solve_body(body: Body) -> None:
 
     joint_positions: list[Vec3] = []
     for j in body.joints:
-        center, _quat = servo_placement(
+        center, quat = servo_placement(
             j.servo.shaft_offset, j.servo.shaft_axis, j.axis, j.pos
         )
+        j.solved_servo_center = center
+        j.solved_servo_quat = quat
         joint_positions.append(center)
 
     if not internal_items and not joint_positions and body.explicit_dimensions is None:
@@ -303,7 +305,7 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
 
     Returns list of (label_a, label_b, overlap_extent) tuples.
     """
-    from botcad.geometry import rotate_vec, servo_placement
+    from botcad.geometry import rotate_vec
 
     # Build list of (label, center, half_extents) for every internal item
     items: list[tuple[str, Vec3, Vec3]] = []
@@ -317,9 +319,8 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
     # Servo bodies from child joints
     for joint in body.joints:
         servo = joint.servo
-        center, quat = servo_placement(
-            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
-        )
+        center = joint.solved_servo_center
+        quat = joint.solved_servo_quat
         # Compute AABB of the rotated servo box by rotating the 8 corners
         # and taking min/max per axis.
         bd = servo.effective_body_dims

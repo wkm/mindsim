@@ -108,11 +108,28 @@ class Joint:
     bracket_style: BracketStyle = BracketStyle.POCKET
     child: Body | None = None
 
+    # Cached servo placement (computed once in packing solver, read by emitters).
+    # servo_placement() positions the servo body at this joint; the center and
+    # quaternion are in the parent body frame.
+    solved_servo_center: Vec3 = (0.0, 0.0, 0.0)
+    solved_servo_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
     @property
     def effective_range(self) -> tuple[float, float]:
         if self.range_rad is not None:
             return self.range_rad
         return self.servo.range_rad
+
+    def wheel_outboard_offset(self) -> float:
+        """How far a wheel child body sits outboard from the joint shaft.
+
+        Offset = shaft_boss_height + half_wheel_width.  Returns 0 if no child.
+        """
+        if self.child is None:
+            return 0.0
+        boss_h = self.servo.shaft_boss_height or 0.0
+        half_w = (self.child.width or self.child.dimensions[2]) / 2
+        return boss_h + half_w
 
     def body(
         self,
@@ -191,6 +208,24 @@ class Body:
         0.0,
         0.0,
     )
+
+    # Body frame orientation — rotation from canonical (Z-up) to actual body
+    # frame.  Computed during solve() for bodies whose geometry is reoriented
+    # (e.g. cylinders aligned to a joint axis).  Identity means no rotation.
+    frame_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
+    # True if this body has a wheel component mounted on it.
+    # Computed once during _collect_tree(), read by all emitters.
+    is_wheel_body: bool = False
+
+    def to_body_frame(self, p: Vec3) -> Vec3:
+        """Transform a canonical-frame point/vector into body-frame coordinates."""
+        w, x, y, z = self.frame_quat
+        if abs(w - 1.0) < 1e-9 and abs(x) + abs(y) + abs(z) < 1e-9:
+            return p  # identity — skip math
+        from botcad.geometry import rotate_vec
+
+        return rotate_vec(self.frame_quat, p)
 
     @property
     def dimensions(self) -> Vec3:
@@ -331,7 +366,14 @@ class Bot:
         return b
 
     def _collect_tree(self) -> None:
-        """Walk the kinematic tree, populate all_bodies/all_joints, resolve modules."""
+        """Walk the kinematic tree, populate all_bodies/all_joints, resolve modules.
+
+        Also computes frame_quat for bodies whose geometry is reoriented
+        relative to their canonical (Z-up) frame — currently cylinders that
+        are aligned to their parent joint axis.
+        """
+        from botcad.geometry import rotation_between
+
         self.all_bodies.clear()
         self.all_joints.clear()
 
@@ -339,11 +381,19 @@ class Bot:
             # Inherit module from parent if not set explicitly
             if body.module is None:
                 body.module = parent_module
+            # Compute is_wheel_body from mounted components
+            body.is_wheel_body = any(m.component.is_wheel for m in body.mounts)
             self.all_bodies.append(body)
             for joint in body.joints:
                 self.all_joints.append(joint)
                 if joint.child is not None:
-                    _walk(joint.child, body.module)
+                    child = joint.child
+                    # Cylinder children are oriented so their Z axis aligns
+                    # with the joint axis.  Record this rotation so mount
+                    # point coordinates can be transformed consistently.
+                    if child.shape is BodyShape.CYLINDER:
+                        child.frame_quat = rotation_between((0.0, 0.0, 1.0), joint.axis)
+                    _walk(child, body.module)
 
         if self.root is not None:
             _walk(self.root, None)

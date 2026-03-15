@@ -183,7 +183,7 @@ class TestWheelerSymmetry:
     def test_bracket_envelopes_mirror_in_body(self):
         """Left and right servo envelope cuts should be symmetric in X."""
         from botcad.bracket import BracketSpec, bracket_envelope
-        from botcad.emit.cad import _quat_to_euler
+        from botcad.geometry import quat_to_euler
 
         bot = _build_bot("wheeler_base")
         base = bot.root
@@ -198,7 +198,7 @@ class TestWheelerSymmetry:
                 joint.axis,
                 joint.pos,
             )
-            euler = _quat_to_euler(quat)
+            euler = quat_to_euler(quat)
             envelope = bracket_envelope(servo, spec)
             envelope = envelope.locate(b3d.Location(center, euler))
             bboxes[joint.name] = envelope.bounding_box()

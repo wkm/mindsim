@@ -28,7 +28,7 @@ from botcad.colors import (
 )
 from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
-from botcad.geometry import rotate_vec, rotation_between, servo_placement
+from botcad.geometry import rotate_vec, rotation_between
 from botcad.skeleton import BaseType, BodyShape
 
 if TYPE_CHECKING:
@@ -70,8 +70,7 @@ def _build_bot_xml(bot: Bot) -> str:
 
     # Component mesh assets (Pi, battery, camera, etc.)
     for body in bot.all_bodies:
-        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
-        if is_wheel_body:
+        if body.is_wheel_body:
             continue
         for mount in body.mounts:
             mesh_name = f"comp_{body.name}_{mount.label}_mesh"
@@ -287,10 +286,10 @@ def _emit_body_tree(
             ground_clearance = _estimate_ground_clearance(body, bot)
             attribs["pos"] = f"0 0 {ground_clearance:.4f}"
     elif parent_joint is not None:
-        if parent_joint.servo.continuous and body.shape is BodyShape.CYLINDER:
+        if body.is_wheel_body:
             # Wheel child body: offset outward from servo along joint axis
             # so the wheel clears the servo body + shaft boss.
-            wheel_offset = _wheel_outboard_offset(parent_joint, body)
+            wheel_offset = parent_joint.wheel_outboard_offset()
             ax, ay, az = parent_joint.axis
             child_pos = (
                 parent_joint.pos[0] + ax * wheel_offset,
@@ -328,8 +327,8 @@ def _emit_body_tree(
             damping = parent_joint.servo.damping
         # For wheel bodies offset outward, the joint anchor must point back
         # to the shaft position (compensate the body offset).
-        if parent_joint.servo.continuous and body.shape is BodyShape.CYLINDER:
-            wheel_offset = _wheel_outboard_offset(parent_joint, body)
+        if body.is_wheel_body:
+            wheel_offset = parent_joint.wheel_outboard_offset()
             ax, ay, az = parent_joint.axis
             joint_pos = _fmt_vec3(
                 (-ax * wheel_offset, -ay * wheel_offset, -az * wheel_offset)
@@ -349,8 +348,7 @@ def _emit_body_tree(
         SubElement(body_el, "joint", **joint_attribs)
 
     # Horn disc geom (purchased part visualization on child bodies)
-    is_wheel = parent_joint is not None and parent_joint.servo.continuous
-    if parent_joint is not None and not is_wheel:
+    if parent_joint is not None and not body.is_wheel_body:
         from botcad.bracket import horn_disc_params
 
         params = horn_disc_params(parent_joint.servo)
@@ -387,7 +385,7 @@ def _emit_body_tree(
         "mesh": mesh_name,
         "rgba": _body_color(body),
     }
-    if is_wheel:
+    if body.is_wheel_body:
         # Mesh is visual only; cylinder primitive handles collision
         mesh_attribs["contype"] = "0"
         mesh_attribs["conaffinity"] = "0"
@@ -397,21 +395,22 @@ def _emit_body_tree(
     SubElement(body_el, "geom", **mesh_attribs)
 
     # Wheel bodies get a primitive cylinder geom for reliable rolling contact
-    if is_wheel:
+    if body.is_wheel_body:
         r = body.radius or body.dimensions[0] / 2
         half_w = (body.width or body.dimensions[2]) / 2
-        # Cylinder default axis is Z; rotate 90° around Y to align with X
-        SubElement(
-            body_el,
-            "geom",
-            type="cylinder",
-            size=f"{r} {half_w}",
-            quat="0.7071068 0 0.7071068 0",
-            rgba=COLOR_STRUCTURE_DARK.with_alpha(0.0).rgba_str,
-            contype="1",
-            conaffinity="1",
-            friction="1.5 0.005 0.0001",
-        )
+        # Cylinder default axis is Z; rotate to match body frame orientation
+        cyl_attribs: dict[str, str] = {
+            "type": "cylinder",
+            "size": f"{r} {half_w}",
+            "rgba": COLOR_STRUCTURE_DARK.with_alpha(0.0).rgba_str,
+            "contype": "1",
+            "conaffinity": "1",
+            "friction": "1.5 0.005 0.0001",
+        }
+        w, qx, qy, qz = body.frame_quat
+        if abs(w - 1.0) > 1e-9 or abs(qx) + abs(qy) + abs(qz) > 1e-9:
+            cyl_attribs["quat"] = _fmt_quat(body.frame_quat)
+        SubElement(body_el, "geom", **cyl_attribs)
 
     # Camera mount
     _emit_camera(body_el, body)
@@ -427,23 +426,20 @@ def _emit_body_tree(
         )
 
     # Mounted component visualization — meshes at resolved positions
-    _emit_mounted_components(body_el, body, is_wheel=is_wheel)
+    _emit_mounted_components(body_el, body, is_wheel=body.is_wheel_body)
 
     # Servo visualization geoms — detailed mesh at each joint
-    # Cache servo_placement per joint (also used by _emit_mounting_hardware).
     joint_placements: dict[str, tuple] = {}
     for joint in body.joints:
-        servo = joint.servo
-        center, quat = servo_placement(
-            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
-        )
+        center = joint.solved_servo_center
+        quat = joint.solved_servo_quat
         joint_placements[joint.name] = (center, quat)
         SubElement(
             body_el,
             "geom",
             name=f"{joint.name}_servo",
             type="mesh",
-            mesh=f"servo_{servo.name}_mesh",
+            mesh=f"servo_{joint.servo.name}_mesh",
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
             rgba=COLOR_STRUCTURE_DARK.rgba_str,
@@ -491,7 +487,9 @@ def _emit_mounted_components(
 
 
 def _emit_mounting_hardware(
-    body_el: Element, body: Body, joint_placements: dict[str, tuple]
+    body_el: Element,
+    body: Body,
+    joint_placements: dict[str, tuple],
 ) -> None:
     """Emit mesh geoms at screw/mounting positions."""
     from botcad.colors import COLOR_METAL_STEEL
@@ -562,10 +560,14 @@ def _emit_mounting_hardware(
             )
 
     # Component mount points (screw holes on mounted components)
+    # Mount points are defined in component-local space. body.to_body_frame()
+    # applies the body's frame_quat (e.g. Z→joint_axis for cylinders) so
+    # positions and axes land in the correct orientation automatically.
     for mount in body.mounts:
         for mp in mount.component.mounting_points:
-            pos = _add_vec3(mount.resolved_pos, mount.rotate_point(mp.pos))
-            local_axis = mount.rotate_point(mp.axis)
+            mp_pos = body.to_body_frame(mount.rotate_point(mp.pos))
+            mp_axis = body.to_body_frame(mount.rotate_point(mp.axis))
+            pos = _add_vec3(mount.resolved_pos, mp_pos)
             SubElement(
                 body_el,
                 "geom",
@@ -573,7 +575,7 @@ def _emit_mounting_hardware(
                     f"mount_{body.name}_{mount.label}_{mp.label}",
                     f"hardware_{mp.diameter:.4f}_mesh",
                     _fmt_vec3(pos),
-                    _z_to_axis_quat(local_axis),
+                    _z_to_axis_quat(mp_axis),
                 ),
             )
 
@@ -650,17 +652,6 @@ def _add_imu_sensors(sensor_el: Element, bot: Bot) -> None:
     """Add IMU sensors (gyro + accelerometer) on the base body."""
     SubElement(sensor_el, "gyro", name="imu_gyro", site="imu")
     SubElement(sensor_el, "accelerometer", name="imu_accel", site="imu")
-
-
-def _wheel_outboard_offset(joint: Joint, child: Body) -> float:
-    """Compute how far a wheel child body sits outboard from the joint (shaft).
-
-    The wheel hub mates with the servo shaft boss, so the wheel's inner face
-    is approximately at the boss tip. Offset = boss_height + half_wheel_width.
-    """
-    boss_h = joint.servo.shaft_boss_height or 0.0
-    half_w = (child.width or child.dimensions[2]) / 2
-    return boss_h + half_w
 
 
 def _estimate_ground_clearance(root_body: Body, bot: Bot) -> float:

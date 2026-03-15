@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from botcad.bracket import BracketSpec
 from botcad.component import BusType, Vec3
-from botcad.geometry import rotate_vec, servo_placement
+from botcad.geometry import rotate_vec
 from botcad.skeleton import BodyShape
 
 if TYPE_CHECKING:
@@ -104,13 +104,10 @@ def _servo_connector_local(joint: Joint) -> Vec3:
     servo = joint.servo
     if servo.connector_pos is None:
         return joint.pos
-    center, quat = servo_placement(
-        servo.shaft_offset,
-        servo.shaft_axis,
-        joint.axis,
-        joint.pos,
+    return _add_vec3(
+        joint.solved_servo_center,
+        rotate_vec(joint.solved_servo_quat, servo.connector_pos),
     )
-    return _add_vec3(center, rotate_vec(quat, servo.connector_pos))
 
 
 def _cable_exit_local(joint: Joint) -> Vec3:
@@ -122,18 +119,14 @@ def _cable_exit_local(joint: Joint) -> Vec3:
     servo = joint.servo
     if servo.connector_pos is None:
         return joint.pos
-    center, quat = servo_placement(
-        servo.shaft_offset,
-        servo.shaft_axis,
-        joint.axis,
-        joint.pos,
-    )
     body_x = servo.effective_body_dims[0]
     spec = BracketSpec()
     bracket_half_x = body_x / 2 + spec.tolerance + spec.wall
     _cx, cy, cz = servo.connector_pos
     cable_exit_servo = (-bracket_half_x, cy, cz)
-    return _add_vec3(center, rotate_vec(quat, cable_exit_servo))
+    return _add_vec3(
+        joint.solved_servo_center, rotate_vec(joint.solved_servo_quat, cable_exit_servo)
+    )
 
 
 def _joint_entry_local() -> Vec3:
@@ -505,17 +498,18 @@ def _route_power(bot: Bot) -> WireRoute:
     battery_pos: Vec3 | None = None
     pi_pos: Vec3 | None = None
 
+    from botcad.component import BatterySpec
+
     for mount in bot.root.mounts:
-        if "LiPo" in mount.component.name or "battery" in mount.label:
+        if isinstance(mount.component, BatterySpec):
             for port in mount.component.wire_ports:
                 if port.bus_type is BusType.POWER:
                     battery_pos = _add_vec3(mount.resolved_pos, port.pos)
                     break
-        if "Pi" in mount.component.name or "pi" in mount.label:
-            for port in mount.component.wire_ports:
-                if port.bus_type is BusType.USB:
-                    pi_pos = _add_vec3(mount.resolved_pos, port.pos)
-                    break
+        for port in mount.component.wire_ports:
+            if port.bus_type is BusType.USB:
+                pi_pos = _add_vec3(mount.resolved_pos, port.pos)
+                break
 
     if battery_pos is not None and pi_pos is not None:
         route.segments.extend(_expand_segment(bot, battery_pos, pi_pos, bot.root.name))

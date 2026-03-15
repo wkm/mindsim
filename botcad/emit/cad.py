@@ -33,7 +33,7 @@ from botcad.bracket import (
     servo_solid,
 )
 from botcad.component import BearingSpec, BusType, CameraSpec
-from botcad.geometry import servo_placement
+from botcad.geometry import quat_to_euler
 from botcad.skeleton import BodyShape, BracketStyle
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,6 @@ _PLA_DENSITY = 1200.0
 
 if TYPE_CHECKING:
     from botcad.component import Component, Vec3
-    from botcad.geometry import Quat
     from botcad.skeleton import Body, Bot, Joint
 
 
@@ -96,13 +95,9 @@ def _update_mass_from_solid(body: Body, solid) -> None:
 
     # Servo mass at servo body center (not shaft/joint position)
     for joint in body.joints:
-        center, _quat = servo_placement(
-            joint.servo.shaft_offset,
-            joint.servo.shaft_axis,
-            joint.axis,
-            joint.pos,
+        mass_items.append(
+            (joint.solved_servo_center, joint.servo.mass, joint.servo.dimensions)
         )
-        mass_items.append((center, joint.servo.mass, joint.servo.dimensions))
 
     # --- Composite mass ---
     total_mass = struct_mass + sum(m for _, m, _ in mass_items)
@@ -197,7 +192,7 @@ def make_component_solid(component: Component):
         return raspberry_pi_zero_solid()
 
     # Wheels: detailed tire/hub geometry
-    if "Wheel" in component.name:
+    if component.is_wheel:
         r = dims[0] / 2
         w = dims[2]
         return _make_wheel_solid(r, w)
@@ -284,8 +279,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
     # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
     comp_stl_count = 0
     for body in bot.all_bodies:
-        is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
-        if is_wheel_body:
+        if body.is_wheel_body:
             continue  # wheel mesh already represents the component
         for mount in body.mounts:
             comp_solid = make_component_solid(mount.component)
@@ -456,10 +450,8 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
         body_world = world_positions[body.name]
         for joint in body.joints:
             servo = joint.servo
-            center, quat = servo_placement(
-                servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
-            )
-            euler = _quat_to_euler(quat)
+            center = joint.solved_servo_center
+            euler = quat_to_euler(joint.solved_servo_quat)
 
             # Cache base solid by servo model (same geometry for all STS3215s)
             if servo.name not in servo_solid_cache:
@@ -505,9 +497,8 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
             if joint.child is not None:
                 child = joint.child
                 # Wheel bodies are offset outward from the joint along the axis
-                has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-                if has_wheel and child.shape is BodyShape.CYLINDER:
-                    offset = _wheel_outboard_offset(joint, child)
+                if child.is_wheel_body:
+                    offset = joint.wheel_outboard_offset()
                     ax, ay, az = joint.axis
                     child_pos = (
                         parent_world_pos[0] + joint.pos[0] + ax * offset,
@@ -727,8 +718,7 @@ def _make_body_solid(
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
 
-        has_wheel = any("Wheel" in m.component.name for m in body.mounts)
-        if has_wheel:
+        if body.is_wheel_body:
             # Wheels: centered on origin (hub at center)
             shell = _make_wheel_solid(r, h)
         elif parent_joint is not None:
@@ -740,7 +730,7 @@ def _make_body_solid(
             shell = Cylinder(r, h, align=C)
 
         if parent_joint is not None:
-            shell = _orient_z_to_axis(shell, parent_joint.axis)
+            shell = _orient_z_to_axis(shell, parent_joint.axis, quat=body.frame_quat)
 
     elif body.shape is BodyShape.TUBE:
         r = body.outer_r or dims[0] / 2
@@ -772,8 +762,7 @@ def _make_body_solid(
         shell = Box(dims[0], dims[1], dims[2], align=C)
 
     # Cut component pockets (skip for wheel bodies — the wheel IS the component)
-    is_wheel_body = any("Wheel" in m.component.name for m in body.mounts)
-    if not is_wheel_body:
+    if not body.is_wheel_body:
         for mount in body.mounts:
             cd = mount.placed_dimensions
             if isinstance(mount.component, BearingSpec):
@@ -803,12 +792,14 @@ def _make_body_solid(
     bracket_spec = BracketSpec()
     if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
-        # servo_placement with joint_pos=(0,0,0) gives the transform that
-        # puts servo-local geometry into child body frame with shaft at origin.
-        center, quat = servo_placement(
-            servo.shaft_offset, servo.shaft_axis, parent_joint.axis, (0, 0, 0)
-        )
-        euler = _quat_to_euler(quat)
+        # Quat is identical to solved_servo_quat (joint_pos only affects center).
+        # Recompute center locally for child frame (shaft at origin).
+        from botcad.geometry import rotate_vec
+
+        quat = parent_joint.solved_servo_quat
+        rotated_offset = rotate_vec(quat, servo.shaft_offset)
+        center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
+        euler = quat_to_euler(quat)
         coupler = coupler_solid(servo, bracket_spec)
         coupler = coupler.locate(Location(center, euler))
         shell = _as_solid(shell.fuse(coupler))
@@ -819,10 +810,8 @@ def _make_body_solid(
     # already cut).  Result: (shell - envelope) + bracket
     for joint in body.joints:
         servo = joint.servo
-        center, quat = servo_placement(
-            servo.shaft_offset, servo.shaft_axis, joint.axis, joint.pos
-        )
-        euler = _quat_to_euler(quat)
+        center = joint.solved_servo_center
+        euler = quat_to_euler(joint.solved_servo_quat)
 
         if joint.bracket_style is BracketStyle.COUPLER:
             envelope = cradle_envelope(servo, bracket_spec)
@@ -909,7 +898,7 @@ def _wire_channel(seg, bus_type: BusType):
                 (rot_axis_x / rot_mag, rot_axis_y / rot_mag, 0), rot_angle
             )
 
-    euler = _quat_to_euler(quat)
+    euler = quat_to_euler(quat)
     channel = Cylinder(radius, length, align=C)
     return channel.locate(Location(mid, euler))
 
@@ -921,15 +910,14 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = child.dimensions
 
-    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
     # Wheels need generous clearance for print tolerance, wobble, and debris.
     # Other child bodies just need FDM fit clearance.
-    tol = 0.005 if has_wheel else 0.0005  # 5mm wheels, 0.5mm otherwise
+    tol = 0.005 if child.is_wheel_body else 0.0005  # 5mm wheels, 0.5mm otherwise
 
     if child.shape is BodyShape.CYLINDER:
         r = (child.radius or dims[0] / 2) + tol
         nominal_h = child.width or child.height or dims[2]
-        if has_wheel:
+        if child.is_wheel_body:
             # Only extend clearance outboard (away from bracket), not inboard.
             # Adding width tolerance inboard eats into the servo bracket.
             h = nominal_h + tol
@@ -941,7 +929,7 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
             outer = Cylinder(r, h, align=C)
             # Match _make_body_solid: bottom face at origin for child cylinders
             outer = outer.locate(Location((0, 0, h / 2)))
-        return _orient_z_to_axis(outer, parent_joint.axis)
+        return _orient_z_to_axis(outer, parent_joint.axis, quat=child.frame_quat)
 
     elif child.shape is BodyShape.TUBE:
         r = (child.outer_r or dims[0] / 2) + tol
@@ -982,19 +970,8 @@ def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
     if abs(angle_rad) < 1e-9:
         return solid
     quat = _axis_angle_to_quat(axis, angle_rad)
-    euler = _quat_to_euler(quat)
+    euler = quat_to_euler(quat)
     return solid.moved(Location((0, 0, 0), euler))
-
-
-def _wheel_outboard_offset(joint: Joint, child: Body) -> float:
-    """Compute how far a wheel sits outboard from the joint (shaft).
-
-    The wheel hub mates with the servo shaft boss, so the wheel's inner face
-    is approximately at the boss tip. Offset = boss_height + half_wheel_width.
-    """
-    boss_h = joint.servo.shaft_boss_height or 0.0
-    half_w = (child.width or child.dimensions[2]) / 2
-    return boss_h + half_w
 
 
 def _child_clearance_volume(child: Body, joint: Joint):
@@ -1027,9 +1004,8 @@ def _child_clearance_volume(child: Body, joint: Joint):
             clearance = clearance + rotated  # boolean union
 
     # Position at joint.pos in parent frame, offset outboard for wheels
-    has_wheel = any("Wheel" in m.component.name for m in child.mounts)
-    if has_wheel and child.shape is BodyShape.CYLINDER:
-        offset = _wheel_outboard_offset(joint, child)
+    if child.is_wheel_body:
+        offset = joint.wheel_outboard_offset()
         ax, ay, az = joint.axis
         pos = (
             joint.pos[0] + ax * offset,
@@ -1172,9 +1148,23 @@ def _horn_solid(servo):
     )
 
 
-def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
-    """Rotate a solid from Z-up to align with the given axis."""
+def _orient_z_to_axis(
+    solid,
+    axis: tuple[float, float, float],
+    quat: tuple[float, float, float, float] | None = None,
+):
+    """Rotate a solid from Z-up to align with the given axis.
+
+    If *quat* is provided (e.g. from body.frame_quat), skip recomputation.
+    """
     from build123d import Location
+
+    if quat is not None:
+        w, x, y, z = quat
+        if abs(w - 1.0) < 1e-9 and abs(x) + abs(y) + abs(z) < 1e-9:
+            return solid  # identity
+        euler = quat_to_euler(quat)
+        return solid.moved(Location((0, 0, 0), euler))
 
     ax, ay, az = axis
     # Compute rotation from Z to target axis
@@ -1194,8 +1184,8 @@ def _orient_z_to_axis(solid, axis: tuple[float, float, float]):
     rot_axis_y /= rot_mag
 
     # Convert axis-angle to Euler angles for build123d Location
-    quat = _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
-    euler = _quat_to_euler(quat)
+    q = _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
+    euler = quat_to_euler(q)
     return solid.moved(Location((0, 0, 0), euler))
 
 
@@ -1250,43 +1240,6 @@ def _axis_angle_to_quat(
     half = angle / 2
     s = math.sin(half)
     return (math.cos(half), axis[0] * s, axis[1] * s, axis[2] * s)
-
-
-def _quat_to_euler(q: Quat) -> tuple[float, float, float]:
-    """Convert quaternion (w, x, y, z) to Euler angles (rx, ry, rz) in degrees.
-
-    Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
-    Handles gimbal lock at pitch = ±90° (where naive conversion loses the
-    yaw component).
-    """
-    w, x, y, z = q
-
-    # Pitch (Y) — check first for gimbal lock
-    sinp = 2.0 * (w * y - z * x)
-    sinp = max(-1.0, min(1.0, sinp))
-
-    if abs(sinp) > 0.9999:
-        # Gimbal lock: pitch ≈ ±90°.  Roll and yaw are coupled;
-        # assign all rotation to yaw (rz), set roll (rx) = 0.
-        ry = math.copysign(math.pi / 2, sinp)
-        rx = 0.0
-        rz = 2.0 * math.atan2(x, w)
-        if sinp < 0:
-            rz = -rz
-    else:
-        ry = math.asin(sinp)
-
-        # Roll (X)
-        sinr_cosp = 2.0 * (w * x + y * z)
-        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
-        rx = math.atan2(sinr_cosp, cosr_cosp)
-
-        # Yaw (Z)
-        siny_cosp = 2.0 * (w * z + x * y)
-        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-        rz = math.atan2(siny_cosp, cosy_cosp)
-
-    return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
 
 
 def _make_bearing_solid(bearing: BearingSpec):

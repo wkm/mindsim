@@ -93,4 +93,5 @@ def PololuWheel90mm() -> Component:
             ),
         ),
         color=COLOR_STRUCTURE_RUBBER.rgba,
+        is_wheel=True,
     )

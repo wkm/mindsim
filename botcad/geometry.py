@@ -157,6 +157,36 @@ def servo_placement(
     return center, q
 
 
+def quat_to_euler(q: Quat) -> tuple[float, float, float]:
+    """Convert quaternion (w, x, y, z) to Euler angles (rx, ry, rz) in degrees.
+
+    Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
+    Handles gimbal lock at pitch = +/-90 degrees.
+    """
+    w, x, y, z = q
+
+    # Pitch (Y) — check first for gimbal lock
+    sinp = 2.0 * (w * y - z * x)
+    sinp = max(-1.0, min(1.0, sinp))
+
+    if abs(sinp) > 0.9999:
+        ry = math.copysign(math.pi / 2, sinp)
+        rx = 0.0
+        rz = 2.0 * math.atan2(x, w)
+        if sinp < 0:
+            rz = -rz
+    else:
+        ry = math.asin(sinp)
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        rx = math.atan2(sinr_cosp, cosr_cosp)
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        rz = math.atan2(siny_cosp, cosy_cosp)
+
+    return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
+
+
 def _normalize(v: Vec3) -> Vec3:
     mag = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
     if mag < 1e-12:
