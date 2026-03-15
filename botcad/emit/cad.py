@@ -226,6 +226,12 @@ def make_component_solid(component: Component):
     if isinstance(component, BearingSpec):
         return _make_bearing_solid(component)
 
+    # Test fastener prism: drilled holes at each mount point
+    if component.name == "TestFastenerPrism":
+        from botcad.components.test_fastener import test_fastener_solid
+
+        return test_fastener_solid(component)
+
     return Box(
         dims[0],
         dims[1],

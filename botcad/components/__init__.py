@@ -5,6 +5,7 @@ from botcad.components.camera import OV5647, PiCamera2
 from botcad.components.compute import RaspberryPiZero2W
 from botcad.components.controller import WaveshareSerialBus
 from botcad.components.servo import STS3215
+from botcad.components.test_fastener import TestFastenerPrism
 from botcad.components.wheel import PololuWheel90mm
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "PiCamera2",
     "PololuWheel90mm",
     "WaveshareSerialBus",
+    "TestFastenerPrism",
 ]

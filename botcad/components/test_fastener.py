@@ -1,0 +1,156 @@
+"""Test fastener component — stress-tests fastener placement at various angles and sizes."""
+
+from __future__ import annotations
+
+import math
+
+from botcad.component import Component, MountPoint
+
+# Pre-computed unit vectors for angled fasteners
+_INV_SQRT2 = math.sqrt(2) / 2  # ~0.7071
+
+
+def TestFastenerPrism() -> Component:
+    """A synthetic prism with mounting holes at varied angles and sizes.
+
+    Exercises the fastener rotation pipeline across cardinal axes,
+    diagonal angles, and multiple screw diameters. Not a real part —
+    exists purely for visual validation that screws orient correctly.
+
+    Layout (viewed from +Z, prism extends along X):
+        Row 1 (Y=+10mm): Cardinal axes — +Z, -Z, +X, -X, +Y, -Y
+        Row 2 (Y=-10mm): Diagonals — 45° in XZ, YZ, XY planes
+    """
+    # 60x30x15 mm prism.  Half-extents for placing points on faces.
+    w, d, h = 0.060, 0.030, 0.015
+    hw, hd, hh = w / 2, d / 2, h / 2  # 30, 15, 7.5 mm
+
+    return Component(
+        name="TestFastenerPrism",
+        dimensions=(w, d, h),
+        mass=0.050,
+        mounting_points=(
+            # --- Cardinal axes, M2: each point sits on the face it points out of ---
+            # Top face (Z = +7.5mm)
+            MountPoint(
+                "up",
+                pos=(-0.015, 0.005, hh),
+                diameter=0.002,
+                axis=(0.0, 0.0, 1.0),
+                fastener_type="M2",
+            ),
+            # Bottom face (Z = -7.5mm)
+            MountPoint(
+                "down",
+                pos=(-0.005, 0.005, -hh),
+                diameter=0.002,
+                axis=(0.0, 0.0, -1.0),
+                fastener_type="M2",
+            ),
+            # Right face (X = +30mm)
+            MountPoint(
+                "right",
+                pos=(hw, 0.005, 0.0),
+                diameter=0.002,
+                axis=(1.0, 0.0, 0.0),
+                fastener_type="M2",
+            ),
+            # Left face (X = -30mm)
+            MountPoint(
+                "left",
+                pos=(-hw, -0.005, 0.0),
+                diameter=0.002,
+                axis=(-1.0, 0.0, 0.0),
+                fastener_type="M2",
+            ),
+            # Front face (Y = +15mm)
+            MountPoint(
+                "front",
+                pos=(0.010, hd, 0.0),
+                diameter=0.002,
+                axis=(0.0, 1.0, 0.0),
+                fastener_type="M2",
+            ),
+            # Back face (Y = -15mm)
+            MountPoint(
+                "back",
+                pos=(0.010, -hd, 0.0),
+                diameter=0.002,
+                axis=(0.0, -1.0, 0.0),
+                fastener_type="M2",
+            ),
+            # --- 45° diagonals, M2.5: on top face, angled outward ---
+            MountPoint(
+                "diag_xz",
+                pos=(0.015, 0.005, hh),
+                diameter=0.0025,
+                axis=(_INV_SQRT2, 0.0, _INV_SQRT2),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "diag_yz",
+                pos=(0.005, 0.005, hh),
+                diameter=0.0025,
+                axis=(0.0, _INV_SQRT2, _INV_SQRT2),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "diag_xy",
+                pos=(hw, hd, 0.0),
+                diameter=0.0025,
+                axis=(_INV_SQRT2, _INV_SQRT2, 0.0),
+                fastener_type="M2.5",
+            ),
+            MountPoint(
+                "diag_neg_xz",
+                pos=(-0.015, -0.005, hh),
+                diameter=0.0025,
+                axis=(-_INV_SQRT2, 0.0, _INV_SQRT2),
+                fastener_type="M2.5",
+            ),
+            # --- M3 at 30° from vertical, on top face ---
+            MountPoint(
+                "steep_30",
+                pos=(-0.005, -0.005, hh),
+                diameter=0.003,
+                axis=(math.sin(math.radians(30)), 0.0, math.cos(math.radians(30))),
+                fastener_type="M3",
+            ),
+        ),
+        color=(0.8, 0.6, 0.2, 1.0),  # Gold/brass — stands out as synthetic
+    )
+
+
+def test_fastener_solid(spec: Component):
+    """Build a simple rectangular prism with drilled holes at each mount point."""
+    from build123d import Align, Axis, Box, Cylinder, Location, Vector
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    w, d, h = spec.dimensions
+
+    body = Box(w, d, h, align=C)
+
+    # Drill a through-hole at each mounting point along its axis
+    hole_depth = max(w, d, h) + 0.002
+    z_vec = Vector(0, 0, 1)
+
+    for mp in spec.mounting_points:
+        hole = Cylinder(mp.diameter / 2, hole_depth, align=C)
+        target = Vector(*mp.axis)
+
+        # Rotate cylinder from Z-up to target axis
+        dot = z_vec.dot(target)
+        if abs(dot + 1.0) < 1e-6:
+            # Anti-parallel: 180° around X
+            hole = hole.rotate(Axis.X, 180)
+        elif abs(dot - 1.0) > 1e-6:
+            # General case: cross product gives rotation axis
+            cross = z_vec.cross(target)
+            angle = math.degrees(math.acos(max(-1.0, min(1.0, dot))))
+            hole = hole.rotate(Axis((0, 0, 0), cross), angle)
+
+        hole = hole.locate(Location(mp.pos))
+        body = body - hole
+
+    body.color = (0.8, 0.6, 0.2)
+    return body

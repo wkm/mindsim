@@ -487,71 +487,83 @@ def _emit_mounting_hardware(
     """Emit mesh geoms at screw/mounting positions."""
     _SCREW_RGBA = "0.7 0.7 0.7 0.9"
 
+    def _screw_attribs(name: str, mesh: str, pos: str, axis_quat):
+        """Common geom attributes for a fastener, including orientation."""
+        attribs = dict(
+            name=name,
+            type="mesh",
+            mesh=mesh,
+            pos=pos,
+            rgba=_SCREW_RGBA,
+            contype="0",
+            conaffinity="0",
+            group="1",
+        )
+        if axis_quat is not None:
+            attribs["quat"] = _fmt_quat(axis_quat)
+        return attribs
+
     # Servo mounting ears (bracket screw holes on this body's joints)
     for joint in body.joints:
         center, quat = joint_placements[joint.name]
         for ear in joint.servo.mounting_ears:
             world_pos = _add_vec3(center, rotate_vec(quat, ear.pos))
+            world_axis = rotate_vec(quat, ear.axis)
             SubElement(
                 body_el,
                 "geom",
-                name=f"screw_{joint.name}_{ear.label}",
-                type="mesh",
-                mesh=f"hardware_{ear.diameter:.4f}_mesh",
-                pos=_fmt_vec3(world_pos),
-                rgba=_SCREW_RGBA,
-                contype="0",
-                conaffinity="0",
-                group="1",
+                **_screw_attribs(
+                    f"screw_{joint.name}_{ear.label}",
+                    f"hardware_{ear.diameter:.4f}_mesh",
+                    _fmt_vec3(world_pos),
+                    _z_to_axis_quat(world_axis),
+                ),
             )
 
         # Horn mounting points (output face screw holes)
         for mp in joint.servo.horn_mounting_points:
             world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
+            world_axis = rotate_vec(quat, mp.axis)
             SubElement(
                 body_el,
                 "geom",
-                name=f"horn_{joint.name}_{mp.label}",
-                type="mesh",
-                mesh=f"hardware_{mp.diameter:.4f}_mesh",
-                pos=_fmt_vec3(world_pos),
-                rgba=_SCREW_RGBA,
-                contype="0",
-                conaffinity="0",
-                group="1",
+                **_screw_attribs(
+                    f"horn_{joint.name}_{mp.label}",
+                    f"hardware_{mp.diameter:.4f}_mesh",
+                    _fmt_vec3(world_pos),
+                    _z_to_axis_quat(world_axis),
+                ),
             )
 
         # Rear horn mounting points (blind side screw holes)
         for mp in joint.servo.rear_horn_mounting_points:
             world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
+            world_axis = rotate_vec(quat, mp.axis)
             SubElement(
                 body_el,
                 "geom",
-                name=f"rear_{joint.name}_{mp.label}",
-                type="mesh",
-                mesh=f"hardware_{mp.diameter:.4f}_mesh",
-                pos=_fmt_vec3(world_pos),
-                rgba=_SCREW_RGBA,
-                contype="0",
-                conaffinity="0",
-                group="1",
+                **_screw_attribs(
+                    f"rear_{joint.name}_{mp.label}",
+                    f"hardware_{mp.diameter:.4f}_mesh",
+                    _fmt_vec3(world_pos),
+                    _z_to_axis_quat(world_axis),
+                ),
             )
 
     # Component mount points (screw holes on mounted components)
     for mount in body.mounts:
         for mp in mount.component.mounting_points:
             pos = _add_vec3(mount.resolved_pos, mount.rotate_point(mp.pos))
+            local_axis = mount.rotate_point(mp.axis)
             SubElement(
                 body_el,
                 "geom",
-                name=f"mount_{body.name}_{mount.label}_{mp.label}",
-                type="mesh",
-                mesh=f"hardware_{mp.diameter:.4f}_mesh",
-                pos=_fmt_vec3(pos),
-                rgba=_SCREW_RGBA,
-                contype="0",
-                conaffinity="0",
-                group="1",
+                **_screw_attribs(
+                    f"mount_{body.name}_{mount.label}_{mp.label}",
+                    f"hardware_{mp.diameter:.4f}_mesh",
+                    _fmt_vec3(pos),
+                    _z_to_axis_quat(local_axis),
+                ),
             )
 
 

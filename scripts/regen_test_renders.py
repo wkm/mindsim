@@ -43,6 +43,7 @@ def regen_component_renders() -> None:
         PiCamera2,
         PololuWheel90mm,
         RaspberryPiZero2W,
+        TestFastenerPrism,
     )
     from botcad.emit.component_renders import (
         render_bracket_views,
@@ -65,6 +66,7 @@ def regen_component_renders() -> None:
         ("camera", "PiCamera2", PiCamera2()),
         ("battery", "LiPo2S-1000", LiPo2S(1000)),
         ("compute", "RaspberryPiZero2W", RaspberryPiZero2W()),
+        ("test", "TestFastenerPrism", TestFastenerPrism()),
     ]
 
     for category, name, comp in components:
