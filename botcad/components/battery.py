@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from botcad.colors import COLOR_POWER_BATTERY, COLOR_STRUCTURE_DARK
 from botcad.component import BatterySpec, BusType, WirePort
 
 
@@ -29,7 +30,7 @@ def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
             # Balance lead
             WirePort("balance", pos=(length / 2, 0.01, 0.0), bus_type=BusType.BALANCE),
         ),
-        color=(0.1, 0.1, 0.8, 1.0),  # Deep battery blue
+        color=COLOR_POWER_BATTERY.rgba,
         chemistry="LiPo",
         cells_s=2,
     )
@@ -80,9 +81,9 @@ def battery_solid(spec: BatterySpec):
     exit_block = exit_block.locate(Location((w / 2 - 0.001, 0, 0)))  # slightly embedded
 
     # Colors
-    body.color = (0.1, 0.1, 0.7)  # Blue shrink wrap
+    body.color = COLOR_POWER_BATTERY.rgb
     label.color = (0.9, 0.9, 0.9)  # White label
-    exit_block.color = (0.2, 0.2, 0.2)  # Dark gray / black rubber exit
+    exit_block.color = COLOR_STRUCTURE_DARK.rgb
 
     # Combine
     res = body.fuse(label).fuse(exit_block)

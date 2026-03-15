@@ -25,6 +25,12 @@ import numpy as np
 from fpdf import FPDF
 from PIL import Image
 
+from botcad.colors import (
+    COLOR_ARROW,
+    COLOR_CLEAR,
+    COLOR_COLLISION,
+    COLOR_STRUCTURE_WIREFRAME,
+)
 from botcad.emit.composite import save_png
 from botcad.emit.render3d import white_background
 from botcad.emit.renders import (
@@ -63,10 +69,10 @@ class DeterministicFPDF(FPDF):
 FRAME_W, FRAME_H = 1200, 1200  # 2x resolution for crisp PDF embedding
 DISPLACEMENTS_MM = [50, 35, 20, 10, 5, 2, 0]
 BORDER_W_MM = 1.5
-COLLISION_COLOR = (220, 40, 40)
-CLEAR_COLOR = (40, 180, 40)
-ARROW_RGBA = [1.0, 0.4, 0.0, 0.9]  # bright orange
-CONTEXT_RGBA = [0.70, 0.72, 0.75, 1.0]  # light steel gray for wireframe
+COLLISION_COLOR = COLOR_COLLISION.rgb_int
+CLEAR_COLOR = COLOR_CLEAR.rgb_int
+ARROW_RGBA = list(COLOR_ARROW.rgba)
+CONTEXT_RGBA = list(COLOR_STRUCTURE_WIREFRAME.rgba)
 MINIMAP_SIZE = 400
 
 # Geom name prefixes to hide in assembly renders (screws, mounting holes, wires)

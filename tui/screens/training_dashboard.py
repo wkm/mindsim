@@ -19,6 +19,7 @@ from textual.widgets import (
     TabPane,
 )
 
+from botcad.colors import TUI_ERROR, TUI_SUCCESS, TUI_WARNING
 from training.dashboard import _fmt_int, _fmt_pct, _fmt_time
 from training.train import Cmd
 
@@ -48,11 +49,11 @@ def _color_val(formatted: str, value: float | None, ranges: dict) -> str:
     if value is None:
         return formatted
     if ranges.get("green") and ranges["green"](value):
-        return f"[green]{formatted}[/green]"
+        return f"[{TUI_SUCCESS}]{formatted}[/{TUI_SUCCESS}]"
     if ranges.get("yellow") and ranges["yellow"](value):
-        return f"[yellow]{formatted}[/yellow]"
+        return f"[{TUI_WARNING}]{formatted}[/{TUI_WARNING}]"
     if ranges.get("red") and ranges["red"](value):
-        return f"[red]{formatted}[/red]"
+        return f"[{TUI_ERROR}]{formatted}[/{TUI_ERROR}]"
     return formatted
 
 
@@ -410,13 +411,13 @@ class TrainingDashboard(Screen):
     def action_checkpoint(self) -> None:
         self.app.send_command(Cmd.CHECKPOINT)
         self.log_message(
-            "[bold cyan]Checkpoint queued[/bold cyan] (saves after current batch)"
+            "[bold #2B95D6]Checkpoint queued[/bold #2B95D6] (saves after current batch)"
         )
 
     def action_send_rerun(self) -> None:
         self.app.send_command(Cmd.LOG_RERUN)
         self.log_message(
-            "[bold cyan]Rerun recording queued[/bold cyan] (records next eval episode)"
+            "[bold #2B95D6]Rerun recording queued[/bold #2B95D6] (records next eval episode)"
         )
 
     def action_advance_curriculum(self) -> None:
@@ -743,11 +744,15 @@ class TrainingDashboard(Screen):
         if gn_val is not None and max_gn > 0:
             ratio = gn_val / max_gn
             if ratio > 10:
-                gn_str = f"[red]{gn_str}[/red] [dim]({ratio:.0f}x)[/dim]"
+                gn_str = (
+                    f"[{TUI_ERROR}]{gn_str}[/{TUI_ERROR}] [dim]({ratio:.0f}x)[/dim]"
+                )
             elif ratio > 2:
-                gn_str = f"[yellow]{gn_str}[/yellow] [dim]({ratio:.0f}x)[/dim]"
+                gn_str = (
+                    f"[{TUI_WARNING}]{gn_str}[/{TUI_WARNING}] [dim]({ratio:.0f}x)[/dim]"
+                )
             else:
-                gn_str = f"[green]{gn_str}[/green]"
+                gn_str = f"[{TUI_SUCCESS}]{gn_str}[/{TUI_SUCCESS}]"
         self.query_one("#m-grad-norm").update(f"  grad norm        {gn_str}")
         self.query_one("#m-entropy").update(
             f"  entropy          {_fmt(m.get('entropy'), precision=3)}"
@@ -815,7 +820,7 @@ class TrainingDashboard(Screen):
 
     def log_ai_commentary(self, text: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        header = f"[dim]{ts}[/dim]  [bold cyan]AI:[/bold cyan]"
+        header = f"[dim]{ts}[/dim]  [bold #2B95D6]AI:[/bold #2B95D6]"
         md = RichMarkdown(text)
         # Write header + rendered markdown to both Log and AI tabs
         for widget_id in ("#log-area", "#ai-area"):

@@ -7,6 +7,7 @@ import time
 import numpy as np
 import rerun as rr
 
+from botcad.colors import COLOR_VIZ_TRAJECTORY
 from sim.env import SimEnv
 from viz import rerun_logger
 
@@ -82,7 +83,10 @@ def run_visualization(
             if len(trajectory_points) > 1:
                 rr.log(
                     "world/trajectory",
-                    rr.LineStrips3D([trajectory_points], colors=[[100, 200, 100]]),
+                    rr.LineStrips3D(
+                        [trajectory_points],
+                        colors=[[*COLOR_VIZ_TRAJECTORY.rgb_int]],
+                    ),
                 )
 
         if step % PROGRESS_PRINT_INTERVAL == 0:

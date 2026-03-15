@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from botcad.colors import COLOR_STRUCTURE_RUBBER
 from botcad.component import Component, MountPoint
 
 
@@ -91,5 +92,5 @@ def PololuWheel90mm() -> Component:
                 fastener_type="M3",
             ),
         ),
-        color=(0.2, 0.2, 0.2, 1.0),  # dark rubber
+        color=COLOR_STRUCTURE_RUBBER.rgba,
     )

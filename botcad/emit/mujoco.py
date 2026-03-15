@@ -17,6 +17,15 @@ from typing import TYPE_CHECKING
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
+from botcad.colors import (
+    COLOR_STRUCTURE_BODY,
+    COLOR_STRUCTURE_DARK,
+    COLOR_STRUCTURE_HORN_DISC,
+    COLOR_WIRE_CSI,
+    COLOR_WIRE_DEFAULT,
+    COLOR_WIRE_POWER,
+    COLOR_WIRE_UART,
+)
 from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
 from botcad.geometry import rotate_vec, rotation_between, servo_placement
@@ -356,7 +365,7 @@ def _emit_body_tree(
                 "type": "mesh",
                 "mesh": f"horn_{parent_joint.name}_mesh",
                 "pos": _fmt_vec3(disc_pos),
-                "rgba": "0.85 0.85 0.88 0.9",
+                "rgba": COLOR_STRUCTURE_HORN_DISC.with_alpha(0.9).rgba_str,
                 "contype": "0",
                 "conaffinity": "0",
                 "group": "1",
@@ -398,7 +407,7 @@ def _emit_body_tree(
             type="cylinder",
             size=f"{r} {half_w}",
             quat="0.7071068 0 0.7071068 0",
-            rgba="0.15 0.15 0.15 0.0",
+            rgba=COLOR_STRUCTURE_DARK.with_alpha(0.0).rgba_str,
             contype="1",
             conaffinity="1",
             friction="1.5 0.005 0.0001",
@@ -437,7 +446,7 @@ def _emit_body_tree(
             mesh=f"servo_{servo.name}_mesh",
             pos=_fmt_vec3(center),
             quat=_fmt_quat(quat),
-            rgba="0.15 0.15 0.15 1.0",
+            rgba=COLOR_STRUCTURE_DARK.rgba_str,
             contype="0",
             conaffinity="0",
             group="1",
@@ -474,7 +483,7 @@ def _emit_mounted_components(
             type="mesh",
             mesh=mesh_name,
             pos=_fmt_vec3(mount.resolved_pos),
-            rgba=f"{r} {g} {b} {a}",
+            rgba=f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
             contype="0",
             conaffinity="0",
             group="1",
@@ -485,7 +494,9 @@ def _emit_mounting_hardware(
     body_el: Element, body: Body, joint_placements: dict[str, tuple]
 ) -> None:
     """Emit mesh geoms at screw/mounting positions."""
-    _SCREW_RGBA = "0.7 0.7 0.7 0.9"
+    from botcad.colors import COLOR_METAL_STEEL
+
+    _SCREW_RGBA = COLOR_METAL_STEEL.with_alpha(0.9).rgba_str
 
     def _screw_attribs(name: str, mesh: str, pos: str, axis_quat):
         """Common geom attributes for a fastener, including orientation."""
@@ -592,9 +603,9 @@ def _emit_camera(parent_el: Element, body: Body) -> None:
 
 
 _WIRE_COLORS = {
-    BusType.UART_HALF_DUPLEX: "0.2 0.4 1.0 0.9",  # blue — servo daisy-chain
-    BusType.CSI: "1.0 0.8 0.0 0.9",  # yellow — camera ribbon
-    BusType.POWER: "0.9 0.2 0.2 0.9",  # red — power
+    BusType.UART_HALF_DUPLEX: COLOR_WIRE_UART.rgba_str,
+    BusType.CSI: COLOR_WIRE_CSI.rgba_str,
+    BusType.POWER: COLOR_WIRE_POWER.rgba_str,
 }
 _WIRE_RADIUS = {
     BusType.UART_HALF_DUPLEX: "0.0009",  # 0.9mm — servo bus (channel is 1.5mm)
@@ -611,7 +622,7 @@ def _emit_body_wires(body_el: Element, body: Body, bot: Bot) -> None:
     already in body-local frame from the routing solver.
     """
     for route in bot.wire_routes:
-        color = _WIRE_COLORS.get(route.bus_type, "0.5 0.5 0.5 0.9")
+        color = _WIRE_COLORS.get(route.bus_type, COLOR_WIRE_DEFAULT.rgba_str)
         for i, seg in enumerate(route.segments):
             if seg.body_name != body.name:
                 continue
@@ -698,18 +709,20 @@ def _build_scene_xml(bot: Bot) -> str:
 def _body_color(body: Body) -> str:
     """Pick a color for a body based on its shape/role."""
     r, g, b = _body_color_rgb(body)
-    return f"{r} {g} {b} 1.0"
+    return f"{r:.4f} {g:.4f} {b:.4f} 1.0000"
 
 
 def _body_color_rgb(body: Body) -> tuple[float, float, float]:
     """Shape-based body color. Shared between CAD and MuJoCo emitters."""
+    from botcad.colors import BP_GRAY5
+
     if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
-        return (0.15, 0.15, 0.15)  # dark gray: wheels
+        return COLOR_STRUCTURE_DARK.rgb  # dark gray: wheels
     if body.shape is BodyShape.TUBE:
-        return (0.7, 0.7, 0.7)  # light gray: structural tubes
+        return BP_GRAY5  # light gray: structural tubes
     if body.shape is BodyShape.JAW:
-        return (0.85, 0.85, 0.85)  # light gray: gripper jaw
-    return (0.9, 0.9, 0.9)  # off-white: default
+        return COLOR_STRUCTURE_BODY.rgb  # light gray: gripper jaw
+    return COLOR_STRUCTURE_BODY.rgb  # default: printed bracket
 
 
 def _z_to_axis_quat(

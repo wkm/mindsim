@@ -71,7 +71,7 @@ class Component:
     mass: float  # kg
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
-    color: RGBA = (0.5, 0.5, 0.5, 1.0)
+    color: RGBA = (0.541, 0.608, 0.659, 1.0)  # BP_GRAY3 — default
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 

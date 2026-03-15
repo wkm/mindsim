@@ -60,7 +60,7 @@ class SolidPart:
 
     name: str
     solid: object  # build123d Solid
-    rgba: tuple[float, float, float, float] = (0.6, 0.6, 0.6, 0.85)
+    rgba: tuple[float, float, float, float] = (0.541, 0.608, 0.659, 0.85)  # BP_GRAY3
     check_collision: bool = True
 
 

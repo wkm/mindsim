@@ -193,12 +193,14 @@ class GCPInstancesScreen(Screen):
                 created = created.split("T")[0] + " " + created.split("T")[1][:5]
 
             # Color-code status
+            from botcad.colors import TUI_ERROR, TUI_SUCCESS, TUI_WARNING
+
             if status == "RUNNING":
-                status_display = f"[green]{status}[/green]"
+                status_display = f"[{TUI_SUCCESS}]{status}[/{TUI_SUCCESS}]"
             elif status in ("TERMINATED", "STOPPED"):
-                status_display = f"[red]{status}[/red]"
+                status_display = f"[{TUI_ERROR}]{status}[/{TUI_ERROR}]"
             elif status in ("STAGING", "PROVISIONING", "SUSPENDING"):
-                status_display = f"[yellow]{status}[/yellow]"
+                status_display = f"[{TUI_WARNING}]{status}[/{TUI_WARNING}]"
             else:
                 status_display = status
 

@@ -744,75 +744,75 @@
   </g>
   <text x="0.018703" y="-0.018075" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">A-A</text>
   <text x="0.018703" y="-0.014575" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">front_horn</text>
-  <line x1="0.000000" y1="0.010800" x2="0.000000" y2="0.013800" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.037406" y1="0.010800" x2="0.037406" y2="0.013800" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.000000" y1="0.012200" x2="0.000000" y2="0.013800" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.037406" y1="0.012200" x2="0.037406" y2="0.013800" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.000000" y1="0.013000" x2="0.037406" y2="0.013000" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.000000,0.013000 0.001500,0.012400 0.001500,0.013600" fill="#555"/>
-  <polygon points="0.037406,0.013000 0.035906,0.012400 0.035906,0.013600" fill="#555"/>
-  <text x="0.018703" y="0.011800" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">37.4</text>
-  <line x1="0.038206" y1="-0.010000" x2="0.041206" y2="-0.010000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.038206" y1="0.010000" x2="0.041206" y2="0.010000" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.039606" y1="-0.010000" x2="0.041206" y2="-0.010000" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.039606" y1="0.010000" x2="0.041206" y2="0.010000" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.040406" y1="-0.010000" x2="0.040406" y2="0.010000" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.040406,-0.010000 0.039806,-0.008500 0.041006,-0.008500" fill="#555"/>
-  <polygon points="0.040406,0.010000 0.039806,0.008500 0.041006,0.008500" fill="#555"/>
-  <text x="0.041906" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.041906 0.000000)">20.0</text>
+  <line x1="0.000000" y1="0.010800" x2="0.000000" y2="0.013800" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.037406" y1="0.010800" x2="0.037406" y2="0.013800" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.000000" y1="0.012200" x2="0.000000" y2="0.013800" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.037406" y1="0.012200" x2="0.037406" y2="0.013800" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.000000" y1="0.013000" x2="0.037406" y2="0.013000" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.000000,0.013000 0.001500,0.012400 0.001500,0.013600" fill="#5C7080"/>
+  <polygon points="0.037406,0.013000 0.035906,0.012400 0.035906,0.013600" fill="#5C7080"/>
+  <text x="0.018703" y="0.011800" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080">37.4</text>
+  <line x1="0.038206" y1="-0.010000" x2="0.041206" y2="-0.010000" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.038206" y1="0.010000" x2="0.041206" y2="0.010000" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.039606" y1="-0.010000" x2="0.041206" y2="-0.010000" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.039606" y1="0.010000" x2="0.041206" y2="0.010000" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.040406" y1="-0.010000" x2="0.040406" y2="0.010000" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.040406,-0.010000 0.039806,-0.008500 0.041006,-0.008500" fill="#5C7080"/>
+  <polygon points="0.040406,0.010000 0.039806,0.008500 0.041006,0.008500" fill="#5C7080"/>
+  <text x="0.041906" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080" transform="rotate(-90 0.041906 0.000000)">20.0</text>
   <text x="0.075709" y="-0.018075" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">B-B</text>
   <text x="0.075709" y="-0.014575" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">rear_horn</text>
-  <line x1="0.045406" y1="0.013200" x2="0.045406" y2="0.016200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.106012" y1="0.013200" x2="0.106012" y2="0.016200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.045406" y1="0.014600" x2="0.045406" y2="0.016200" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.106012" y1="0.014600" x2="0.106012" y2="0.016200" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.045406" y1="0.015400" x2="0.106012" y2="0.015400" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.045406,0.015400 0.046906,0.014800 0.046906,0.016000" fill="#555"/>
-  <polygon points="0.106012,0.015400 0.104512,0.014800 0.104512,0.016000" fill="#555"/>
-  <text x="0.075709" y="0.014200" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">60.6</text>
-  <line x1="0.106812" y1="-0.012400" x2="0.109812" y2="-0.012400" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.106812" y1="0.012400" x2="0.109812" y2="0.012400" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.108212" y1="-0.012400" x2="0.109812" y2="-0.012400" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.108212" y1="0.012400" x2="0.109812" y2="0.012400" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.109012" y1="-0.012400" x2="0.109012" y2="0.012400" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.109012,-0.012400 0.108412,-0.010900 0.109612,-0.010900" fill="#555"/>
-  <polygon points="0.109012,0.012400 0.108412,0.010900 0.109612,0.010900" fill="#555"/>
-  <text x="0.110512" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.110512 0.000000)">24.8</text>
+  <line x1="0.045406" y1="0.013200" x2="0.045406" y2="0.016200" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.106012" y1="0.013200" x2="0.106012" y2="0.016200" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.045406" y1="0.014600" x2="0.045406" y2="0.016200" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.106012" y1="0.014600" x2="0.106012" y2="0.016200" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.045406" y1="0.015400" x2="0.106012" y2="0.015400" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.045406,0.015400 0.046906,0.014800 0.046906,0.016000" fill="#5C7080"/>
+  <polygon points="0.106012,0.015400 0.104512,0.014800 0.104512,0.016000" fill="#5C7080"/>
+  <text x="0.075709" y="0.014200" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080">60.6</text>
+  <line x1="0.106812" y1="-0.012400" x2="0.109812" y2="-0.012400" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.106812" y1="0.012400" x2="0.109812" y2="0.012400" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.108212" y1="-0.012400" x2="0.109812" y2="-0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.108212" y1="0.012400" x2="0.109812" y2="0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.109012" y1="-0.012400" x2="0.109012" y2="0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.109012,-0.012400 0.108412,-0.010900 0.109612,-0.010900" fill="#5C7080"/>
+  <polygon points="0.109012,0.012400 0.108412,0.010900 0.109612,0.010900" fill="#5C7080"/>
+  <text x="0.110512" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080" transform="rotate(-90 0.110512 0.000000)">24.8</text>
   <text x="0.145315" y="-0.018075" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">C-C</text>
   <text x="0.145315" y="-0.014575" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001800" fill="#888">mid_body</text>
-  <line x1="0.114012" y1="0.013200" x2="0.114012" y2="0.016200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.176619" y1="0.013200" x2="0.176619" y2="0.016200" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.114012" y1="0.014600" x2="0.114012" y2="0.016200" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.176619" y1="0.014600" x2="0.176619" y2="0.016200" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.114012" y1="0.015400" x2="0.176619" y2="0.015400" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.114012,0.015400 0.115512,0.014800 0.115512,0.016000" fill="#555"/>
-  <polygon points="0.176619,0.015400 0.175119,0.014800 0.175119,0.016000" fill="#555"/>
-  <text x="0.145315" y="0.014200" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">62.6</text>
-  <line x1="0.177419" y1="-0.012400" x2="0.180419" y2="-0.012400" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.177419" y1="0.012400" x2="0.180419" y2="0.012400" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.178819" y1="-0.012400" x2="0.180419" y2="-0.012400" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.178819" y1="0.012400" x2="0.180419" y2="0.012400" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.179619" y1="-0.012400" x2="0.179619" y2="0.012400" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.179619,-0.012400 0.179019,-0.010900 0.180219,-0.010900" fill="#555"/>
-  <polygon points="0.179619,0.012400 0.179019,0.010900 0.180219,0.010900" fill="#555"/>
-  <text x="0.181119" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.181119 0.000000)">24.8</text>
+  <line x1="0.114012" y1="0.013200" x2="0.114012" y2="0.016200" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.176619" y1="0.013200" x2="0.176619" y2="0.016200" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.114012" y1="0.014600" x2="0.114012" y2="0.016200" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.176619" y1="0.014600" x2="0.176619" y2="0.016200" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.114012" y1="0.015400" x2="0.176619" y2="0.015400" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.114012,0.015400 0.115512,0.014800 0.115512,0.016000" fill="#5C7080"/>
+  <polygon points="0.176619,0.015400 0.175119,0.014800 0.175119,0.016000" fill="#5C7080"/>
+  <text x="0.145315" y="0.014200" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080">62.6</text>
+  <line x1="0.177419" y1="-0.012400" x2="0.180419" y2="-0.012400" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.177419" y1="0.012400" x2="0.180419" y2="0.012400" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.178819" y1="-0.012400" x2="0.180419" y2="-0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.178819" y1="0.012400" x2="0.180419" y2="0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.179619" y1="-0.012400" x2="0.179619" y2="0.012400" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.179619,-0.012400 0.179019,-0.010900 0.180219,-0.010900" fill="#5C7080"/>
+  <polygon points="0.179619,0.012400 0.179019,0.010900 0.180219,0.010900" fill="#5C7080"/>
+  <text x="0.181119" y="0.000000" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080" transform="rotate(-90 0.181119 0.000000)">24.8</text>
   <text x="0.215935" y="-0.018075" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">side_XZ</text>
-  <line x1="0.184619" y1="0.044715" x2="0.184619" y2="0.047715" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.247251" y1="0.044715" x2="0.247251" y2="0.047715" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.184619" y1="0.046115" x2="0.184619" y2="0.047715" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.247251" y1="0.046115" x2="0.247251" y2="0.047715" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.184619" y1="0.046915" x2="0.247251" y2="0.046915" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.184619,0.046915 0.186119,0.046315 0.186119,0.047515" fill="#555"/>
-  <polygon points="0.247251,0.046915 0.245751,0.046315 0.245751,0.047515" fill="#555"/>
-  <text x="0.215935" y="0.045715" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">62.6</text>
-  <line x1="0.248051" y1="-0.011715" x2="0.251051" y2="-0.011715" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.248051" y1="0.043915" x2="0.251051" y2="0.043915" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.249451" y1="-0.011715" x2="0.251051" y2="-0.011715" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.249451" y1="0.043915" x2="0.251051" y2="0.043915" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.250251" y1="-0.011715" x2="0.250251" y2="0.043915" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.250251,-0.011715 0.249651,-0.010215 0.250851,-0.010215" fill="#555"/>
-  <polygon points="0.250251,0.043915 0.249651,0.042415 0.250851,0.042415" fill="#555"/>
-  <text x="0.251751" y="0.016100" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.251751 0.016100)">55.6</text>
+  <line x1="0.184619" y1="0.044715" x2="0.184619" y2="0.047715" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.247251" y1="0.044715" x2="0.247251" y2="0.047715" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.184619" y1="0.046115" x2="0.184619" y2="0.047715" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.247251" y1="0.046115" x2="0.247251" y2="0.047715" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.184619" y1="0.046915" x2="0.247251" y2="0.046915" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.184619,0.046915 0.186119,0.046315 0.186119,0.047515" fill="#5C7080"/>
+  <polygon points="0.247251,0.046915 0.245751,0.046315 0.245751,0.047515" fill="#5C7080"/>
+  <text x="0.215935" y="0.045715" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080">62.6</text>
+  <line x1="0.248051" y1="-0.011715" x2="0.251051" y2="-0.011715" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.248051" y1="0.043915" x2="0.251051" y2="0.043915" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.249451" y1="-0.011715" x2="0.251051" y2="-0.011715" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.249451" y1="0.043915" x2="0.251051" y2="0.043915" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.250251" y1="-0.011715" x2="0.250251" y2="0.043915" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.250251,-0.011715 0.249651,-0.010215 0.250851,-0.010215" fill="#5C7080"/>
+  <polygon points="0.250251,0.043915 0.249651,0.042415 0.250851,0.042415" fill="#5C7080"/>
+  <text x="0.251751" y="0.016100" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080" transform="rotate(-90 0.251751 0.016100)">55.6</text>
   <line x1="0.181619" y1="-0.001700" x2="0.250251" y2="-0.001700" stroke="#555" stroke-width="0.000250" stroke-dasharray="0.002500,0.000800,0.000500,0.000800"/>
   <text x="0.180119" y="-0.001100" text-anchor="end" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">A</text>
   <text x="0.251751" y="-0.001100" text-anchor="start" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">A</text>
@@ -823,22 +823,22 @@
   <text x="0.180119" y="0.016700" text-anchor="end" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">C</text>
   <text x="0.251751" y="0.016700" text-anchor="start" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">C</text>
   <text x="0.267651" y="-0.018075" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002500" font-weight="bold" fill="#333">side_YZ</text>
-  <line x1="0.255251" y1="0.044717" x2="0.255251" y2="0.047717" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.280051" y1="0.044717" x2="0.280051" y2="0.047717" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.255251" y1="0.046117" x2="0.255251" y2="0.047717" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.280051" y1="0.046117" x2="0.280051" y2="0.047717" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.255251" y1="0.046917" x2="0.280051" y2="0.046917" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.255251,0.046917 0.256751,0.046317 0.256751,0.047517" fill="#555"/>
-  <polygon points="0.280051,0.046917 0.278551,0.046317 0.278551,0.047517" fill="#555"/>
-  <text x="0.267651" y="0.045717" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555">24.8</text>
-  <line x1="0.280851" y1="-0.011740" x2="0.283851" y2="-0.011740" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.280851" y1="0.043917" x2="0.283851" y2="0.043917" stroke="#555" stroke-width="0.000140" stroke-opacity="0.5"/>
-  <line x1="0.282251" y1="-0.011740" x2="0.283851" y2="-0.011740" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.282251" y1="0.043917" x2="0.283851" y2="0.043917" stroke="#555" stroke-width="0.000200"/>
-  <line x1="0.283051" y1="-0.011740" x2="0.283051" y2="0.043917" stroke="#555" stroke-width="0.000200"/>
-  <polygon points="0.283051,-0.011740 0.282451,-0.010240 0.283651,-0.010240" fill="#555"/>
-  <polygon points="0.283051,0.043917 0.282451,0.042417 0.283651,0.042417" fill="#555"/>
-  <text x="0.284551" y="0.016088" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#555" transform="rotate(-90 0.284551 0.016088)">55.7</text>
+  <line x1="0.255251" y1="0.044717" x2="0.255251" y2="0.047717" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.280051" y1="0.044717" x2="0.280051" y2="0.047717" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.255251" y1="0.046117" x2="0.255251" y2="0.047717" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.280051" y1="0.046117" x2="0.280051" y2="0.047717" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.255251" y1="0.046917" x2="0.280051" y2="0.046917" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.255251,0.046917 0.256751,0.046317 0.256751,0.047517" fill="#5C7080"/>
+  <polygon points="0.280051,0.046917 0.278551,0.046317 0.278551,0.047517" fill="#5C7080"/>
+  <text x="0.267651" y="0.045717" text-anchor="middle" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080">24.8</text>
+  <line x1="0.280851" y1="-0.011740" x2="0.283851" y2="-0.011740" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.280851" y1="0.043917" x2="0.283851" y2="0.043917" stroke="#5C7080" stroke-width="0.000140" stroke-opacity="0.5"/>
+  <line x1="0.282251" y1="-0.011740" x2="0.283851" y2="-0.011740" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.282251" y1="0.043917" x2="0.283851" y2="0.043917" stroke="#5C7080" stroke-width="0.000200"/>
+  <line x1="0.283051" y1="-0.011740" x2="0.283051" y2="0.043917" stroke="#5C7080" stroke-width="0.000200"/>
+  <polygon points="0.283051,-0.011740 0.282451,-0.010240 0.283651,-0.010240" fill="#5C7080"/>
+  <polygon points="0.283051,0.043917 0.282451,0.042417 0.283651,0.042417" fill="#5C7080"/>
+  <text x="0.284551" y="0.016088" text-anchor="middle" dominant-baseline="central" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.001600" fill="#5C7080" transform="rotate(-90 0.284551 0.016088)">55.7</text>
   <line x1="0.252251" y1="-0.001700" x2="0.283051" y2="-0.001700" stroke="#555" stroke-width="0.000250" stroke-dasharray="0.002500,0.000800,0.000500,0.000800"/>
   <text x="0.250751" y="-0.001100" text-anchor="end" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">A</text>
   <text x="0.284551" y="-0.001100" text-anchor="start" font-family="'Input Sans Narrow', 'DejaVu Sans', Arial, sans-serif" font-size="0.002000" font-weight="bold" fill="#555">A</text>

@@ -55,19 +55,22 @@ def render_diff_sheet(output_dir: Path, name: str, artifacts: dict[str, Path]):
     """Generates a composite PNG showing the diff from multiple angles."""
     from PIL import Image, ImageDraw
 
+    from botcad.colors import (
+        COLOR_COMPARE_EXTRA,
+        COLOR_COMPARE_GEN,
+        COLOR_COMPARE_MISSING,
+    )
     from botcad.emit.composite import FONT_LABEL, FONT_TITLE, save_png
     from botcad.emit.render3d import (
-        COLOR_BRACKET,
         VIEWS_4,
-        Color,
         Renderer3D,
         SceneBuilder,
     )
 
-    # Custom colors for diff
-    COLOR_GEN = COLOR_BRACKET  # Blueish
-    COLOR_EXTRA = Color(1.0, 0.2, 0.2, 1.0, "extra (red)")
-    COLOR_MISSING = Color(1.0, 0.9, 0.2, 1.0, "missing (yellow)")
+    # Diff colors from centralized palette
+    COLOR_GEN = COLOR_COMPARE_GEN
+    COLOR_EXTRA = COLOR_COMPARE_EXTRA
+    COLOR_MISSING = COLOR_COMPARE_MISSING
 
     # 1. Build Scene
     scene = SceneBuilder(width=1000, height=1000)

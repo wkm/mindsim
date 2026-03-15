@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from botcad.colors import COLOR_METAL_BRASS
 from botcad.component import Component, MountPoint
 
 # Pre-computed unit vectors for angled fasteners
@@ -117,7 +118,7 @@ def TestFastenerPrism() -> Component:
                 fastener_type="M3",
             ),
         ),
-        color=(0.8, 0.6, 0.2, 1.0),  # Gold/brass — stands out as synthetic
+        color=COLOR_METAL_BRASS.rgba,
     )
 
 
@@ -152,5 +153,5 @@ def test_fastener_solid(spec: Component):
         hole = hole.locate(Location(mp.pos))
         body = body - hole
 
-    body.color = (0.8, 0.6, 0.2)
+    body.color = COLOR_METAL_BRASS.rgb
     return body

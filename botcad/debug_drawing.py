@@ -37,19 +37,14 @@ from build123d import (
 )
 from build123d.exporters import LineType
 
+from botcad.colors import DEBUG_PALETTE
+from botcad.colors import DIM_COLOR as DIM_COLOR  # re-export
 from botcad.component import Vec3
 
 RGB = tuple[int, int, int]
 
-# Default color palette — visually distinct, colorblind-friendly
-PALETTE: list[RGB] = [
-    (220, 60, 40),  # red
-    (50, 120, 190),  # blue
-    (60, 60, 60),  # dark gray
-    (40, 170, 80),  # green
-    (200, 140, 40),  # amber
-    (140, 80, 170),  # purple
-]
+# Default color palette — visually distinct, colorblind-friendly (Blueprint.js)
+PALETTE: list[RGB] = DEBUG_PALETTE
 
 # Geometry is in meters; scale=1000 means 1m → 1000 SVG units (mm).
 DEFAULT_SCALE = 1000.0
@@ -77,7 +72,6 @@ DIM_OFFSET_MM = 3.0  # offset from geometry edge to dimension line
 DIM_ARROW_MM = 1.5  # arrowhead length
 DIM_TICK_MM = 0.8  # extension line overshoot past dimension line
 DIM_LINE_WEIGHT_MM = 0.2  # dimension line stroke width
-DIM_COLOR = "#555"  # dimension line/text color
 
 # Section cutting line styling (mm)
 _CUT_OVERHANG_MM = 3.0  # extend past geometry edges

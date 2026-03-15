@@ -34,11 +34,36 @@ from pathlib import Path
 from textual import work
 from textual.app import App
 from textual.binding import Binding
+from textual.theme import Theme
 
+from botcad.colors import (
+    TUI_BACKGROUND,
+    TUI_ERROR,
+    TUI_PRIMARY,
+    TUI_PRIMARY_BG,
+    TUI_SECONDARY,
+    TUI_SUCCESS,
+    TUI_SURFACE,
+    TUI_WARNING,
+)
 from training.train import CommandChannel
 from tui.screens.dirty_tree import DirtyTreeScreen
 from tui.screens.main_menu import MainMenuScreen
 from tui.screens.training_dashboard import TrainingDashboard
+
+# Blueprint.js dark theme for Textual TUI
+_BLUEPRINT_THEME = Theme(
+    name="blueprint",
+    primary=TUI_PRIMARY,
+    secondary=TUI_SECONDARY,
+    warning=TUI_WARNING,
+    error=TUI_ERROR,
+    success=TUI_SUCCESS,
+    background=TUI_BACKGROUND,
+    surface=TUI_SURFACE,
+    panel=TUI_PRIMARY_BG,
+    dark=True,
+)
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +237,8 @@ class MindSimApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.register_theme(_BLUEPRINT_THEME)
+        self.theme = "blueprint"
         self.commands = CommandChannel()
         self._dashboard: TrainingDashboard | None = None
         # Set by screens to dispatch after app.run() returns

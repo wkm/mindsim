@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from botcad.colors import COLOR_ELECTRONICS_DARK, COLOR_STRUCTURE_DARK
 from botcad.component import BusType, CameraSpec, MountPoint, WirePort
 
 
@@ -54,7 +55,7 @@ def OV5647() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=(0.1, 0.4, 0.15, 1.0),  # PCB Green
+        color=COLOR_ELECTRONICS_DARK.rgba,
     )
 
 
@@ -107,13 +108,10 @@ def camera_solid(spec: CameraSpec):
     connector = connector.locate(Location((0, -pcb_h / 2, pcb_thick / 2)))
 
     # 5. Composite Solid
-    # Combine all parts. PCB is Green, Lens is Black/Dark Gray.
-    # We'll return them as a single fused solid for now, but we could use Compound.
-    # (The cad emitter handles colors per-solid, but here we fuse for simplicity).
-    pcb.color = (0.1, 0.4, 0.15)  # Dark Green
-    lens_base.color = (0.15, 0.15, 0.15)
-    lens_barrel.color = (0.1, 0.1, 0.1)
-    connector.color = (0.8, 0.8, 0.8)
+    pcb.color = COLOR_ELECTRONICS_DARK.rgb
+    lens_base.color = COLOR_STRUCTURE_DARK.rgb
+    lens_barrel.color = (0.1, 0.1, 0.1)  # lens glass — near black
+    connector.color = (0.8, 0.8, 0.8)  # metal connector
 
     return pcb.fuse(lens_base).fuse(lens_barrel).fuse(connector)
 
@@ -161,5 +159,5 @@ def PiCamera2() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=(0.1, 0.4, 0.15, 1.0),  # PCB Green
+        color=COLOR_ELECTRONICS_DARK.rgba,
     )

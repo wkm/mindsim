@@ -244,6 +244,8 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
     """Generate STEP assembly and per-body STL files."""
     from build123d import Color, Compound, Location, export_step, export_stl
 
+    from botcad.colors import COLOR_STRUCTURE_DARK, COLOR_STRUCTURE_HORN_DISC
+
     meshes_dir = output_dir / "meshes"
     meshes_dir.mkdir(parents=True, exist_ok=True)
 
@@ -440,7 +442,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             offset = params.thickness / 2
             pos = (jx + ax * offset, jy + ay * offset, jz + az * offset)
 
-            solid.color = Color(0.85, 0.85, 0.88)
+            solid.color = Color(*COLOR_STRUCTURE_HORN_DISC.rgb)
             solid.label = f"{joint.name}_horn"
             positioned = solid.moved(Location(pos))
             assembly_parts.append(positioned)
@@ -466,7 +468,8 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
                 Location(body_world) * Location(center, euler)
             )
             solid = _as_solid(solid)
-            solid.color = Color(0.15, 0.15, 0.15)  # dark gray
+
+            solid.color = Color(*COLOR_STRUCTURE_DARK.rgb)
             solid.label = f"servo_{joint.name}"
             assembly_parts.append(solid)
             servo_count += 1

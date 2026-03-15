@@ -34,53 +34,20 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import uniform_filter
 
-# ── Color ──
-
-
-@dataclass(frozen=True)
-class Color:
-    """Unified color: one definition, multiple representations.
-
-    Construct with MuJoCo-style floats [0..1]. Derive PIL RGB and
-    MuJoCo XML string automatically.
-    """
-
-    r: float
-    g: float
-    b: float
-    a: float = 1.0
-    label: str = ""
-
-    @property
-    def rgba_str(self) -> str:
-        """MuJoCo XML rgba attribute value."""
-        return f"{self.r} {self.g} {self.b} {self.a}"
-
-    @property
-    def rgb_int(self) -> tuple[int, int, int]:
-        """PIL-compatible (R, G, B) in 0..255."""
-        return (int(self.r * 255), int(self.g * 255), int(self.b * 255))
-
-    @property
-    def legend(self) -> tuple[str, tuple[int, int, int]]:
-        """(label, rgb_int) pair for composite legends."""
-        return (self.label, self.rgb_int)
-
-
-# ── Standard colors (visual language) ──
-
-COLOR_MOUNTING = Color(0.2, 0.4, 1.0, 1.0, "mounting (blue)")
-COLOR_WIRE_PORT = Color(1.0, 0.5, 0.1, 1.0, "wire port (orange)")
-COLOR_SHAFT = Color(1.0, 0.2, 0.2, 1.0, "shaft (red)")
-COLOR_HORN = Color(1.0, 0.9, 0.2, 0.7, "horn (yellow)")
-COLOR_HORN_HOLE = Color(0.2, 1.0, 0.3, 1.0, "horn holes (green)")
-COLOR_REAR_HOLE = Color(0.2, 0.9, 0.9, 1.0, "rear holes (cyan)")
-
-COLOR_BRACKET = Color(0.55, 0.75, 0.85, 1.0, "bracket (blue)")
-COLOR_SERVO_BODY = Color(0.15, 0.15, 0.15, 1.0, "servo (dark)")
-COLOR_CRADLE = Color(0.55, 0.75, 0.85, 1.0, "cradle/static (blue)")
-COLOR_COUPLER = Color(0.85, 0.55, 0.55, 1.0, "coupler/moving (red)")
-
+# ── Color (re-exported from botcad.colors) ──
+from botcad.colors import (  # noqa: E402, F401
+    COLOR_BRACKET,
+    COLOR_COUPLER,
+    COLOR_CRADLE,
+    COLOR_HORN,
+    COLOR_HORN_HOLE,
+    COLOR_MOUNTING,
+    COLOR_REAR_HOLE,
+    COLOR_SERVO_BODY,
+    COLOR_SHAFT,
+    COLOR_WIRE_PORT,
+    Color,
+)
 
 # ── Camera presets ──
 

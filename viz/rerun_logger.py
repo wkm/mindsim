@@ -12,6 +12,8 @@ import mujoco
 import numpy as np
 import rerun as rr
 
+from botcad.colors import COLOR_VIZ_ARENA, COLOR_VIZ_FLOOR
+
 logger = logging.getLogger(__name__)
 
 
@@ -487,7 +489,7 @@ def setup_scene(
         rr.Boxes3D(
             half_sizes=[[half_size, half_size, 0.005]],
             centers=[[0, 0, -0.005]],
-            colors=[[128, 128, 128, 100]],
+            colors=[[*COLOR_VIZ_FLOOR.rgb_int, int(COLOR_VIZ_FLOOR.a * 255)]],
         ),
         static=True,
     )
@@ -505,7 +507,10 @@ def setup_scene(
         ]
         rr.log(
             f"{namespace}/arena_boundary",
-            rr.LineStrips3D([corners], colors=[[255, 100, 100, 180]]),
+            rr.LineStrips3D(
+                [corners],
+                colors=[[*COLOR_VIZ_ARENA.rgb_int, int(COLOR_VIZ_ARENA.a * 255)]],
+            ),
             static=True,
         )
 
