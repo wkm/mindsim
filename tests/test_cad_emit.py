@@ -124,7 +124,7 @@ class TestBodySolidBBox:
             for seg in route.segments:
                 wire_map.setdefault(seg.body_name, []).append((seg, route.bus_type))
 
-        solid = _make_body_solid(base, None, wire_map.get(base.name, []))
+        solid = _make_body_solid(base, None, tuple(wire_map.get(base.name, [])))
         bb = solid.bounding_box()
 
         dims = base.dimensions

@@ -19,6 +19,7 @@ Servo local frame convention (same as servo.py):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -180,6 +181,7 @@ def _bracket_outer(
     return outer, ear_bottom_z, (body_x, body_y, body_z)
 
 
+@lru_cache(maxsize=32)
 def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     """Return the bracket's outer box extended with an insertion channel.
 
@@ -195,6 +197,7 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     return outer
 
 
+@lru_cache(maxsize=32)
 def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     """Build a bracket solid in servo local frame.
 
@@ -385,6 +388,7 @@ def horn_disc_params(
     )
 
 
+@lru_cache(maxsize=32)
 def servo_solid(servo: ServoSpec):
     """Build a detailed solid representing the physical servo body.
 
@@ -499,6 +503,7 @@ def servo_solid(servo: ServoSpec):
 # Coupler (C) wraps the +X end (shaft side), bridging both horns.
 
 
+@lru_cache(maxsize=32)
 def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     """Build a cradle wrapping the -X (back) end of the servo body.
 
@@ -602,6 +607,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
+@lru_cache(maxsize=32)
 def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     """Cradle envelope for cutting from parent body shell.
 
@@ -759,6 +765,7 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
     return lo
 
 
+@lru_cache(maxsize=32)
 def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     """Build a C-shaped coupler bridging front and rear horn faces.
 

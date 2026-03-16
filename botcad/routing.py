@@ -33,13 +33,22 @@ if TYPE_CHECKING:
 
 @dataclass
 class WireSegment:
-    """A segment of wire between two points in body-local coordinates."""
+    """A segment of wire between two points in body-local coordinates.
+
+    Identity-based hashing for functools.lru_cache compatibility.
+    """
 
     start: Vec3  # body-local coordinates
     end: Vec3  # body-local coordinates
     body_name: str  # which body this segment lives on
     joint_name: str | None = None  # if crossing a joint
     slack: float = 0.0  # extra length needed for joint motion (meters)
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
 
     @property
     def straight_length(self) -> float:

@@ -97,7 +97,11 @@ class Mount:
 
 @dataclass
 class Joint:
-    """A revolute joint connecting a parent body to a child body via a servo."""
+    """A revolute joint connecting a parent body to a child body via a servo.
+
+    Identity-based hashing allows functools.lru_cache on geometry functions
+    that take Joint arguments.  Within a bot build, each Joint is a singleton.
+    """
 
     name: str
     servo: ServoSpec
@@ -169,6 +173,12 @@ class Joint:
         self.child = b
         return b
 
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
+
 
 @dataclass
 class Body:
@@ -176,6 +186,9 @@ class Body:
 
     Bodies contain mounted components and child joints. Their size is either
     set explicitly or computed by the packing solver to fit all contents.
+
+    Identity-based hashing allows functools.lru_cache on geometry functions
+    that take Body arguments.  Within a bot build, each Body is a singleton.
     """
 
     name: str
@@ -313,6 +326,12 @@ class Body:
         )
         self.joints.append(j)
         return j
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
 
 
 @dataclass
