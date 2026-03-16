@@ -60,7 +60,7 @@ class DeterministicFPDF(FPDF):
             # PDF ID must be two 16-byte hex strings.
             # We hash the provided string and return it twice.
             h = hashlib.md5(self._custom_file_id.encode()).hexdigest().upper()
-            return f"{h}{h}"
+            return f"<{h}><{h}>"
         return super().file_id()
 
 
