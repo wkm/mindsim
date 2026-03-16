@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -171,16 +172,14 @@ def _update_mass_from_solid(body: Body, solid) -> None:
     )
 
 
+@lru_cache(maxsize=64)
 def make_component_solid(component: Component):
     """Create a build123d solid representing a component's physical geometry.
 
-    Used by component tear sheets to render actual CAD geometry instead of
-    primitive approximations. Dispatches to shape-specific builders:
-    - Wheels get tire ring + hub + bore via _make_wheel_solid()
-    - Servos use body_dimensions (main block without ears/horn)
-    - Everything else gets a box from dimensions
+    Every component must have an explicit CAD solid — no fallback to
+    primitive boxes. Dispatches to shape-specific builders; raises
+    ValueError for unknown components.
     """
-    from build123d import Align, Box
 
     from botcad.component import ServoSpec
 
@@ -227,11 +226,10 @@ def make_component_solid(component: Component):
 
         return test_fastener_solid(component)
 
-    return Box(
-        dims[0],
-        dims[1],
-        dims[2],
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    raise ValueError(
+        f"No CAD solid builder for component {component.name!r}. "
+        f"Every component must have explicit geometry — add a case to "
+        f"make_component_solid() or implement a <component>_solid() factory."
     )
 
 
@@ -268,8 +266,8 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
     body_solids: dict[str, object] = {}
     for body in bot.all_bodies:
         pj = parent_joint_map.get(body.name)
-        wire_segs = body_wire_segments.get(body.name, [])
-        solid = _make_body_solid(body, pj, wire_segs)
+        wire_segs = tuple(body_wire_segments.get(body.name, []))
+        solid = _make_body_solid(body, pj, wire_segs or None)
         if solid is not None:
             body_solids[body.name] = solid
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
@@ -294,55 +292,56 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
 
     # --- Per-servo STLs (for MuJoCo mesh geoms) ---
     # Each servo gets an STL at origin; MuJoCo positions via servo_placement().
-    servo_stl_cache: dict[str, str] = {}
+    # servo_solid() is @lru_cache'd so geometry is built once per servo model.
+    servo_stl_names: set[str] = set()
     servo_stl_count = 0
     for body in bot.all_bodies:
         for joint in body.joints:
             servo = joint.servo
-            # All servos of same model share the same base geometry
-            if servo.name not in servo_stl_cache:
+            if servo.name not in servo_stl_names:
                 s_solid = servo_solid(servo)
                 stl_name = f"servo_{servo.name}.stl"
                 export_stl(s_solid, str(meshes_dir / stl_name))
-                servo_stl_cache[servo.name] = stl_name
+                servo_stl_names.add(servo.name)
                 servo_stl_count += 1
 
     # --- Per-hardware STLs (for MuJoCo mesh geoms) ---
     # Many screws/pins share the same diameter/geometry.
-    hardware_solids: dict[float, object] = {}
+    # screw_solid() is @lru_cache'd; we just track which diameters we've exported.
+    hardware_exported: set[float] = set()
     for body in bot.all_bodies:
         # Hardware on joints
         for joint in body.joints:
             for ear in joint.servo.mounting_ears:
-                if ear.diameter not in hardware_solids:
-                    hardware_solids[ear.diameter] = _screw_solid(ear.diameter)
+                if ear.diameter not in hardware_exported:
                     export_stl(
-                        hardware_solids[ear.diameter],
+                        screw_solid(ear.diameter),
                         str(meshes_dir / f"hardware_{ear.diameter:.4f}.stl"),
                     )
+                    hardware_exported.add(ear.diameter)
             for mp in joint.servo.horn_mounting_points:
-                if mp.diameter not in hardware_solids:
-                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                if mp.diameter not in hardware_exported:
                     export_stl(
-                        hardware_solids[mp.diameter],
+                        screw_solid(mp.diameter),
                         str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
                     )
+                    hardware_exported.add(mp.diameter)
             for mp in joint.servo.rear_horn_mounting_points:
-                if mp.diameter not in hardware_solids:
-                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                if mp.diameter not in hardware_exported:
                     export_stl(
-                        hardware_solids[mp.diameter],
+                        screw_solid(mp.diameter),
                         str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
                     )
+                    hardware_exported.add(mp.diameter)
         # Hardware on components
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                if mp.diameter not in hardware_solids:
-                    hardware_solids[mp.diameter] = _screw_solid(mp.diameter)
+                if mp.diameter not in hardware_exported:
                     export_stl(
-                        hardware_solids[mp.diameter],
+                        screw_solid(mp.diameter),
                         str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
                     )
+                    hardware_exported.add(mp.diameter)
 
     # --- Per-horn STLs ---
     for body in bot.all_bodies:
@@ -444,8 +443,8 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             part_modules.append(body.module.name if body.module else None)
 
     # --- Servo solids (purchased parts, shown seated in brackets) ---
+    # servo_solid() is @lru_cache'd — same geometry returned for all STS3215s.
     servo_count = 0
-    servo_solid_cache: dict[str, object] = {}
     for body in bot.all_bodies:
         body_world = world_positions[body.name]
         for joint in body.joints:
@@ -453,10 +452,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             center = joint.solved_servo_center
             euler = quat_to_euler(joint.solved_servo_quat)
 
-            # Cache base solid by servo model (same geometry for all STS3215s)
-            if servo.name not in servo_solid_cache:
-                servo_solid_cache[servo.name] = servo_solid(servo)
-            solid = servo_solid_cache[servo.name].moved(
+            solid = servo_solid(servo).moved(
                 Location(body_world) * Location(center, euler)
             )
             solid = _as_solid(solid)
@@ -692,8 +688,9 @@ def _cut_camera_features(shell, mount, body_dims, solved_dims):
     return shell
 
 
+@lru_cache(maxsize=128)
 def _make_body_solid(
-    body: Body, parent_joint: Joint | None = None, wire_segments: list | None = None
+    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
 ):
     """Create a build123d solid for a body.
 
@@ -706,6 +703,8 @@ def _make_body_solid(
     Mesh origin conventions (matching MuJoCo emitter expectations):
     - box/sphere/cylinder: centered at origin
     - tube: offset so z=0 is the joint end, z=+length is the far end
+
+    wire_segments must be a tuple (not list) for lru_cache hashability.
     """
     from build123d import Align, Box, Cylinder, Location, Sphere
 
@@ -1133,6 +1132,7 @@ def _make_wheel_solid(radius: float, width: float):
     return _as_solid(wheel)
 
 
+@lru_cache(maxsize=32)
 def _horn_solid(servo):
     """Build a horn disc cylinder from servo specs."""
     from build123d import Align, Cylinder
@@ -1189,7 +1189,8 @@ def _orient_z_to_axis(
     return solid.moved(Location((0, 0, 0), euler))
 
 
-def _screw_solid(diameter: float):
+@lru_cache(maxsize=32)
+def screw_solid(diameter: float):
     """Build a premium-looking screw solid (cylinder + chamfered head)."""
     from build123d import Align, Axis, Cylinder, chamfer
 

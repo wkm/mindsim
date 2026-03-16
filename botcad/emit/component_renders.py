@@ -49,37 +49,30 @@ from botcad.emit.render3d import (
 WIDTH, HEIGHT = 800, 800  # per-view resolution
 
 
-# ── Scene building: layered approach ──
+# ── Scene building: CAD geometry + annotation overlays ──
+#
+# Every physical part is rendered from real CAD geometry (build123d → STL → mesh).
+# Annotation markers (spheres, cylinders) are non-physical overlays that highlight
+# feature locations — mounting holes, wire ports, shaft positions, etc.
 
 
-def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
-    """Body mesh + axis indicators — every component gets these.
-
-    The body is rendered as a mesh from the CAD pipeline (actual STL geometry),
-    not a primitive approximation. The mesh asset "comp" must be defined
-    via scene.add_mesh() by the caller.
-    """
+def _body_render_color(component: Component) -> Color:
+    """Compute a render-safe body color, lightening very dark components."""
     c = component.color
-    # Lighten very dark components so mesh geometry details are visible
     min_lum = 0.35
     r, g, b = c[0], c[1], c[2]
     lum = 0.299 * r + 0.587 * g + 0.114 * b
     if lum < min_lum and lum > 0:
         scale = min_lum / lum
         r, g, b = min(r * scale, 1.0), min(g * scale, 1.0), min(b * scale, 1.0)
-    body_color = Color(r, g, b, 0.85, "body")
+    return Color(r, g, b, 0.85, "body")
 
-    scene.add_mesh("comp", "component.stl", body_color)
 
-    # Effective dimensions for axis sizing
-    d = component.dimensions
-    if isinstance(component, ServoSpec):
-        d = component.effective_body_dims
-
-    # Axis indicators: thin cylinders for X (red), Y (green), Z (blue)
-    axis_len = max(max(d) * 1.0, 0.015)
+def _add_axis_annotations(scene: SceneBuilder, dimensions: tuple) -> None:
+    """Annotate XYZ axis indicators sized to the component dimensions."""
+    axis_len = max(max(dimensions) * 1.0, 0.015)
     axis_r = 0.0005
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "axis_x",
         pos=(axis_len / 2, 0, 0),
         radius=axis_r,
@@ -87,7 +80,7 @@ def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
         color=Color(1, 0, 0, 0.5),
         quat="0.7071068 0 0.7071068 0",
     )
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "axis_y",
         pos=(0, axis_len / 2, 0),
         radius=axis_r,
@@ -95,13 +88,23 @@ def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
         color=Color(0, 1, 0, 0.5),
         quat="0.7071068 0.7071068 0 0",
     )
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "axis_z",
         pos=(0, 0, axis_len / 2),
         radius=axis_r,
         half_height=axis_len / 2,
         color=Color(0, 0, 1, 0.5),
     )
+
+
+def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
+    """Body mesh (CAD geometry) + axis annotation indicators."""
+    scene.add_mesh("comp", "component.stl", _body_render_color(component))
+
+    d = component.dimensions
+    if isinstance(component, ServoSpec):
+        d = component.effective_body_dims
+    _add_axis_annotations(scene, d)
 
 
 def _axis_quat(axis: tuple[float, float, float]) -> str | None:
@@ -128,13 +131,8 @@ def _axis_quat(axis: tuple[float, float, float]) -> str | None:
     return f"{w:.7f} {cx:.7f} {cy:.7f} {cz:.7f}"
 
 
-def _add_mounting_geoms(scene: SceneBuilder, component: Component) -> None:
-    """Oriented fastener cylinders at each mounting_point — skip if none.
-
-    Each fastener is a small cylinder aligned to the mount point's insertion
-    axis, with radius proportional to the hole diameter. This replaces the
-    old blue-sphere visualization and makes axis orientation readable.
-    """
+def _add_mounting_annotations(scene: SceneBuilder, component: Component) -> None:
+    """Annotation cylinders showing mounting point locations and axes."""
     if not component.mounting_points:
         return
     for i, mp in enumerate(component.mounting_points):
@@ -147,7 +145,7 @@ def _add_mounting_geoms(scene: SceneBuilder, component: Component) -> None:
             mp.pos[1] + ay * half_height,
             mp.pos[2] + az * half_height,
         )
-        scene.add_cylinder(
+        scene.annotate_cylinder(
             f"mount_{i}",
             pos=pos,
             radius=radius,
@@ -157,27 +155,28 @@ def _add_mounting_geoms(scene: SceneBuilder, component: Component) -> None:
         )
 
 
-def _add_wire_port_geoms(scene: SceneBuilder, component: Component) -> None:
-    """Orange spheres at each wire_port — skip if none."""
+def _add_wire_port_annotations(scene: SceneBuilder, component: Component) -> None:
+    """Annotation spheres showing wire port locations."""
     if not component.wire_ports:
         return
     for i, wp in enumerate(component.wire_ports):
-        scene.add_sphere(f"wire_{i}", pos=wp.pos, size=0.003, color=COLOR_WIRE_PORT)
+        scene.annotate_sphere(
+            f"wire_{i}", pos=wp.pos, size=0.003, color=COLOR_WIRE_PORT
+        )
 
 
-def _add_servo_geoms(scene: SceneBuilder, servo: ServoSpec) -> None:
-    """Servo-specific: mounting ears, shaft, horn, horn holes, rear holes."""
-    so = servo.shaft_offset
-
-    # Mounting ears (blue — same as mounting points)
+def _annotate_ears_and_shaft(scene: SceneBuilder, servo: ServoSpec) -> None:
+    """Mounting ear and shaft annotations shared by servo and bracket scenes."""
     if servo.mounting_ears:
         for i, ear in enumerate(servo.mounting_ears):
-            scene.add_sphere(f"ear_{i}", pos=ear.pos, size=0.002, color=COLOR_MOUNTING)
+            scene.annotate_sphere(
+                f"ear_{i}", pos=ear.pos, size=0.002, color=COLOR_MOUNTING
+            )
 
-    # Shaft indicator (red cylinder at shaft position, along +Z)
+    so = servo.shaft_offset
     shaft_h = 0.008
     shaft_z = so[2] + shaft_h / 2
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "shaft",
         pos=(so[0], so[1], shaft_z),
         radius=0.003,
@@ -185,9 +184,15 @@ def _add_servo_geoms(scene: SceneBuilder, servo: ServoSpec) -> None:
         color=COLOR_SHAFT,
     )
 
+
+def _add_servo_annotations(scene: SceneBuilder, servo: ServoSpec) -> None:
+    """Servo-specific annotation markers: ears, shaft, horn, horn holes, rear holes."""
+    _annotate_ears_and_shaft(scene, servo)
+
     # Horn disc (thin yellow cylinder at shaft)
+    so = servo.shaft_offset
     horn_z = so[2] + 0.003
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "horn",
         pos=(so[0], so[1], horn_z),
         radius=0.01,
@@ -198,65 +203,52 @@ def _add_servo_geoms(scene: SceneBuilder, servo: ServoSpec) -> None:
     # Horn mounting holes (green spheres)
     if servo.horn_mounting_points:
         for i, mp in enumerate(servo.horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"horn_mount_{i}", pos=mp.pos, size=0.0015, color=COLOR_HORN_HOLE
             )
 
     # Rear horn mounting holes (cyan spheres)
     if servo.rear_horn_mounting_points:
         for i, mp in enumerate(servo.rear_horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"rear_mount_{i}", pos=mp.pos, size=0.0015, color=COLOR_REAR_HOLE
             )
 
 
 def _add_bracket_annotations(scene: SceneBuilder, servo: ServoSpec) -> None:
     """Common annotations for bracket/cradle/coupler-assembly scenes."""
-    # Mounting ears (blue)
-    if servo.mounting_ears:
-        for i, ear in enumerate(servo.mounting_ears):
-            scene.add_sphere(f"ear_{i}", pos=ear.pos, size=0.002, color=COLOR_MOUNTING)
-
-    # Shaft (red)
-    so = servo.shaft_offset
-    shaft_h = 0.008
-    shaft_z = so[2] + shaft_h / 2
-    scene.add_cylinder(
-        "shaft",
-        pos=(so[0], so[1], shaft_z),
-        radius=0.003,
-        half_height=shaft_h / 2,
-        color=COLOR_SHAFT,
-    )
+    _annotate_ears_and_shaft(scene, servo)
 
     # Wire port (orange)
     if servo.connector_pos:
         cp = servo.connector_pos
-        scene.add_sphere("wire_0", pos=cp, size=0.003, color=COLOR_WIRE_PORT)
+        scene.annotate_sphere("wire_0", pos=cp, size=0.003, color=COLOR_WIRE_PORT)
 
 
 def _add_horn_annotations(scene: SceneBuilder, servo: ServoSpec) -> None:
     """Horn + rear hole annotations in servo body frame."""
     if servo.horn_mounting_points:
         for i, mp in enumerate(servo.horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"horn_{i}", pos=mp.pos, size=0.0015, color=COLOR_HORN_HOLE
             )
     if servo.rear_horn_mounting_points:
         for i, mp in enumerate(servo.rear_horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"rear_{i}", pos=mp.pos, size=0.0015, color=COLOR_REAR_HOLE
             )
 
 
-def _build_and_render(
-    scene: SceneBuilder, temp_dir: Path
-) -> list[tuple[Image.Image, str]]:
-    """Render all views using SceneBuilder → Renderer3D pipeline."""
-    scene.set_mesh_dir(temp_dir)
-    xml = scene.to_xml()
-    with Renderer3D(xml, WIDTH, HEIGHT) as r:
-        return r.render_views(VIEWS_6)
+def _render_scene(scene: SceneBuilder, temp_dir: Path, title: str) -> Image.Image:
+    """Render all views, composite into a grid, and clean up temp_dir."""
+    try:
+        scene.set_mesh_dir(temp_dir)
+        xml = scene.to_xml()
+        with Renderer3D(xml, WIDTH, HEIGHT) as r:
+            views = r.render_views(VIEWS_6)
+        return grid(title, scene.legends, views)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # ── Scene builders ──
@@ -277,10 +269,10 @@ def build_component_scene(component: Component) -> tuple[SceneBuilder, Path]:
 
     scene = SceneBuilder(model_name="component_debug", width=WIDTH, height=HEIGHT)
     _add_common_geoms(scene, component)
-    _add_mounting_geoms(scene, component)
-    _add_wire_port_geoms(scene, component)
+    _add_mounting_annotations(scene, component)
+    _add_wire_port_annotations(scene, component)
     if isinstance(component, ServoSpec):
-        _add_servo_geoms(scene, component)
+        _add_servo_annotations(scene, component)
 
     return scene, temp_dir
 
@@ -339,7 +331,7 @@ def build_coupler_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     # Horn holes in shaft-centered frame
     if servo.horn_mounting_points:
         for i, mp in enumerate(servo.horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"horn_{i}",
                 pos=(mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz),
                 size=0.0015,
@@ -347,7 +339,7 @@ def build_coupler_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
             )
     if servo.rear_horn_mounting_points:
         for i, mp in enumerate(servo.rear_horn_mounting_points):
-            scene.add_sphere(
+            scene.annotate_sphere(
                 f"rear_{i}",
                 pos=(mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz),
                 size=0.0015,
@@ -355,9 +347,52 @@ def build_coupler_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
             )
 
     # Shaft origin indicator
-    scene.add_cylinder(
+    scene.annotate_cylinder(
         "shaft", pos=(0, 0, 0.004), radius=0.003, half_height=0.004, color=COLOR_SHAFT
     )
+
+    return scene, temp_dir
+
+
+def build_fastener_showcase_scene(component: Component) -> tuple[SceneBuilder, Path]:
+    """Build scene showing a component with actual CAD screw solids at each mount point.
+
+    Unlike the standard component scene (which uses blue cylinder primitives),
+    this renders real screw geometry from screw_solid() — chamfered heads,
+    proper diameters, oriented to each mount point's insertion axis.
+    """
+    from build123d import export_stl
+
+    from botcad.emit.cad import make_component_solid, screw_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_"))
+    solid = make_component_solid(component)
+    export_stl(solid, str(temp_dir / "component.stl"))
+
+    scene = SceneBuilder(model_name="fastener_showcase", width=WIDTH, height=HEIGHT)
+    scene.add_mesh("comp", "component.stl", _body_render_color(component))
+
+    # Export and place a screw mesh at each mount point
+    from botcad.colors import COLOR_METAL_BRASS
+
+    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
+    exported_diameters: dict[float, str] = {}
+
+    for i, mp in enumerate(component.mounting_points):
+        if mp.diameter not in exported_diameters:
+            stl_name = f"screw_{mp.diameter:.4f}.stl"
+            export_stl(screw_solid(mp.diameter), str(temp_dir / stl_name))
+            exported_diameters[mp.diameter] = stl_name
+
+        scene.add_mesh(
+            f"screw_{i}",
+            exported_diameters[mp.diameter],
+            screw_color,
+            pos=mp.pos,
+            quat=_axis_quat(mp.axis),
+        )
+
+    _add_axis_annotations(scene, component.dimensions)
 
     return scene, temp_dir
 
@@ -392,81 +427,86 @@ def build_coupler_assembly_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
 # ── Public render functions ──
 
 
+def _dims_str(d: tuple) -> str:
+    return f"{d[0] * 1000:.1f} x {d[1] * 1000:.1f} x {d[2] * 1000:.1f} mm"
+
+
 def render_component_views(component: Component, name: str) -> Image.Image:
     """Render all views of a component and composite into a single image."""
     scene, temp_dir = build_component_scene(component)
-    try:
-        views = _build_and_render(scene, temp_dir)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-    d = component.dimensions
-    title = f"{name} — {d[0] * 1000:.1f} x {d[1] * 1000:.1f} x {d[2] * 1000:.1f} mm"
-    return grid(title, scene.legends, views)
+    return _render_scene(scene, temp_dir, f"{name} — {_dims_str(component.dimensions)}")
 
 
 def render_bracket_views(servo: ServoSpec, name: str) -> Image.Image:
     """Render bracket + servo assembly from all views."""
     scene, temp_dir = build_bracket_scene(servo)
-    try:
-        views = _build_and_render(scene, temp_dir)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    return grid(f"Pocket Bracket — {name}", scene.legends, views)
+    return _render_scene(scene, temp_dir, f"Pocket Bracket — {name}")
 
 
 def render_cradle_views(servo: ServoSpec, name: str) -> Image.Image:
     """Render cradle + servo from all views."""
     scene, temp_dir = build_cradle_scene(servo)
-    try:
-        views = _build_and_render(scene, temp_dir)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    return grid(f"Cradle (static side) — {name}", scene.legends, views)
+    return _render_scene(scene, temp_dir, f"Cradle (static side) — {name}")
 
 
 def render_coupler_views(servo: ServoSpec, name: str) -> Image.Image:
     """Render coupler alone from all views."""
     scene, temp_dir = build_coupler_scene(servo)
-    try:
-        views = _build_and_render(scene, temp_dir)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    return grid(f"Coupler (moving side) — {name}", scene.legends, views)
+    return _render_scene(scene, temp_dir, f"Coupler (moving side) — {name}")
 
 
 def render_coupler_assembly_views(servo: ServoSpec, name: str) -> Image.Image:
     """Render complete coupler assembly (cradle + servo + coupler)."""
     scene, temp_dir = build_coupler_assembly_scene(servo)
-    try:
-        views = _build_and_render(scene, temp_dir)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    return grid(f"Coupler Assembly — {name}", scene.legends, views)
+    return _render_scene(scene, temp_dir, f"Coupler Assembly — {name}")
+
+
+def render_fastener_showcase(component: Component, name: str) -> Image.Image:
+    """Render a component with actual CAD screw solids at each mount point.
+
+    Shows real screw geometry (chamfered heads, proper diameters) oriented
+    to each mounting point's insertion axis. Visual regression baseline for
+    fastener rendering quality.
+    """
+    scene, temp_dir = build_fastener_showcase_scene(component)
+    title = f"Fastener Showcase — {name} — {_dims_str(component.dimensions)}"
+    return _render_scene(scene, temp_dir, title)
 
 
 # ── Pipeline entry point ──
 
 
+_COMPONENT_CATEGORY_REGISTRY: dict[str, str] | None = None
+
+
 def _component_category(comp: Component) -> str:
-    """Derive category from the component's module (battery, camera, servo, etc.)."""
-    import importlib
-    import pkgutil
+    """Derive category from the component's module (battery, camera, servo, etc.).
 
-    import botcad.components as pkg
+    Builds a name→module registry on first call, avoiding repeated brute-force
+    module scanning and factory instantiation.
+    """
+    global _COMPONENT_CATEGORY_REGISTRY
+    if _COMPONENT_CATEGORY_REGISTRY is None:
+        import importlib
+        import pkgutil
 
-    for info in pkgutil.iter_modules(pkg.__path__):
-        mod = importlib.import_module(f"botcad.components.{info.name}")
-        for attr in dir(mod):
-            obj = getattr(mod, attr)
-            if callable(obj) and not isinstance(obj, type):
-                try:
-                    instance = obj()
-                    if isinstance(instance, Component) and instance.name == comp.name:
-                        return info.name
-                except TypeError:
-                    pass
-    return "component"
+        import botcad.components as pkg
+
+        registry: dict[str, str] = {}
+        for info in pkgutil.iter_modules(pkg.__path__):
+            mod = importlib.import_module(f"botcad.components.{info.name}")
+            for attr in dir(mod):
+                obj = getattr(mod, attr)
+                if callable(obj) and not isinstance(obj, type):
+                    try:
+                        instance = obj()
+                        if isinstance(instance, Component):
+                            registry[instance.name] = info.name
+                    except TypeError:
+                        pass
+        _COMPONENT_CATEGORY_REGISTRY = registry
+
+    return _COMPONENT_CATEGORY_REGISTRY.get(comp.name, "component")
 
 
 def emit_component_renders(bot, output_dir: Path) -> None:

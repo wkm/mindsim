@@ -51,6 +51,7 @@ def regen_component_renders() -> None:
         render_coupler_assembly_views,
         render_coupler_views,
         render_cradle_views,
+        render_fastener_showcase,
     )
     from botcad.emit.composite import save_png
     from botcad.emit.drawings import emit_component_drawings
@@ -75,6 +76,13 @@ def regen_component_renders() -> None:
         out_path = out_dir / f"test_{category}_{safe_name}.png"
         save_png(img, out_path)
         print(f"  component: {out_path}")
+
+    # Fastener showcase — real screw geometry on TestFastenerPrism
+    fastener_prism = TestFastenerPrism()
+    img = render_fastener_showcase(fastener_prism, "TestFastenerPrism")
+    out_path = out_dir / "test_fastener_showcase.png"
+    save_png(img, out_path)
+    print(f"  fastener showcase: {out_path}")
 
     # Bracket tear sheets (3D renders)
     servo = STS3215()

@@ -15,7 +15,7 @@ Renders use a CAD-style "shaded with edges" look:
 Usage:
     scene = SceneBuilder()
     scene.add_mesh("bracket", "/tmp/bracket.stl", COLOR_BRACKET)
-    scene.add_sphere("ear_0", pos=(0.01, 0, 0.02), size=0.002, color=COLOR_MOUNTING)
+    scene.annotate_sphere("ear_0", pos=(0.01, 0, 0.02), size=0.002, color=COLOR_MOUNTING)
     xml = scene.to_xml()
 
     with Renderer3D(xml, width=800, height=800) as r:
@@ -94,19 +94,30 @@ class SceneBuilder:
     def set_mesh_dir(self, path: str | Path) -> None:
         self._mesh_dir = str(path)
 
-    def add_mesh(self, name: str, filename: str, color: Color) -> None:
-        """Add a mesh asset + geom."""
+    def add_mesh(
+        self,
+        name: str,
+        filename: str,
+        color: Color,
+        pos: tuple[float, ...] | None = None,
+        quat: str | None = None,
+    ) -> None:
+        """Add a mesh asset + geom, optionally positioned/oriented."""
         mesh_name = f"{name}_mesh"
         self._meshes.append((mesh_name, filename))
+        pos_attr = f' pos="{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"' if pos else ""
+        quat_attr = f' quat="{quat}"' if quat else ""
         self._geoms.append(
             f'<geom name="{name}" type="mesh" mesh="{mesh_name}"'
+            f"{pos_attr}{quat_attr}"
             f' rgba="{color.rgba_str}"/>'
         )
         self._add_legend(color)
 
-    def add_sphere(
+    def annotate_sphere(
         self, name: str, pos: tuple[float, ...], size: float, color: Color
     ) -> None:
+        """Add a sphere annotation marker (not physical geometry)."""
         self._geoms.append(
             f'<geom name="{name}" type="sphere" size="{size}"'
             f' pos="{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"'
@@ -114,7 +125,7 @@ class SceneBuilder:
         )
         self._add_legend(color)
 
-    def add_cylinder(
+    def annotate_cylinder(
         self,
         name: str,
         pos: tuple[float, ...],
@@ -123,6 +134,7 @@ class SceneBuilder:
         color: Color,
         quat: str | None = None,
     ) -> None:
+        """Add a cylinder annotation marker (not physical geometry)."""
         quat_attr = f' quat="{quat}"' if quat else ""
         self._geoms.append(
             f'<geom name="{name}" type="cylinder"'
