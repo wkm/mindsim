@@ -1,7 +1,8 @@
 """Emit viewer_manifest.json for the 3D web viewer.
 
 Walks the kinematic tree and produces structured assembly steps,
-joint metadata, and IK chain definitions.
+joint metadata, IK chain definitions, and enriched body/joint/mount data
+for the CAD-app-style explore mode.
 """
 
 from __future__ import annotations
@@ -13,6 +14,38 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
+
+from botcad.component import BatterySpec, CameraSpec, ServoSpec
+
+
+def _component_specs(comp) -> dict:
+    """Extract type-specific specs from a Component."""
+    specs: dict = {}
+    if isinstance(comp, CameraSpec):
+        specs["component_type"] = "camera"
+        specs["fov_deg"] = comp.fov_deg
+        specs["resolution"] = list(comp.resolution)
+    elif isinstance(comp, BatterySpec):
+        specs["component_type"] = "battery"
+        specs["chemistry"] = comp.chemistry
+        specs["voltage"] = comp.voltage
+        specs["cells_s"] = comp.cells_s
+    elif isinstance(comp, ServoSpec):
+        specs["component_type"] = "servo"
+        specs["stall_torque_nm"] = round(comp.stall_torque, 4)
+        specs["no_load_speed_rad_s"] = round(comp.no_load_speed, 3)
+        specs["voltage"] = comp.voltage
+        specs["gear_ratio"] = comp.gear_ratio
+    elif comp.is_wheel:
+        specs["component_type"] = "wheel"
+    else:
+        specs["component_type"] = "component"
+    return specs
+
+
+def _round3(v):
+    """Round a tuple/list of floats to 6 decimal places (µm precision)."""
+    return [round(x, 6) for x in v]
 
 
 def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
@@ -29,35 +62,60 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     step_num = [0]
 
     def _walk_body(body: Body, parent_name: str | None, joint: Joint | None) -> None:
-        # Body entry
+        # Body entry — enriched with shape, dimensions, mass, mounts
         body_entry = {
             "name": body.name,
             "mesh": f"{body.name}.stl",
             "parent": parent_name,
+            "shape": str(body.shape),
+            "dimensions": _round3(body.dimensions),
+            "mass": round(body.solved_mass, 4),
         }
         if joint:
             body_entry["joint"] = joint.name
+
+        # Mounts with full component metadata
+        mounts = []
+        for mount in body.mounts:
+            comp = mount.component
+            mount_entry = {
+                "label": mount.label,
+                "component_name": comp.name,
+                "dimensions": _round3(comp.dimensions),
+                "mass": round(comp.mass, 4),
+            }
+            mount_entry.update(_component_specs(comp))
+            mounts.append(mount_entry)
+        if mounts:
+            body_entry["mounts"] = mounts
+
         manifest["bodies"].append(body_entry)
 
-        # Joint entry
+        # Joint entry — enriched with servo specs
         if joint:
             lo, hi = joint.effective_range
-            manifest["joints"].append(
-                {
-                    "name": joint.name,
-                    "parent_body": parent_name,
-                    "child_body": body.name,
-                    "axis": list(joint.axis),
-                    "range": [lo, hi],
-                    "range_deg": [
-                        round(math.degrees(lo), 1),
-                        round(math.degrees(hi), 1),
-                    ],
-                    "pos": list(joint.pos),
-                    "servo": joint.servo.name,
-                    "continuous": joint.servo.continuous,
-                }
-            )
+            joint_entry = {
+                "name": joint.name,
+                "parent_body": parent_name,
+                "child_body": body.name,
+                "axis": list(joint.axis),
+                "range": [lo, hi],
+                "range_deg": [
+                    round(math.degrees(lo), 1),
+                    round(math.degrees(hi), 1),
+                ],
+                "pos": list(joint.pos),
+                "servo": joint.servo.name,
+                "continuous": joint.servo.continuous,
+                "servo_specs": {
+                    "stall_torque_nm": round(joint.servo.stall_torque, 4),
+                    "no_load_speed_rad_s": round(joint.servo.no_load_speed, 3),
+                    "voltage": joint.servo.voltage,
+                    "gear_ratio": joint.servo.gear_ratio,
+                    "mass": round(joint.servo.mass, 4),
+                },
+            }
+            manifest["joints"].append(joint_entry)
 
         # Assembly step
         step_num[0] += 1

@@ -240,10 +240,10 @@ async function main() {
     assert(botNameText === botName, `Bot name displayed correctly ("${botNameText}")`);
 
     const tabs = await page.$$('.mode-tab');
-    assert(tabs.length === 3, `Three mode tabs present (${tabs.length})`);
+    assert(tabs.length === 4, `Four mode tabs present (${tabs.length})`);
 
     // Screenshot each mode
-    const modeNames = ['joint', 'assembly', 'ik'];
+    const modeNames = ['explore', 'joint', 'assembly', 'ik'];
     for (const mode of modeNames) {
       await page.click(`.mode-tab[data-mode="${mode}"]`);
       await page.waitForTimeout(500);

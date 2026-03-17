@@ -9,12 +9,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
+import { ExploreMode } from './explore-mode.js';
 import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const SIDE_PANEL_WIDTH = 320;
+const TREE_PANEL_WIDTH = 280;
 
 // ---------------------------------------------------------------------------
 // URL params
@@ -39,19 +41,40 @@ const _textDecoder = new TextDecoder('utf-8');
 // Three.js
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a2e);
+scene.background = new THREE.Color(0x2a2a2a);
+
+function getTreePanelWidth() {
+  const treePanel = document.getElementById('tree-panel');
+  return (treePanel && treePanel.style.display !== 'none') ? TREE_PANEL_WIDTH : 0;
+}
+
+function getCanvasWidth() {
+  return window.innerWidth - SIDE_PANEL_WIDTH - getTreePanelWidth();
+}
+
+/** Update renderer + camera to fit the visible canvas area between panels. */
+function updateCanvasLayout() {
+  const left = getTreePanelWidth();
+  const w = getCanvasWidth();
+  const h = window.innerHeight;
+  container.style.left = left + 'px';
+  container.style.right = SIDE_PANEL_WIDTH + 'px';
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
 
 const camera = new THREE.PerspectiveCamera(
-  45, (window.innerWidth - SIDE_PANEL_WIDTH) / window.innerHeight, 0.001, 100
+  45, getCanvasWidth() / window.innerHeight, 0.01, 10
 );
 camera.position.set(0.4, 0.45, 0.55);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
+updateCanvasLayout();
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.2, 0);
@@ -59,15 +82,18 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 controls.update();
 
-// Lighting
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+// Lighting — bright enough to read geometry clearly
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
 dirLight.position.set(2, 4, 3);
 dirLight.castShadow = true;
 scene.add(dirLight);
+const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
+fillLight.position.set(-2, 1, -2);
+scene.add(fillLight);
 
 // Ground grid
-scene.add(new THREE.GridHelper(2, 40, 0x333355, 0x222244));
+scene.add(new THREE.GridHelper(2, 40, 0x444444, 0x363636));
 
 // ---------------------------------------------------------------------------
 // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
@@ -268,6 +294,26 @@ function buildScene() {
     }
   }
 
+  // Cell-shaded edge outlines — sharp edges only (threshold angle ~30°)
+  const edgeMaterial = new THREE.LineBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0.6,
+  });
+  for (const [, group] of Object.entries(bodies)) {
+    const meshesToEdge = [];
+    group.traverse(child => {
+      if (child.isMesh && child.geometry) meshesToEdge.push(child);
+    });
+    for (const mesh of meshesToEdge) {
+      const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
+      const lines = new THREE.LineSegments(edges, edgeMaterial);
+      lines.position.copy(mesh.position);
+      lines.quaternion.copy(mesh.quaternion);
+      lines.scale.copy(mesh.scale);
+      lines.raycast = () => {}; // non-interactive
+      group.add(lines);
+    }
+  }
+
   // Parent all bodies to root (flat — transforms come from xpos/xquat)
   for (let b = 0; b < model.nbody; b++) {
     if (!bodies[b]) {
@@ -301,16 +347,38 @@ function syncTransforms() {
 }
 
 // ---------------------------------------------------------------------------
+// Fetch viewer manifest
+// ---------------------------------------------------------------------------
+async function fetchManifest() {
+  try {
+    const resp = await fetch(`../bots/${botName}/viewer_manifest.json`);
+    if (resp.ok) return await resp.json();
+  } catch { /* fall through */ }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Mode management
 // ---------------------------------------------------------------------------
 let currentMode = null;
+let currentModeName = null;
 const modes = {};
 
 function switchMode(modeName) {
   if (!(modeName in modes)) return;
   if (currentMode) currentMode.deactivate();
   currentMode = modes[modeName];
+  currentModeName = modeName;
   currentMode.activate();
+
+  // Show/hide tree panel based on mode
+  const treePanel = document.getElementById('tree-panel');
+  if (treePanel) {
+    treePanel.style.display = modeName === 'explore' ? 'block' : 'none';
+  }
+
+  // Refit canvas to the visible area between panels
+  updateCanvasLayout();
 
   document.querySelectorAll('.mode-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.mode === modeName);
@@ -325,12 +393,17 @@ async function main() {
     await loadMuJoCo();
     buildScene();
 
+    const manifest = await fetchManifest();
+
     const ctx = {
       mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls,
       syncTransforms, getPosition, getQuaternion, toMujocoPos, getMujocoName,
       botName,
     };
 
+    if (manifest) {
+      modes.explore = new ExploreMode(ctx, manifest);
+    }
     modes.joint = new JointMode(ctx);
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
@@ -339,7 +412,7 @@ async function main() {
       tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 
-    switchMode('joint');
+    switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
     function animate() {
@@ -350,10 +423,28 @@ async function main() {
     }
     animate();
 
-    window.addEventListener('resize', () => {
-      camera.aspect = (window.innerWidth - SIDE_PANEL_WIDTH) / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    window.addEventListener('resize', () => updateCanvasLayout());
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      // Ignore if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === '1' && currentModeName === 'explore' && modes.explore) {
+        // Reset camera to frame the focused item
+        const explore = modes.explore;
+        if (explore.focusedNodeId) {
+          const [type, ...rest] = explore.focusedNodeId.split(':');
+          let bodyId;
+          if (type === 'body') bodyId = explore.bodyNameToId[rest[0]];
+          else if (type === 'joint') {
+            const jd = explore.focusedData;
+            bodyId = explore.bodyNameToId[jd?.child_body];
+          }
+          else if (type === 'mount') bodyId = explore.bodyNameToId[rest[0]];
+          if (bodyId !== undefined) explore.focus.focusOnBody(bodyId, 0.4);
+        }
+      }
     });
 
   } catch (err) {

@@ -3,12 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { clearGroup, radToDegStr } from './utils.js';
-
-// Reusable temporaries for updateOverlays hot path
-const _tmpVec = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 0, 1);
-const _tmpQuat = new THREE.Quaternion();
+import { clearGroup, radToDegStr, createArcGeometry, orientToAxis } from './utils.js';
 
 export class JointMode {
   constructor(ctx) {
@@ -163,12 +158,28 @@ export class JointMode {
       const totalAngle = rangeMax - rangeMin;
       if (totalAngle <= 0.01) continue;
 
-      // Range arc (gray)
+      // ROM disk (filled sector in joint color)
+      const sectorShape = new THREE.Shape();
+      sectorShape.moveTo(0, 0);
+      for (let s = 0; s <= 32; s++) {
+        const t = rangeMin + (rangeMax - rangeMin) * (s / 32);
+        sectorShape.lineTo(Math.cos(t) * arcRadius, Math.sin(t) * arcRadius);
+      }
+      sectorShape.lineTo(0, 0);
+      const sectorGeo = new THREE.ShapeGeometry(sectorShape);
+      const sectorColor = new THREE.Color(sliderInfo.color);
+      const sector = new THREE.Mesh(sectorGeo, new THREE.MeshBasicMaterial({
+        color: sectorColor, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false,
+      }));
+      orientToAxis(sector, axisDir);
+      arcGroup.add(sector);
+
+      // ROM edge outline
       const rangeArc = new THREE.Line(
-        this._createArcGeometry(arcRadius, rangeMin, rangeMax, 32),
-        new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.5 })
+        createArcGeometry(arcRadius, rangeMin, rangeMax, 32),
+        new THREE.LineBasicMaterial({ color: sectorColor, transparent: true, opacity: 0.4 })
       );
-      this._orientArcToAxis(rangeArc, axisDir);
+      orientToAxis(rangeArc, axisDir);
       arcGroup.add(rangeArc);
 
       // Current angle arc (colored)
@@ -185,27 +196,13 @@ export class JointMode {
         else color = 0x44cc44;
 
         const curArc = new THREE.Line(
-          this._createArcGeometry(arcRadius, curMin, curMax, 16),
+          createArcGeometry(arcRadius, curMin, curMax, 16),
           new THREE.LineBasicMaterial({ color, linewidth: 2 })
         );
-        this._orientArcToAxis(curArc, axisDir);
+        orientToAxis(curArc, axisDir);
         arcGroup.add(curArc);
       }
     }
-  }
-
-  _createArcGeometry(radius, startAngle, endAngle, segments) {
-    const points = [];
-    for (let i = 0; i <= segments; i++) {
-      const t = startAngle + (endAngle - startAngle) * (i / segments);
-      points.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, 0));
-    }
-    return new THREE.BufferGeometry().setFromPoints(points);
-  }
-
-  _orientArcToAxis(arcMesh, axisDir) {
-    _tmpQuat.setFromUnitVectors(_up, axisDir);
-    arcMesh.quaternion.copy(_tmpQuat);
   }
 
   updateFromModel() {
