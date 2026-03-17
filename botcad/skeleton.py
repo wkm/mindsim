@@ -357,6 +357,7 @@ class Bot:
     wire_routes: list = field(default_factory=list)
 
     _modules: dict[str, Module] = field(default_factory=dict)
+    _cad_model: object = field(default=None, init=False, repr=False)
 
     def module(self, name: str) -> Module:
         """Create or retrieve a named module (fabrication unit)."""
@@ -464,6 +465,12 @@ class Bot:
                     stacklevel=2,
                 )
 
+    def build_cad(self):
+        """Build CAD geometry and refine mass/inertia from actual solids."""
+        from botcad.emit.cad import build_cad
+
+        self._cad_model = build_cad(self)
+
     def emit(self, output_dir: str | None = None) -> None:
         """Generate all output files."""
         from pathlib import Path
@@ -476,9 +483,13 @@ class Bot:
         output_dir_path.mkdir(parents=True, exist_ok=True)
         (output_dir_path / "meshes").mkdir(exist_ok=True)
 
+        # Build geometry + refine mass (if not already done)
+        if self._cad_model is None:
+            self.build_cad()
+
         from botcad.emit.cad import emit_cad
 
-        emit_cad(self, output_dir_path)
+        parts = emit_cad(self, output_dir_path, self._cad_model)
 
         from botcad.emit.mujoco import emit_mujoco
 
@@ -515,7 +526,7 @@ class Bot:
             from botcad.emit.readme import emit_assembly_guide_for_module
 
             for mod_name in self._modules:
-                emit_cad_for_module(self, mod_name, output_dir_path)
+                emit_cad_for_module(self, mod_name, output_dir_path, parts)
                 emit_bom_for_module(self, mod_name, output_dir_path)
                 emit_assembly_guide_for_module(self, mod_name, output_dir_path)
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,6 +34,7 @@ from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
+from botcad.cad_utils import as_solid as _as_solid
 from botcad.component import BearingSpec, BusType, CameraSpec
 from botcad.geometry import quat_to_euler
 from botcad.skeleton import BodyShape, BracketStyle
@@ -45,6 +47,27 @@ _PLA_DENSITY = 1200.0
 if TYPE_CHECKING:
     from botcad.component import Component, Vec3
     from botcad.skeleton import Body, Bot, Joint
+
+
+@dataclass
+class CadModel:
+    """Pre-built CAD geometry for all bodies in a bot."""
+
+    body_solids: dict[str, object]  # body_name → build123d Solid
+    parent_joint_map: dict[str, Joint]  # body_name → parent Joint
+    world_positions: dict[str, tuple[float, float, float]]  # body_name → (x, y, z)
+    rigid_groups: dict[str, list[Body]]  # group_name → [Body, ...]
+    body_wire_segments: dict[str, list[tuple]]  # body_name → [(seg, bus_type), ...]
+
+
+@dataclass
+class AssemblyPart:
+    """A positioned CAD solid in the assembly, tagged with metadata."""
+
+    solid: object  # build123d Solid (positioned in world frame)
+    module: str | None  # fabrication module name, or None
+    kind: str  # "body" | "horn" | "servo"
+    label: str  # human-readable identifier
 
 
 def _update_mass_from_solid(body: Body, solid) -> None:
@@ -129,25 +152,20 @@ def _update_mass_from_solid(body: Body, solid) -> None:
     ixz = struct_ixz + struct_mass * sx * sz
     iyz = struct_iyz + struct_mass * sy * sz
 
+    # Overwrite provisional packing estimates with CAD-derived values
     # Add each component's inertia (box approximation shifted to composite COM)
-    for pos, mass, dims in mass_items:
-        if mass <= 0:
-            continue
-        dx, dy, dz = dims
-        # Box inertia about own center
-        ix = mass * (dy**2 + dz**2) / 12.0
-        iy = mass * (dx**2 + dz**2) / 12.0
-        iz = mass * (dx**2 + dy**2) / 12.0
-        # Parallel axis shift to composite COM
-        rx = pos[0] - com_x
-        ry = pos[1] - com_y
-        rz = pos[2] - com_z
-        ixx += ix + mass * (ry**2 + rz**2)
-        iyy += iy + mass * (rx**2 + rz**2)
-        izz += iz + mass * (rx**2 + ry**2)
-        ixy += mass * rx * ry
-        ixz += mass * rx * rz
-        iyz += mass * ry * rz
+    from botcad.geometry import parallel_axis_inertia
+
+    comp_com = (com_x, com_y, com_z)
+    c_ixx, c_iyy, c_izz, c_ixy, c_ixz, c_iyz = parallel_axis_inertia(
+        mass_items, comp_com
+    )
+    ixx += c_ixx
+    iyy += c_iyy
+    izz += c_izz
+    ixy += c_ixy
+    ixz += c_ixz
+    iyz += c_iyz
 
     # Ensure minimum inertia (MuJoCo needs positive values)
     min_i = 1e-8
@@ -233,15 +251,12 @@ def make_component_solid(component: Component):
     )
 
 
-def emit_cad(bot: Bot, output_dir: Path) -> None:
-    """Generate STEP assembly and per-body STL files."""
-    from build123d import Color, Compound, Location, export_step, export_stl
+def build_cad(bot: Bot) -> CadModel:
+    """Build all body solids and refine mass/inertia from actual geometry.
 
-    from botcad.colors import COLOR_STRUCTURE_DARK, COLOR_STRUCTURE_HORN_DISC
-
-    meshes_dir = output_dir / "meshes"
-    meshes_dir.mkdir(parents=True, exist_ok=True)
-
+    This is the geometry-building + mass-refinement step, separated from file
+    export so that accurate mass properties are available before any emitter runs.
+    """
     # Build body → parent joint mapping
     parent_joint_map: dict[str, Joint] = {}
     for joint in bot.all_joints:
@@ -262,7 +277,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
                 (seg, route.bus_type)
             )
 
-    # --- Per-body STLs (for MuJoCo sim) ---
+    # Build body solids and refine mass from actual geometry
     body_solids: dict[str, object] = {}
     for body in bot.all_bodies:
         pj = parent_joint_map.get(body.name)
@@ -270,8 +285,35 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
         solid = _make_body_solid(body, pj, wire_segs or None)
         if solid is not None:
             body_solids[body.name] = solid
-            export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
             _update_mass_from_solid(body, solid)
+
+    return CadModel(
+        body_solids=body_solids,
+        parent_joint_map=parent_joint_map,
+        world_positions=world_positions,
+        rigid_groups=rigid_groups,
+        body_wire_segments=body_wire_segments,
+    )
+
+
+def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
+    """Generate STEP assembly and per-body STL files from pre-built geometry."""
+    from build123d import Color, Compound, Location, export_step, export_stl
+
+    from botcad.colors import COLOR_STRUCTURE_DARK, COLOR_STRUCTURE_HORN_DISC
+
+    meshes_dir = output_dir / "meshes"
+    meshes_dir.mkdir(parents=True, exist_ok=True)
+
+    body_solids = cad.body_solids
+    world_positions = cad.world_positions
+    rigid_groups = cad.rigid_groups
+
+    # --- Per-body STLs (for MuJoCo sim) ---
+    for body in bot.all_bodies:
+        solid = body_solids.get(body.name)
+        if solid is not None:
+            export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
 
     # --- Per-component STLs (for MuJoCo mesh geoms) ---
     # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
@@ -351,6 +393,40 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
                 if horn:
                     export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
+    # --- Bracket / cradle / coupler STLs (visual-only attachments) ---
+    # Pre-positioned in body-local frame so MuJoCo uses pos="0 0 0".
+    from botcad.geometry import rotate_vec
+
+    bracket_spec = BracketSpec()
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            center = joint.solved_servo_center
+            euler = quat_to_euler(joint.solved_servo_quat)
+
+            if joint.bracket_style is BracketStyle.COUPLER:
+                # Cradle on parent body
+                cradle = cradle_solid(joint.servo, bracket_spec)
+                cradle = cradle.locate(Location(center, euler))
+                export_stl(cradle, str(meshes_dir / f"cradle_{joint.name}.stl"))
+
+                # Coupler on child body (shaft-centered → child body frame)
+                rotated_offset = rotate_vec(
+                    joint.solved_servo_quat, joint.servo.shaft_offset
+                )
+                coupler_center = (
+                    -rotated_offset[0],
+                    -rotated_offset[1],
+                    -rotated_offset[2],
+                )
+                coupler = coupler_solid(joint.servo, bracket_spec)
+                coupler = coupler.locate(Location(coupler_center, euler))
+                export_stl(coupler, str(meshes_dir / f"coupler_{joint.name}.stl"))
+            else:
+                # Pocket bracket on parent body
+                bracket = bracket_solid(joint.servo, bracket_spec)
+                bracket = bracket.locate(Location(center, euler))
+                export_stl(bracket, str(meshes_dir / f"bracket_{joint.name}.stl"))
+
     # --- Per-wire STLs ---
     from botcad.component import BusType
 
@@ -373,8 +449,7 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
                 )
 
     # --- STEP assembly (printable parts, positioned + colored) ---
-    assembly_parts = []
-    part_modules: list[str | None] = []  # parallel list: module name per part
+    parts: list[AssemblyPart] = []
     for group_name, bodies in rigid_groups.items():
         group_root = bodies[0]
         group_root_pos = world_positions[group_root.name]
@@ -408,8 +483,14 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             group_solid.color = Color(*_body_color_rgb(group_root))
             group_solid.label = group_name
             positioned = group_solid.moved(Location(group_root_pos))
-            assembly_parts.append(positioned)
-            part_modules.append(group_root.module.name if group_root.module else None)
+            parts.append(
+                AssemblyPart(
+                    solid=positioned,
+                    module=group_root.module.name if group_root.module else None,
+                    kind="body",
+                    label=group_name,
+                )
+            )
 
     # --- Horn discs (purchased parts, not in body STLs) ---
     for body in bot.all_bodies:
@@ -438,9 +519,14 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
             solid.color = Color(*COLOR_STRUCTURE_HORN_DISC.rgb)
             solid.label = f"{joint.name}_horn"
             positioned = solid.moved(Location(pos))
-            assembly_parts.append(positioned)
-            # Horn belongs to parent body's module (joint owner)
-            part_modules.append(body.module.name if body.module else None)
+            parts.append(
+                AssemblyPart(
+                    solid=positioned,
+                    module=body.module.name if body.module else None,
+                    kind="horn",
+                    label=f"{joint.name}_horn",
+                )
+            )
 
     # --- Servo solids (purchased parts, shown seated in brackets) ---
     # servo_solid() is @lru_cache'd — same geometry returned for all STS3215s.
@@ -459,24 +545,30 @@ def emit_cad(bot: Bot, output_dir: Path) -> None:
 
             solid.color = Color(*COLOR_STRUCTURE_DARK.rgb)
             solid.label = f"servo_{joint.name}"
-            assembly_parts.append(solid)
+            parts.append(
+                AssemblyPart(
+                    solid=solid,
+                    module=None,
+                    kind="servo",
+                    label=f"servo_{joint.name}",
+                )
+            )
             servo_count += 1
 
-    if assembly_parts:
-        assembly = Compound(label=bot.name, children=assembly_parts)
+    assembly_solids = [p.solid for p in parts]
+    if assembly_solids:
+        assembly = Compound(label=bot.name, children=assembly_solids)
         export_step(
             assembly,
             str(output_dir / "assembly.step"),
             timestamp="2026-01-01T00:00:00",
         )
         print(
-            f"CAD: wrote assembly.step ({len(assembly_parts) - servo_count} printed "
+            f"CAD: wrote assembly.step ({len(assembly_solids) - servo_count} printed "
             f"+ {servo_count} servo parts) + {len(body_solids)} STLs to {output_dir}"
         )
 
-    # Store for per-module export
-    bot._assembly_parts = assembly_parts
-    bot._part_modules = part_modules
+    return parts
 
 
 def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
@@ -540,25 +632,6 @@ def _body_color_rgb(body: Body) -> tuple[float, float, float]:
     from botcad.emit.mujoco import _body_color_rgb as _shared_body_color_rgb
 
     return _shared_body_color_rgb(body)
-
-
-def _as_solid(shape):
-    """Extract a single Solid from a boolean result.
-
-    build123d boolean ops (cut, union) return a Compound even when the
-    result is a single solid. The STEP exporter only writes colors on
-    Solid objects, not Compounds. This extracts the Solid so colors
-    work correctly in exported STEP files.
-    """
-    from build123d import Compound, Solid
-
-    if isinstance(shape, Solid):
-        return shape
-    if isinstance(shape, Compound):
-        solids = shape.solids()
-        if len(solids) == 1:
-            return solids[0]
-    return shape
 
 
 def _ensure_solid(shape):
@@ -1256,16 +1329,13 @@ def _make_bearing_solid(bearing: BearingSpec):
     return _as_solid(outer - inner)
 
 
-def emit_cad_for_module(bot: Bot, module_name: str, output_dir: Path) -> None:
+def emit_cad_for_module(
+    bot: Bot, module_name: str, output_dir: Path, parts: list[AssemblyPart]
+) -> None:
     """Export a per-module STEP file containing only parts in the named module."""
     from build123d import Compound, export_step
 
-    assembly_parts = getattr(bot, "_assembly_parts", [])
-    part_modules = getattr(bot, "_part_modules", [])
-
-    module_parts = [
-        part for part, mod in zip(assembly_parts, part_modules) if mod == module_name
-    ]
+    module_parts = [p.solid for p in parts if p.module == module_name]
 
     if module_parts:
         assembly = Compound(label=f"{bot.name}_{module_name}", children=module_parts)

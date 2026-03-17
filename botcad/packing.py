@@ -238,35 +238,14 @@ def _compute_mass_inertia(body: Body) -> None:
     body.solved_mass = total_mass
     body.solved_com = (com_x, com_y, com_z)
 
-    # Compute inertia tensor about CoM using parallel axis theorem
-    ixx, iyy, izz = 0.0, 0.0, 0.0
-    ixy, ixz, iyz = 0.0, 0.0, 0.0
+    # Provisional — overwritten by CAD geometry in build_cad()
+    # Include structural body as a mass item (centered at origin)
+    from botcad.geometry import parallel_axis_inertia
 
-    for pos, mass, dims in mass_items:
-        if mass <= 0:
-            continue
-        dx, dy, dz = dims
-        # Box inertia about own center
-        ix = mass * (dy**2 + dz**2) / 12.0
-        iy = mass * (dx**2 + dz**2) / 12.0
-        iz = mass * (dx**2 + dy**2) / 12.0
-
-        # Parallel axis: shift to body CoM
-        rx = pos[0] - com_x
-        ry = pos[1] - com_y
-        rz = pos[2] - com_z
-        ixx += ix + mass * (ry**2 + rz**2)
-        iyy += iy + mass * (rx**2 + rz**2)
-        izz += iz + mass * (rx**2 + ry**2)
-        ixy += mass * rx * ry
-        ixz += mass * rx * rz
-        iyz += mass * ry * rz
-
-    # Add structural inertia (thin-walled box about center)
-    sx, sy, sz = dims
-    ixx += structural_mass * (sy**2 + sz**2) / 12.0
-    iyy += structural_mass * (sx**2 + sz**2) / 12.0
-    izz += structural_mass * (sx**2 + sy**2) / 12.0
+    all_mass_items = mass_items + [((0.0, 0.0, 0.0), structural_mass, dims)]
+    ixx, iyy, izz, ixy, ixz, iyz = parallel_axis_inertia(
+        all_mass_items, (com_x, com_y, com_z)
+    )
 
     # Ensure minimum inertia (MuJoCo needs positive values)
     min_i = 1e-8
