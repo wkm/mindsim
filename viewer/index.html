@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>MindSim Bot Viewer</title>
+  <title>MindSim Viewer</title>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
@@ -12,7 +12,7 @@
       overflow: hidden; position: fixed; width: 100%; height: 100%;
       touch-action: none; user-select: none;
     }
-    #canvas-container { position: absolute; inset: 0; }
+    #canvas-container { position: absolute; inset: 0; z-index: 1; }
     canvas { display: block; }
 
     /* Top bar */
@@ -100,28 +100,118 @@
 
     /* Joint axis colors */
     .joint-color { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+
+    /* ── Landing page ── */
+    #landing {
+      position: absolute; inset: 0; z-index: 500;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #1a1a2e;
+    }
+    #landing h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    #landing p { font-size: 14px; color: #888; margin-bottom: 40px; }
+    .landing-cards { display: flex; gap: 24px; }
+    .landing-card {
+      width: 220px; padding: 32px 24px; border-radius: 12px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+      text-align: center; cursor: pointer; transition: all 0.2s;
+      text-decoration: none; color: inherit;
+    }
+    .landing-card:hover { background: rgba(80,80,200,0.15); border-color: #6666cc; transform: translateY(-2px); }
+    .landing-card .card-icon { font-size: 36px; margin-bottom: 12px; }
+    .landing-card .card-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+    .landing-card .card-desc { font-size: 12px; color: #888; }
+
+    /* ── Component browser ── */
+    #component-browser { display: none; position: absolute; inset: 0; z-index: 50; pointer-events: none; }
+    #component-sidebar {
+      position: absolute; top: 44px; left: 0; bottom: 0; width: 220px;
+      background: rgba(10,10,30,0.9); border-right: 1px solid rgba(255,255,255,0.1);
+      z-index: 91; overflow-y: auto; padding: 12px 0;
+      backdrop-filter: blur(8px); pointer-events: auto;
+    }
+    #component-sidebar .sidebar-title {
+      font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase;
+      letter-spacing: 0.5px; padding: 8px 16px 4px;
+    }
+    .component-item {
+      display: block; padding: 8px 16px; cursor: pointer; font-size: 13px;
+      font-family: inherit; color: #999; transition: all 0.1s;
+      border: none; background: none; width: 100%; text-align: left;
+    }
+    .component-item:hover { background: rgba(255,255,255,0.05); color: #ccc; }
+    .component-item.active { background: rgba(80,80,200,0.2); color: #fff; }
+    .component-item .item-category {
+      font-size: 10px; color: #555; text-transform: uppercase; display: block;
+    }
+
+    /* Layer checkboxes */
+    .layer-controls { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+    .layer-toggle {
+      display: flex; align-items: center; gap: 8px; padding: 5px 0;
+      cursor: pointer; font-size: 12px; color: #ccc;
+    }
+    .layer-toggle input[type="checkbox"] {
+      width: 14px; height: 14px; accent-color: #6666cc; cursor: pointer;
+    }
+    .layer-swatch {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0;
+    }
+    .layer-label { flex: 1; }
+
+    /* Hoverable mounting point / wire port items */
+    .highlight-item {
+      padding: 2px 4px; border-radius: 3px; cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+    .highlight-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
   </style>
 </head>
 <body>
-  <div id="loading">
+  <!-- Landing page -->
+  <div id="landing">
+    <h1>MindSim</h1>
+    <p>Design robots from real components</p>
+    <div class="landing-cards">
+      <a class="landing-card" href="?bot=wheeler_arm">
+        <div class="card-icon">&#x1F916;</div>
+        <div class="card-title">Bots</div>
+        <div class="card-desc">MuJoCo simulation viewer with joint, assembly, and IK modes</div>
+      </a>
+      <a class="landing-card" href="?component=catalog">
+        <div class="card-icon">&#x1F9F0;</div>
+        <div class="card-title">Components</div>
+        <div class="card-desc">Browse servos, sensors, and boards with 3D geometry preview</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Loading overlay (bot viewer) -->
+  <div id="loading" style="display:none">
     <div class="spinner"></div>
     <p id="loading-text">Loading MuJoCo WASM...</p>
   </div>
 
   <div id="canvas-container"></div>
 
-  <div id="top-bar">
+  <!-- Top bar (shared by bot viewer and component browser) -->
+  <div id="top-bar" style="display:none">
     <h1>MindSim</h1>
-    <span class="bot-name" id="bot-name">loading...</span>
-    <div class="mode-tabs">
+    <span class="bot-name" id="bot-name"></span>
+    <div class="mode-tabs" id="mode-tabs">
       <button class="mode-tab active" data-mode="joint">Joints</button>
       <button class="mode-tab" data-mode="assembly">Assembly</button>
       <button class="mode-tab" data-mode="ik">IK</button>
     </div>
   </div>
 
-  <div id="side-panel">
+  <div id="side-panel" style="display:none">
     <!-- Populated by mode JS -->
+  </div>
+
+  <!-- Component browser layout -->
+  <div id="component-browser">
+    <div id="component-sidebar"></div>
   </div>
 
   <script type="importmap">

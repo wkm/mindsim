@@ -19,7 +19,6 @@ Requires mjpython (not plain python) for MuJoCo viewer/play features.
 from __future__ import annotations
 
 import argparse
-import functools
 import http.server
 import logging
 import os
@@ -428,49 +427,353 @@ class MindSimApp(App):
             self._dashboard._total_batches = total
 
 
-def _run_web_viewer(bot_name: str, port: int = 8080):
-    """Launch a local HTTP server and open the 3D bot viewer in the browser."""
-    project_root = Path(__file__).parent
-    bot_dir = project_root / "bots" / bot_name
+def _build_component_registry() -> dict:
+    """Build a registry of all components from botcad.components factories.
 
-    if not bot_dir.exists():
-        print(f"Error: Bot directory not found for {bot_name} at {bot_dir}")
-        sys.exit(1)
+    Returns dict mapping component name → (factory_func, Component instance).
+    """
+    import importlib
+    import pkgutil
 
-    # Generate viewer_manifest.json if design.py is newer (or manifest missing)
-    design_py = bot_dir / "design.py"
-    manifest_json = bot_dir / "viewer_manifest.json"
-    needs_regen = design_py.exists() and (
-        not manifest_json.exists()
-        or design_py.stat().st_mtime > manifest_json.stat().st_mtime
-    )
-    if needs_regen:
+    import botcad.components as pkg
+    from botcad.component import Component
+
+    registry: dict[str, tuple] = {}
+    for info in pkgutil.iter_modules(pkg.__path__):
+        mod = importlib.import_module(f"botcad.components.{info.name}")
+        for attr in dir(mod):
+            obj = getattr(mod, attr)
+            if callable(obj) and not isinstance(obj, type):
+                try:
+                    instance = obj()
+                    if isinstance(instance, Component):
+                        registry[instance.name] = (obj, instance, info.name)
+                except TypeError:
+                    pass
+    return registry
+
+
+def _component_to_json(comp, category: str) -> dict:
+    """Serialize a Component instance to JSON-safe dict."""
+    from botcad.component import ServoSpec
+
+    info = {
+        "name": comp.name,
+        "category": category,
+        "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
+        "mass_g": round(comp.mass * 1000, 1),
+        "is_servo": isinstance(comp, ServoSpec),
+        "color": list(comp.color),
+    }
+    if isinstance(comp, ServoSpec):
+        import math
+
+        info["servo"] = {
+            "stall_torque_nm": round(comp.stall_torque, 3),
+            "no_load_speed_rpm": round(comp.no_load_speed * 60 / (2 * math.pi), 1),
+            "voltage": comp.voltage,
+            "range_deg": [round(math.degrees(r), 1) for r in comp.range_rad],
+            "gear_ratio": comp.gear_ratio,
+            "continuous": comp.continuous,
+        }
+    info["mounting_points"] = [
+        {
+            "label": mp.label,
+            "diameter_mm": round(mp.diameter * 1000, 2),
+            "pos": list(mp.pos),
+            "axis": list(mp.axis),
+        }
+        for mp in comp.mounting_points
+    ]
+    info["wire_ports"] = [
+        {
+            "label": wp.label,
+            "bus_type": str(wp.bus_type),
+            "pos": list(wp.pos),
+        }
+        for wp in comp.wire_ports
+    ]
+    return info
+
+
+# STL generation cache: (component_name, part_name) → bytes
+_stl_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _generate_stl_bytes(comp, part: str) -> bytes | None:
+    """Generate STL bytes for a component part. Returns None if not applicable."""
+    import tempfile
+
+    from build123d import export_stl
+
+    from botcad.component import ServoSpec
+    from botcad.emit.cad import make_component_solid
+
+    cache_key = (comp.name, part)
+    if cache_key in _stl_cache:
+        return _stl_cache[cache_key]
+
+    solid = None
+    if part == "body":
+        solid = make_component_solid(comp)
+    elif isinstance(comp, ServoSpec):
+        from botcad.bracket import (
+            BracketSpec,
+            bracket_envelope,
+            bracket_solid,
+            coupler_solid,
+            cradle_envelope,
+            cradle_solid,
+            servo_solid,
+        )
+
+        spec = BracketSpec()
+        if part == "bracket":
+            solid = bracket_solid(comp, spec)
+        elif part == "servo":
+            solid = servo_solid(comp)
+        elif part == "cradle":
+            solid = cradle_solid(comp, spec)
+        elif part == "coupler":
+            solid = coupler_solid(comp, spec)
+        elif part == "bracket_envelope":
+            solid = bracket_envelope(comp, spec)
+        elif part == "cradle_envelope":
+            solid = cradle_envelope(comp, spec)
+
+    if solid is None:
+        return None
+
+    with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as tmp:
+        export_stl(solid, tmp.name)
+        stl_bytes = Path(tmp.name).read_bytes()
+
+    _stl_cache[cache_key] = stl_bytes
+    return stl_bytes
+
+
+class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
+    """HTTP handler that serves static files and component API endpoints."""
+
+    # Set by server setup
+    component_registry: dict = {}
+    project_root: str = "."
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=self.project_root, **kwargs)
+
+    def do_GET(self):
+        # API routes
+        if self.path == "/api/components":
+            self._handle_component_catalog()
+            return
+
+        # /api/components/<name>/fasteners
+        m = re.match(r"^/api/components/([^/]+)/fasteners$", self.path)
+        if m:
+            self._handle_component_fasteners(m.group(1))
+            return
+
+        # /api/components/<name>/stl/<part>
+        m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", self.path)
+        if m:
+            self._handle_component_stl(m.group(1), m.group(2))
+            return
+
+        # Fall through to static file serving
+        super().do_GET()
+
+    def _handle_component_catalog(self):
+        import json
+
+        catalog = []
+        for _factory, comp, category in self.component_registry.values():
+            catalog.append(_component_to_json(comp, category))
+        payload = json.dumps(catalog).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _handle_component_stl(self, name: str, part: str):
+        # Handle screw STL requests (generated by fasteners endpoint)
+        if name.startswith("_screw_") and part == "body":
+            cache_key = (name, "body")
+            stl_bytes = _stl_cache.get(cache_key)
+            if stl_bytes:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(stl_bytes)))
+                self.end_headers()
+                self.wfile.write(stl_bytes)
+                return
+            self.send_error(404, f"Screw STL not found: {name}")
+            return
+
+        if name not in self.component_registry:
+            self.send_error(404, f"Unknown component: {name}")
+            return
+
+        valid_parts = {
+            "body",
+            "bracket",
+            "servo",
+            "cradle",
+            "coupler",
+            "bracket_envelope",
+            "cradle_envelope",
+        }
+        if part not in valid_parts:
+            self.send_error(400, f"Unknown part: {part}")
+            return
+
+        _factory, comp, _category = self.component_registry[name]
         try:
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location("design", design_py)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            bot = mod.build()
-            bot.solve()
-            from botcad.emit.viewer import emit_viewer_manifest
-
-            emit_viewer_manifest(bot, bot_dir)
-            print(f"Generated viewer_manifest.json for {bot_name}")
+            stl_bytes = _generate_stl_bytes(comp, part)
         except Exception as e:
-            print(f"Warning: could not generate viewer manifest: {e}")
+            self.send_error(500, f"STL generation failed: {e}")
+            return
 
-    # Serve from project root so both /viewer/ and /bots/ are accessible
-    handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=str(project_root)
-    )
-    url = f"http://localhost:{port}/viewer/?bot={bot_name}"
-    print(f"Serving {bot_name} viewer at {url}")
+        if stl_bytes is None:
+            self.send_error(404, f"Part '{part}' not available for {name}")
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(stl_bytes)))
+        self.send_header(
+            "Content-Disposition", f'attachment; filename="{name}_{part}.stl"'
+        )
+        self.end_headers()
+        self.wfile.write(stl_bytes)
+
+    def _handle_component_fasteners(self, name: str):
+        """Return JSON with screw positions + STL URLs for each mounting point."""
+        import json
+        import math
+
+        if name not in self.component_registry:
+            self.send_error(404, f"Unknown component: {name}")
+            return
+
+        _factory, comp, _category = self.component_registry[name]
+
+        # Ensure screw STLs are generated (one per unique diameter)
+        for mp in comp.mounting_points:
+            cache_key = (f"_screw_{mp.diameter:.4f}", "body")
+            if cache_key not in _stl_cache:
+                try:
+                    import tempfile
+
+                    from build123d import export_stl
+
+                    from botcad.emit.cad import screw_solid
+
+                    solid = screw_solid(mp.diameter)
+                    with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as tmp:
+                        export_stl(solid, tmp.name)
+                        _stl_cache[cache_key] = Path(tmp.name).read_bytes()
+                except Exception:
+                    pass
+
+        def _axis_to_quat(axis):
+            """Convert a unit axis vector to a quaternion rotating Z-up to that axis."""
+            ax, ay, az = axis
+            length = math.sqrt(ax * ax + ay * ay + az * az)
+            if length < 1e-9:
+                return [1.0, 0.0, 0.0, 0.0]
+            ax, ay, az = ax / length, ay / length, az / length
+            # Rotation from (0,0,1) to (ax,ay,az)
+            dot = az  # dot product with Z
+            if dot > 0.9999:
+                return [1.0, 0.0, 0.0, 0.0]  # identity
+            if dot < -0.9999:
+                return [0.0, 1.0, 0.0, 0.0]  # 180° around X
+            # cross product of Z with target
+            cx, cy, cz = -ay, ax, 0.0
+            s = math.sqrt((1.0 + dot) * 2.0)
+            return [s / 2.0, cx / s, cy / s, cz / s]  # w, x, y, z
+
+        fasteners = []
+        for mp in comp.mounting_points:
+            d_key = f"{mp.diameter:.4f}"
+            stl_url = f"/api/components/_screw_{d_key}/stl/body"
+            fasteners.append(
+                {
+                    "label": mp.label,
+                    "pos": list(mp.pos),
+                    "quat": _axis_to_quat(mp.axis),
+                    "diameter_mm": round(mp.diameter * 1000, 2),
+                    "stl_url": stl_url,
+                }
+            )
+
+        payload = json.dumps({"fasteners": fasteners}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        # Quieter logging — skip successful static file requests
+        if len(args) >= 2 and str(args[1]) == "200":
+            return
+        super().log_message(format, *args)
+
+
+def _run_web_viewer(bot_name: str | None, port: int = 8080):
+    """Launch a local HTTP server and open the 3D viewer in the browser."""
+    project_root = Path(__file__).parent
+
+    # Generate viewer manifest for bot if specified
+    if bot_name:
+        bot_dir = project_root / "bots" / bot_name
+        if not bot_dir.exists():
+            print(f"Error: Bot directory not found for {bot_name} at {bot_dir}")
+            sys.exit(1)
+
+        design_py = bot_dir / "design.py"
+        manifest_json = bot_dir / "viewer_manifest.json"
+        needs_regen = design_py.exists() and (
+            not manifest_json.exists()
+            or design_py.stat().st_mtime > manifest_json.stat().st_mtime
+        )
+        if needs_regen:
+            try:
+                import importlib.util
+
+                spec = importlib.util.spec_from_file_location("design", design_py)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                bot = mod.build()
+                bot.solve()
+                from botcad.emit.viewer import emit_viewer_manifest
+
+                emit_viewer_manifest(bot, bot_dir)
+                print(f"Generated viewer_manifest.json for {bot_name}")
+            except Exception as e:
+                print(f"Warning: could not generate viewer manifest: {e}")
+
+    # Build component registry for API
+    print("Building component registry...")
+    ViewerHTTPHandler.component_registry = _build_component_registry()
+    ViewerHTTPHandler.project_root = str(project_root)
+    print(f"  {len(ViewerHTTPHandler.component_registry)} components registered")
+
+    # Determine URL
+    if bot_name:
+        url = f"http://localhost:{port}/viewer/?bot={bot_name}"
+    else:
+        url = f"http://localhost:{port}/viewer/"
+
+    print(f"Viewer at {url}")
     print("Press Ctrl+C to stop.")
-
     webbrowser.open(url)
 
-    server = http.server.HTTPServer(("", port), handler)
+    # ThreadingHTTPServer so STL generation doesn't block other requests
+    server = http.server.ThreadingHTTPServer(("", port), ViewerHTTPHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -693,7 +996,7 @@ def main():
         _run_tui()
 
     elif args.command == "web":
-        _run_web_viewer(args.bot or "wheeler_arm", args.port)
+        _run_web_viewer(args.bot, args.port)
 
     elif args.command == "scene":
         from sim.scene_preview import run_scene_preview
