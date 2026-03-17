@@ -48,3 +48,77 @@ export function createMarker(color) {
   mesh.visible = false;
   return mesh;
 }
+
+// ---------------------------------------------------------------------------
+// Arc geometry helpers (extracted from joint-mode for reuse)
+// ---------------------------------------------------------------------------
+const _arcUp = new THREE.Vector3(0, 0, 1);
+const _arcQuat = new THREE.Quaternion();
+
+/**
+ * Create a BufferGeometry arc in the XY plane.
+ * @param {number} radius
+ * @param {number} startAngle - radians
+ * @param {number} endAngle - radians
+ * @param {number} segments
+ * @returns {THREE.BufferGeometry}
+ */
+export function createArcGeometry(radius, startAngle, endAngle, segments) {
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = startAngle + (endAngle - startAngle) * (i / segments);
+    points.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, 0));
+  }
+  return new THREE.BufferGeometry().setFromPoints(points);
+}
+
+/**
+ * Orient a mesh/line from the Z-axis to a target axis direction.
+ * @param {THREE.Object3D} obj
+ * @param {THREE.Vector3} axisDir - normalized target direction
+ */
+export function orientToAxis(obj, axisDir) {
+  _arcQuat.setFromUnitVectors(_arcUp, axisDir);
+  obj.quaternion.copy(_arcQuat);
+}
+
+// ---------------------------------------------------------------------------
+// Text sprite for dimension / spec labels
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a billboard text sprite.
+ * @param {string} text
+ * @param {Object} opts
+ * @param {number} [opts.fontSize=12]
+ * @param {string} [opts.color='#ffffff']
+ * @param {string} [opts.bgColor='rgba(0,0,0,0.5)']
+ * @returns {THREE.Sprite}
+ */
+export function createTextSprite(text, { fontSize = 12, color = '#ffffff', bgColor = 'rgba(0,0,0,0.5)' } = {}) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const font = `${fontSize * 4}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.font = font;
+  const metrics = ctx.measureText(text);
+  const padding = fontSize * 2;
+  canvas.width = Math.ceil(metrics.width + padding * 2);
+  canvas.height = Math.ceil(fontSize * 6);
+
+  // Background
+  ctx.fillStyle = bgColor;
+  ctx.roundRect(0, 0, canvas.width, canvas.height, fontSize);
+  ctx.fill();
+
+  // Text
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  return new THREE.Sprite(mat);
+}
