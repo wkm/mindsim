@@ -3,19 +3,14 @@
  */
 
 import * as THREE from 'three';
-import { clearGroup, radToDegStr } from './utils.js';
-
-// Reusable temporaries for updateOverlays hot path
-const _tmpVec = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 0, 1);
-const _tmpQuat = new THREE.Quaternion();
+import { clearGroup, radToDegStr, createArcGeometry, orientToAxis } from './utils.js';
 
 export class JointMode {
   constructor(ctx) {
     this.ctx = ctx;
     this.sliders = [];
     this.axisArrows = [];
-    this.angleArcs = [];
+    this.angleArcs = [];  // { group, curArcGroup, axisDir, rangeMin, rangeMax, color }
     this.overlayGroup = new THREE.Group();
     this.overlayGroup.name = 'JointOverlays';
     this.active = false;
@@ -43,9 +38,10 @@ export class JointMode {
     const HINGE = mujoco.mjtJoint.mjJNT_HINGE.value;
 
     let html = '<h2>Joint Validation</h2>';
-    html += '<p style="font-size:12px;color:#888;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
 
-    const jointColors = ['#ff6666', '#66cc66', '#6688ff', '#ffaa44', '#cc66cc', '#66cccc'];
+    // Blueprint.js palette: red, green, blue, gold, violet, turquoise
+    const jointColors = ['#DB3737', '#0F9960', '#137CBD', '#D99E0B', '#7157D9', '#00B3A4'];
     this.sliders = [];
 
     for (let j = 0; j < model.njnt; j++) {
@@ -117,6 +113,8 @@ export class JointMode {
     this.axisArrows = [];
     this.angleArcs = [];
 
+    const arcRadius = 0.04;
+
     for (const s of this.sliders) {
       const j = s.jointIdx;
       const bodyId = this.ctx.model.jnt_bodyid[j];
@@ -131,11 +129,50 @@ export class JointMode {
       this.overlayGroup.add(arrow);
       this.axisArrows.push(arrow);
 
-      // Angle arc group — children rebuilt on update, but the group persists
+      // Group for this joint's arcs
       const arcGroup = new THREE.Group();
-      arcGroup.userData = { jointIdx: j, bodyId, axisDir: axisDir.clone(), rangeMin: s.rangeMin, rangeMax: s.rangeMax };
+      arcGroup.userData = { bodyId };
       this.overlayGroup.add(arcGroup);
-      this.angleArcs.push(arcGroup);
+
+      const totalAngle = s.rangeMax - s.rangeMin;
+      const sectorColor = new THREE.Color(s.color);
+
+      // Static ROM sector (built once, never rebuilt)
+      if (totalAngle > 0.01) {
+        const sectorShape = new THREE.Shape();
+        sectorShape.moveTo(0, 0);
+        for (let seg = 0; seg <= 32; seg++) {
+          const t = s.rangeMin + totalAngle * (seg / 32);
+          sectorShape.lineTo(Math.cos(t) * arcRadius, Math.sin(t) * arcRadius);
+        }
+        sectorShape.lineTo(0, 0);
+        const sector = new THREE.Mesh(
+          new THREE.ShapeGeometry(sectorShape),
+          new THREE.MeshBasicMaterial({
+            color: sectorColor, transparent: true, opacity: 0.18,
+            side: THREE.DoubleSide, depthWrite: false,
+          })
+        );
+        orientToAxis(sector, axisDir);
+        arcGroup.add(sector);
+
+        // Static ROM edge outline
+        const rangeArc = new THREE.Line(
+          createArcGeometry(arcRadius, s.rangeMin, s.rangeMax, 32),
+          new THREE.LineBasicMaterial({ color: sectorColor, transparent: true, opacity: 0.4 })
+        );
+        orientToAxis(rangeArc, axisDir);
+        arcGroup.add(rangeArc);
+      }
+
+      // Sub-group for the dynamic current-angle arc (rebuilt on update)
+      const curArcGroup = new THREE.Group();
+      arcGroup.add(curArcGroup);
+
+      this.angleArcs.push({
+        group: arcGroup, curArcGroup, axisDir: axisDir.clone(),
+        rangeMin: s.rangeMin, rangeMax: s.rangeMax, arcRadius,
+      });
     }
 
     this.updateOverlays();
@@ -149,63 +186,38 @@ export class JointMode {
     }
 
     for (let i = 0; i < this.angleArcs.length; i++) {
-      const arcGroup = this.angleArcs[i];
-      const { bodyId, axisDir, rangeMin, rangeMax } = arcGroup.userData;
+      const arc = this.angleArcs[i];
       const sliderInfo = this.sliders[i];
       const currentAngle = this.ctx.data.qpos[sliderInfo.qposAddr];
 
-      this.ctx.getPosition(data.xpos, bodyId, arcGroup.position);
+      this.ctx.getPosition(data.xpos, arc.group.userData.bodyId, arc.group.position);
 
-      // Clear old arcs
-      clearGroup(arcGroup);
+      // Only rebuild the dynamic current-angle arc
+      clearGroup(arc.curArcGroup);
 
-      const arcRadius = 0.04;
-      const totalAngle = rangeMax - rangeMin;
+      const totalAngle = arc.rangeMax - arc.rangeMin;
       if (totalAngle <= 0.01) continue;
 
-      // Range arc (gray)
-      const rangeArc = new THREE.Line(
-        this._createArcGeometry(arcRadius, rangeMin, rangeMax, 32),
-        new THREE.LineBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.5 })
-      );
-      this._orientArcToAxis(rangeArc, axisDir);
-      arcGroup.add(rangeArc);
-
-      // Current angle arc (colored)
       if (Math.abs(currentAngle) > 0.01) {
         const curMin = Math.min(0, currentAngle);
         const curMax = Math.max(0, currentAngle);
         const limitProximity = Math.max(
-          1 - Math.abs(currentAngle - rangeMin) / (totalAngle * 0.2),
-          1 - Math.abs(rangeMax - currentAngle) / (totalAngle * 0.2)
+          1 - Math.abs(currentAngle - arc.rangeMin) / (totalAngle * 0.2),
+          1 - Math.abs(arc.rangeMax - currentAngle) / (totalAngle * 0.2)
         );
         let color;
-        if (limitProximity > 0.5) color = 0xff4444;
-        else if (limitProximity > 0) color = 0xffaa44;
-        else color = 0x44cc44;
+        if (limitProximity > 0.5) color = 0xDB3737;      // BP_RED3
+        else if (limitProximity > 0) color = 0xD99E0B;  // BP_GOLD3
+        else color = 0x0F9960;                          // BP_GREEN3
 
         const curArc = new THREE.Line(
-          this._createArcGeometry(arcRadius, curMin, curMax, 16),
+          createArcGeometry(arc.arcRadius, curMin, curMax, 16),
           new THREE.LineBasicMaterial({ color, linewidth: 2 })
         );
-        this._orientArcToAxis(curArc, axisDir);
-        arcGroup.add(curArc);
+        orientToAxis(curArc, arc.axisDir);
+        arc.curArcGroup.add(curArc);
       }
     }
-  }
-
-  _createArcGeometry(radius, startAngle, endAngle, segments) {
-    const points = [];
-    for (let i = 0; i <= segments; i++) {
-      const t = startAngle + (endAngle - startAngle) * (i / segments);
-      points.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, 0));
-    }
-    return new THREE.BufferGeometry().setFromPoints(points);
-  }
-
-  _orientArcToAxis(arcMesh, axisDir) {
-    _tmpQuat.setFromUnitVectors(_up, axisDir);
-    arcMesh.quaternion.copy(_tmpQuat);
   }
 
   updateFromModel() {

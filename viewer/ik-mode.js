@@ -144,8 +144,8 @@ export class IKMode {
       const name = getMujocoName(model.name_jntadr, j);
       const addr = model.jnt_qposadr[j];
       html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">
-        <span style="color:#ccc;">${name}</span>
-        <span style="color:#8888cc;font-family:monospace;" id="ik-jval-${j}">0.0°</span>
+        <span style="color:#394B59;">${name}</span>
+        <span style="color:#137CBD;font-family:monospace;" id="ik-jval-${j}">0.0°</span>
       </div>`;
       this._jointEls.push({ jointIdx: j, addr });
     }
@@ -155,15 +155,15 @@ export class IKMode {
 
   buildOverlays() {
     this.arrow = new THREE.ArrowHelper(
-      new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.1, 0xff4444
+      new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.1, 0xDB3737
     );
     this.arrow.visible = false;
     this.overlayGroup.add(this.arrow);
 
-    this.anchorMarker = createMarker(0x4488ff);
+    this.anchorMarker = createMarker(0x137CBD);
     this.overlayGroup.add(this.anchorMarker);
 
-    this.targetMarker = createMarker(0xff4444);
+    this.targetMarker = createMarker(0xDB3737);
     this.overlayGroup.add(this.targetMarker);
   }
 

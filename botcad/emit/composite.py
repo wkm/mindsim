@@ -70,9 +70,9 @@ def grid(
         cell_h: Height of each cell.
     """
     n_rows = math.ceil(len(views) / cols)
-    margin = 5
-    label_h = 28
-    title_h = 50
+    margin = 2
+    label_h = 20
+    title_h = 40
 
     grid_w = cell_w * cols + margin * (cols + 1)
     grid_h = title_h + (cell_h + label_h + margin) * n_rows + margin
@@ -148,10 +148,10 @@ def filmstrip(
 
     has_collisions = any(collisions)
 
-    margin = 8
-    header_h = 38
-    label_h = 24
-    border_w = 3
+    margin = 3
+    header_h = 30
+    label_h = 18
+    border_w = 2
 
     canvas_w = cell_w * n + margin * (n + 1)
     canvas_h = header_h + cell_h + label_h + margin * 2

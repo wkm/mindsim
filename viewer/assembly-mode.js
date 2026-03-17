@@ -6,6 +6,7 @@
  */
 
 import { GEOM_GROUP_STRUCTURAL, GEOM_GROUP_DETAIL, GEOM_GROUP_WIRE } from './utils.js';
+import { FocusController } from './focus-controller.js';
 
 export class AssemblyMode {
   constructor(ctx) {
@@ -16,6 +17,7 @@ export class AssemblyMode {
     this.active = false;
     this.allGeomMeshes = [];
     this.rootBodyMeshes = []; // cached meshes on the base body (body 1)
+    this.focus = new FocusController(ctx);
   }
 
   activate() {
@@ -129,7 +131,7 @@ export class AssemblyMode {
     const total = this.steps.length;
 
     let html = '<h2>Assembly</h2>';
-    html += '<p style="font-size:12px;color:#888;margin-bottom:12px;">Step through the build sequence.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:12px;">Step through the build sequence.</p>';
 
     html += `<div class="slider-group">
       <div class="slider-label">
@@ -183,6 +185,12 @@ export class AssemblyMode {
     document.getElementById('asm-step-slider').value = idx;
     document.getElementById('asm-sub-slider').value = 1;
     this.applyStep(idx, 1.0);
+
+    // Focus camera on the step's body
+    const step = this.steps[idx];
+    if (step && step.bodyId !== undefined) {
+      this.focus.focusOnBody(step.bodyId, 0.5);
+    }
   }
 
   applyStep(stepIdx, progress) {
@@ -263,5 +271,7 @@ export class AssemblyMode {
     }
   }
 
-  update() {}
+  update() {
+    this.focus.update();
+  }
 }

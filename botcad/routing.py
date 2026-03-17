@@ -153,7 +153,7 @@ def _wireport_local(body: Body, bus_type: BusType) -> Vec3 | None:
     """
     for mount in body.mounts:
         for port in mount.component.wire_ports:
-            if port.bus_type is bus_type:
+            if port.bus_type == bus_type:
                 return _add_vec3(mount.resolved_pos, port.pos)
     return None
 
@@ -326,7 +326,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
         return route
 
     # Pi UART port — origin of the bus, in root body frame
-    pi_uart_pos = _wireport_local(bot.root, "uart_half_duplex")
+    pi_uart_pos = _wireport_local(bot.root, BusType.UART_HALF_DUPLEX)
     if pi_uart_pos is None:
         pi_uart_pos = (0.0, 0.0, 0.0)
 
@@ -428,7 +428,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         for mount in body.mounts:
             if isinstance(mount.component, CameraSpec):
                 for port in mount.component.wire_ports:
-                    if port.bus_type is BusType.CSI:
+                    if port.bus_type == BusType.CSI:
                         camera_body = body
                         camera_pos = _add_vec3(mount.resolved_pos, port.pos)
                         return
@@ -442,7 +442,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         return route
 
     # Camera on root body — single direct segment
-    pi_csi_pos = _wireport_local(bot.root, "csi")
+    pi_csi_pos = _wireport_local(bot.root, BusType.CSI)
     if pi_csi_pos is None:
         return route
 
@@ -512,11 +512,11 @@ def _route_power(bot: Bot) -> WireRoute:
     for mount in bot.root.mounts:
         if isinstance(mount.component, BatterySpec):
             for port in mount.component.wire_ports:
-                if port.bus_type is BusType.POWER:
+                if port.bus_type == BusType.POWER:
                     battery_pos = _add_vec3(mount.resolved_pos, port.pos)
                     break
         for port in mount.component.wire_ports:
-            if port.bus_type is BusType.USB:
+            if port.bus_type == BusType.USB:
                 pi_pos = _add_vec3(mount.resolved_pos, port.pos)
                 break
 

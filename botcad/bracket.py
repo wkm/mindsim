@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from botcad.cad_utils import as_solid as _as_solid
+
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
@@ -94,39 +96,6 @@ def _horn_clip_radius(servo: ServoSpec, spec: BracketSpec) -> float:
     return clip_r
 
 
-def _as_solid(shape):
-    """Extract a single Solid from a boolean result or shape list.
-
-    build123d boolean ops (cut, union) and fillets can return Compound
-    or ShapeList even when the result is a single solid. This extracts
-    the Solid so further operations (like filleting or more booleans)
-    work correctly.
-    """
-    from build123d import Compound, ShapeList, Solid
-
-    # 1. Handle ShapeList (returned by fillet and some boolean ops)
-    if isinstance(shape, ShapeList):
-        if len(shape) == 1:
-            return _as_solid(shape[0])
-        # If it's a list of multiple solids, try to compound them
-        if all(isinstance(s, Solid) for s in shape):
-            return _as_solid(Compound(list(shape)))
-        return shape
-
-    # 2. Handle Solid
-    if isinstance(shape, Solid):
-        return shape
-
-    # 3. Handle Compound
-    if isinstance(shape, Compound):
-        solids = shape.solids()
-        if len(solids) == 1:
-            return solids[0]
-        return shape
-
-    return shape
-
-
 @dataclass(frozen=True)
 class BracketSpec:
     """Parameters controlling bracket geometry around a servo."""
@@ -145,8 +114,8 @@ def _bracket_outer(
     """Compute the bracket's outer box solid and ear_bottom_z.
 
     Shared between bracket_solid() and bracket_envelope().
-    insertion_clearance extends the box upward (+Z) to cut a clear servo
-    insertion path through the parent body shell.
+    insertion_clearance extends the box upward (+Z, horn/shaft side) to cut
+    a clear servo insertion path through the parent body shell.
     Returns (outer_solid, ear_bottom_z, body_dims).
     """
     from build123d import Align, Box, Location
@@ -187,12 +156,13 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
 
     Used by the CAD emitter to cut the bracket footprint from the parent
     body shell before unioning the finished bracket in. The insertion
-    channel extends 200mm above the bracket so the servo has a clear path
-    through the parent body shell (the CSG only removes material where
-    shell exists).
+    channel extends 200mm above the bracket (horn/shaft side, +Z) so the
+    servo has a clear insertion path through the parent body shell.
     """
     if spec is None:
         spec = BracketSpec()
+    if servo.name == "SCS0009":
+        return _scs0009_bracket_envelope(servo, spec)
     outer, _, _ = _bracket_outer(servo, spec, insertion_clearance=0.200)
     return outer
 
@@ -212,6 +182,9 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
 
     if spec is None:
         spec = BracketSpec()
+
+    if servo.name == "SCS0009":
+        return _scs0009_bracket_solid(servo, spec)
 
     outer, ear_bottom_z, bd = _bracket_outer(servo, spec)
     body_x, body_y, body_z = bd
@@ -392,8 +365,23 @@ def horn_disc_params(
 def servo_solid(servo: ServoSpec):
     """Build a detailed solid representing the physical servo body.
 
-    Pass 11: Absolute precision matching. Using the exact bounding planes
-    measured from the official reference CAD. Centered on body center (0,0,0).
+    Dispatches to a form-factor-specific builder based on the servo name.
+    Centered on body center (0,0,0) in servo local frame.
+    """
+    if servo.name == "SCS0009":
+        return _scs0009_solid(servo)
+    return _sts_series_solid(servo)
+
+
+@lru_cache(maxsize=32)
+def _sts_series_solid(servo: ServoSpec):
+    """STS-series servo body (STS3215, STS3250, etc.).
+
+    Aluminum mid-section with plastic top/bottom caps, bottom-mounted
+    mounting flanges, dual-axis shaft with rear support bearing.
+
+    Geometry matched to the official STS3215 STEP model (same outer
+    shell for all STS variants).
     """
     from build123d import Align, Axis, Box, Cylinder, Location, fillet
 
@@ -485,6 +473,212 @@ def servo_solid(servo: ServoSpec):
             body = _as_solid(body.cut(h))
 
     return body
+
+
+@lru_cache(maxsize=32)
+def _scs0009_solid(servo: ServoSpec):
+    """SCS0009 micro servo body (SG90-style form factor).
+
+    Classic micro servo shape: rectangular plastic body with mounting
+    ears/tabs protruding from the sides at roughly 2/3 body height.
+    Single output shaft on top, offset toward +X end.  No rear shaft.
+
+    Dimensions from Feetech datasheet (SC-0090-C001):
+        Body:  23.2 x 12.1 x 22.5 mm (L x W x H, no ears)
+        Ears:  extend ±4.65mm beyond body in X, 2.5mm thick in Z
+        Ear Z: positioned ~7.75mm below body top (flush with lower body)
+        Total: 32.5 x 12.1 x 25.25 mm (with ears + shaft boss)
+        Shaft: 20T spline, OD 3.95mm, offset +5.8mm from center in X
+
+    Origin = geometric center of main body (no ears).
+    """
+    from build123d import Align, Axis, Box, Cylinder, Location, fillet
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    r = 0.0010  # small fillet for plastic molding
+
+    # Body center at Z=0, spans ±body_z/2
+    z_top = body_z / 2   # +11.25mm
+    z_bot = -body_z / 2  # -11.25mm
+
+    # ── 1. Main body ──────────────────────────────────────────────
+    body = Box(
+        body_x, body_y, body_z,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    body = _as_solid(fillet(body.edges().filter_by(Axis.Z), r))
+
+    # ── 2. Output shaft boss (single axis, no rear shaft) ────────
+    sx, sy, _sz = servo.shaft_offset
+    boss_r = servo.shaft_boss_radius  # ~1.98mm
+    boss_h = servo.shaft_boss_height  # ~2.0mm
+    boss = Cylinder(boss_r, boss_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    boss = boss.locate(Location((sx, sy, z_top)))
+    body = _as_solid(body.fuse(boss))
+
+    # ── 3. Mounting ears (side tabs, SG90-style) ──────────────────
+    # Ears protrude in ±X from body sides, at roughly 2/3 height.
+    # Each ear: ~4.65mm extension beyond body, full body_y width,
+    # ~2.5mm thick in Z.
+    ear_ext = 0.00465    # extension beyond body edge in X
+    ear_thick = 0.0025   # thickness in Z
+    ear_total_x = body_x + 2 * ear_ext  # ~32.5mm total
+
+    # Ears sit with top aligned to a point ~7.75mm below body top
+    # (i.e. about 3.5mm above body center for a 22.5mm body)
+    ear_top_z = z_top - 0.00775   # ~3.5mm above center
+    ear_bot_z = ear_top_z - ear_thick
+    ear_cz = (ear_top_z + ear_bot_z) / 2
+
+    ear = Box(
+        ear_total_x, body_y, ear_thick,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    ear = ear.locate(Location((0, 0, ear_cz)))
+    body = _as_solid(body.fuse(ear))
+
+    # ── 4. Mounting holes through ears ────────────────────────────
+    if servo.mounting_ears:
+        for mp in servo.mounting_ears:
+            hole = Cylinder(
+                mp.diameter / 2,
+                0.010,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            hole = hole.locate(Location((mp.pos[0], mp.pos[1], ear_cz)))
+            body = _as_solid(body.cut(hole))
+
+    return body
+
+
+# ── SCS0009 micro servo bracket (simple wrap-around cradle) ────────────
+#
+# The SCS0009 is small enough that a single-piece bracket suffices.
+# The servo drops in from +Z, the side ear tabs rest on ledges, and
+# screws go down through the tabs into the bracket.  A shaft clearance
+# hole on top lets the horn rotate freely.  Cable exits out the -Z face.
+#
+# Cross-section looking from +Y, X horizontal, Z vertical:
+#
+#     WWWW===WWWWWWWWWWWW       <- wall + shaft hole + wall
+#     W   SSSSSSSSSSSS  W       <- servo body (shaft boss at +X)
+#     W   SSSSSSSSSSSS  W
+#     W===SSSSSSSSSSSS==W       <- ear tab ledges (ears sit here)
+#     W   SSSSSSSSSSSS  W
+#     W   SSSSSSSSSSSS  W
+#     WWWWWWW====WWWWWWWW       <- wall + cable slot + wall
+#
+
+
+@lru_cache(maxsize=32)
+def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
+    """Build a bracket for the SCS0009 micro servo.
+
+    The bracket is a U-shaped tray that wraps only the lower portion of
+    the servo body — from the bottom up to the ear tabs.  The servo
+    drops in from above, the wing tabs overhang the bracket walls, and
+    screws through the tabs clamp it in place.  Everything above the
+    tabs (upper body, shaft, horn) is fully exposed.
+
+    Cross-section looking from +Y, X horizontal, Z vertical:
+
+              (exposed — shaft + upper body)
+        ====TTTTTTTTTTTT====    <- ear tabs rest on bracket walls
+        W   SSSSSSSSSSSS   W    <- servo body (lower portion)
+        W   SSSSSSSSSSSS   W
+        WWWWWWWW====WWWWWWWW    <- bottom wall + cable slot
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+
+    # Ear tab geometry (must match _scs0009_solid)
+    ear_ext = 0.00465    # tab extension beyond body in ±X
+    ear_thick = 0.0025   # tab thickness in Z
+    ear_top_z = body_z / 2 - 0.00775  # top of ear tab
+
+    # --- Bracket extent ---
+    # X: wide enough for body + ear tabs + wall
+    outer_x = body_x + 2 * ear_ext + 2 * wall
+    # Y: body width + tolerance + wall
+    outer_y = body_y + 2 * (tol + wall)
+    # Z: from bottom of body up to just below the ear tabs.
+    # The tabs sit on top of the bracket walls and overhang them.
+    ear_bot_z = ear_top_z - ear_thick  # bottom face of the ear tab
+    outer_top_z = ear_bot_z  # bracket walls stop right where the tabs begin
+    outer_bot_z = -body_z / 2 - wall
+    outer_z = outer_top_z - outer_bot_z
+    outer_cz = (outer_top_z + outer_bot_z) / 2
+
+    outer = Box(outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    outer = outer.locate(Location((0, 0, outer_cz)))
+
+    # --- Body pocket (open on +Z for servo insertion) ---
+    pocket_x = body_x + 2 * tol
+    pocket_y = body_y + 2 * tol
+    pocket_z = outer_z + 0.002  # through the full height (open top)
+    pocket = Box(pocket_x, pocket_y, pocket_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    pocket = pocket.locate(Location((0, 0, outer_cz)))
+    shell = outer - pocket
+
+    # --- M2 through-holes at each ear position ---
+    for ear in servo.mounting_ears:
+        hole = Cylinder(
+            ear.diameter / 2,
+            outer_z + 0.002,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        hole = hole.locate(Location((ear.pos[0], ear.pos[1], outer_cz)))
+        shell = shell - hole
+
+    # --- Cable exit slot (-Z face) ---
+    if servo.connector_pos is not None:
+        _cx, cy, _cz = servo.connector_pos
+        slot_w = 0.006  # 6mm wide
+        slot_h = 0.004  # 4mm tall
+        slot_depth = wall + tol + 0.002
+        slot = Box(
+            slot_w,
+            slot_h,
+            slot_depth,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        slot_z = outer_bot_z + slot_depth / 2 - 0.001
+        slot = slot.locate(Location((0, cy, slot_z)))
+        shell = shell - slot
+
+    return _as_solid(shell)
+
+
+@lru_cache(maxsize=32)
+def _scs0009_bracket_envelope(servo: ServoSpec, spec: BracketSpec):
+    """Envelope for cutting the SCS0009 bracket footprint from the parent body.
+
+    Same outer box as the bracket, extended 200mm in +Z for insertion clearance.
+    """
+    from build123d import Align, Box, Location
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+
+    ear_ext = 0.00465
+    ear_thick = 0.0025
+    ear_top_z = body_z / 2 - 0.00775
+    ear_bot_z = ear_top_z - ear_thick
+
+    outer_x = body_x + 2 * ear_ext + 2 * wall
+    outer_y = body_y + 2 * (tol + wall)
+    outer_top_z = ear_bot_z + 0.200  # insertion clearance
+    outer_bot_z = -body_z / 2 - wall
+    outer_z = outer_top_z - outer_bot_z
+    outer_cz = (outer_top_z + outer_bot_z) / 2
+
+    outer = Box(outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    outer = outer.locate(Location((0, 0, outer_cz)))
+    return outer
 
 
 # ── Coupler-style bracket: cradle (static) + coupler (moving) ──────────

@@ -39,6 +39,7 @@ from botcad.colors import (  # noqa: E402, F401
     COLOR_BRACKET,
     COLOR_COUPLER,
     COLOR_CRADLE,
+    COLOR_ENVELOPE,
     COLOR_HORN,
     COLOR_HORN_HOLE,
     COLOR_MOUNTING,
@@ -203,8 +204,8 @@ class SceneBuilder:
                 )
             bodies_str = "\n".join(body_xml_parts)
             worldbody_content = f"""
-    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.6 0.6 0.6" specular="0.05 0.05 0.05"/>
-    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.3 0.3 0.3" specular="0.02 0.02 0.02"/>
+    <light pos="0.15 0.15 0.25" dir="-0.4 -0.4 -1" diffuse="0.7 0.7 0.7" specular="0.08 0.08 0.08"/>
+    <light pos="-0.15 0.08 0.15" dir="0.4 -0.2 -1" diffuse="0.2 0.2 0.25" specular="0.02 0.02 0.02"/>
     <body name="root" pos="0 0 0">
         {geoms_str}
 {bodies_str}
@@ -212,8 +213,8 @@ class SceneBuilder:
         else:
             # Single-body scene (most common)
             worldbody_content = f"""
-    <light pos="0.1 0.1 0.2" dir="-0.3 -0.3 -1" diffuse="0.6 0.6 0.6" specular="0.05 0.05 0.05"/>
-    <light pos="-0.1 0.1 0.2" dir="0.3 -0.3 -1" diffuse="0.3 0.3 0.3" specular="0.02 0.02 0.02"/>
+    <light pos="0.15 0.15 0.25" dir="-0.4 -0.4 -1" diffuse="0.7 0.7 0.7" specular="0.08 0.08 0.08"/>
+    <light pos="-0.15 0.08 0.15" dir="0.4 -0.2 -1" diffuse="0.2 0.2 0.25" specular="0.02 0.02 0.02"/>
     <body name="root" pos="0 0 0">
         {geoms_str}
     </body>"""
@@ -225,7 +226,7 @@ class SceneBuilder:
   <visual>
     <rgba haze="1 1 1 1"/>
     <global offwidth="{self.width}" offheight="{self.height}"/>
-    <headlight diffuse="0.6 0.6 0.6" ambient="0.45 0.45 0.45" specular="0.05 0.05 0.05"/>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.35 0.35 0.35" specular="0.12 0.12 0.12"/>
     <quality offsamples="4"/>
   </visual>
   <asset>
@@ -247,29 +248,33 @@ def white_background(img: np.ndarray) -> None:
 
 
 def _detect_edges(seg: np.ndarray, depth: np.ndarray) -> np.ndarray:
-    """Detect edges from segmentation IDs and depth discontinuities.
+    """Detect edges from segmentation, depth discontinuities, and surface normals.
+
+    Three edge sources, inspired by the web viewer's Three.js rendering:
+    1. Segmentation boundaries — where geom IDs differ between adjacent pixels
+    2. Depth discontinuities — silhouette edges from large depth gradients
+    3. Normal-based crease edges — where surface normals diverge sharply,
+       approximating Three.js EdgesGeometry with a ~28° dihedral threshold
 
     Returns a boolean edge mask (True = edge pixel).
     """
     ids = seg[:, :, 0]
 
-    # Segmentation boundaries: neighboring pixels with different geom IDs
+    # 1. Segmentation boundaries: neighboring pixels with different geom IDs
     seg_edges = np.zeros(ids.shape, dtype=bool)
     seg_edges[:-1, :] |= ids[:-1, :] != ids[1:, :]
     seg_edges[1:, :] |= ids[:-1, :] != ids[1:, :]
     seg_edges[:, :-1] |= ids[:, :-1] != ids[:, 1:]
     seg_edges[:, 1:] |= ids[:, :-1] != ids[:, 1:]
 
-    # Depth discontinuities: large depth gradient → silhouette edge
-    # Normalize depth to [0, 1] range for threshold comparison
-    d = depth.astype(np.float32)
+    d = depth.astype(np.float64)
     d_range = d.max() - d.min()
+
+    # 2. Depth discontinuities: large depth gradient → silhouette edge
     if d_range > 0:
         d_norm = (d - d.min()) / d_range
     else:
         d_norm = np.zeros_like(d)
-
-    # Sobel-like gradient magnitude on depth
     dx = np.zeros_like(d_norm)
     dy = np.zeros_like(d_norm)
     dx[:, 1:] = np.abs(d_norm[:, 1:] - d_norm[:, :-1])
@@ -277,8 +282,60 @@ def _detect_edges(seg: np.ndarray, depth: np.ndarray) -> np.ndarray:
     depth_grad = np.maximum(dx, dy)
     depth_edges = depth_grad > 0.015
 
-    # Union of both edge sources
-    edges = seg_edges | depth_edges
+    # 3. Normal-based crease edges (like Three.js EdgesGeometry at ~28°)
+    # Compute screen-space normals from depth gradients, detect where
+    # adjacent normals diverge — catches chamfer, fillet, and face-junction
+    # edges that segmentation and depth-discontinuity methods miss.
+    h, w = d.shape
+    normal_edges = np.zeros_like(seg_edges)
+    if d_range > 1e-10:
+        bg = d >= d.max() - 1e-6
+
+        # Central-difference depth gradients (raw depth, not normalized)
+        gx = np.zeros_like(d)
+        gy = np.zeros_like(d)
+        gx[:, 1:-1] = (d[:, 2:] - d[:, :-2]) / 2.0
+        gy[1:-1, :] = (d[2:, :] - d[:-2, :]) / 2.0
+        gx[:, 0] = d[:, 1] - d[:, 0]
+        gx[:, -1] = d[:, -1] - d[:, -2]
+        gy[0, :] = d[1, :] - d[0, :]
+        gy[-1, :] = d[-1, :] - d[-2, :]
+        gx[bg] = 0
+        gy[bg] = 0
+
+        # Normal = normalize(-gx, -gy, scale)
+        # Scale ∝ depth-per-pixel makes detection resolution-independent.
+        # Tuned so a ~25° dihedral angle produces dot < threshold.
+        scale = d_range / max(h, w)
+        nz = np.full_like(d, scale)
+        length = np.sqrt(gx * gx + gy * gy + nz * nz)
+        length = np.maximum(length, 1e-15)
+        nx = -gx / length
+        ny = -gy / length
+        nz_n = nz / length
+
+        # Edge where adjacent normals diverge past threshold
+        threshold = 0.75
+        dot_h = (
+            nx[:, :-1] * nx[:, 1:] + ny[:, :-1] * ny[:, 1:] + nz_n[:, :-1] * nz_n[:, 1:]
+        )
+        normal_edges[:, :-1] |= dot_h < threshold
+        normal_edges[:, 1:] |= dot_h < threshold
+
+        dot_v = nx[:-1] * nx[1:] + ny[:-1] * ny[1:] + nz_n[:-1] * nz_n[1:]
+        normal_edges[:-1] |= dot_v < threshold
+        normal_edges[1:] |= dot_v < threshold
+
+        # Mask out background and its 1px border (unreliable gradients)
+        bg_border = bg.copy()
+        bg_border[1:] |= bg[:-1]
+        bg_border[:-1] |= bg[1:]
+        bg_border[:, 1:] |= bg[:, :-1]
+        bg_border[:, :-1] |= bg[:, 1:]
+        normal_edges &= ~bg_border
+
+    # Union all edge sources
+    edges = seg_edges | depth_edges | normal_edges
 
     # Thicken to ~2px for visibility
     thick = edges.copy()
@@ -357,6 +414,42 @@ def _mesh_bounds(
 # ── Renderer ──
 
 
+def postprocess_render(
+    renderer: mujoco.Renderer,
+    data: mujoco.MjData,
+    cam: mujoco.MjvCamera,
+) -> np.ndarray:
+    """Three-pass render with edge detection and SSAO. Returns H×W×3 uint8.
+
+    Shared pipeline used by both component renders (Renderer3D) and bot renders.
+    Produces the same CAD-style shaded-with-edges look everywhere.
+    """
+    # Pass 1: color
+    renderer.update_scene(data, camera=cam)
+    img = renderer.render().copy()
+    white_background(img)
+
+    # Pass 2: segmentation
+    renderer.update_scene(data, camera=cam)
+    renderer.enable_segmentation_rendering()
+    seg = renderer.render()
+    renderer.disable_segmentation_rendering()
+
+    # Pass 3: depth
+    renderer.update_scene(data, camera=cam)
+    renderer.enable_depth_rendering()
+    depth = renderer.render()
+    renderer.disable_depth_rendering()
+
+    # Post-process
+    _apply_ssao(img, depth, strength=0.35)
+    edges = _detect_edges(seg, depth)
+    bg_mask = np.all(img == 255, axis=2)
+    img[edges & ~bg_mask] = [40, 40, 40]
+
+    return img
+
+
 class Renderer3D:
     """MuJoCo offscreen renderer with managed lifecycle.
 
@@ -402,7 +495,7 @@ class Renderer3D:
             cam.lookat[:] = lookat
         else:
             cam.lookat[:] = self._geom_center
-        cam.distance = distance if distance is not None else self._geom_extent * 1.8
+        cam.distance = distance if distance is not None else self._geom_extent * 1.4
         cam.azimuth = azimuth
         cam.elevation = elevation
         return cam
@@ -416,33 +509,7 @@ class Renderer3D:
     ) -> np.ndarray:
         """Render a single frame with CAD-style edges. Returns H*W*3 uint8."""
         cam = self._setup_camera(azimuth, elevation, lookat, distance)
-
-        # Pass 1: color render
-        self.renderer.update_scene(self.data, camera=cam)
-        img = self.renderer.render().copy()
-        white_background(img)
-
-        # Pass 2: segmentation buffer
-        self.renderer.update_scene(self.data, camera=cam)
-        self.renderer.enable_segmentation_rendering()
-        seg = self.renderer.render()
-        self.renderer.disable_segmentation_rendering()
-
-        # Pass 3: depth buffer
-        self.renderer.update_scene(self.data, camera=cam)
-        self.renderer.enable_depth_rendering()
-        depth = self.renderer.render()
-        self.renderer.disable_depth_rendering()
-
-        # Post-process: SSAO
-        _apply_ssao(img, depth, strength=0.35)
-
-        # Post-process: edge outlines
-        edges = _detect_edges(seg, depth)
-        bg_mask = np.all(img == 255, axis=2)
-        img[edges & ~bg_mask] = [40, 40, 40]
-
-        return img
+        return postprocess_render(self.renderer, self.data, cam)
 
     def render_frame_plain(
         self,

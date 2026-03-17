@@ -1,8 +1,11 @@
 /**
  * MindSim Bot Viewer — MuJoCo-based bot visualization.
  *
- * Extracted from the original viewer.js. Loads MuJoCo WASM, builds Three.js
- * scene from the bot model, and routes between Joint/Assembly/IK modes.
+ * Loads MuJoCo WASM, builds Three.js scene from the bot model,
+ * and routes between Explore/Joint/Assembly/IK modes.
+ *
+ * Based on the monolithic viewer.js, extracted as an importable module
+ * so viewer.js can act as a URL router.
  */
 
 import * as THREE from 'three';
@@ -10,12 +13,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
+import { ExploreMode } from './explore-mode.js';
+import { FocusController } from './focus-controller.js';
 import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const SIDE_PANEL_WIDTH = 320;
+const TREE_PANEL_WIDTH = 280;
 
 export async function initBotViewer(botName) {
   // ---------------------------------------------------------------------------
@@ -34,19 +40,40 @@ export async function initBotViewer(botName) {
   // Three.js
   const container = document.getElementById('canvas-container');
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1a2e);
+  scene.background = new THREE.Color(0xF5F8FA);
+
+  function getTreePanelWidth() {
+    const treePanel = document.getElementById('tree-panel');
+    return (treePanel && treePanel.style.display !== 'none') ? TREE_PANEL_WIDTH : 0;
+  }
+
+  function getCanvasWidth() {
+    return window.innerWidth - SIDE_PANEL_WIDTH - getTreePanelWidth();
+  }
+
+  /** Update renderer + camera to fit the visible canvas area between panels. */
+  function updateCanvasLayout() {
+    const left = getTreePanelWidth();
+    const w = getCanvasWidth();
+    const h = window.innerHeight;
+    container.style.left = left + 'px';
+    container.style.right = SIDE_PANEL_WIDTH + 'px';
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
 
   const camera = new THREE.PerspectiveCamera(
-    45, (window.innerWidth - SIDE_PANEL_WIDTH) / window.innerHeight, 0.001, 100
+    45, getCanvasWidth() / window.innerHeight, 0.01, 10
   );
   camera.position.set(0.4, 0.45, 0.55);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
+  updateCanvasLayout();
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.2, 0);
@@ -54,15 +81,18 @@ export async function initBotViewer(botName) {
   controls.dampingFactor = 0.1;
   controls.update();
 
-  // Lighting
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  // Lighting — bright enough to read geometry clearly
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
   dirLight.position.set(2, 4, 3);
   dirLight.castShadow = true;
   scene.add(dirLight);
+  const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
+  fillLight.position.set(-2, 1, -2);
+  scene.add(fillLight);
 
   // Ground grid
-  scene.add(new THREE.GridHelper(2, 40, 0x333355, 0x222244));
+  scene.add(new THREE.GridHelper(2, 40, 0xBFCCD6, 0xCED9E0));
 
   // ---------------------------------------------------------------------------
   // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
@@ -239,17 +269,17 @@ export async function initBotViewer(botName) {
       getQuaternion(model.geom_quat, g, mesh.quaternion);
     }
 
-    // Assign distinct colors to mesh-type bodies for visual differentiation.
+    // Assign distinct Blueprint.js palette colors to mesh-type bodies.
     // Only override the default gray (0.9, 0.9, 0.9); leave detail geoms alone.
     const bodyColors = [
-      null,              // body 0 = world, skip
-      [0.85, 0.85, 0.88], // base — light steel
-      [0.35, 0.35, 0.40], // left_rim — dark gray
-      [0.35, 0.35, 0.40], // right_rim — dark gray
-      [0.55, 0.65, 0.85], // turntable — blue-gray
-      [0.75, 0.80, 0.90], // upper_arm — light blue
-      [0.65, 0.75, 0.85], // forearm — medium blue
-      [0.90, 0.85, 0.75], // hand — warm beige
+      null,                              // body 0 = world, skip
+      [0.808, 0.851, 0.878],            // base — BP_LIGHT_GRAY1 (#CED9E0)
+      [0.094, 0.133, 0.157],            // left_rim — BP_DARK_GRAY1 (#182026)
+      [0.094, 0.133, 0.157],            // right_rim — BP_DARK_GRAY1 (#182026)
+      [0.169, 0.584, 0.839],            // turntable — BP_BLUE4 (#2B95D6)
+      [0.655, 0.761, 0.831],            // upper_arm — BP_GRAY4 (#A7B6C2)
+      [0.541, 0.608, 0.659],            // forearm — BP_GRAY3 (#8A9BA8)
+      [0.851, 0.620, 0.043],            // hand — BP_GOLD3 (#D99E0B)
     ];
     for (const [b, group] of Object.entries(bodies)) {
       const bi = parseInt(b);
@@ -260,6 +290,26 @@ export async function initBotViewer(botName) {
             child.material.color.setRGB(r, g, bl);
           }
         });
+      }
+    }
+
+    // Cell-shaded edge outlines — sharp edges only (threshold angle ~30°)
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.6,
+    });
+    for (const [, group] of Object.entries(bodies)) {
+      const meshesToEdge = [];
+      group.traverse(child => {
+        if (child.isMesh && child.geometry && child.geomGroup === GEOM_GROUP_STRUCTURAL) meshesToEdge.push(child);
+      });
+      for (const mesh of meshesToEdge) {
+        const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
+        const lines = new THREE.LineSegments(edges, edgeMaterial);
+        lines.position.copy(mesh.position);
+        lines.quaternion.copy(mesh.quaternion);
+        lines.scale.copy(mesh.scale);
+        lines.raycast = () => {}; // non-interactive
+        group.add(lines);
       }
     }
 
@@ -281,9 +331,12 @@ export async function initBotViewer(botName) {
     syncTransforms();
   }
 
+  const _syncVec = new THREE.Vector3();
+  const _syncQuat = new THREE.Quaternion();
+
   function syncTransforms() {
-    const tmpVec = new THREE.Vector3();
-    const tmpQuat = new THREE.Quaternion();
+    const tmpVec = _syncVec;
+    const tmpQuat = _syncQuat;
     for (let b = 0; b < model.nbody; b++) {
       if (bodies[b]) {
         getPosition(data.xpos, b, tmpVec);
@@ -296,16 +349,32 @@ export async function initBotViewer(botName) {
   }
 
   // ---------------------------------------------------------------------------
+  // Fetch viewer manifest
+  // ---------------------------------------------------------------------------
+  async function fetchManifest() {
+    try {
+      const resp = await fetch(`../bots/${botName}/viewer_manifest.json`);
+      if (resp.ok) return await resp.json();
+    } catch { /* fall through */ }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
   // Mode management
   // ---------------------------------------------------------------------------
   let currentMode = null;
+  let currentModeName = null;
   const modes = {};
 
   function switchMode(modeName) {
     if (!(modeName in modes)) return;
     if (currentMode) currentMode.deactivate();
     currentMode = modes[modeName];
+    currentModeName = modeName;
     currentMode.activate();
+
+    // Refit canvas to the visible area between panels
+    requestAnimationFrame(() => updateCanvasLayout());
 
     document.querySelectorAll('.mode-tab').forEach(tab => {
       tab.classList.toggle('active', tab.dataset.mode === modeName);
@@ -319,12 +388,17 @@ export async function initBotViewer(botName) {
     await loadMuJoCo();
     buildScene();
 
+    const manifest = await fetchManifest();
+
     const ctx = {
       mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls,
       syncTransforms, getPosition, getQuaternion, toMujocoPos, getMujocoName,
       botName,
     };
 
+    if (manifest) {
+      modes.explore = new ExploreMode(ctx, manifest);
+    }
     modes.joint = new JointMode(ctx);
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
@@ -333,21 +407,30 @@ export async function initBotViewer(botName) {
       tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 
-    switchMode('joint');
+    // Auto-focus camera on the bot before showing the scene
+    const initialFocus = new FocusController(ctx);
+    initialFocus.focusOnAll(0.8);
+
+    switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
     function animate() {
       controls.update();
+      initialFocus.update();  // drive initial camera animation
       if (currentMode && currentMode.update) currentMode.update();
       renderer.render(scene, camera);
       requestAnimationFrame(animate);
     }
     animate();
 
-    window.addEventListener('resize', () => {
-      camera.aspect = (window.innerWidth - SIDE_PANEL_WIDTH) / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    window.addEventListener('resize', () => updateCanvasLayout());
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === '1' && currentModeName === 'explore' && modes.explore) {
+        modes.explore.refocusCurrent();
+      }
     });
 
   } catch (err) {

@@ -22,6 +22,7 @@
     <mesh name="wire_servo_bus_base_2_mesh" file="wire_servo_bus_base_2.stl" scale="1 1 1"/>
     <mesh name="wire_servo_bus_base_3_mesh" file="wire_servo_bus_base_3.stl" scale="1 1 1"/>
     <mesh name="wire_servo_bus_base_4_mesh" file="wire_servo_bus_base_4.stl" scale="1 1 1"/>
+    <mesh name="wire_servo_bus_base_5_mesh" file="wire_servo_bus_base_5.stl" scale="1 1 1"/>
     <mesh name="wire_power_base_0_mesh" file="wire_power_base_0.stl" scale="1 1 1"/>
     <mesh name="wire_power_base_1_mesh" file="wire_power_base_1.stl" scale="1 1 1"/>
     <mesh name="wire_power_base_2_mesh" file="wire_power_base_2.stl" scale="1 1 1"/>
@@ -79,6 +80,7 @@
       <geom name="wire_servo_bus_base_2" type="mesh" mesh="wire_servo_bus_base_2_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_servo_bus_base_3" type="mesh" mesh="wire_servo_bus_base_3_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_servo_bus_base_4" type="mesh" mesh="wire_servo_bus_base_4_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
+      <geom name="wire_servo_bus_base_5" type="mesh" mesh="wire_servo_bus_base_5_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_0" type="mesh" mesh="wire_power_base_0_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="mesh" mesh="wire_power_base_1_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_2" type="mesh" mesh="wire_power_base_2_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>

@@ -194,6 +194,7 @@ COLOR_COUPLER = Color(*BP_RED4, 1.0, "coupler/moving (red)")
 
 # ── Assembly feedback ──
 
+COLOR_ENVELOPE = Color(*BP_RED3, 0.25, "envelope (red)")
 COLOR_COLLISION = Color(*BP_RED3, 1.0, "collision (red)")
 COLOR_CLEAR = Color(*BP_GREEN3, 1.0, "clear (green)")
 COLOR_ARROW = Color(*BP_ORANGE3, 0.9, "arrow (orange)")

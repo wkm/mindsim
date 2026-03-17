@@ -4,19 +4,109 @@
     {
       "name": "base",
       "mesh": "base.stl",
-      "parent": null
+      "parent": null,
+      "shape": "box",
+      "dimensions": [
+        0.13,
+        0.08,
+        0.045
+      ],
+      "mass": 0.2334,
+      "mounts": [
+        {
+          "label": "battery",
+          "component_name": "LiPo2S-1000",
+          "dimensions": [
+            0.073,
+            0.035,
+            0.018
+          ],
+          "mass": 0.055,
+          "component_type": "battery",
+          "chemistry": "LiPo",
+          "voltage": 0.0,
+          "cells_s": 2
+        },
+        {
+          "label": "camera",
+          "component_name": "OV5647",
+          "dimensions": [
+            0.025,
+            0.024,
+            0.009
+          ],
+          "mass": 0.003,
+          "component_type": "camera",
+          "fov_deg": 72.0,
+          "resolution": [
+            2592,
+            1944
+          ]
+        },
+        {
+          "label": "pi",
+          "component_name": "RaspberryPiZero2W",
+          "dimensions": [
+            0.065,
+            0.03,
+            0.005
+          ],
+          "mass": 0.01,
+          "component_type": "component"
+        }
+      ]
     },
     {
       "name": "left_rim",
       "mesh": "left_rim.stl",
       "parent": "base",
-      "joint": "left_wheel"
+      "shape": "cylinder",
+      "dimensions": [
+        0.1,
+        0.1,
+        0.02
+      ],
+      "mass": 0.0421,
+      "joint": "left_wheel",
+      "mounts": [
+        {
+          "label": "wheel",
+          "component_name": "Pololu 90x10mm Wheel",
+          "dimensions": [
+            0.09,
+            0.09,
+            0.01
+          ],
+          "mass": 0.022,
+          "component_type": "wheel"
+        }
+      ]
     },
     {
       "name": "right_rim",
       "mesh": "right_rim.stl",
       "parent": "base",
-      "joint": "right_wheel"
+      "shape": "cylinder",
+      "dimensions": [
+        0.1,
+        0.1,
+        0.02
+      ],
+      "mass": 0.0421,
+      "joint": "right_wheel",
+      "mounts": [
+        {
+          "label": "wheel",
+          "component_name": "Pololu 90x10mm Wheel",
+          "dimensions": [
+            0.09,
+            0.09,
+            0.01
+          ],
+          "mass": 0.022,
+          "component_type": "wheel"
+        }
+      ]
     }
   ],
   "joints": [
@@ -43,7 +133,14 @@
         0.0
       ],
       "servo": "STS3215",
-      "continuous": true
+      "continuous": true,
+      "servo_specs": {
+        "stall_torque_nm": 2.942,
+        "no_load_speed_rad_s": 4.717,
+        "voltage": 12.0,
+        "gear_ratio": 345.0,
+        "mass": 0.055
+      }
     },
     {
       "name": "right_wheel",
@@ -68,7 +165,14 @@
         0.0
       ],
       "servo": "STS3215",
-      "continuous": true
+      "continuous": true,
+      "servo_specs": {
+        "stall_torque_nm": 2.942,
+        "no_load_speed_rad_s": 4.717,
+        "voltage": 12.0,
+        "gear_ratio": 345.0,
+        "mass": 0.055
+      }
     }
   ],
   "assembly_steps": [
