@@ -59,7 +59,7 @@ export class SemanticViz {
       const rangeGeo = createArcGeometry(arcRadius, lo, hi, 48);
       const rangeArc = new THREE.Line(
         rangeGeo,
-        new THREE.LineBasicMaterial({ color: 0x66cc66, transparent: true, opacity: 0.6, linewidth: 2 })
+        new THREE.LineBasicMaterial({ color: 0x0A6640, transparent: true, opacity: 0.6, linewidth: 2 })
       );
       orientToAxis(rangeArc, swizzled);
       rangeArc.position.copy(center);
@@ -67,7 +67,7 @@ export class SemanticViz {
     }
 
     // Axis arrow
-    const arrow = new THREE.ArrowHelper(swizzled, center, 0.08, 0x66cc66, 0.018, 0.01);
+    const arrow = new THREE.ArrowHelper(swizzled, center, 0.08, 0x0A6640, 0.018, 0.01);
     this.group.add(arrow);
 
     // Text labels for servo specs
@@ -82,7 +82,7 @@ export class SemanticViz {
 
       const labelPos = center.clone().add(new THREE.Vector3(0.03, 0.025, 0));
       for (let i = 0; i < labels.length; i++) {
-        const sprite = createTextSprite(labels[i], { fontSize: 11, color: '#66cc66' });
+        const sprite = createTextSprite(labels[i], { fontSize: 11, color: '#0A6640' });
         sprite.position.copy(labelPos).y -= i * 0.009;
         sprite.scale.set(0.04, 0.01, 1);
         this.group.add(sprite);
@@ -109,7 +109,7 @@ export class SemanticViz {
     const boxEdges = new THREE.EdgesGeometry(boxGeo);
     const wireBox = new THREE.LineSegments(
       boxEdges,
-      new THREE.LineBasicMaterial({ color: 0x8888cc, transparent: true, opacity: 0.5 })
+      new THREE.LineBasicMaterial({ color: 0x0E5A8A, transparent: true, opacity: 0.5 })
     );
     wireBox.position.copy(center);
     this.group.add(wireBox);
@@ -124,19 +124,19 @@ export class SemanticViz {
         `${(dims[2] * 1000).toFixed(1)} mm`,
       ];
       // X dimension
-      const xSprite = createTextSprite(dimLabels[0], { fontSize: 10, color: '#ff6666' });
+      const xSprite = createTextSprite(dimLabels[0], { fontSize: 10, color: '#DB3737' });
       xSprite.position.set(center.x, center.y - size.y / 2 - 0.008, center.z);
       xSprite.scale.set(0.027, 0.007, 1);
       this.group.add(xSprite);
 
       // Y dimension
-      const ySprite = createTextSprite(dimLabels[1], { fontSize: 10, color: '#66cc66' });
+      const ySprite = createTextSprite(dimLabels[1], { fontSize: 10, color: '#0A6640' });
       ySprite.position.set(center.x + size.x / 2 + 0.008, center.y, center.z);
       ySprite.scale.set(0.027, 0.007, 1);
       this.group.add(ySprite);
 
       // Z dimension
-      const zSprite = createTextSprite(dimLabels[2], { fontSize: 10, color: '#6688ff' });
+      const zSprite = createTextSprite(dimLabels[2], { fontSize: 10, color: '#137CBD' });
       zSprite.position.set(center.x, center.y, center.z + size.z / 2 + 0.008);
       zSprite.scale.set(0.027, 0.007, 1);
       this.group.add(zSprite);
@@ -144,7 +144,7 @@ export class SemanticViz {
 
     // Mass label
     if (bodyData.mass) {
-      const massSprite = createTextSprite(`${(bodyData.mass * 1000).toFixed(1)} g`, { fontSize: 11, color: '#ffaa44' });
+      const massSprite = createTextSprite(`${(bodyData.mass * 1000).toFixed(1)} g`, { fontSize: 11, color: '#BF8C0A' });
       massSprite.position.set(center.x, center.y + size.y / 2 + 0.008, center.z);
       massSprite.scale.set(0.027, 0.007, 1);
       this.group.add(massSprite);
@@ -169,7 +169,7 @@ export class SemanticViz {
     coneGeo.rotateX(Math.PI); // point forward
     const cone = new THREE.Mesh(
       coneGeo,
-      new THREE.MeshBasicMaterial({ color: 0xcc66cc, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0x7157D9, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
     );
     cone.position.copy(position);
     this.group.add(cone);
@@ -178,7 +178,7 @@ export class SemanticViz {
     const wireGeo = new THREE.EdgesGeometry(coneGeo);
     const wire = new THREE.LineSegments(
       wireGeo,
-      new THREE.LineBasicMaterial({ color: 0xcc66cc, transparent: true, opacity: 0.4 })
+      new THREE.LineBasicMaterial({ color: 0x7157D9, transparent: true, opacity: 0.4 })
     );
     wire.position.copy(position);
     this.group.add(wire);
@@ -187,7 +187,7 @@ export class SemanticViz {
     if (mountData.resolution) {
       const label = createTextSprite(
         `${mountData.resolution[0]}×${mountData.resolution[1]}  FOV ${mountData.fov_deg}°`,
-        { fontSize: 11, color: '#cc66cc' }
+        { fontSize: 11, color: '#7157D9' }
       );
       label.position.copy(position).y += 0.018;
       label.scale.set(0.047, 0.008, 1);
@@ -208,7 +208,7 @@ export class SemanticViz {
     const arcGeo = createArcGeometry(0.04, 0, Math.PI * 1.5, 24);
     const arc = new THREE.Line(
       arcGeo,
-      new THREE.LineBasicMaterial({ color: 0x66cccc, linewidth: 2 })
+      new THREE.LineBasicMaterial({ color: 0x008075, linewidth: 2 })
     );
     arc.position.copy(position);
     this.group.add(arc);
@@ -216,7 +216,7 @@ export class SemanticViz {
     // Arrowhead at the end of the arc
     const arrowDir = new THREE.Vector3(0, 1, 0);
     const arrowPos = position.clone().add(new THREE.Vector3(0.04, 0, 0));
-    const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowPos, 0.015, 0x66cccc, 0.008, 0.005);
+    const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowPos, 0.015, 0x008075, 0.008, 0.005);
     this.group.add(arrowHelper);
   }
 }

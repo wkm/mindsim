@@ -41,7 +41,7 @@ const _textDecoder = new TextDecoder('utf-8');
 // Three.js
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x2a2a2a);
+scene.background = new THREE.Color(0xF5F8FA);
 
 function getTreePanelWidth() {
   const treePanel = document.getElementById('tree-panel');
@@ -93,7 +93,7 @@ fillLight.position.set(-2, 1, -2);
 scene.add(fillLight);
 
 // Ground grid
-scene.add(new THREE.GridHelper(2, 40, 0x444444, 0x363636));
+scene.add(new THREE.GridHelper(2, 40, 0xBFCCD6, 0xCED9E0));
 
 // ---------------------------------------------------------------------------
 // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
@@ -270,17 +270,17 @@ function buildScene() {
     getQuaternion(model.geom_quat, g, mesh.quaternion);
   }
 
-  // Assign distinct colors to mesh-type bodies for visual differentiation.
+  // Assign distinct Blueprint.js palette colors to mesh-type bodies.
   // Only override the default gray (0.9, 0.9, 0.9); leave detail geoms alone.
   const bodyColors = [
-    null,              // body 0 = world, skip
-    [0.85, 0.85, 0.88], // base — light steel
-    [0.35, 0.35, 0.40], // left_rim — dark gray
-    [0.35, 0.35, 0.40], // right_rim — dark gray
-    [0.55, 0.65, 0.85], // turntable — blue-gray
-    [0.75, 0.80, 0.90], // upper_arm — light blue
-    [0.65, 0.75, 0.85], // forearm — medium blue
-    [0.90, 0.85, 0.75], // hand — warm beige
+    null,                              // body 0 = world, skip
+    [0.808, 0.851, 0.878],            // base — BP_LIGHT_GRAY1 (#CED9E0)
+    [0.094, 0.133, 0.157],            // left_rim — BP_DARK_GRAY1 (#182026)
+    [0.094, 0.133, 0.157],            // right_rim — BP_DARK_GRAY1 (#182026)
+    [0.169, 0.584, 0.839],            // turntable — BP_BLUE4 (#2B95D6)
+    [0.655, 0.761, 0.831],            // upper_arm — BP_GRAY4 (#A7B6C2)
+    [0.541, 0.608, 0.659],            // forearm — BP_GRAY3 (#8A9BA8)
+    [0.851, 0.620, 0.043],            // hand — BP_GOLD3 (#D99E0B)
   ];
   for (const [b, group] of Object.entries(bodies)) {
     const bi = parseInt(b);

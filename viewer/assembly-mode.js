@@ -131,7 +131,7 @@ export class AssemblyMode {
     const total = this.steps.length;
 
     let html = '<h2>Assembly</h2>';
-    html += '<p style="font-size:12px;color:#888;margin-bottom:12px;">Step through the build sequence.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:12px;">Step through the build sequence.</p>';
 
     html += `<div class="slider-group">
       <div class="slider-label">

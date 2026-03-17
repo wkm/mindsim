@@ -6,13 +6,13 @@
  */
 
 const ICONS = {
-  body: { symbol: '\u25a0', color: '#8888cc' },    // filled square
-  joint: { symbol: '\u25cf', color: '#66cc66' },   // filled circle
-  camera: { symbol: '\u25c6', color: '#cc66cc' },  // diamond
-  battery: { symbol: '\u25a0', color: '#ffaa44' },  // square (orange)
-  wheel: { symbol: '\u25cf', color: '#66cccc' },   // circle (teal)
-  servo: { symbol: '\u2699', color: '#66cc66' },   // gear
-  component: { symbol: '\u25cb', color: '#999' },  // open circle
+  body: { symbol: '\u25a0', color: '#0E5A8A' },    // filled square — BP_BLUE1
+  joint: { symbol: '\u25cf', color: '#0A6640' },   // filled circle — BP_GREEN1
+  camera: { symbol: '\u25c6', color: '#7157D9' },  // diamond — BP_VIOLET3
+  battery: { symbol: '\u25a0', color: '#BF8C0A' },  // square — BP_GOLD (dark)
+  wheel: { symbol: '\u25cf', color: '#008075' },   // circle — BP_TURQUOISE (dark)
+  servo: { symbol: '\u2699', color: '#0A6640' },   // gear — BP_GREEN1
+  component: { symbol: '\u25cb', color: '#5C7080' },  // open circle — BP_GRAY1
 };
 
 export class ComponentTree {

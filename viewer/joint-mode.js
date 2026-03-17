@@ -38,9 +38,10 @@ export class JointMode {
     const HINGE = mujoco.mjtJoint.mjJNT_HINGE.value;
 
     let html = '<h2>Joint Validation</h2>';
-    html += '<p style="font-size:12px;color:#888;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
 
-    const jointColors = ['#ff6666', '#66cc66', '#6688ff', '#ffaa44', '#cc66cc', '#66cccc'];
+    // Blueprint.js palette: red, green, blue, gold, violet, turquoise
+    const jointColors = ['#DB3737', '#0F9960', '#137CBD', '#D99E0B', '#7157D9', '#00B3A4'];
     this.sliders = [];
 
     for (let j = 0; j < model.njnt; j++) {
@@ -205,9 +206,9 @@ export class JointMode {
           1 - Math.abs(arc.rangeMax - currentAngle) / (totalAngle * 0.2)
         );
         let color;
-        if (limitProximity > 0.5) color = 0xff4444;
-        else if (limitProximity > 0) color = 0xffaa44;
-        else color = 0x44cc44;
+        if (limitProximity > 0.5) color = 0xDB3737;      // BP_RED3
+        else if (limitProximity > 0) color = 0xD99E0B;  // BP_GOLD3
+        else color = 0x0F9960;                          // BP_GREEN3
 
         const curArc = new THREE.Line(
           createArcGeometry(arc.arcRadius, curMin, curMax, 16),

@@ -143,7 +143,7 @@ export class ExploreMode {
   _showWelcomeProperties() {
     const panel = document.getElementById('side-panel');
     let html = '<h2>Explore</h2>';
-    html += '<p style="font-size:12px;color:#888;margin-bottom:16px;">Click components in the tree to inspect them.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Click components in the tree to inspect them.</p>';
 
     // Bot summary
     const m = this.manifest;
@@ -191,7 +191,7 @@ export class ExploreMode {
       html += '<h3>Mounted Components</h3>';
       for (const m of body.mounts) {
         const typeClass = (m.component_type || 'component') + '-chip';
-        html += `<div class="prop-chip ${typeClass}">${m.label} <span style="color:#888;">(${m.component_name})</span></div>`;
+        html += `<div class="prop-chip ${typeClass}">${m.label} <span style="color:#5C7080;">(${m.component_name})</span></div>`;
       }
     }
 
@@ -228,8 +228,8 @@ export class ExploreMode {
     html += '</div>';
 
     html += '<h3>Connected Bodies</h3>';
-    html += `<div class="prop-chip body-chip" data-node-id="body:${joint.parent_body}">${joint.parent_body} <span style="color:#888;">(parent)</span></div>`;
-    html += `<div class="prop-chip body-chip" data-node-id="body:${joint.child_body}">${joint.child_body} <span style="color:#888;">(child)</span></div>`;
+    html += `<div class="prop-chip body-chip" data-node-id="body:${joint.parent_body}">${joint.parent_body} <span style="color:#5C7080;">(parent)</span></div>`;
+    html += `<div class="prop-chip body-chip" data-node-id="body:${joint.child_body}">${joint.child_body} <span style="color:#5C7080;">(child)</span></div>`;
 
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
