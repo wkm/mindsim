@@ -6,10 +6,7 @@
  */
 
 import * as THREE from 'three';
-import { createArcGeometry, orientToAxis, createTextSprite } from './utils.js';
-
-const _up = new THREE.Vector3(0, 0, 1);
-const _tmpQuat = new THREE.Quaternion();
+import { clearGroup, createArcGeometry, orientToAxis, createTextSprite } from './utils.js';
 
 export class SemanticViz {
   constructor(ctx) {
@@ -35,17 +32,7 @@ export class SemanticViz {
   }
 
   clear() {
-    while (this.group.children.length > 0) {
-      const child = this.group.children[0];
-      this.group.remove(child);
-      child.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-          else obj.material.dispose();
-        }
-      });
-    }
+    clearGroup(this.group);
   }
 
   /**

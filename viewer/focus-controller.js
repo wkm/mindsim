@@ -10,6 +10,7 @@ import * as THREE from 'three';
 const _box = new THREE.Box3();
 const _center = new THREE.Vector3();
 const _size = new THREE.Vector3();
+const _camDir = new THREE.Vector3();
 
 export class FocusController {
   /**
@@ -65,7 +66,7 @@ export class FocusController {
 
     // Position camera at an offset from the body center
     const cam = this.ctx.camera;
-    const camDir = new THREE.Vector3().subVectors(cam.position, this.ctx.controls.target).normalize();
+    const camDir = _camDir.subVectors(cam.position, this.ctx.controls.target).normalize();
 
     this._startPos.copy(cam.position);
     this._endPos.copy(_center).addScaledVector(camDir, dist);

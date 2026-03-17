@@ -301,7 +301,7 @@ function buildScene() {
   for (const [, group] of Object.entries(bodies)) {
     const meshesToEdge = [];
     group.traverse(child => {
-      if (child.isMesh && child.geometry) meshesToEdge.push(child);
+      if (child.isMesh && child.geometry && child.geomGroup === GEOM_GROUP_STRUCTURAL) meshesToEdge.push(child);
     });
     for (const mesh of meshesToEdge) {
       const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
@@ -332,9 +332,12 @@ function buildScene() {
   syncTransforms();
 }
 
+const _syncVec = new THREE.Vector3();
+const _syncQuat = new THREE.Quaternion();
+
 function syncTransforms() {
-  const tmpVec = new THREE.Vector3();
-  const tmpQuat = new THREE.Quaternion();
+  const tmpVec = _syncVec;
+  const tmpQuat = _syncQuat;
   for (let b = 0; b < model.nbody; b++) {
     if (bodies[b]) {
       getPosition(data.xpos, b, tmpVec);
@@ -371,14 +374,10 @@ function switchMode(modeName) {
   currentModeName = modeName;
   currentMode.activate();
 
-  // Show/hide tree panel based on mode
-  const treePanel = document.getElementById('tree-panel');
-  if (treePanel) {
-    treePanel.style.display = modeName === 'explore' ? 'block' : 'none';
-  }
-
-  // Refit canvas to the visible area between panels
-  updateCanvasLayout();
+  // Refit canvas to the visible area between panels (mode activate/deactivate
+  // toggles the tree panel; we just need to update the canvas layout after)
+  // Use requestAnimationFrame so the DOM has updated before measuring
+  requestAnimationFrame(() => updateCanvasLayout());
 
   document.querySelectorAll('.mode-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.mode === modeName);
@@ -431,19 +430,7 @@ async function main() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if (e.key === '1' && currentModeName === 'explore' && modes.explore) {
-        // Reset camera to frame the focused item
-        const explore = modes.explore;
-        if (explore.focusedNodeId) {
-          const [type, ...rest] = explore.focusedNodeId.split(':');
-          let bodyId;
-          if (type === 'body') bodyId = explore.bodyNameToId[rest[0]];
-          else if (type === 'joint') {
-            const jd = explore.focusedData;
-            bodyId = explore.bodyNameToId[jd?.child_body];
-          }
-          else if (type === 'mount') bodyId = explore.bodyNameToId[rest[0]];
-          if (bodyId !== undefined) explore.focus.focusOnBody(bodyId, 0.4);
-        }
+        modes.explore.refocusCurrent();
       }
     });
 

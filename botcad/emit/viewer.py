@@ -43,8 +43,8 @@ def _component_specs(comp) -> dict:
     return specs
 
 
-def _round3(v):
-    """Round a tuple/list of floats to 6 decimal places (µm precision)."""
+def _round_vec(v):
+    """Round a tuple/list of floats to 6 decimal places (µm precision for meters)."""
     return [round(x, 6) for x in v]
 
 
@@ -68,7 +68,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             "mesh": f"{body.name}.stl",
             "parent": parent_name,
             "shape": str(body.shape),
-            "dimensions": _round3(body.dimensions),
+            "dimensions": _round_vec(body.dimensions),
             "mass": round(body.solved_mass, 4),
         }
         if joint:
@@ -81,7 +81,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             mount_entry = {
                 "label": mount.label,
                 "component_name": comp.name,
-                "dimensions": _round3(comp.dimensions),
+                "dimensions": _round_vec(comp.dimensions),
                 "mass": round(comp.mass, 4),
             }
             mount_entry.update(_component_specs(comp))

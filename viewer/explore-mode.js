@@ -76,14 +76,26 @@ export class ExploreMode {
     else if (type === 'mount') this._buildMountProperties(nodeData);
   }
 
+  /** Resolve a nodeId to its primary MuJoCo body ID. */
+  resolveBodyId(nodeId, nodeData) {
+    const [type, ...rest] = nodeId.split(':');
+    if (type === 'body') return this.bodyNameToId[rest[0]];
+    if (type === 'joint') return this.bodyNameToId[nodeData?.child_body];
+    if (type === 'mount') return this.bodyNameToId[rest[0]];
+    return undefined;
+  }
+
   /** Animate camera to frame the relevant body for a node. */
   _focusCamera(nodeId, nodeData) {
-    const [type, ...rest] = nodeId.split(':');
-    let bodyId;
-    if (type === 'body') bodyId = this.bodyNameToId[rest[0]];
-    else if (type === 'joint') bodyId = this.bodyNameToId[nodeData.child_body];
-    else if (type === 'mount') bodyId = this.bodyNameToId[rest[0]];
+    const bodyId = this.resolveBodyId(nodeId, nodeData);
     if (bodyId !== undefined) this.focus.focusOnBody(bodyId);
+  }
+
+  /** Re-frame camera on the currently focused node. */
+  refocusCurrent(duration = 0.4) {
+    if (!this.focusedNodeId) return;
+    const bodyId = this.resolveBodyId(this.focusedNodeId, this.focusedData);
+    if (bodyId !== undefined) this.focus.focusOnBody(bodyId, duration);
   }
 
   /** Ghost non-focused meshes and show semantic overlays. */
