@@ -428,7 +428,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         for mount in body.mounts:
             if isinstance(mount.component, CameraSpec):
                 for port in mount.component.wire_ports:
-                    if port.bus_type is BusType.CSI:
+                    if port.bus_type == BusType.CSI:
                         camera_body = body
                         camera_pos = _add_vec3(mount.resolved_pos, port.pos)
                         return
@@ -512,11 +512,11 @@ def _route_power(bot: Bot) -> WireRoute:
     for mount in bot.root.mounts:
         if isinstance(mount.component, BatterySpec):
             for port in mount.component.wire_ports:
-                if port.bus_type is BusType.POWER:
+                if port.bus_type == BusType.POWER:
                     battery_pos = _add_vec3(mount.resolved_pos, port.pos)
                     break
         for port in mount.component.wire_ports:
-            if port.bus_type is BusType.USB:
+            if port.bus_type == BusType.USB:
                 pi_pos = _add_vec3(mount.resolved_pos, port.pos)
                 break
 

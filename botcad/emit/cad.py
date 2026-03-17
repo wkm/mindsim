@@ -706,7 +706,7 @@ def _cut_camera_features(shell, mount, body_dims, solved_dims):
     ribbon_h = 0.002  # 2mm tall (1mm ribbon + clearance)
 
     # CSI port offset relative to camera center (from wire_ports)
-    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type is BusType.CSI]
+    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type == BusType.CSI]
     if csi_ports:
         wp = csi_ports[0]
         slot_pos = (pos[0] + wp.pos[0], pos[1] + wp.pos[1], pos[2] + wp.pos[2])
