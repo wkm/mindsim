@@ -187,6 +187,39 @@ def quat_to_euler(q: Quat) -> tuple[float, float, float]:
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
 
 
+def parallel_axis_inertia(
+    mass_items: list[tuple[Vec3, float, Vec3]],
+    com: Vec3,
+) -> tuple[float, float, float, float, float, float]:
+    """Combine box-approximated component inertias about a common center of mass.
+
+    Each item is (position, mass, box_dims). Returns (Ixx, Iyy, Izz, Ixy, Ixz, Iyz).
+    """
+    ixx = iyy = izz = 0.0
+    ixy = ixz = iyz = 0.0
+
+    for pos, mass, dims in mass_items:
+        if mass <= 0:
+            continue
+        dx, dy, dz = dims
+        # Box inertia about own center
+        ix = mass * (dy**2 + dz**2) / 12.0
+        iy = mass * (dx**2 + dz**2) / 12.0
+        iz = mass * (dx**2 + dy**2) / 12.0
+        # Parallel axis shift to COM
+        rx = pos[0] - com[0]
+        ry = pos[1] - com[1]
+        rz = pos[2] - com[2]
+        ixx += ix + mass * (ry**2 + rz**2)
+        iyy += iy + mass * (rx**2 + rz**2)
+        izz += iz + mass * (rx**2 + ry**2)
+        ixy += mass * rx * ry
+        ixz += mass * rx * rz
+        iyz += mass * ry * rz
+
+    return (ixx, iyy, izz, ixy, ixz, iyz)
+
+
 def _normalize(v: Vec3) -> Vec3:
     mag = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
     if mag < 1e-12:

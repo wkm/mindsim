@@ -43,7 +43,7 @@ def battery_solid(spec: BatterySpec):
     """
     from build123d import Align, Box, Location
 
-    from botcad.emit.cad import _as_solid
+    from botcad.cad_utils import as_solid as _as_solid
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     w, length, h = spec.dimensions

@@ -73,7 +73,7 @@ def raspberry_pi_zero_solid():
     """
     from build123d import Align, Box, Cylinder, Location
 
-    from botcad.emit.cad import _as_solid
+    from botcad.cad_utils import as_solid as _as_solid
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
 

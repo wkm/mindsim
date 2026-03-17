@@ -9,6 +9,14 @@ Design robots from real components, train them in simulation, build the physical
 - The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 - **Derive from geometry, don't approximate.** When build123d/OCCT can compute a property (mass, COM, inertia, surface area) from actual CAD solid geometry, use it. The CAD solid is ground truth. Heuristic estimates are fallbacks, not the primary path.
 - **Sim fidelity matters.** Geometry, mass, and actuation should match physical reality. CAD geometry = sim geometry — MuJoCo references the same STLs you'd send to a slicer.
+- **One body, one mesh.** Each body solid is the union of its structural shell and all attachment geometry (brackets, cradles, couplers). That single mesh is both the collision and visual representation in simulation — no layered overlays. If geometry belongs to a body, union it into the body solid; don't bolt on a second visual-only mesh.
+- **Design / Compose / Place / Cut.** The component geometry pipeline has four stages:
+  1. **Design** — build each primitive (servo, bracket, coupler, clearance envelope) in its own local frame. The clearance/cut solid is a design-time artifact, visible in component renders.
+  2. **Compose** — assemble related primitives (bracket wraps servo, coupler mates shaft) in local frame.
+  3. **Place** — one rigid transform per component instance into the parent body frame.
+  4. **Cut** — apply the pre-designed clearance solid to the parent body, using the **same transform** as Place.
+
+  The critical invariant: Place and Cut use identical transforms. No axis-sign-dependent logic, no extra shifts at cut time. If a clearance shape needs asymmetry (e.g. outboard-only tolerance), that asymmetry is designed into the cut solid in step 1, in local frame, where it can be seen and validated.
 - **Commit logs are a journal.** Explain _why_, not just _what_.
 
 ## Quick Start

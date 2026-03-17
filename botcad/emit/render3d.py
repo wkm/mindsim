@@ -39,6 +39,7 @@ from botcad.colors import (  # noqa: E402, F401
     COLOR_BRACKET,
     COLOR_COUPLER,
     COLOR_CRADLE,
+    COLOR_ENVELOPE,
     COLOR_HORN,
     COLOR_HORN_HOLE,
     COLOR_MOUNTING,

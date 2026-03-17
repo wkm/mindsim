@@ -31,6 +31,7 @@ from botcad.emit.render3d import (
     COLOR_BRACKET,
     COLOR_COUPLER,
     COLOR_CRADLE,
+    COLOR_ENVELOPE,
     COLOR_HORN,
     COLOR_HORN_HOLE,
     COLOR_MOUNTING,
@@ -278,18 +279,20 @@ def build_component_scene(component: Component) -> tuple[SceneBuilder, Path]:
 
 
 def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
-    """Build scene showing bracket + servo + annotations."""
+    """Build scene showing bracket + servo + envelope + annotations."""
     from build123d import export_stl
 
-    from botcad.bracket import BracketSpec, bracket_solid, servo_solid
+    from botcad.bracket import BracketSpec, bracket_envelope, bracket_solid, servo_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_bracket_"))
     export_stl(bracket_solid(servo, BracketSpec()), str(temp_dir / "bracket.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
+    export_stl(bracket_envelope(servo, BracketSpec()), str(temp_dir / "envelope.stl"))
 
     scene = SceneBuilder(model_name="bracket_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("bracket", "bracket.stl", COLOR_BRACKET)
     scene.add_mesh("servo", "servo.stl", COLOR_SERVO_BODY)
+    scene.add_mesh("envelope", "envelope.stl", COLOR_ENVELOPE)
     _add_bracket_annotations(scene, servo)
     _add_horn_annotations(scene, servo)
 
@@ -297,18 +300,20 @@ def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
 
 
 def build_cradle_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
-    """Build scene showing cradle + servo + annotations."""
+    """Build scene showing cradle + servo + envelope + annotations."""
     from build123d import export_stl
 
-    from botcad.bracket import BracketSpec, cradle_solid, servo_solid
+    from botcad.bracket import BracketSpec, cradle_envelope, cradle_solid, servo_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_cradle_"))
     export_stl(cradle_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
+    export_stl(cradle_envelope(servo, BracketSpec()), str(temp_dir / "envelope.stl"))
 
     scene = SceneBuilder(model_name="cradle_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("cradle", "cradle.stl", COLOR_CRADLE)
     scene.add_mesh("servo", "servo.stl", COLOR_SERVO_BODY)
+    scene.add_mesh("envelope", "envelope.stl", COLOR_ENVELOPE)
     _add_bracket_annotations(scene, servo)
 
     return scene, temp_dir

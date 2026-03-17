@@ -393,40 +393,6 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
                 if horn:
                     export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
-    # --- Bracket / cradle / coupler STLs (visual-only attachments) ---
-    # Pre-positioned in body-local frame so MuJoCo uses pos="0 0 0".
-    from botcad.geometry import rotate_vec
-
-    bracket_spec = BracketSpec()
-    for body in bot.all_bodies:
-        for joint in body.joints:
-            center = joint.solved_servo_center
-            euler = quat_to_euler(joint.solved_servo_quat)
-
-            if joint.bracket_style is BracketStyle.COUPLER:
-                # Cradle on parent body
-                cradle = cradle_solid(joint.servo, bracket_spec)
-                cradle = cradle.locate(Location(center, euler))
-                export_stl(cradle, str(meshes_dir / f"cradle_{joint.name}.stl"))
-
-                # Coupler on child body (shaft-centered → child body frame)
-                rotated_offset = rotate_vec(
-                    joint.solved_servo_quat, joint.servo.shaft_offset
-                )
-                coupler_center = (
-                    -rotated_offset[0],
-                    -rotated_offset[1],
-                    -rotated_offset[2],
-                )
-                coupler = coupler_solid(joint.servo, bracket_spec)
-                coupler = coupler.locate(Location(coupler_center, euler))
-                export_stl(coupler, str(meshes_dir / f"coupler_{joint.name}.stl"))
-            else:
-                # Pocket bracket on parent body
-                bracket = bracket_solid(joint.servo, bracket_spec)
-                bracket = bracket.locate(Location(center, euler))
-                export_stl(bracket, str(meshes_dir / f"bracket_{joint.name}.stl"))
-
     # --- Per-wire STLs ---
     from botcad.component import BusType
 
@@ -975,8 +941,12 @@ def _wire_channel(seg, bus_type: BusType):
     return channel.locate(Location(mid, euler))
 
 
-def _child_outer_envelope(child: Body, parent_joint: Joint):
-    """Solid outer envelope of a child body, for clearance subtraction."""
+def _child_outer_envelope_local(child: Body):
+    """Solid outer envelope of a child body in canonical Z-up local frame.
+
+    No rotation is applied — the caller is responsible for placing/orienting
+    the envelope using the joint axis transform (Design/Place/Cut pipeline).
+    """
     from build123d import Align, Box, Cylinder, Location, Sphere
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
@@ -1001,7 +971,7 @@ def _child_outer_envelope(child: Body, parent_joint: Joint):
             outer = Cylinder(r, h, align=C)
             # Match _make_body_solid: bottom face at origin for child cylinders
             outer = outer.locate(Location((0, 0, h / 2)))
-        return _orient_z_to_axis(outer, parent_joint.axis, quat=child.frame_quat)
+        return outer
 
     elif child.shape is BodyShape.TUBE:
         r = (child.outer_r or dims[0] / 2) + tol
@@ -1029,8 +999,7 @@ def _is_axially_symmetric(child: Body, joint: Joint) -> bool:
     if child.shape is BodyShape.SPHERE:
         return True
     if child.shape is BodyShape.CYLINDER:
-        # Cylinder gets oriented along parent_joint.axis via _orient_z_to_axis,
-        # which is the same as the joint axis — so it's symmetric.
+        # Cylinder is designed Z-up and placed along joint axis — symmetric.
         return True
     return False
 
@@ -1049,16 +1018,23 @@ def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
 def _child_clearance_volume(child: Body, joint: Joint):
     """Compute the volume swept by a child body through its joint range.
 
+    Follows the Design/Place/Cut pipeline:
+      1. Design: build envelope in canonical Z-up local frame
+      2. Sweep: rotate around local Z (0,0,1) for asymmetric shapes
+      3. Place: single rigid transform using axis orientation + joint position
+
     For axially symmetric children (cylinders, spheres), the swept volume
     equals the static envelope. For asymmetric shapes, we union discrete
     rotations sampled every ~15 degrees through the joint range.
     """
     from build123d import Location
 
-    envelope = _child_outer_envelope(child, joint)
+    # 1. Design — unrotated, Z-up local frame
+    envelope = _child_outer_envelope_local(child)
     if envelope is None:
         return None
 
+    # 2. Sweep — rotate around local Z axis (not joint.axis)
     if _is_axially_symmetric(child, joint):
         clearance = envelope
     else:
@@ -1072,10 +1048,13 @@ def _child_clearance_volume(child: Body, joint: Joint):
         clearance = envelope  # angle=0 (rest pose)
         for i in range(1, n_samples + 1):
             angle = lo + (hi - lo) * i / n_samples
-            rotated = _rotate_solid(envelope, joint.axis, angle)
+            rotated = _rotate_solid(envelope, (0, 0, 1), angle)
             clearance = clearance + rotated  # boolean union
 
-    # Position at joint.pos in parent frame, offset outboard for wheels
+    # 3. Place — single rigid transform: orientation from axis, position from joint
+    orient_quat = _axis_to_quat(joint.axis)
+    euler = quat_to_euler(orient_quat)
+
     if child.is_wheel_body:
         offset = joint.wheel_outboard_offset()
         ax, ay, az = joint.axis
@@ -1086,7 +1065,7 @@ def _child_clearance_volume(child: Body, joint: Joint):
         )
     else:
         pos = joint.pos
-    return clearance.moved(Location(pos))
+    return clearance.moved(Location(pos, euler))
 
 
 def _make_wheel_solid(radius: float, width: float):
@@ -1221,6 +1200,27 @@ def _horn_solid(servo):
     )
 
 
+def _axis_to_quat(
+    axis: tuple[float, float, float],
+) -> tuple[float, float, float, float]:
+    """Quaternion rotating Z-up to align with the given axis. No body-frame dependency."""
+    ax, ay, az = axis
+    angle_deg = math.degrees(math.acos(max(-1.0, min(1.0, az))))
+    if angle_deg < 1e-4:
+        return (1.0, 0.0, 0.0, 0.0)  # identity
+
+    rot_axis_x = -ay
+    rot_axis_y = ax
+    rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
+    if rot_mag < 1e-9:
+        # Opposite direction (az = -1)
+        return _axis_angle_to_quat((1.0, 0.0, 0.0), math.pi)
+
+    rot_axis_x /= rot_mag
+    rot_axis_y /= rot_mag
+    return _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
+
+
 def _orient_z_to_axis(
     solid,
     axis: tuple[float, float, float],
@@ -1239,25 +1239,10 @@ def _orient_z_to_axis(
         euler = quat_to_euler(quat)
         return solid.moved(Location((0, 0, 0), euler))
 
-    ax, ay, az = axis
-    # Compute rotation from Z to target axis
-    angle_deg = math.degrees(math.acos(max(-1.0, min(1.0, az))))
-    if angle_deg < 1e-4:
-        return solid
-
-    # Rotation axis in XY plane (cross product of Z=(0,0,1) and axis)
-    rot_axis_x = -ay
-    rot_axis_y = ax
-    rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
-    if rot_mag < 1e-9:
-        # Opposite direction (az = -1)
-        return solid.moved(Location((0, 0, 0), (180, 0, 0)))
-
-    rot_axis_x /= rot_mag
-    rot_axis_y /= rot_mag
-
-    # Convert axis-angle to Euler angles for build123d Location
-    q = _axis_angle_to_quat((rot_axis_x, rot_axis_y, 0.0), math.radians(angle_deg))
+    q = _axis_to_quat(axis)
+    w, x, y, z = q
+    if abs(w - 1.0) < 1e-9 and abs(x) + abs(y) + abs(z) < 1e-9:
+        return solid  # identity
     euler = quat_to_euler(q)
     return solid.moved(Location((0, 0, 0), euler))
 

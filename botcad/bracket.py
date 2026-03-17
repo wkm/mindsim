@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from botcad.cad_utils import as_solid as _as_solid
+
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
@@ -92,39 +94,6 @@ def _horn_clip_radius(servo: ServoSpec, spec: BracketSpec) -> float:
         )
         clip_r = min(clip_r, min_ear_r)
     return clip_r
-
-
-def _as_solid(shape):
-    """Extract a single Solid from a boolean result or shape list.
-
-    build123d boolean ops (cut, union) and fillets can return Compound
-    or ShapeList even when the result is a single solid. This extracts
-    the Solid so further operations (like filleting or more booleans)
-    work correctly.
-    """
-    from build123d import Compound, ShapeList, Solid
-
-    # 1. Handle ShapeList (returned by fillet and some boolean ops)
-    if isinstance(shape, ShapeList):
-        if len(shape) == 1:
-            return _as_solid(shape[0])
-        # If it's a list of multiple solids, try to compound them
-        if all(isinstance(s, Solid) for s in shape):
-            return _as_solid(Compound(list(shape)))
-        return shape
-
-    # 2. Handle Solid
-    if isinstance(shape, Solid):
-        return shape
-
-    # 3. Handle Compound
-    if isinstance(shape, Compound):
-        solids = shape.solids()
-        if len(solids) == 1:
-            return solids[0]
-        return shape
-
-    return shape
 
 
 @dataclass(frozen=True)
