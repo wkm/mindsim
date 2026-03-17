@@ -35,10 +35,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 def regen_component_renders() -> None:
     """Regenerate component/bracket test images and technical drawings."""
-    from botcad.component import Component
+    from botcad.component import Component, ServoSpec
     from botcad.components import (
         OV5647,
+        SCS0009,
         STS3215,
+        STS3250,
         LiPo2S,
         PiCamera2,
         PololuWheel90mm,
@@ -60,8 +62,10 @@ def regen_component_renders() -> None:
 
     # Component tear sheets (3D renders)
     components: list[tuple[str, str, Component]] = [
+        ("servo", "SCS0009 (position)", SCS0009(continuous=False)),
         ("servo", "STS3215 (position)", STS3215(continuous=False)),
         ("servo", "STS3215 (continuous)", STS3215(continuous=True)),
+        ("servo", "STS3250 (position)", STS3250(continuous=False)),
         ("wheel", "Pololu 90x10mm Wheel", PololuWheel90mm()),
         ("camera", "OV5647", OV5647()),
         ("camera", "PiCamera2", PiCamera2()),
@@ -84,23 +88,30 @@ def regen_component_renders() -> None:
     save_png(img, out_path)
     print(f"  fastener showcase: {out_path}")
 
-    # Bracket tear sheets (3D renders)
-    servo = STS3215()
-    for render_fn, label in [
-        (render_bracket_views, "bracket"),
-        (render_cradle_views, "cradle"),
-        (render_coupler_views, "coupler"),
-        (render_coupler_assembly_views, "coupler_assembly"),
-    ]:
-        img = render_fn(servo, "STS3215")
-        out_path = out_dir / f"test_{label}_sts3215.png"
-        save_png(img, out_path)
-        print(f"  bracket: {out_path}")
+    # Bracket tear sheets (3D renders) — for each servo that uses brackets
+    # NOTE: bracket/cradle/coupler geometry is designed around the STS form
+    # factor.  SCS0009 micro servo needs its own bracket design (TODO).
+    bracket_servos: list[tuple[str, ServoSpec]] = [
+        ("sts3215", STS3215()),
+        ("sts3250", STS3250()),
+    ]
+    for slug, servo in bracket_servos:
+        for render_fn, label in [
+            (render_bracket_views, "bracket"),
+            (render_cradle_views, "cradle"),
+            (render_coupler_views, "coupler"),
+            (render_coupler_assembly_views, "coupler_assembly"),
+        ]:
+            img = render_fn(servo, servo.name)
+            out_path = out_dir / f"test_{label}_{slug}.png"
+            save_png(img, out_path)
+            print(f"  bracket: {out_path}")
 
     # Bracket technical drawings (2D section SVGs)
-    svgs = emit_component_drawings("STS3215", out_dir)
-    for svg_path in svgs:
-        print(f"  drawing: {svg_path}")
+    for slug, _servo in bracket_servos:
+        svgs = emit_component_drawings(slug.upper(), out_dir)
+        for svg_path in svgs:
+            print(f"  drawing: {svg_path}")
 
 
 def regen_rom_renders() -> None:
