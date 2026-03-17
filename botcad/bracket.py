@@ -392,8 +392,23 @@ def horn_disc_params(
 def servo_solid(servo: ServoSpec):
     """Build a detailed solid representing the physical servo body.
 
-    Pass 11: Absolute precision matching. Using the exact bounding planes
-    measured from the official reference CAD. Centered on body center (0,0,0).
+    Dispatches to a form-factor-specific builder based on the servo name.
+    Centered on body center (0,0,0) in servo local frame.
+    """
+    if servo.name == "SCS0009":
+        return _scs0009_solid(servo)
+    return _sts_series_solid(servo)
+
+
+@lru_cache(maxsize=32)
+def _sts_series_solid(servo: ServoSpec):
+    """STS-series servo body (STS3215, STS3250, etc.).
+
+    Aluminum mid-section with plastic top/bottom caps, bottom-mounted
+    mounting flanges, dual-axis shaft with rear support bearing.
+
+    Geometry matched to the official STS3215 STEP model (same outer
+    shell for all STS variants).
     """
     from build123d import Align, Axis, Box, Cylinder, Location, fillet
 
@@ -483,6 +498,82 @@ def servo_solid(servo: ServoSpec):
             )
             h = h.locate(Location((ear.pos[0], ear.pos[1], f_z_bot)))
             body = _as_solid(body.cut(h))
+
+    return body
+
+
+@lru_cache(maxsize=32)
+def _scs0009_solid(servo: ServoSpec):
+    """SCS0009 micro servo body (SG90-style form factor).
+
+    Classic micro servo shape: rectangular plastic body with mounting
+    ears/tabs protruding from the sides at roughly 2/3 body height.
+    Single output shaft on top, offset toward +X end.  No rear shaft.
+
+    Dimensions from Feetech datasheet (SC-0090-C001):
+        Body:  23.2 x 12.1 x 22.5 mm (L x W x H, no ears)
+        Ears:  extend ±4.65mm beyond body in X, 2.5mm thick in Z
+        Ear Z: positioned ~7.75mm below body top (flush with lower body)
+        Total: 32.5 x 12.1 x 25.25 mm (with ears + shaft boss)
+        Shaft: 20T spline, OD 3.95mm, offset +5.8mm from center in X
+
+    Origin = geometric center of main body (no ears).
+    """
+    from build123d import Align, Axis, Box, Cylinder, Location, fillet
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    r = 0.0010  # small fillet for plastic molding
+
+    # Body center at Z=0, spans ±body_z/2
+    z_top = body_z / 2   # +11.25mm
+    z_bot = -body_z / 2  # -11.25mm
+
+    # ── 1. Main body ──────────────────────────────────────────────
+    body = Box(
+        body_x, body_y, body_z,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    body = _as_solid(fillet(body.edges().filter_by(Axis.Z), r))
+
+    # ── 2. Output shaft boss (single axis, no rear shaft) ────────
+    sx, sy, _sz = servo.shaft_offset
+    boss_r = servo.shaft_boss_radius  # ~1.98mm
+    boss_h = servo.shaft_boss_height  # ~2.0mm
+    boss = Cylinder(boss_r, boss_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    boss = boss.locate(Location((sx, sy, z_top)))
+    body = _as_solid(body.fuse(boss))
+
+    # ── 3. Mounting ears (side tabs, SG90-style) ──────────────────
+    # Ears protrude in ±X from body sides, at roughly 2/3 height.
+    # Each ear: ~4.65mm extension beyond body, full body_y width,
+    # ~2.5mm thick in Z.
+    ear_ext = 0.00465    # extension beyond body edge in X
+    ear_thick = 0.0025   # thickness in Z
+    ear_total_x = body_x + 2 * ear_ext  # ~32.5mm total
+
+    # Ears sit with top aligned to a point ~7.75mm below body top
+    # (i.e. about 3.5mm above body center for a 22.5mm body)
+    ear_top_z = z_top - 0.00775   # ~3.5mm above center
+    ear_bot_z = ear_top_z - ear_thick
+    ear_cz = (ear_top_z + ear_bot_z) / 2
+
+    ear = Box(
+        ear_total_x, body_y, ear_thick,
+        align=(Align.CENTER, Align.CENTER, Align.CENTER),
+    )
+    ear = ear.locate(Location((0, 0, ear_cz)))
+    body = _as_solid(body.fuse(ear))
+
+    # ── 4. Mounting holes through ears ────────────────────────────
+    if servo.mounting_ears:
+        for mp in servo.mounting_ears:
+            hole = Cylinder(
+                mp.diameter / 2,
+                0.010,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            hole = hole.locate(Location((mp.pos[0], mp.pos[1], ear_cz)))
+            body = _as_solid(body.cut(hole))
 
     return body
 
