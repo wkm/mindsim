@@ -32,7 +32,12 @@ from botcad.colors import (
     COLOR_STRUCTURE_WIREFRAME,
 )
 from botcad.emit.composite import save_png
-from botcad.emit.render3d import white_background
+from botcad.emit.render3d import (
+    _apply_ssao,
+    _detect_edges,
+    _mesh_bounds,
+    white_background,
+)
 from botcad.emit.renders import (
     _configure_spec,
     _joint_name,
@@ -238,27 +243,24 @@ def _render_composite(
     seg = renderer.render()  # (H, W, 2) int32: (geom_id, obj_type)
     renderer.disable_segmentation_rendering()
 
+    # ── Pass 4: depth buffer for SSAO and normal-based edges ──
+    renderer.update_scene(data, camera=cam)
+    renderer.enable_depth_rendering()
+    depth = renderer.render()
+    renderer.disable_depth_rendering()
+
     # ── Composite: lit solid targets over wireframe context ──
     ids = seg[:, :, 0]
     solid_mask = ids >= 0  # pixels where target geometry is present
     result = img_wire.copy()
     result[solid_mask] = img_solid[solid_mask]
 
-    # ── Edge outlines from segmentation boundaries ──
-    # Find pixels where any neighbor has a different geom ID
-    edges = np.zeros(ids.shape, dtype=bool)
-    edges[:-1, :] |= ids[:-1, :] != ids[1:, :]
-    edges[1:, :] |= ids[:-1, :] != ids[1:, :]
-    edges[:, :-1] |= ids[:, :-1] != ids[:, 1:]
-    edges[:, 1:] |= ids[:, :-1] != ids[:, 1:]
-    # Thicken to ~3px
-    thick = edges.copy()
-    thick[1:, :] |= edges[:-1, :]
-    thick[:-1, :] |= edges[1:, :]
-    thick[:, 1:] |= edges[:, :-1]
-    thick[:, :-1] |= edges[:, 1:]
-    # Paint edges on solid regions (includes silhouette inner edge)
-    result[thick & solid_mask] = [40, 40, 40]
+    # SSAO on solid regions
+    _apply_ssao(result, depth, strength=0.35)
+
+    # Edge outlines: segmentation + depth + normal-based creases
+    edges = _detect_edges(seg, depth)
+    result[edges & solid_mask] = [40, 40, 40]
 
     model.geom_rgba[:] = saved_rgba
     return result
@@ -572,7 +574,7 @@ def _render_servo_insertion(
         # Tight zoom on servo area
         lookat = data.geom_xpos[servo_gid].copy()
         servo_half = model.geom_size[servo_gid]
-        distance = max(np.max(servo_half) * 12, 0.10)
+        distance = max(np.max(servo_half) * 8, 0.06)
 
         img = _render_composite(
             model,
@@ -632,7 +634,7 @@ def _render_child_attachment(
         child_pos = data.xpos[child_bid].copy()
         lookat = (servo_pos + child_pos) / 2.0
         servo_half = model.geom_size[servo_gid]
-        distance = max(np.max(servo_half) * 14, 0.12)
+        distance = max(np.max(servo_half) * 10, 0.08)
 
         img = _render_composite(
             model,
@@ -677,8 +679,9 @@ def _render_minimap(
     mujoco.mj_resetData(model, data)
     mujoco.mj_forward(model, data)
 
-    lookat = model.stat.center.copy()
-    distance = model.stat.extent * 2.5
+    center, extent = _mesh_bounds(model, data)
+    lookat = center
+    distance = extent * 1.5
 
     img = _render_composite(
         model,
@@ -825,8 +828,9 @@ def _render_overview_frame(bot_xml: Path) -> Image.Image:
 
     renderer = mujoco.Renderer(model, FRAME_W, FRAME_H)
     all_bids = set(range(1, model.nbody))
-    lookat = model.stat.center.copy()
-    distance = model.stat.extent * 2.5
+    center, extent = _mesh_bounds(model, data)
+    lookat = center
+    distance = extent * 1.5
 
     img = _render_composite(
         model,
@@ -955,7 +959,7 @@ def _render_component_insertion(
 
         lookat = data.geom_xpos[comp_gid].copy()
         comp_half = model.geom_size[comp_gid]
-        distance = max(np.max(comp_half) * 14, 0.10)
+        distance = max(np.max(comp_half) * 10, 0.06)
 
         img = _render_composite(
             model,
@@ -1001,7 +1005,7 @@ def _render_fastener_step(
 
     lookat = data.geom_xpos[comp_gid].copy()
     comp_half = model.geom_size[comp_gid]
-    distance = max(np.max(comp_half) * 14, 0.10)
+    distance = max(np.max(comp_half) * 10, 0.06)
 
     frames, labels, collisions = [], [], []
 

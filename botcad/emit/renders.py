@@ -27,7 +27,12 @@ from botcad.emit.composite import (  # noqa: F401
     filmstrip,
     save_png,
 )
-from botcad.emit.render3d import VIEWS_4, white_background  # noqa: F401
+from botcad.emit.render3d import (  # noqa: F401
+    VIEWS_4,
+    _mesh_bounds,
+    postprocess_render,
+    white_background,
+)
 
 # ── Config ──
 
@@ -49,9 +54,14 @@ CLOSEUP_VIEWS = {
 
 
 def _configure_spec(spec: mujoco.MjSpec) -> None:
-    """Common spec configuration: headlight, offscreen buffer."""
-    spec.visual.headlight.diffuse = [0.7, 0.7, 0.7]
-    spec.visual.headlight.ambient = [0.3, 0.3, 0.3]
+    """Common spec configuration: headlight, offscreen buffer.
+
+    Lighting matches the web viewer's Three.js setup: bright directional key
+    with moderate ambient and slight specular sheen for dimensionality.
+    """
+    spec.visual.headlight.diffuse = [0.8, 0.8, 0.8]
+    spec.visual.headlight.ambient = [0.35, 0.35, 0.35]
+    spec.visual.headlight.specular = [0.12, 0.12, 0.12]
     spec.visual.global_.offwidth = max(VIEW_W, SWEEP_W) * 2
     spec.visual.global_.offheight = max(VIEW_H, SWEEP_H) * 2
 
@@ -75,17 +85,14 @@ def _render(
     azimuth: float,
     elevation: float,
 ) -> np.ndarray:
-    """Render a single frame with the given camera parameters."""
+    """Render a single frame with edge detection and SSAO."""
     cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
     cam.lookat[:] = lookat
     cam.distance = distance
     cam.azimuth = azimuth
     cam.elevation = elevation
-    renderer.update_scene(data, camera=cam)
-    img = renderer.render().copy()
-    white_background(img)
-    return img
+    return postprocess_render(renderer, data, cam)
 
 
 def _set_mesh_alpha(model: mujoco.MjModel, alpha: float) -> np.ndarray:
@@ -144,8 +151,9 @@ def render_overview(
     t0 = time.perf_counter()
     renderer = mujoco.Renderer(model, VIEW_W, VIEW_H)
 
-    lookat = model.stat.center.copy()
-    distance = model.stat.extent * 2.5
+    center, extent = _mesh_bounds(model, data)
+    lookat = center
+    distance = extent * 1.5
 
     # Make mesh geoms semi-transparent so wires are visible
     saved_rgba = _set_mesh_alpha(model, 0.3)
@@ -169,9 +177,9 @@ def render_overview(
     renderer.close()
 
     # Composite 2x2
-    margin = 8
-    label_h = 22
-    title_h = 30
+    margin = 3
+    label_h = 16
+    title_h = 22
     cols, rows = 2, 2
     cw = VIEW_W * cols + margin * (cols + 1)
     ch = title_h + (VIEW_H + label_h) * rows + margin * (rows + 1)
@@ -239,7 +247,7 @@ def render_closeups(
         separation = np.linalg.norm(servo_pos - child_pos)
         servo_half = model.geom_size[gid]  # box half-sizes
         servo_max_dim = np.max(servo_half) * 2
-        distance = max(separation * 2.5, servo_max_dim * 6, 0.08)
+        distance = max(separation * 1.8, servo_max_dim * 4, 0.05)
 
         imgs = []
         lbls = []
@@ -266,14 +274,14 @@ def render_closeups(
         return output_dir / "test_closeups.png"
 
     # Composite: vertical stack of sections, each with header + 2x2 grid
-    margin = 8
-    label_h = 20
-    header_h = 28
+    margin = 3
+    label_h = 16
+    header_h = 22
     cols, rows = 2, 2
     section_w = VIEW_W * cols + margin * (cols + 1)
     section_h = header_h + (VIEW_H + label_h) * rows + margin * (rows + 1)
 
-    title_h = 30
+    title_h = 22
     canvas_w = section_w
     canvas_h = title_h + section_h * len(sections) + margin
 
@@ -430,9 +438,10 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
             data.qpos[qposadr] = angle
             mujoco.mj_forward(model, data)
 
-            # Camera follows child body
+            # Camera follows child body, distance from mesh bounds
             child_pos = data.xpos[child_bid].copy()
-            distance = model.stat.extent * 1.8
+            sweep_center, sweep_extent = _mesh_bounds(model, data)
+            distance = sweep_extent * 1.5
 
             img = _render(
                 model,
@@ -482,8 +491,8 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
         strip_images.append(strip_img)
 
     # Stack strips vertically with a title header
-    margin = 8
-    title_h = 30
+    margin = 3
+    title_h = 22
     total_w = max(img.width for img in strip_images) if strip_images else 100
     total_h = title_h + sum(img.height for img in strip_images) + margin
 

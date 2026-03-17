@@ -166,21 +166,28 @@ def quat_to_euler(q: Quat) -> tuple[float, float, float]:
     w, x, y, z = q
 
     # Pitch (Y) — check first for gimbal lock
-    sinp = 2.0 * (w * y - z * x)
+    # Intrinsic XYZ: R = Rx(rx) · Ry(ry) · Rz(rz)
+    # sin(ry) = R[0][2] = 2(xz + wy)
+    sinp = 2.0 * (w * y + x * z)
     sinp = max(-1.0, min(1.0, sinp))
 
     if abs(sinp) > 0.9999:
+        # Gimbal lock: only rx ± rz is determined; set rx = 0.
         ry = math.copysign(math.pi / 2, sinp)
         rx = 0.0
-        rz = 2.0 * math.atan2(x, w)
-        if sinp < 0:
-            rz = -rz
+        # R[1][0] = 2(xy + wz), R[1][1] = 1 - 2(x² + z²)
+        if sinp > 0:
+            rz = math.atan2(2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z))
+        else:
+            rz = math.atan2(-2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z))
     else:
         ry = math.asin(sinp)
-        sinr_cosp = 2.0 * (w * x + y * z)
+        # rx from R[1][2] = -sin(rx)cos(ry), R[2][2] = cos(rx)cos(ry)
+        sinr_cosp = 2.0 * (w * x - y * z)
         cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
         rx = math.atan2(sinr_cosp, cosr_cosp)
-        siny_cosp = 2.0 * (w * z + x * y)
+        # rz from R[0][1] = -cos(ry)sin(rz), R[0][0] = cos(ry)cos(rz)
+        siny_cosp = 2.0 * (w * z - x * y)
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
         rz = math.atan2(siny_cosp, cosy_cosp)
 

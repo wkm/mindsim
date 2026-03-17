@@ -54,7 +54,7 @@
   <worldbody>
     <body name="base" pos="0 0 0.0450">
       <freejoint name="root"/>
-      <inertial pos="-0.002200 0.000000 0.006183" mass="0.287987" fullinertia="1.219363e-04 4.215387e-04 3.720365e-04 4.075568e-17 9.551198e-06 2.212231e-17"/>
+      <inertial pos="-0.002200 0.000000 0.006183" mass="0.287987" fullinertia="1.219363e-04 4.215387e-04 3.720365e-04 4.075423e-17 9.551198e-06 2.212189e-17"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
       <geom name="comp_base_pi" type="mesh" mesh="comp_base_pi_mesh" pos="0.000000 0.000000 0.000000" rgba="0.0588 0.6000 0.3765 1.0000" contype="0" conaffinity="0" group="1"/>

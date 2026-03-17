@@ -145,7 +145,7 @@ def validate_subassembly(
         r = Renderer3D(xml, SWEEP_W, SWEEP_H)
 
         # Auto camera distance from scene extent
-        dist = camera_distance or max(r._geom_extent * 2.5, 0.05)
+        dist = camera_distance or max(r._geom_extent * 1.4, 0.05)
 
         angles = np.linspace(range_rad[0], range_rad[1], frames)
         qposadr = r.model.jnt_qposadr[0]  # single hinge joint

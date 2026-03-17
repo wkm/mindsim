@@ -10,6 +10,7 @@ import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
 import { ExploreMode } from './explore-mode.js';
+import { FocusController } from './focus-controller.js';
 import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -411,11 +412,16 @@ async function main() {
       tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 
+    // Auto-focus camera on the bot before showing the scene
+    const initialFocus = new FocusController(ctx);
+    initialFocus.focusOnAll(0.8);
+
     switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
     function animate() {
       controls.update();
+      initialFocus.update();  // drive initial camera animation
       if (currentMode && currentMode.update) currentMode.update();
       renderer.render(scene, camera);
       requestAnimationFrame(animate);

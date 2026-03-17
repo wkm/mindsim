@@ -114,8 +114,8 @@ def _bracket_outer(
     """Compute the bracket's outer box solid and ear_bottom_z.
 
     Shared between bracket_solid() and bracket_envelope().
-    insertion_clearance extends the box upward (+Z) to cut a clear servo
-    insertion path through the parent body shell.
+    insertion_clearance extends the box upward (+Z, horn/shaft side) to cut
+    a clear servo insertion path through the parent body shell.
     Returns (outer_solid, ear_bottom_z, body_dims).
     """
     from build123d import Align, Box, Location
@@ -156,9 +156,8 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
 
     Used by the CAD emitter to cut the bracket footprint from the parent
     body shell before unioning the finished bracket in. The insertion
-    channel extends 200mm above the bracket so the servo has a clear path
-    through the parent body shell (the CSG only removes material where
-    shell exists).
+    channel extends 200mm above the bracket (horn/shaft side, +Z) so the
+    servo has a clear insertion path through the parent body shell.
     """
     if spec is None:
         spec = BracketSpec()

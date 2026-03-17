@@ -51,6 +51,51 @@ export class FocusController {
   }
 
   /**
+   * Compute world-space bounding box for all bodies (the entire bot).
+   * @returns {THREE.Box3}
+   */
+  getAllBoundingBox() {
+    _box.makeEmpty();
+    for (const [, group] of Object.entries(this.ctx.bodies)) {
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.updateWorldMatrix(true, false);
+          const geom = child.geometry;
+          if (!geom.boundingBox) geom.computeBoundingBox();
+          const meshBox = geom.boundingBox.clone().applyMatrix4(child.matrixWorld);
+          _box.union(meshBox);
+        }
+      });
+    }
+    return _box;
+  }
+
+  /**
+   * Animate camera to frame the entire bot.
+   * @param {number} duration - seconds
+   */
+  focusOnAll(duration = 0.6) {
+    const box = this.getAllBoundingBox();
+    if (box.isEmpty()) return;
+
+    box.getCenter(_center);
+    box.getSize(_size);
+    const maxDim = Math.max(_size.x, _size.y, _size.z, 0.05);
+    const dist = maxDim * 2.0;
+
+    // Standard isometric viewing direction (upper-right-front)
+    const camDir = _camDir.set(0.4, 0.45, 0.55).normalize();
+
+    this._startPos.copy(this.ctx.camera.position);
+    this._endPos.copy(_center).addScaledVector(camDir, dist);
+    this._startTarget.copy(this.ctx.controls.target);
+    this._endTarget.copy(_center);
+    this._animStart = performance.now() / 1000;
+    this._animDuration = duration;
+    this._animating = true;
+  }
+
+  /**
    * Animate camera to frame a body.
    * @param {number} bodyId
    * @param {number} duration - seconds
