@@ -40,8 +40,6 @@ class ComponentBrowser {
     this.stlLoader = new STLLoader();
     this.stlCache = {};       // url → BufferGeometry
     this.layerGroups = {};    // layer id → THREE.Group
-    this.layerEnabled = {};   // layer id → boolean
-    this._fitPending = false;
   }
 
   async init() {
@@ -58,13 +56,13 @@ class ComponentBrowser {
     container.style.right = SIDE_PANEL_WIDTH + 'px';
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
+    this.scene.background = new THREE.Color(0xF5F8FA);
 
     const viewWidth = window.innerWidth - SIDEBAR_WIDTH - SIDE_PANEL_WIDTH;
     this.camera = new THREE.PerspectiveCamera(45, viewWidth / window.innerHeight, 0.0001, 10);
     this.camera.position.set(0.06, 0.06, 0.08);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(viewWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
@@ -76,15 +74,18 @@ class ComponentBrowser {
     this.controls.dampingFactor = 0.1;
     this.controls.update();
 
-    // Lighting
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    // Lighting — match bot viewer (bright, with fill light)
+    this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
     dirLight.position.set(0.2, 0.4, 0.3);
     dirLight.castShadow = true;
     this.scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
+    fillLight.position.set(-0.2, 0.1, -0.2);
+    this.scene.add(fillLight);
 
-    // Grid (200mm with 5mm divisions)
-    this.scene.add(new THREE.GridHelper(0.2, 40, 0x333355, 0x222244));
+    // Grid (200mm with 5mm divisions) — light theme colors
+    this.scene.add(new THREE.GridHelper(0.2, 40, 0xBFCCD6, 0xCED9E0));
 
     // Create a group per layer
     for (const layer of LAYERS) {
@@ -92,7 +93,6 @@ class ComponentBrowser {
       g.name = layer.id;
       this.scene.add(g);
       this.layerGroups[layer.id] = g;
-      this.layerEnabled[layer.id] = false;
     }
 
     window.addEventListener('resize', () => {
@@ -146,7 +146,7 @@ class ComponentBrowser {
 
   _buildSidePanel() {
     const panel = document.getElementById('side-panel');
-    panel.innerHTML = '<p style="color:#666; font-size:13px">Select a component</p>';
+    panel.innerHTML = '<p style="color:var(--bp-gray3); font-size:13px">Select a component</p>';
   }
 
   _buildLayerControls(comp) {
@@ -156,7 +156,7 @@ class ComponentBrowser {
     for (const layer of LAYERS) {
       if (layer.servoOnly && !comp.is_servo) continue;
 
-      const checked = this.layerEnabled[layer.id] ? 'checked' : '';
+      const checked = this.layerGroups[layer.id].visible ? 'checked' : '';
       const colorSwatch = layer.colorHex !== null
         ? `<span class="layer-swatch" style="background:#${layer.colorHex.toString(16).padStart(6, '0')}"></span>`
         : `<span class="layer-swatch" style="background:rgb(${Math.round(comp.color[0]*255)},${Math.round(comp.color[1]*255)},${Math.round(comp.color[2]*255)})"></span>`;
@@ -316,7 +316,6 @@ class ComponentBrowser {
   }
 
   async _onLayerToggle(layerId, enabled) {
-    this.layerEnabled[layerId] = enabled;
     const group = this.layerGroups[layerId];
 
     if (enabled) {
@@ -350,12 +349,10 @@ class ComponentBrowser {
     // Clear all layers
     for (const layer of LAYERS) {
       this._clearGroup(this.layerGroups[layer.id]);
-      this.layerEnabled[layer.id] = false;
       this.layerGroups[layer.id].visible = false;
     }
 
-    // Enable body by default
-    this.layerEnabled['body'] = true;
+    // Body enabled by default (set visible after load below)
 
     // Update side panel (includes layer checkboxes)
     this._updateSidePanel(comp);
@@ -390,32 +387,33 @@ class ComponentBrowser {
       if (!resp.ok) return;
       const data = await resp.json();
 
-      // Load each unique screw STL
+      // Fetch unique screw STLs in parallel
+      const uniqueUrls = [...new Set(data.fasteners.map(f => f.stl_url))];
       const geomCache = {};
-      for (const f of data.fasteners) {
-        if (!geomCache[f.stl_url]) {
-          const stlResp = await fetch(f.stl_url);
-          if (!stlResp.ok) continue;
-          const buf = await stlResp.arrayBuffer();
-          geomCache[f.stl_url] = this.stlLoader.parse(buf);
-        }
-
-        const geom = geomCache[f.stl_url].clone();
+      await Promise.all(uniqueUrls.map(async (url) => {
+        const stlResp = await fetch(url);
+        if (!stlResp.ok) return;
+        const buf = await stlResp.arrayBuffer();
+        const geom = this.stlLoader.parse(buf);
         geom.computeVertexNormals();
-        const mat = new THREE.MeshPhysicalMaterial({
-          color: 0xD4A843, roughness: 0.4, metalness: 0.3,
-        });
-        const mesh = new THREE.Mesh(geom, mat);
+        geomCache[url] = geom;
+      }));
+
+      // Shared material for all fasteners
+      const fastenerMat = new THREE.MeshPhysicalMaterial({
+        color: 0xD4A843, roughness: 0.4, metalness: 0.3,
+      });
+
+      for (const f of data.fasteners) {
+        const srcGeom = geomCache[f.stl_url];
+        if (!srcGeom) continue;
+
+        const mesh = new THREE.Mesh(srcGeom.clone(), fastenerMat);
         mesh.castShadow = true;
-
-        // Position at mounting point
         mesh.position.set(f.pos[0], f.pos[1], f.pos[2]);
-
-        // Orient to mounting axis via quaternion
         if (f.quat) {
-          mesh.quaternion.set(f.quat[1], f.quat[2], f.quat[3], f.quat[0]); // xyzw from wxyz
+          mesh.quaternion.set(f.quat[1], f.quat[2], f.quat[3], f.quat[0]);
         }
-
         group.add(mesh);
       }
     } catch (err) {
@@ -463,8 +461,17 @@ class ComponentBrowser {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = !opts.wireframe;
     mesh.receiveShadow = !opts.wireframe;
-
     group.add(mesh);
+
+    // Edge outlines (matching bot viewer style) — skip for wireframe/transparent
+    if (!opts.wireframe && !opts.transparent) {
+      const edges = new THREE.EdgesGeometry(geometry, 28);
+      const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
+        color: 0x000000, transparent: true, opacity: 0.6,
+      }));
+      lines.raycast = () => {};
+      group.add(lines);
+    }
   }
 
   _clearGroup(group) {

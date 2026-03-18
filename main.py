@@ -498,20 +498,35 @@ def _component_to_json(comp, category: str) -> dict:
 
 # STL generation cache: (component_name, part_name) → bytes
 _stl_cache: dict[tuple[str, str], bytes] = {}
+_stl_cache_lock = threading.Lock()
+
+# Cached catalog JSON (built once, served on every /api/components request)
+_catalog_json: bytes | None = None
 
 
-def _generate_stl_bytes(comp, part: str) -> bytes | None:
-    """Generate STL bytes for a component part. Returns None if not applicable."""
+def _solid_to_stl_bytes(solid) -> bytes:
+    """Export a build123d Solid to STL bytes via a temp file."""
     import tempfile
 
     from build123d import export_stl
 
+    with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as tmp:
+        export_stl(solid, tmp.name)
+        return Path(tmp.name).read_bytes()
+
+
+def _generate_stl_bytes(comp, part: str) -> bytes | None:
+    """Generate STL bytes for a component part. Returns None if not applicable.
+
+    Thread-safe: uses _stl_cache_lock to prevent duplicate generation.
+    """
     from botcad.component import ServoSpec
     from botcad.emit.cad import make_component_solid
 
     cache_key = (comp.name, part)
-    if cache_key in _stl_cache:
-        return _stl_cache[cache_key]
+    with _stl_cache_lock:
+        if cache_key in _stl_cache:
+            return _stl_cache[cache_key]
 
     solid = None
     if part == "body":
@@ -544,12 +559,32 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
     if solid is None:
         return None
 
-    with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as tmp:
-        export_stl(solid, tmp.name)
-        stl_bytes = Path(tmp.name).read_bytes()
-
-    _stl_cache[cache_key] = stl_bytes
+    stl_bytes = _solid_to_stl_bytes(solid)
+    with _stl_cache_lock:
+        _stl_cache[cache_key] = stl_bytes
     return stl_bytes
+
+
+def _axis_to_quat(axis: tuple) -> list[float]:
+    """Convert an axis vector to a quaternion rotating Z-up to that axis.
+
+    Returns [w, x, y, z].
+    """
+    import math
+
+    ax, ay, az = axis
+    length = math.sqrt(ax * ax + ay * ay + az * az)
+    if length < 1e-9:
+        return [1.0, 0.0, 0.0, 0.0]
+    ax, ay, az = ax / length, ay / length, az / length
+    dot = az  # dot product with Z
+    if dot > 0.9999:
+        return [1.0, 0.0, 0.0, 0.0]
+    if dot < -0.9999:
+        return [0.0, 1.0, 0.0, 0.0]
+    cx, cy, cz = -ay, ax, 0.0
+    s = math.sqrt((1.0 + dot) * 2.0)
+    return [s / 2.0, cx / s, cy / s, cz / s]
 
 
 class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
@@ -562,8 +597,30 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=self.project_root, **kwargs)
 
+    def _send_json(self, payload: bytes):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _send_binary(self, data: bytes, filename: str | None = None):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(data)))
+        if filename:
+            self.send_header(
+                "Content-Disposition", f'attachment; filename="{filename}"'
+            )
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
         # API routes
+        if self.path == "/api/bots":
+            self._handle_bots_list()
+            return
+
         if self.path == "/api/components":
             self._handle_component_catalog()
             return
@@ -583,49 +640,38 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         # Fall through to static file serving
         super().do_GET()
 
-    def _handle_component_catalog(self):
+    def _handle_bots_list(self):
         import json
 
-        catalog = []
-        for _factory, comp, category in self.component_registry.values():
-            catalog.append(_component_to_json(comp, category))
-        payload = json.dumps(catalog).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        bots = [{"name": b["name"], "category": "bot"} for b in _discover_bots()]
+        self._send_json(json.dumps(bots).encode())
+
+    def _handle_component_catalog(self):
+        global _catalog_json
+        if _catalog_json is None:
+            import json
+
+            catalog = [
+                _component_to_json(comp, category)
+                for _factory, comp, category in self.component_registry.values()
+            ]
+            _catalog_json = json.dumps(catalog).encode()
+        self._send_json(_catalog_json)
 
     def _handle_component_stl(self, name: str, part: str):
         # Handle screw STL requests (generated by fasteners endpoint)
         if name.startswith("_screw_") and part == "body":
             cache_key = (name, "body")
-            stl_bytes = _stl_cache.get(cache_key)
+            with _stl_cache_lock:
+                stl_bytes = _stl_cache.get(cache_key)
             if stl_bytes:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/octet-stream")
-                self.send_header("Content-Length", str(len(stl_bytes)))
-                self.end_headers()
-                self.wfile.write(stl_bytes)
+                self._send_binary(stl_bytes)
                 return
             self.send_error(404, f"Screw STL not found: {name}")
             return
 
         if name not in self.component_registry:
             self.send_error(404, f"Unknown component: {name}")
-            return
-
-        valid_parts = {
-            "body",
-            "bracket",
-            "servo",
-            "cradle",
-            "coupler",
-            "bracket_envelope",
-            "cradle_envelope",
-        }
-        if part not in valid_parts:
-            self.send_error(400, f"Unknown part: {part}")
             return
 
         _factory, comp, _category = self.component_registry[name]
@@ -639,19 +685,11 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, f"Part '{part}' not available for {name}")
             return
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(len(stl_bytes)))
-        self.send_header(
-            "Content-Disposition", f'attachment; filename="{name}_{part}.stl"'
-        )
-        self.end_headers()
-        self.wfile.write(stl_bytes)
+        self._send_binary(stl_bytes, f"{name}_{part}.stl")
 
     def _handle_component_fasteners(self, name: str):
         """Return JSON with screw positions + STL URLs for each mounting point."""
         import json
-        import math
 
         if name not in self.component_registry:
             self.send_error(404, f"Unknown component: {name}")
@@ -662,59 +700,32 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         # Ensure screw STLs are generated (one per unique diameter)
         for mp in comp.mounting_points:
             cache_key = (f"_screw_{mp.diameter:.4f}", "body")
-            if cache_key not in _stl_cache:
-                try:
-                    import tempfile
+            with _stl_cache_lock:
+                if cache_key in _stl_cache:
+                    continue
+            try:
+                from botcad.emit.cad import screw_solid
 
-                    from build123d import export_stl
-
-                    from botcad.emit.cad import screw_solid
-
-                    solid = screw_solid(mp.diameter)
-                    with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as tmp:
-                        export_stl(solid, tmp.name)
-                        _stl_cache[cache_key] = Path(tmp.name).read_bytes()
-                except Exception:
-                    pass
-
-        def _axis_to_quat(axis):
-            """Convert a unit axis vector to a quaternion rotating Z-up to that axis."""
-            ax, ay, az = axis
-            length = math.sqrt(ax * ax + ay * ay + az * az)
-            if length < 1e-9:
-                return [1.0, 0.0, 0.0, 0.0]
-            ax, ay, az = ax / length, ay / length, az / length
-            # Rotation from (0,0,1) to (ax,ay,az)
-            dot = az  # dot product with Z
-            if dot > 0.9999:
-                return [1.0, 0.0, 0.0, 0.0]  # identity
-            if dot < -0.9999:
-                return [0.0, 1.0, 0.0, 0.0]  # 180° around X
-            # cross product of Z with target
-            cx, cy, cz = -ay, ax, 0.0
-            s = math.sqrt((1.0 + dot) * 2.0)
-            return [s / 2.0, cx / s, cy / s, cz / s]  # w, x, y, z
+                stl_bytes = _solid_to_stl_bytes(screw_solid(mp.diameter))
+                with _stl_cache_lock:
+                    _stl_cache[cache_key] = stl_bytes
+            except Exception:
+                pass
 
         fasteners = []
         for mp in comp.mounting_points:
             d_key = f"{mp.diameter:.4f}"
-            stl_url = f"/api/components/_screw_{d_key}/stl/body"
             fasteners.append(
                 {
                     "label": mp.label,
                     "pos": list(mp.pos),
                     "quat": _axis_to_quat(mp.axis),
                     "diameter_mm": round(mp.diameter * 1000, 2),
-                    "stl_url": stl_url,
+                    "stl_url": f"/api/components/_screw_{d_key}/stl/body",
                 }
             )
 
-        payload = json.dumps({"fasteners": fasteners}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        self._send_json(json.dumps({"fasteners": fasteners}).encode())
 
     def log_message(self, format, *args):
         # Quieter logging — skip successful static file requests
