@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import http.server
+import json
 import logging
 import os
 import re
@@ -500,8 +501,9 @@ def _component_to_json(comp, category: str) -> dict:
 _stl_cache: dict[tuple[str, str], bytes] = {}
 _stl_cache_lock = threading.Lock()
 
-# Cached catalog JSON (built once, served on every /api/components request)
+# Cached JSON responses (built once, served on every request)
 _catalog_json: bytes | None = None
+_bots_json: bytes | None = None
 
 
 def _solid_to_stl_bytes(solid) -> bytes:
@@ -566,25 +568,10 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
 
 
 def _axis_to_quat(axis: tuple) -> list[float]:
-    """Convert an axis vector to a quaternion rotating Z-up to that axis.
+    """Quaternion rotating Z-up to the given axis. Returns [w, x, y, z]."""
+    from botcad.geometry import rotation_between
 
-    Returns [w, x, y, z].
-    """
-    import math
-
-    ax, ay, az = axis
-    length = math.sqrt(ax * ax + ay * ay + az * az)
-    if length < 1e-9:
-        return [1.0, 0.0, 0.0, 0.0]
-    ax, ay, az = ax / length, ay / length, az / length
-    dot = az  # dot product with Z
-    if dot > 0.9999:
-        return [1.0, 0.0, 0.0, 0.0]
-    if dot < -0.9999:
-        return [0.0, 1.0, 0.0, 0.0]
-    cx, cy, cz = -ay, ax, 0.0
-    s = math.sqrt((1.0 + dot) * 2.0)
-    return [s / 2.0, cx / s, cy / s, cz / s]
+    return list(rotation_between((0.0, 0.0, 1.0), axis))
 
 
 class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
@@ -641,16 +628,15 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def _handle_bots_list(self):
-        import json
-
-        bots = [{"name": b["name"], "category": "bot"} for b in _discover_bots()]
-        self._send_json(json.dumps(bots).encode())
+        global _bots_json
+        if _bots_json is None:
+            bots = [{"name": b["name"], "category": "bot"} for b in _discover_bots()]
+            _bots_json = json.dumps(bots).encode()
+        self._send_json(_bots_json)
 
     def _handle_component_catalog(self):
         global _catalog_json
         if _catalog_json is None:
-            import json
-
             catalog = [
                 _component_to_json(comp, category)
                 for _factory, comp, category in self.component_registry.values()
@@ -689,7 +675,6 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_component_fasteners(self, name: str):
         """Return JSON with screw positions + STL URLs for each mounting point."""
-        import json
 
         if name not in self.component_registry:
             self.send_error(404, f"Unknown component: {name}")

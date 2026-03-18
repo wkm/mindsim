@@ -6,6 +6,7 @@
  */
 
 let items = null;  // [{name, category, url}]
+let filtered = []; // current filtered view
 let activeIdx = 0;
 
 const overlay = document.getElementById('quick-switcher-overlay');
@@ -32,25 +33,20 @@ async function ensureItems() {
 
 function fuzzyMatch(query, item) {
   const q = query.toLowerCase();
-  const name = item.name.toLowerCase();
-  const cat = item.category.toLowerCase();
-  // Match if query appears in name or category
-  return name.includes(q) || cat.includes(q);
+  return item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
 }
 
-function render(query) {
-  const filtered = query
-    ? items.filter(item => fuzzyMatch(query, item))
-    : items;
+function refilter(query) {
+  filtered = query ? items.filter(item => fuzzyMatch(query, item)) : [...items];
+  activeIdx = Math.max(0, Math.min(activeIdx, filtered.length - 1));
+  if (!filtered.length) activeIdx = -1;
+}
 
+function render() {
   if (!filtered.length) {
     results.innerHTML = '<div class="qs-empty">No results</div>';
-    activeIdx = -1;
     return;
   }
-
-  activeIdx = Math.min(activeIdx, filtered.length - 1);
-  if (activeIdx < 0) activeIdx = 0;
 
   results.innerHTML = filtered.map((item, i) => `
     <div class="qs-item${i === activeIdx ? ' qs-active' : ''}" data-url="${item.url}">
@@ -59,26 +55,19 @@ function render(query) {
     </div>
   `).join('');
 
-  // Click handler
-  results.querySelectorAll('.qs-item').forEach(el => {
-    el.addEventListener('click', () => navigate(el.dataset.url));
-  });
-
-  // Scroll active into view
   const active = results.querySelector('.qs-active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
 function navigate(url) {
-  window.location.search = url;
+  window.location.href = url;
 }
 
 function open() {
   overlay.style.display = 'flex';
   input.value = '';
   activeIdx = 0;
-  ensureItems().then(() => render(''));
-  // Focus after display so it works
+  ensureItems().then(() => { refilter(''); render(); });
   requestAnimationFrame(() => input.focus());
 }
 
@@ -89,23 +78,19 @@ function close() {
 // Input filtering
 input.addEventListener('input', () => {
   activeIdx = 0;
-  if (items) render(input.value);
+  if (items) { refilter(input.value); render(); }
 });
 
 // Keyboard navigation
 input.addEventListener('keydown', (e) => {
-  const filtered = items
-    ? (input.value ? items.filter(item => fuzzyMatch(input.value, item)) : items)
-    : [];
-
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     activeIdx = Math.min(activeIdx + 1, filtered.length - 1);
-    render(input.value);
+    render();
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     activeIdx = Math.max(activeIdx - 1, 0);
-    render(input.value);
+    render();
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (activeIdx >= 0 && activeIdx < filtered.length) {
@@ -117,10 +102,19 @@ input.addEventListener('keydown', (e) => {
   }
 });
 
+// Delegated click handler on results container
+results.addEventListener('click', (e) => {
+  const item = e.target.closest('.qs-item');
+  if (item) navigate(item.dataset.url);
+});
+
 // Click outside to close
 overlay.addEventListener('click', (e) => {
   if (e.target === overlay) close();
 });
+
+// Bot/component name in navbar opens switcher
+document.getElementById('bot-name').addEventListener('click', () => open());
 
 // Global Ctrl+K / Cmd+K
 document.addEventListener('keydown', (e) => {

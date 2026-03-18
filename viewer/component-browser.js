@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { clearGroup, orientToAxis } from './utils.js';
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -245,7 +246,7 @@ class ComponentBrowser {
   _createMarkers(comp) {
     // Remove old markers
     if (this._markerGroup) {
-      this._clearGroup(this._markerGroup);
+      clearGroup(this._markerGroup);
       this.scene.remove(this._markerGroup);
     }
     this._markerGroup = new THREE.Group();
@@ -273,10 +274,7 @@ class ComponentBrowser {
       mesh.position.set(mp.pos[0], mp.pos[1], mp.pos[2]);
 
       // Orient cylinder axis to mount axis
-      const axis = new THREE.Vector3(mp.axis[0], mp.axis[1], mp.axis[2]).normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-      const quat = new THREE.Quaternion().setFromUnitVectors(up, axis);
-      mesh.quaternion.copy(quat);
+      orientToAxis(mesh, new THREE.Vector3(mp.axis[0], mp.axis[1], mp.axis[2]));
 
       mesh.userData.defaultMat = mesh.material;
       mesh.userData.highlightMat = highlightMat;
@@ -348,7 +346,7 @@ class ComponentBrowser {
 
     // Clear all layers
     for (const layer of LAYERS) {
-      this._clearGroup(this.layerGroups[layer.id]);
+      clearGroup(this.layerGroups[layer.id]);
       this.layerGroups[layer.id].visible = false;
     }
 
@@ -471,15 +469,6 @@ class ComponentBrowser {
       }));
       lines.raycast = () => {};
       group.add(lines);
-    }
-  }
-
-  _clearGroup(group) {
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
     }
   }
 

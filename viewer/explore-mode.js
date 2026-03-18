@@ -250,6 +250,7 @@ export class ExploreMode {
     }
     html += this._propRow('Mass', `${(mount.mass * 1000).toFixed(1)} g`);
     html += '</div>';
+    html += `<a href="?component=${encodeURIComponent(mount.component_name)}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">View in Component Browser</a>`;
 
     // Type-specific specs
     if (mount.component_type === 'camera') {

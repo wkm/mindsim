@@ -46,7 +46,12 @@
       z-index: 100; backdrop-filter: blur(8px);
     }
     #top-bar h1 { font-size: 14px; font-weight: 600; margin-right: 24px; color: var(--bp-dark-gray1); }
-    #top-bar .bot-name { font-size: 13px; color: var(--bp-blue1); margin-right: auto; }
+    #top-bar .bot-name {
+      font-size: 13px; color: var(--bp-blue1); margin-right: auto;
+      cursor: pointer; padding: 4px 8px; border-radius: 4px;
+      transition: background 0.1s;
+    }
+    #top-bar .bot-name:hover { background: rgba(19,124,189,0.1); }
 
     /* Mode tabs */
     .mode-tabs { display: flex; gap: 2px; }
