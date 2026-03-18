@@ -507,14 +507,6 @@ class Bot:
 
         emit_renders(self, output_dir_path)
 
-        from botcad.emit.component_renders import emit_component_renders
-
-        emit_component_renders(self, output_dir_path)
-
-        from botcad.emit.assembly_renders import emit_assembly_renders
-
-        emit_assembly_renders(self, output_dir_path)
-
         from botcad.emit.drawings import emit_drawings
 
         emit_drawings(self, output_dir_path)

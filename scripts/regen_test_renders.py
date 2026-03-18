@@ -16,8 +16,8 @@ Outputs:
     botcad/components/test_*.png        — component & bracket 3D tear sheets
     botcad/components/drawing_*.svg     — component & bracket 2D section drawings
     botcad/components/test_rom_*.png    — subassembly ROM validation filmstrips
-    bots/*/test_*.png                   — per-bot validation renders
-    bots/*/test_*.pdf                   — per-bot assembly instruction PDFs
+    bots/*/test_overview.png            — per-bot 4-view overview
+    bots/*/test_sweep.png               — per-bot joint ROM filmstrip
     bots/*/drawings/*.svg               — per-bot joint section drawings
     bots/*/*.step                       — per-bot STEP assemblies
 """
