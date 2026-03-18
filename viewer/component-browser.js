@@ -20,16 +20,22 @@ const SIDE_PANEL_WIDTH = 320;
 // ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
-const LAYERS = [
-  { id: 'body',             label: 'Body',             servoOnly: false, colorHex: null,     opts: {} },
-  { id: 'servo',            label: 'Servo',            servoOnly: true,  colorHex: 0x182026, opts: {} },
-  { id: 'bracket',          label: 'Bracket',          servoOnly: true,  colorHex: 0xCED9E0, opts: {} },
-  { id: 'cradle',           label: 'Cradle',           servoOnly: true,  colorHex: 0xCED9E0, opts: {} },
-  { id: 'coupler',          label: 'Coupler',          servoOnly: true,  colorHex: 0xF55656, opts: {} },
-  { id: 'bracket_envelope', label: 'Bracket Envelope', servoOnly: true,  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
-  { id: 'cradle_envelope',  label: 'Cradle Envelope',  servoOnly: true,  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
-  { id: 'fasteners',        label: 'Fasteners',        servoOnly: false, colorHex: 0xD4A843, opts: {} },
-];
+// Layer display metadata — keyed by layer ID returned from the backend.
+// The backend's `layers` array on each component determines which layers
+// are available; this table just supplies labels, colors, and material opts.
+const LAYER_META = {
+  body:             { label: 'Body',             colorHex: null,     opts: {} },
+  servo:            { label: 'Servo',            colorHex: 0x182026, opts: {} },
+  horn:             { label: 'Horn',             colorHex: 0xE8E8E8, opts: {} },
+  bracket:          { label: 'Bracket',          colorHex: 0xCED9E0, opts: {} },
+  cradle:           { label: 'Cradle',           colorHex: 0xCED9E0, opts: {} },
+  coupler:          { label: 'Coupler',          colorHex: 0xF55656, opts: {} },
+  bracket_envelope: { label: 'Bracket Envelope', colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
+  cradle_envelope:  { label: 'Cradle Envelope',  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
+  fasteners:        { label: 'Fasteners',        colorHex: 0xD4A843, opts: {} },
+};
+// All known layer IDs (superset) — used to create THREE.Groups up-front.
+const ALL_LAYER_IDS = Object.keys(LAYER_META);
 
 // ---------------------------------------------------------------------------
 // ComponentBrowser class
@@ -89,11 +95,11 @@ class ComponentBrowser {
     this.scene.add(new THREE.GridHelper(0.2, 40, 0xBFCCD6, 0xCED9E0));
 
     // Create a group per layer
-    for (const layer of LAYERS) {
+    for (const id of ALL_LAYER_IDS) {
       const g = new THREE.Group();
-      g.name = layer.id;
+      g.name = id;
       this.scene.add(g);
-      this.layerGroups[layer.id] = g;
+      this.layerGroups[id] = g;
     }
 
     window.addEventListener('resize', () => {
@@ -154,18 +160,19 @@ class ComponentBrowser {
     let html = '<h3>Layers</h3>';
     html += '<div class="layer-controls">';
 
-    for (const layer of LAYERS) {
-      if (layer.servoOnly && !comp.is_servo) continue;
+    for (const id of (comp.layers || [])) {
+      const meta = LAYER_META[id];
+      if (!meta) continue;
 
-      const checked = this.layerGroups[layer.id].visible ? 'checked' : '';
-      const colorSwatch = layer.colorHex !== null
-        ? `<span class="layer-swatch" style="background:#${layer.colorHex.toString(16).padStart(6, '0')}"></span>`
+      const checked = this.layerGroups[id].visible ? 'checked' : '';
+      const colorSwatch = meta.colorHex !== null
+        ? `<span class="layer-swatch" style="background:#${meta.colorHex.toString(16).padStart(6, '0')}"></span>`
         : `<span class="layer-swatch" style="background:rgb(${Math.round(comp.color[0]*255)},${Math.round(comp.color[1]*255)},${Math.round(comp.color[2]*255)})"></span>`;
 
       html += `<label class="layer-toggle">
-        <input type="checkbox" data-layer="${layer.id}" ${checked}>
+        <input type="checkbox" data-layer="${id}" ${checked}>
         ${colorSwatch}
-        <span class="layer-label">${layer.label}</span>
+        <span class="layer-label">${meta.label}</span>
       </label>`;
     }
 
@@ -345,19 +352,20 @@ class ComponentBrowser {
     document.getElementById('mode-tabs').style.display = 'none';
 
     // Clear all layers
-    for (const layer of LAYERS) {
-      clearGroup(this.layerGroups[layer.id]);
-      this.layerGroups[layer.id].visible = false;
+    for (const id of ALL_LAYER_IDS) {
+      clearGroup(this.layerGroups[id]);
+      this.layerGroups[id].visible = false;
     }
 
-    // Body enabled by default (set visible after load below)
+    // First layer in the backend list is the default
+    const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
 
     // Update side panel (includes layer checkboxes)
     this._updateSidePanel(comp);
 
-    // Load body
-    await this._loadLayer('body');
-    this.layerGroups['body'].visible = true;
+    // Load default layer
+    await this._loadLayer(defaultLayer);
+    this.layerGroups[defaultLayer].visible = true;
     this._fitCameraToVisibleMeshes();
   }
 
@@ -371,12 +379,12 @@ class ComponentBrowser {
       return;
     }
 
-    const layerDef = LAYERS.find(l => l.id === layerId);
-    const color = layerDef.colorHex !== null
-      ? layerDef.colorHex
+    const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
+    const color = meta.colorHex !== null
+      ? meta.colorHex
       : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
 
-    await this._addSTLMesh(compName, layerId, color, layerDef.opts, group);
+    await this._addSTLMesh(compName, layerId, color, meta.opts, group);
   }
 
   async _loadFasteners(compName, group) {
@@ -476,8 +484,8 @@ class ComponentBrowser {
     const box = new THREE.Box3();
     let hasGeometry = false;
 
-    for (const layer of LAYERS) {
-      const group = this.layerGroups[layer.id];
+    for (const id of ALL_LAYER_IDS) {
+      const group = this.layerGroups[id];
       if (!group.visible) continue;
       group.traverse(child => {
         if (child.isMesh) {

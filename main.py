@@ -454,6 +454,30 @@ def _build_component_registry() -> dict:
     return registry
 
 
+def _component_layers(comp) -> list[str]:
+    """Return the list of available STL layer IDs for a component."""
+    from botcad.component import ServoSpec
+
+    if isinstance(comp, ServoSpec):
+        from botcad.bracket import horn_disc_params
+
+        layers = [
+            "servo",
+            "bracket",
+            "cradle",
+            "coupler",
+            "bracket_envelope",
+            "cradle_envelope",
+        ]
+        if horn_disc_params(comp) is not None:
+            layers.insert(1, "horn")
+    else:
+        layers = ["body"]
+    if comp.mounting_points:
+        layers.append("fasteners")
+    return layers
+
+
 def _component_to_json(comp, category: str) -> dict:
     """Serialize a Component instance to JSON-safe dict."""
     from botcad.component import ServoSpec
@@ -465,6 +489,7 @@ def _component_to_json(comp, category: str) -> dict:
         "mass_g": round(comp.mass * 1000, 1),
         "is_servo": isinstance(comp, ServoSpec),
         "color": list(comp.color),
+        "layers": _component_layers(comp),
     }
     if isinstance(comp, ServoSpec):
         import math
@@ -549,6 +574,21 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
             solid = bracket_solid(comp, spec)
         elif part == "servo":
             solid = servo_solid(comp)
+        elif part == "horn":
+            from botcad.bracket import horn_disc_params
+            from botcad.emit.cad import _horn_solid
+
+            params = horn_disc_params(comp)
+            if params is not None:
+                from build123d import Location
+
+                horn = _horn_solid(comp)
+                if horn is not None:
+                    solid = horn.locate(
+                        Location(
+                            (params.center_xy[0], params.center_xy[1], params.center_z)
+                        )
+                    )
         elif part == "cradle":
             solid = cradle_solid(comp, spec)
         elif part == "coupler":
