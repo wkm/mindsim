@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint
+.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint test-viewer viewer-cache
 
 tui:
 	uv run mjpython main.py
@@ -52,6 +52,15 @@ validate: lint test renders
 lint:
 	uv run ruff check --fix .
 	uv run ruff format .
+
+test-viewer:
+	npx playwright test --config viewer/tests/playwright.config.mjs
+
+viewer-cache:
+	@mkdir -p viewer/.cdn_cache
+	curl -sL "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" -o viewer/.cdn_cache/three.module.js
+	curl -sL "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js" -o viewer/.cdn_cache/OrbitControls.js
+	curl -sL "https://cdn.jsdelivr.net/npm/mujoco-js@0.0.7/dist/mujoco_wasm.js" -o viewer/.cdn_cache/mujoco_wasm.js
 
 setup:
 	git config core.hooksPath .githooks
