@@ -11,10 +11,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { clearGroup } from './utils.js';
 
 const SIDE_PANEL_WIDTH = 320;
 
-// Shared edge material — matches bot-viewer.js and component-browser.js
+// Edge rendering — matches bot-viewer.js and component-browser.js
 const EDGE_MATERIAL = new THREE.LineBasicMaterial({
   color: 0x000000, transparent: true, opacity: 0.6,
 });
@@ -352,7 +353,14 @@ class CadStepsViewer {
     const geometry = await this._loadStepSTL(bodyIdx);
     if (!geometry) return;
 
-    this._clearGroup(this.meshGroup);
+    // Remove old meshes (don't dispose cached STL geometries — just materials + edges)
+    while (this.meshGroup.children.length > 0) {
+      const child = this.meshGroup.children[0];
+      this.meshGroup.remove(child);
+      // Dispose edge geometries (generated per-step, not cached) and materials
+      if (child.isLineSegments && child.geometry) child.geometry.dispose();
+      if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
+    }
 
     // Body solid — neutral color so the tool overlay stands out
     const material = new THREE.MeshPhysicalMaterial({
@@ -372,7 +380,7 @@ class CadStepsViewer {
     // Tool solid overlay
     await this._updateToolMesh();
 
-    // Prefetch adjacent steps
+    // Prefetch adjacent steps (body + tool STLs)
     this._prefetch(idx - 1);
     this._prefetch(idx + 1);
 
@@ -384,18 +392,19 @@ class CadStepsViewer {
   }
 
   async _updateToolMesh() {
-    this._clearGroup(this.toolGroup);
+    clearGroup(this.toolGroup);
 
     const step = this.steps[this.currentStep];
     if (!this.showTool || !step || !step.has_tool) return;
 
-    const geometry = await this._loadToolSTL(this.currentStep);
+    const geometry = await this._loadSTL(this.toolStlCache, this.currentStep, 'tool-stl');
     if (!geometry) return;
 
     // Color by op type: red for cut, green for union
     const isCut = step.op === 'cut';
+    const toolColor = isCut ? 0xDB3737 : 0x0F9960;
     const material = new THREE.MeshPhysicalMaterial({
-      color: isCut ? 0xDB3737 : 0x0F9960,
+      color: toolColor,
       transparent: true,
       opacity: 0.35,
       roughness: 0.8,
@@ -405,10 +414,9 @@ class CadStepsViewer {
     });
     this.toolGroup.add(new THREE.Mesh(geometry, material));
 
-    // Tool edges — same style but matching tool color, lower opacity
-    const edgeColor = isCut ? 0xDB3737 : 0x0F9960;
+    // Tool edges — matching tool color, lower opacity
     const toolEdgeMat = new THREE.LineBasicMaterial({
-      color: edgeColor, transparent: true, opacity: 0.4,
+      color: toolColor, transparent: true, opacity: 0.4,
     });
     const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
     const lines = new THREE.LineSegments(edges, toolEdgeMat);
@@ -416,53 +424,28 @@ class CadStepsViewer {
     this.toolGroup.add(lines);
   }
 
-  /** Dispose all children of a THREE.Group. */
-  _clearGroup(group) {
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
-    }
-  }
-
-  async _loadStepSTL(idx) {
+  /** Load an STL into a cache by step index and URL suffix. */
+  async _loadSTL(cache, idx, suffix) {
     if (idx < 0 || idx >= this.steps.length) return null;
-    if (this.stlCache[idx]) return this.stlCache[idx];
+    if (cache[idx]) return cache[idx];
 
-    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/stl`;
+    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/${suffix}`;
     return new Promise((resolve) => {
       this.stlLoader.load(url, (geometry) => {
         geometry.computeVertexNormals();
-        this.stlCache[idx] = geometry;
+        cache[idx] = geometry;
         resolve(geometry);
-      }, undefined, (err) => {
-        console.error(`Failed to load step ${idx} STL:`, err);
-        resolve(null);
-      });
+      }, undefined, () => resolve(null));
     });
   }
 
-  async _loadToolSTL(idx) {
-    if (idx < 0 || idx >= this.steps.length) return null;
-    if (this.toolStlCache[idx]) return this.toolStlCache[idx];
-
-    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/tool-stl`;
-    return new Promise((resolve) => {
-      this.stlLoader.load(url, (geometry) => {
-        geometry.computeVertexNormals();
-        this.toolStlCache[idx] = geometry;
-        resolve(geometry);
-      }, undefined, () => {
-        // No tool for this step — not an error
-        resolve(null);
-      });
-    });
-  }
+  _loadStepSTL(idx) { return this._loadSTL(this.stlCache, idx, 'stl'); }
 
   _prefetch(idx) {
-    if (idx >= 0 && idx < this.steps.length && !this.stlCache[idx]) {
-      this._loadStepSTL(idx); // fire and forget
+    if (idx < 0 || idx >= this.steps.length) return;
+    if (!this.stlCache[idx]) this._loadStepSTL(idx);
+    if (this.steps[idx]?.has_tool && !this.toolStlCache[idx]) {
+      this._loadSTL(this.toolStlCache, idx, 'tool-stl');
     }
   }
 

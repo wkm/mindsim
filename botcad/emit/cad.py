@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -288,7 +289,6 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
-    import time
 
     body_solids: dict[str, object] = {}
     n = len(bot.all_bodies)
@@ -773,31 +773,31 @@ def _subprocess_bool_cut(shape, tool, timeout_sec: int):
     with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as rf:
         result_path = rf.name
 
-    ctx = mp.get_context("spawn")
-    p = ctx.Process(target=_bool_cut_worker, args=(shape_path, tool_path, result_path))
-    p.start()
-    p.join(timeout=timeout_sec)
-
-    if p.is_alive():
-        p.kill()
-        p.join()
-        # Clean up temp files
-        for f in (shape_path, tool_path, result_path):
-            Path(f).unlink(missing_ok=True)
-        raise TimeoutError(
-            f"Boolean cut timed out after {timeout_sec}s — "
-            f"likely near-coincident geometry"
+    try:
+        ctx = mp.get_context("spawn")
+        p = ctx.Process(
+            target=_bool_cut_worker, args=(shape_path, tool_path, result_path)
         )
+        p.start()
+        p.join(timeout=timeout_sec)
 
-    if p.exitcode != 0:
+        if p.is_alive():
+            p.kill()
+            p.join()
+            raise TimeoutError(
+                f"Boolean cut timed out after {timeout_sec}s — "
+                f"likely near-coincident geometry"
+            )
+
+        if p.exitcode != 0:
+            raise RuntimeError(
+                f"Boolean cut subprocess failed (exit code {p.exitcode})"
+            )
+
+        return import_brep(result_path)
+    finally:
         for f in (shape_path, tool_path, result_path):
             Path(f).unlink(missing_ok=True)
-        raise RuntimeError(f"Boolean cut subprocess failed (exit code {p.exitcode})")
-
-    result = import_brep(result_path)
-    for f in (shape_path, tool_path, result_path):
-        Path(f).unlink(missing_ok=True)
-    return result
 
 
 def _cut_camera_features(shell, mount, body_dims, solved_dims):
@@ -873,7 +873,6 @@ def _build_body_solid(
 
     wire_segments must be a tuple (not list) for lru_cache hashability.
     """
-    import time
 
     from build123d import Align, Box, Cylinder, Location, Sphere
 

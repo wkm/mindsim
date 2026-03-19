@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -516,7 +517,6 @@ _bot_cache_lock = threading.Lock()
 
 def _load_bot(bot_name: str):
     """Lazily load and solve a bot, returning (bot, cad_model). Thread-safe."""
-    import time
 
     with _bot_cache_lock:
         if bot_name in _bot_cache:
@@ -553,7 +553,6 @@ def _load_bot(bot_name: str):
 
 def _get_cad_steps(bot_name: str, body_name: str) -> list:
     """Get cached CAD steps for a body, computing on first access."""
-    import time
 
     cache_key = (bot_name, body_name)
     with _cad_steps_lock:
@@ -665,6 +664,15 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=self.project_root, **kwargs)
+
+    def end_headers(self):
+        # Disable all caching — localhost dev server, always serve fresh
+        self.send_header(
+            "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
+        )
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
 
     def _send_json(self, payload: bytes):
         self.send_response(200)
@@ -846,44 +854,20 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         self._send_json(payload)
 
     def _handle_cad_step_stl(self, bot_name: str, body_name: str, step_idx: int):
-        """Return STL bytes for a specific CAD construction step."""
-        cache_key = (f"cadstep_{bot_name}_{body_name}", str(step_idx))
-        with _stl_cache_lock:
-            cached = _stl_cache.get(cache_key)
-        if cached:
-            self._send_binary(cached, f"{body_name}_step{step_idx}.stl")
-            return
-
-        try:
-            steps = _get_cad_steps(bot_name, body_name)
-        except (FileNotFoundError, KeyError) as e:
-            self.send_error(404, str(e))
-            return
-        except Exception as e:
-            self.send_error(500, f"CAD step generation failed: {e}")
-            return
-
-        if step_idx < 0 or step_idx >= len(steps):
-            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
-            return
-
-        try:
-            stl_bytes = _solid_to_stl_bytes(steps[step_idx].solid)
-        except Exception as e:
-            self.send_error(500, f"STL export failed for step {step_idx}: {e}")
-            return
-
-        with _stl_cache_lock:
-            _stl_cache[cache_key] = stl_bytes
-        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}.stl")
+        self._serve_cad_step_solid(bot_name, body_name, step_idx, attr="solid")
 
     def _handle_cad_step_tool_stl(self, bot_name: str, body_name: str, step_idx: int):
-        """Return STL bytes for the tool solid used in a CAD step."""
-        cache_key = (f"cadstep_tool_{bot_name}_{body_name}", str(step_idx))
+        self._serve_cad_step_solid(bot_name, body_name, step_idx, attr="tool")
+
+    def _serve_cad_step_solid(
+        self, bot_name: str, body_name: str, step_idx: int, attr: str
+    ):
+        """Serve STL bytes for a CadStep's solid or tool attribute."""
+        cache_key = (f"cadstep_{attr}_{bot_name}_{body_name}", str(step_idx))
         with _stl_cache_lock:
             cached = _stl_cache.get(cache_key)
         if cached:
-            self._send_binary(cached, f"{body_name}_step{step_idx}_tool.stl")
+            self._send_binary(cached, f"{body_name}_step{step_idx}_{attr}.stl")
             return
 
         try:
@@ -899,20 +883,20 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
             return
 
-        tool = steps[step_idx].tool
-        if tool is None:
-            self.send_error(404, f"Step {step_idx} has no tool solid")
+        solid = getattr(steps[step_idx], attr, None)
+        if solid is None:
+            self.send_error(404, f"Step {step_idx} has no {attr}")
             return
 
         try:
-            stl_bytes = _solid_to_stl_bytes(tool)
+            stl_bytes = _solid_to_stl_bytes(solid)
         except Exception as e:
-            self.send_error(500, f"Tool STL export failed for step {step_idx}: {e}")
+            self.send_error(500, f"STL export failed for step {step_idx} {attr}: {e}")
             return
 
         with _stl_cache_lock:
             _stl_cache[cache_key] = stl_bytes
-        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}_tool.stl")
+        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}_{attr}.stl")
 
     def log_message(self, format, *args):
         # Quieter logging — skip successful static file requests

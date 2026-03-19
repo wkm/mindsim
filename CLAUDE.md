@@ -17,6 +17,7 @@ Design robots from real components, train them in simulation, build the physical
   4. **Cut** — apply the pre-designed clearance solid to the parent body, using the **same transform** as Place.
 
   The critical invariant: Place and Cut use identical transforms. No axis-sign-dependent logic, no extra shifts at cut time. If a clearance shape needs asymmetry (e.g. outboard-only tolerance), that asymmetry is designed into the cut solid in step 1, in local frame, where it can be seen and validated.
+- **`.moved()`, never `.locate()`.** build123d's `.locate()` mutates in place and returns `self`. On `@lru_cache`d solids (bracket, envelope, coupler, servo), this silently corrupts the cached object for all future callers. Always use `.moved()` which creates an independent copy. The CAD steps debug viewer (`?cadsteps=bot:body`) makes this kind of bug visible.
 - **Commit logs are a journal.** Explain _why_, not just _what_.
 
 ## Quick Start
@@ -24,6 +25,7 @@ Design robots from real components, train them in simulation, build the physical
 ```bash
 uv run mjpython main.py                    # Interactive TUI
 uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
+uv run mjpython main.py web [--bot NAME]   # Web viewer (3D, components, CAD steps)
 uv run mjpython main.py train [--bot NAME]
 uv run mjpython main.py scene              # Scene gen preview
 ```
