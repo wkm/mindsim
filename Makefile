@@ -54,7 +54,7 @@ lint:
 	uv run ruff format .
 
 test-viewer:
-	npx playwright test --config viewer/tests/playwright.config.mjs
+	pnpm exec playwright test --config viewer/tests/playwright.config.mjs
 
 viewer-cache:
 	@mkdir -p viewer/.cdn_cache
@@ -64,7 +64,9 @@ viewer-cache:
 
 setup:
 	git config core.hooksPath .githooks
-	@echo "Git hooks configured (pre-commit: ruff lint + format)"
+	pnpm install
+	pnpm exec playwright install chromium
+	@echo "Setup complete (git hooks, node deps, playwright browser)"
 
 # --- Worktree management ---
 # TYPE=infra -> infra/<name> branch (no date prefix)
