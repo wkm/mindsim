@@ -30,7 +30,7 @@
   <worldbody>
     <body name="base" pos="0 0 0.0450">
       <freejoint name="root"/>
-      <inertial pos="0.003406 0.000294 0.004371" mass="0.234449" fullinertia="1.384121e-04 4.741625e-04 4.988516e-04 6.603094e-07 8.030925e-06 4.039489e-07"/>
+      <inertial pos="0.000023 0.000237 0.004770" mass="0.251378" fullinertia="1.480921e-04 5.151194e-04 5.394230e-04 6.153748e-09 4.345322e-08 5.254776e-07"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
       <camera name="camera_cam" fovy="72.0" pos="0.000000 0.028000 0.000000" euler="0 3.141592653589793 0"/>
       <site name="imu" pos="0 0 0" size="0.005"/>

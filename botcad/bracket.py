@@ -471,7 +471,6 @@ def _scs0009_solid(servo: ServoSpec):
 
     # Body center at Z=0, spans ±body_z/2
     z_top = body_z / 2  # +11.25mm
-    _z_bot = -body_z / 2  # -11.25mm  # noqa: F841
 
     # ── 1. Main body ──────────────────────────────────────────────
     body = Box(

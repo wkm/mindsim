@@ -195,6 +195,10 @@ export class ExploreMode {
       }
     }
 
+    // CAD steps link
+    const botName = this.manifest.bot_name;
+    html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">CAD Steps</a>`;
+
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
   }

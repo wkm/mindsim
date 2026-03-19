@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -68,6 +69,16 @@ class AssemblyPart:
     module: str | None  # fabrication module name, or None
     kind: str  # "body" | "horn" | "servo"
     label: str  # human-readable identifier
+
+
+@dataclass
+class CadStep:
+    """One intermediate snapshot during body solid construction."""
+
+    label: str  # human-readable description, e.g. "Cut bearing pocket"
+    solid: object  # build123d Solid at this stage
+    op: str  # "create" | "cut" | "union"
+    tool: object | None = None  # cutting/union tool solid (placed in body frame)
 
 
 def _update_mass_from_solid(body: Body, solid) -> None:
@@ -278,14 +289,22 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
+
     body_solids: dict[str, object] = {}
-    for body in bot.all_bodies:
+    n = len(bot.all_bodies)
+    for i, body in enumerate(bot.all_bodies):
+        print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
+        t0 = time.monotonic()
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
-        solid = _make_body_solid(body, pj, wire_segs or None)
+        steps = _build_body_solid(body, pj, wire_segs or None)
+        solid = steps[-1].solid if steps else None
         if solid is not None:
             body_solids[body.name] = solid
             _update_mass_from_solid(body, solid)
+        dt = time.monotonic() - t0
+        print(f" {dt:.1f}s")
+        log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
     return CadModel(
         body_solids=body_solids,
@@ -659,15 +678,126 @@ def _bboxes_overlap(a, b) -> bool:
     )
 
 
-def _bool_cut(shape, tool):
-    """Boolean cut that works on Solid, Compound, or ShapeList."""
-    from build123d import Solid
+def _bool_cut(shape, tool, timeout_sec: int = 30):
+    """Boolean cut with fuzzy tolerance, OBB, and subprocess timeout.
 
-    if isinstance(shape, Solid):
-        return shape.cut(tool)
-    shape = _to_compound(shape)
-    result = shape.cut(tool)
-    return _to_compound(result)
+    Uses OCCT's SetFuzzyValue + SetUseOBB to handle near-coincident faces
+    that cause infinite loops. Falls back to a subprocess with a hard kill
+    timeout since OCP holds the GIL during boolean ops (signal.alarm won't
+    interrupt).
+    """
+    result = _occt_cut(shape, tool)
+    if result is not None:
+        return result
+
+    # Direct OCCT API failed — try subprocess with timeout
+    log.warning(
+        "Direct boolean cut failed, trying subprocess with %ds timeout", timeout_sec
+    )
+    return _subprocess_bool_cut(shape, tool, timeout_sec)
+
+
+def _occt_cut(shape, tool):
+    """Boolean cut via direct OCCT API with fuzzy tolerance + OBB.
+
+    Returns a build123d Shape on success, or None on failure.
+    """
+    try:
+        from build123d import Compound, Solid
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+        from OCP.TopTools import TopTools_ListOfShape
+
+        # OCCT needs TopoDS_Solid, not TopoDS_Compound.
+        # Extract the solid from build123d wrappers.
+        def _to_occ(s):
+            if hasattr(s, "solids"):
+                solids = s.solids()
+                if len(solids) == 1:
+                    return solids[0].wrapped
+            return s.wrapped
+
+        cut_op = BRepAlgoAPI_Cut()
+
+        args = TopTools_ListOfShape()
+        args.Append(_to_occ(shape))
+        cut_op.SetArguments(args)
+
+        tools = TopTools_ListOfShape()
+        tools.Append(_to_occ(tool))
+        cut_op.SetTools(tools)
+
+        cut_op.SetFuzzyValue(1e-5)
+        cut_op.SetRunParallel(True)
+        cut_op.SetUseOBB(True)
+
+        cut_op.Build()
+
+        if not cut_op.IsDone():
+            return None
+
+        result_occ = cut_op.Shape()
+        # Wrap back into build123d — try Solid first, fall back to Compound
+        try:
+            return Solid(result_occ)
+        except Exception:
+            return Compound(result_occ)
+    except Exception:
+        log.exception("OCCT direct cut failed")
+        return None
+
+
+def _bool_cut_worker(s_path: str, t_path: str, r_path: str):
+    """Subprocess target for boolean cut. Must be module-level for pickling."""
+    from build123d import export_brep, import_brep
+
+    s = import_brep(s_path)
+    t = import_brep(t_path)
+    result = s.cut(t)
+    export_brep(result, r_path)
+
+
+def _subprocess_bool_cut(shape, tool, timeout_sec: int):
+    """Boolean cut in a subprocess that can be killed on timeout."""
+    import multiprocessing as mp
+    import tempfile
+
+    from build123d import export_brep, import_brep
+
+    # Serialize shapes to BREP via temp files
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as sf:
+        export_brep(shape, sf.name)
+        shape_path = sf.name
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as tf:
+        export_brep(tool, tf.name)
+        tool_path = tf.name
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as rf:
+        result_path = rf.name
+
+    try:
+        ctx = mp.get_context("spawn")
+        p = ctx.Process(
+            target=_bool_cut_worker, args=(shape_path, tool_path, result_path)
+        )
+        p.start()
+        p.join(timeout=timeout_sec)
+
+        if p.is_alive():
+            p.kill()
+            p.join()
+            raise TimeoutError(
+                f"Boolean cut timed out after {timeout_sec}s — "
+                f"likely near-coincident geometry"
+            )
+
+        if p.exitcode != 0:
+            raise RuntimeError(
+                f"Boolean cut subprocess failed (exit code {p.exitcode})"
+            )
+
+        return import_brep(result_path)
+    finally:
+        for f in (shape_path, tool_path, result_path):
+            Path(f).unlink(missing_ok=True)
 
 
 def _cut_camera_features(shell, mount, body_dims, solved_dims):
@@ -727,17 +857,15 @@ def _cut_camera_features(shell, mount, body_dims, solved_dims):
     return shell
 
 
-@lru_cache(maxsize=128)
-def _make_body_solid(
+def _build_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
-):
-    """Create a build123d solid for a body.
+) -> list[CadStep]:
+    """Single implementation of body solid construction.
 
-    Returns a Solid with:
-    - Outer solid shape (no hollowing — fabrication shell pass comes later)
-    - Servo brackets unioned in at each joint location
-    - Component pockets cut out
-    - Wire channels subtracted along routed cable paths
+    Always builds the full step list. Callers that only need the final solid
+    use _make_body_solid() which discards the intermediates.
+
+    Logs each operation to stdout so hangs are diagnosable.
 
     Mesh origin conventions (matching MuJoCo emitter expectations):
     - box/sphere/cylinder: centered at origin
@@ -745,93 +873,105 @@ def _make_body_solid(
 
     wire_segments must be a tuple (not list) for lru_cache hashability.
     """
+
     from build123d import Align, Box, Cylinder, Location, Sphere
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = body.dimensions
+    steps: list[CadStep] = []
+    _step_t0 = time.monotonic()
 
+    def _record(step: CadStep) -> None:
+        """Append step and log timing."""
+        nonlocal _step_t0
+        dt = time.monotonic() - _step_t0
+        steps.append(step)
+        print(f"    [{len(steps):2d}] {step.label} ({dt:.1f}s)", flush=True)
+        _step_t0 = time.monotonic()
+
+    # --- 1. Outer shell ---
+    # NOTE: .moved() (not .locate()) throughout — .locate() mutates in place,
+    # which corrupts @lru_cache'd shapes from bracket.py.
     if body.custom_solid is not None:
         shell = _ensure_solid(body.custom_solid)
+        shape_label = "custom"
     elif body.shape is BodyShape.CYLINDER:
         r = body.radius or dims[0] / 2
         h = body.width or dims[2]
-
         if body.is_wheel_body:
-            # Wheels: centered on origin (hub at center)
             shell = _make_wheel_solid(r, h)
+            shape_label = "wheel"
         elif parent_joint is not None:
-            # Child cylinder: bottom face at origin (sits on top of horn).
-            # Offset so z=0 is the joint/horn end, z=+h is the far end.
             shell = Cylinder(r, h, align=C)
-            shell = shell.locate(Location((0, 0, h / 2)))
+            shell = shell.moved(Location((0, 0, h / 2)))
+            shape_label = "cylinder"
         else:
             shell = Cylinder(r, h, align=C)
-
+            shape_label = "cylinder"
         if parent_joint is not None:
             shell = _orient_z_to_axis(shell, parent_joint.axis, quat=body.frame_quat)
-
     elif body.shape is BodyShape.TUBE:
         r = body.outer_r or dims[0] / 2
         length = body.length or dims[2]
         shell = Cylinder(r, length, align=C)
-        shell = shell.locate(Location((0, 0, length / 2)))
-
+        shell = shell.moved(Location((0, 0, length / 2)))
+        shape_label = "tube"
     elif body.shape is BodyShape.SPHERE:
         r = body.radius or dims[0] / 2
         shell = Sphere(r)
-
+        shape_label = "sphere"
     elif body.shape is BodyShape.JAW:
         jw = body.jaw_width or dims[0]
         jt = body.jaw_thickness or dims[1]
         jl = body.jaw_length or dims[2]
-        knuckle_h = 0.008  # thicker base for horn attachment
-        # Knuckle at base (z=0 to z=knuckle_h)
+        knuckle_h = 0.008
         knuckle = Box(
             jw, jt * 2, knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
         )
-        # Jaw plate extending from knuckle to full length
         plate = Box(
             jw, jt, jl - knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
         )
-        plate = plate.locate(Location((0, 0, knuckle_h)))
+        plate = plate.moved(Location((0, 0, knuckle_h)))
         shell = knuckle + plate
-
+        shape_label = "jaw"
     else:
         shell = Box(dims[0], dims[1], dims[2], align=C)
+        shape_label = "box"
 
-    # Cut component pockets (skip for wheel bodies — the wheel IS the component)
+    _record(CadStep(f"Outer shell ({shape_label})", _ensure_solid(shell), "create"))
+
+    # --- 2. Cut component pockets ---
     if not body.is_wheel_body:
         for mount in body.mounts:
             cd = mount.placed_dimensions
             if isinstance(mount.component, BearingSpec):
-                # Bearings: cylindrical pocket with tolerance
-                tol = 0.0005  # 0.5mm total diameter clearance
+                tol = 0.0005
                 pocket_r = mount.component.od / 2 + tol / 2
-                pocket_h = mount.component.width + 0.001  # through-cut margin
+                pocket_h = mount.component.width + 0.001
                 pocket = Cylinder(pocket_r, pocket_h, align=C)
             else:
-                # Default: box pocket
-                pocket = Box(
-                    cd[0] + 0.0005,
-                    cd[1] + 0.0005,
-                    cd[2] + 0.0005,
-                    align=C,
-                )
-            pocket = pocket.locate(Location(mount.resolved_pos))
+                pocket = Box(cd[0] + 0.0005, cd[1] + 0.0005, cd[2] + 0.0005, align=C)
+            pocket = pocket.moved(Location(mount.resolved_pos))
+            tool_solid = _ensure_solid(pocket)
             shell = shell - pocket
 
-            # Camera-specific cuts: lens aperture + ribbon cable exit
             if isinstance(mount.component, CameraSpec):
                 shell = _cut_camera_features(shell, mount, body.dimensions, dims)
 
-    # Union coupler onto child body for coupler-style joints.
-    # The coupler is built in servo-local frame; place it so the shaft
-    # center lands at the child body origin (joint point).
+            comp_name = getattr(mount.component, "name", type(mount.component).__name__)
+            _record(
+                CadStep(
+                    f"Cut {comp_name} pocket",
+                    _ensure_solid(shell),
+                    "cut",
+                    tool=tool_solid,
+                )
+            )
+
+    # --- 3. Union coupler ---
     bracket_spec = BracketSpec()
     if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
-        # Quat is identical to solved_servo_quat (joint_pos only affects center).
-        # Recompute center locally for child frame (shaft at origin).
         from botcad.geometry import rotate_vec
 
         quat = parent_joint.solved_servo_quat
@@ -839,13 +979,21 @@ def _make_body_solid(
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
         coupler = coupler_solid(servo, bracket_spec)
-        coupler = coupler.locate(Location(center, euler))
+        coupler = coupler.moved(Location(center, euler))
+        tool_solid = _ensure_solid(coupler)
         shell = _as_solid(shell.fuse(coupler))
+        _record(
+            CadStep(
+                f"Union coupler ({servo.name})",
+                _ensure_solid(shell),
+                "union",
+                tool=tool_solid,
+            )
+        )
 
-    # Cut bracket footprints then union finished brackets at each joint.
-    # Order matters: subtract envelope first so shell material doesn't
-    # fill the servo pocket, then union the bracket (which has the pocket
-    # already cut).  Result: (shell - envelope) + bracket
+    # --- 4. Cut bracket envelopes, then union finished brackets ---
+    # Each is a separate step so the envelope cut and bracket union are
+    # independently visible in the debug viewer.
     for joint in body.joints:
         servo = joint.servo
         center = joint.solved_servo_center
@@ -853,34 +1001,133 @@ def _make_body_solid(
 
         if joint.bracket_style is BracketStyle.COUPLER:
             envelope = cradle_envelope(servo, bracket_spec)
-            envelope = envelope.locate(Location(center, euler))
+            envelope = envelope.moved(Location(center, euler))
             cradle = cradle_solid(servo, bracket_spec)
-            cradle = cradle.locate(Location(center, euler))
-            shell = _to_compound(_bool_cut(shell, envelope).fuse(cradle))
+            cradle = cradle.moved(Location(center, euler))
+            tool_envelope = _ensure_solid(envelope)
+            shell = _bool_cut(shell, envelope)
+            shell = _ensure_solid(shell)
+            _record(
+                CadStep(
+                    f"Cut cradle envelope ({servo.name})",
+                    shell,
+                    "cut",
+                    tool=tool_envelope,
+                )
+            )
+            tool_cradle = _ensure_solid(cradle)
+            shell = _to_compound(shell.fuse(cradle))
+            _record(
+                CadStep(
+                    f"Union cradle ({servo.name})",
+                    _ensure_solid(shell),
+                    "union",
+                    tool=tool_cradle,
+                )
+            )
         else:
             envelope = bracket_envelope(servo, bracket_spec)
-            envelope = envelope.locate(Location(center, euler))
+            envelope = envelope.moved(Location(center, euler))
             bracket = bracket_solid(servo, bracket_spec)
-            bracket = bracket.locate(Location(center, euler))
-            shell = (shell - envelope) + bracket
+            bracket = bracket.moved(Location(center, euler))
+            tool_envelope = _ensure_solid(envelope)
+            shell = shell - envelope
+            _record(
+                CadStep(
+                    f"Cut bracket envelope ({servo.name})",
+                    _ensure_solid(shell),
+                    "cut",
+                    tool=tool_envelope,
+                )
+            )
+            tool_bracket = _ensure_solid(bracket)
+            shell = shell + bracket
+            _record(
+                CadStep(
+                    f"Union bracket ({servo.name})",
+                    _ensure_solid(shell),
+                    "union",
+                    tool=tool_bracket,
+                )
+            )
 
-    # Cut clearance volumes for rotating child bodies
+    # --- 5. Cut child clearance volumes ---
     for joint in body.joints:
         if joint.child is not None:
             clearance = _child_clearance_volume(joint.child, joint)
             if clearance is not None and _bboxes_overlap(shell, clearance):
-                shell = _bool_cut(shell, clearance)
-                shell = _ensure_solid(shell)
+                tool_solid = _ensure_solid(clearance)
+                try:
+                    shell = _bool_cut(shell, clearance)
+                    shell = _ensure_solid(shell)
+                except (TimeoutError, RuntimeError) as exc:
+                    log.warning(
+                        "Skipping child clearance cut (%s): %s", joint.child.name, exc
+                    )
+                    print(
+                        f"    [--] SKIPPED child clearance ({joint.child.name}): {exc}",
+                        flush=True,
+                    )
+                    continue
+                _record(
+                    CadStep(
+                        f"Cut child clearance ({joint.child.name})",
+                        shell,
+                        "cut",
+                        tool=tool_solid,
+                    )
+                )
 
-    # Cut wire channels along routed cable paths
+    # --- 6. Cut wire channels ---
     if wire_segments:
         for seg, bus_type in wire_segments:
             channel = _wire_channel(seg, bus_type)
             if channel is not None and _bboxes_overlap(shell, channel):
-                shell = _bool_cut(shell, channel)
-                shell = _ensure_solid(shell)
+                tool_solid = _ensure_solid(channel)
+                try:
+                    shell = _bool_cut(shell, channel)
+                    shell = _ensure_solid(shell)
+                except (TimeoutError, RuntimeError) as exc:
+                    log.warning(
+                        "Skipping wire channel cut (%s): %s", bus_type.name, exc
+                    )
+                    print(
+                        f"    [--] SKIPPED wire channel ({bus_type.name}): {exc}",
+                        flush=True,
+                    )
+                    continue
+                _record(
+                    CadStep(
+                        f"Cut wire channel ({bus_type.name})",
+                        shell,
+                        "cut",
+                        tool=tool_solid,
+                    )
+                )
 
-    return shell
+    return steps
+
+
+def _make_body_solid(
+    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+):
+    """Convenience wrapper — returns only the final solid from _build_body_solid.
+
+    Kept for backward compatibility with tests. Production code (build_cad)
+    calls _build_body_solid directly.
+    """
+    steps = _build_body_solid(body, parent_joint, wire_segments)
+    return steps[-1].solid if steps else None
+
+
+def make_body_solid_with_steps(
+    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+) -> list[CadStep]:
+    """Build a body solid step-by-step, capturing each intermediate result.
+
+    Same code path as build_cad() — both call _build_body_solid().
+    """
+    return _build_body_solid(body, parent_joint, wire_segments)
 
 
 # Channel radii for wire routing (matches MuJoCo rendering radii)
