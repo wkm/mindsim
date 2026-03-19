@@ -288,14 +288,22 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
+    import time
+
     body_solids: dict[str, object] = {}
-    for body in bot.all_bodies:
+    n = len(bot.all_bodies)
+    for i, body in enumerate(bot.all_bodies):
+        print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
+        t0 = time.monotonic()
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
         solid = _make_body_solid(body, pj, wire_segs or None)
         if solid is not None:
             body_solids[body.name] = solid
             _update_mass_from_solid(body, solid)
+        dt = time.monotonic() - t0
+        print(f" {dt:.1f}s")
+        log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
     return CadModel(
         body_solids=body_solids,
@@ -669,15 +677,126 @@ def _bboxes_overlap(a, b) -> bool:
     )
 
 
-def _bool_cut(shape, tool):
-    """Boolean cut that works on Solid, Compound, or ShapeList."""
-    from build123d import Solid
+def _bool_cut(shape, tool, timeout_sec: int = 30):
+    """Boolean cut with fuzzy tolerance, OBB, and subprocess timeout.
 
-    if isinstance(shape, Solid):
-        return shape.cut(tool)
-    shape = _to_compound(shape)
-    result = shape.cut(tool)
-    return _to_compound(result)
+    Uses OCCT's SetFuzzyValue + SetUseOBB to handle near-coincident faces
+    that cause infinite loops. Falls back to a subprocess with a hard kill
+    timeout since OCP holds the GIL during boolean ops (signal.alarm won't
+    interrupt).
+    """
+    result = _occt_cut(shape, tool)
+    if result is not None:
+        return result
+
+    # Direct OCCT API failed — try subprocess with timeout
+    log.warning(
+        "Direct boolean cut failed, trying subprocess with %ds timeout", timeout_sec
+    )
+    return _subprocess_bool_cut(shape, tool, timeout_sec)
+
+
+def _occt_cut(shape, tool):
+    """Boolean cut via direct OCCT API with fuzzy tolerance + OBB.
+
+    Returns a build123d Shape on success, or None on failure.
+    """
+    try:
+        from build123d import Compound, Solid
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+        from OCP.TopTools import TopTools_ListOfShape
+
+        # OCCT needs TopoDS_Solid, not TopoDS_Compound.
+        # Extract the solid from build123d wrappers.
+        def _to_occ(s):
+            if hasattr(s, "solids"):
+                solids = s.solids()
+                if len(solids) == 1:
+                    return solids[0].wrapped
+            return s.wrapped
+
+        cut_op = BRepAlgoAPI_Cut()
+
+        args = TopTools_ListOfShape()
+        args.Append(_to_occ(shape))
+        cut_op.SetArguments(args)
+
+        tools = TopTools_ListOfShape()
+        tools.Append(_to_occ(tool))
+        cut_op.SetTools(tools)
+
+        cut_op.SetFuzzyValue(1e-5)
+        cut_op.SetRunParallel(True)
+        cut_op.SetUseOBB(True)
+
+        cut_op.Build()
+
+        if not cut_op.IsDone():
+            return None
+
+        result_occ = cut_op.Shape()
+        # Wrap back into build123d — try Solid first, fall back to Compound
+        try:
+            return Solid(result_occ)
+        except Exception:
+            return Compound(result_occ)
+    except Exception:
+        log.exception("OCCT direct cut failed")
+        return None
+
+
+def _bool_cut_worker(s_path: str, t_path: str, r_path: str):
+    """Subprocess target for boolean cut. Must be module-level for pickling."""
+    from build123d import export_brep, import_brep
+
+    s = import_brep(s_path)
+    t = import_brep(t_path)
+    result = s.cut(t)
+    export_brep(result, r_path)
+
+
+def _subprocess_bool_cut(shape, tool, timeout_sec: int):
+    """Boolean cut in a subprocess that can be killed on timeout."""
+    import multiprocessing as mp
+    import tempfile
+
+    from build123d import export_brep, import_brep
+
+    # Serialize shapes to BREP via temp files
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as sf:
+        export_brep(shape, sf.name)
+        shape_path = sf.name
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as tf:
+        export_brep(tool, tf.name)
+        tool_path = tf.name
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=False) as rf:
+        result_path = rf.name
+
+    ctx = mp.get_context("spawn")
+    p = ctx.Process(target=_bool_cut_worker, args=(shape_path, tool_path, result_path))
+    p.start()
+    p.join(timeout=timeout_sec)
+
+    if p.is_alive():
+        p.kill()
+        p.join()
+        # Clean up temp files
+        for f in (shape_path, tool_path, result_path):
+            Path(f).unlink(missing_ok=True)
+        raise TimeoutError(
+            f"Boolean cut timed out after {timeout_sec}s — "
+            f"likely near-coincident geometry"
+        )
+
+    if p.exitcode != 0:
+        for f in (shape_path, tool_path, result_path):
+            Path(f).unlink(missing_ok=True)
+        raise RuntimeError(f"Boolean cut subprocess failed (exit code {p.exitcode})")
+
+    result = import_brep(result_path)
+    for f in (shape_path, tool_path, result_path):
+        Path(f).unlink(missing_ok=True)
+    return result
 
 
 def _cut_camera_features(shell, mount, body_dims, solved_dims):
@@ -745,19 +864,34 @@ def _build_body_solid(
     Always builds the full step list. Callers that only need the final solid
     use _make_body_solid() which discards the intermediates.
 
+    Logs each operation to stdout so hangs are diagnosable.
+
     Mesh origin conventions (matching MuJoCo emitter expectations):
     - box/sphere/cylinder: centered at origin
     - tube: offset so z=0 is the joint end, z=+length is the far end
 
     wire_segments must be a tuple (not list) for lru_cache hashability.
     """
+    import time
+
     from build123d import Align, Box, Cylinder, Location, Sphere
 
     C = (Align.CENTER, Align.CENTER, Align.CENTER)
     dims = body.dimensions
     steps: list[CadStep] = []
+    _step_t0 = time.monotonic()
+
+    def _record(step: CadStep) -> None:
+        """Append step and log timing."""
+        nonlocal _step_t0
+        dt = time.monotonic() - _step_t0
+        steps.append(step)
+        print(f"    [{len(steps):2d}] {step.label} ({dt:.1f}s)", flush=True)
+        _step_t0 = time.monotonic()
 
     # --- 1. Outer shell ---
+    # NOTE: .moved() (not .locate()) throughout — .locate() mutates in place,
+    # which corrupts @lru_cache'd shapes from bracket.py.
     if body.custom_solid is not None:
         shell = _ensure_solid(body.custom_solid)
         shape_label = "custom"
@@ -769,7 +903,7 @@ def _build_body_solid(
             shape_label = "wheel"
         elif parent_joint is not None:
             shell = Cylinder(r, h, align=C)
-            shell = shell.locate(Location((0, 0, h / 2)))
+            shell = shell.moved(Location((0, 0, h / 2)))
             shape_label = "cylinder"
         else:
             shell = Cylinder(r, h, align=C)
@@ -780,7 +914,7 @@ def _build_body_solid(
         r = body.outer_r or dims[0] / 2
         length = body.length or dims[2]
         shell = Cylinder(r, length, align=C)
-        shell = shell.locate(Location((0, 0, length / 2)))
+        shell = shell.moved(Location((0, 0, length / 2)))
         shape_label = "tube"
     elif body.shape is BodyShape.SPHERE:
         r = body.radius or dims[0] / 2
@@ -797,16 +931,14 @@ def _build_body_solid(
         plate = Box(
             jw, jt, jl - knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
         )
-        plate = plate.locate(Location((0, 0, knuckle_h)))
+        plate = plate.moved(Location((0, 0, knuckle_h)))
         shell = knuckle + plate
         shape_label = "jaw"
     else:
         shell = Box(dims[0], dims[1], dims[2], align=C)
         shape_label = "box"
 
-    steps.append(
-        CadStep(f"Outer shell ({shape_label})", _ensure_solid(shell), "create")
-    )
+    _record(CadStep(f"Outer shell ({shape_label})", _ensure_solid(shell), "create"))
 
     # --- 2. Cut component pockets ---
     if not body.is_wheel_body:
@@ -819,7 +951,7 @@ def _build_body_solid(
                 pocket = Cylinder(pocket_r, pocket_h, align=C)
             else:
                 pocket = Box(cd[0] + 0.0005, cd[1] + 0.0005, cd[2] + 0.0005, align=C)
-            pocket = pocket.locate(Location(mount.resolved_pos))
+            pocket = pocket.moved(Location(mount.resolved_pos))
             tool_solid = _ensure_solid(pocket)
             shell = shell - pocket
 
@@ -827,7 +959,7 @@ def _build_body_solid(
                 shell = _cut_camera_features(shell, mount, body.dimensions, dims)
 
             comp_name = getattr(mount.component, "name", type(mount.component).__name__)
-            steps.append(
+            _record(
                 CadStep(
                     f"Cut {comp_name} pocket",
                     _ensure_solid(shell),
@@ -847,10 +979,10 @@ def _build_body_solid(
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
         coupler = coupler_solid(servo, bracket_spec)
-        coupler = coupler.locate(Location(center, euler))
+        coupler = coupler.moved(Location(center, euler))
         tool_solid = _ensure_solid(coupler)
         shell = _as_solid(shell.fuse(coupler))
-        steps.append(
+        _record(
             CadStep(
                 f"Union coupler ({servo.name})",
                 _ensure_solid(shell),
@@ -869,13 +1001,13 @@ def _build_body_solid(
 
         if joint.bracket_style is BracketStyle.COUPLER:
             envelope = cradle_envelope(servo, bracket_spec)
-            envelope = envelope.locate(Location(center, euler))
+            envelope = envelope.moved(Location(center, euler))
             cradle = cradle_solid(servo, bracket_spec)
-            cradle = cradle.locate(Location(center, euler))
+            cradle = cradle.moved(Location(center, euler))
             tool_envelope = _ensure_solid(envelope)
             shell = _bool_cut(shell, envelope)
             shell = _ensure_solid(shell)
-            steps.append(
+            _record(
                 CadStep(
                     f"Cut cradle envelope ({servo.name})",
                     shell,
@@ -885,7 +1017,7 @@ def _build_body_solid(
             )
             tool_cradle = _ensure_solid(cradle)
             shell = _to_compound(shell.fuse(cradle))
-            steps.append(
+            _record(
                 CadStep(
                     f"Union cradle ({servo.name})",
                     _ensure_solid(shell),
@@ -895,12 +1027,12 @@ def _build_body_solid(
             )
         else:
             envelope = bracket_envelope(servo, bracket_spec)
-            envelope = envelope.locate(Location(center, euler))
+            envelope = envelope.moved(Location(center, euler))
             bracket = bracket_solid(servo, bracket_spec)
-            bracket = bracket.locate(Location(center, euler))
+            bracket = bracket.moved(Location(center, euler))
             tool_envelope = _ensure_solid(envelope)
             shell = shell - envelope
-            steps.append(
+            _record(
                 CadStep(
                     f"Cut bracket envelope ({servo.name})",
                     _ensure_solid(shell),
@@ -910,7 +1042,7 @@ def _build_body_solid(
             )
             tool_bracket = _ensure_solid(bracket)
             shell = shell + bracket
-            steps.append(
+            _record(
                 CadStep(
                     f"Union bracket ({servo.name})",
                     _ensure_solid(shell),
@@ -925,9 +1057,19 @@ def _build_body_solid(
             clearance = _child_clearance_volume(joint.child, joint)
             if clearance is not None and _bboxes_overlap(shell, clearance):
                 tool_solid = _ensure_solid(clearance)
-                shell = _bool_cut(shell, clearance)
-                shell = _ensure_solid(shell)
-                steps.append(
+                try:
+                    shell = _bool_cut(shell, clearance)
+                    shell = _ensure_solid(shell)
+                except (TimeoutError, RuntimeError) as exc:
+                    log.warning(
+                        "Skipping child clearance cut (%s): %s", joint.child.name, exc
+                    )
+                    print(
+                        f"    [--] SKIPPED child clearance ({joint.child.name}): {exc}",
+                        flush=True,
+                    )
+                    continue
+                _record(
                     CadStep(
                         f"Cut child clearance ({joint.child.name})",
                         shell,
@@ -942,9 +1084,19 @@ def _build_body_solid(
             channel = _wire_channel(seg, bus_type)
             if channel is not None and _bboxes_overlap(shell, channel):
                 tool_solid = _ensure_solid(channel)
-                shell = _bool_cut(shell, channel)
-                shell = _ensure_solid(shell)
-                steps.append(
+                try:
+                    shell = _bool_cut(shell, channel)
+                    shell = _ensure_solid(shell)
+                except (TimeoutError, RuntimeError) as exc:
+                    log.warning(
+                        "Skipping wire channel cut (%s): %s", bus_type.name, exc
+                    )
+                    print(
+                        f"    [--] SKIPPED wire channel ({bus_type.name}): {exc}",
+                        flush=True,
+                    )
+                    continue
+                _record(
                     CadStep(
                         f"Cut wire channel ({bus_type.name})",
                         shell,

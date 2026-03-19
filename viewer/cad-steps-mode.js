@@ -53,8 +53,18 @@ class CadStepsViewer {
   }
 
   async init() {
+    // Show loading overlay — CAD step generation is slow on first hit
+    const loadingEl = document.getElementById('loading');
+    const loadingText = document.getElementById('loading-text');
+    loadingEl.style.display = '';
+    loadingText.textContent = `Building CAD steps for ${this.bodyName}...`;
+
     this._setupThreeJS();
-    await this._fetchSteps();
+    this.allBodies = [];
+    await Promise.all([this._fetchSteps(), this._fetchBodies()]);
+
+    loadingEl.style.display = 'none';
+
     this._buildUI();
     this._animate();
     if (this.steps.length > 0) {
@@ -121,6 +131,18 @@ class CadStepsViewer {
     }
     const data = await resp.json();
     this.steps = data.steps || [];
+  }
+
+  async _fetchBodies() {
+    // Load viewer manifest to get list of all bodies for this bot
+    const url = `/bots/${this.botName}/viewer_manifest.json`;
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        this.allBodies = (manifest.bodies || []).map(b => b.name);
+      }
+    } catch { /* manifest not available — no body switcher */ }
   }
 
   _buildUI() {
@@ -215,6 +237,28 @@ class CadStepsViewer {
     toolRow.appendChild(toolLbl);
     panel.appendChild(toolRow);
 
+    // Other bodies in this bot
+    if (this.allBodies.length > 1) {
+      const bodiesTitle = document.createElement('h3');
+      bodiesTitle.textContent = 'Bodies';
+      panel.appendChild(bodiesTitle);
+      const bodiesDiv = document.createElement('div');
+      bodiesDiv.style.cssText = 'margin-bottom: 12px;';
+      for (const name of this.allBodies) {
+        const link = document.createElement('a');
+        link.className = 'prop-chip body-chip';
+        link.style.cssText = 'cursor: pointer; text-decoration: none;';
+        if (name === this.bodyName) {
+          link.style.background = 'rgba(19,124,189,0.15)';
+          link.style.borderColor = 'var(--bp-blue3)';
+        }
+        link.textContent = name;
+        link.href = `?cadsteps=${encodeURIComponent(this.botName)}:${encodeURIComponent(name)}`;
+        bodiesDiv.appendChild(link);
+      }
+      panel.appendChild(bodiesDiv);
+    }
+
     // Step list
     const listTitle = document.createElement('h3');
     listTitle.textContent = 'All Steps';
@@ -288,9 +332,10 @@ class CadStepsViewer {
 
     // Update UI
     this.stepValueEl.textContent = `${idx + 1} / ${this.steps.length}`;
+    const opLabel = step.op === 'cut' ? 'subtract' : step.op === 'union' ? 'add' : step.op;
     this.stepInfoEl.innerHTML = `
       <div class="step-title">${step.label}</div>
-      <div class="step-desc">Step ${idx + 1} of ${this.steps.length} &mdash; <code>${step.op}</code></div>
+      <div class="step-desc">Step ${idx + 1} of ${this.steps.length} &mdash; <code>${opLabel}</code></div>
     `;
 
     // Highlight in step list
@@ -299,13 +344,17 @@ class CadStepsViewer {
       row.style.background = rowIdx === idx ? 'rgba(19,124,189,0.15)' : '';
     }
 
-    // Load and display result STL
-    const geometry = await this._loadStepSTL(idx);
+    // For steps with a tool, show the state BEFORE this operation so the
+    // tool overlay shows what's about to change. For step 0 (create) or steps
+    // without a tool, show the result of this step.
+    const hasPrev = idx > 0 && step.has_tool;
+    const bodyIdx = hasPrev ? idx - 1 : idx;
+    const geometry = await this._loadStepSTL(bodyIdx);
     if (!geometry) return;
 
     this._clearGroup(this.meshGroup);
 
-    // Result solid — neutral color so the tool overlay stands out
+    // Body solid — neutral color so the tool overlay stands out
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xCED9E0,
       roughness: 0.5,

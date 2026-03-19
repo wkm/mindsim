@@ -516,6 +516,8 @@ _bot_cache_lock = threading.Lock()
 
 def _load_bot(bot_name: str):
     """Lazily load and solve a bot, returning (bot, cad_model). Thread-safe."""
+    import time
+
     with _bot_cache_lock:
         if bot_name in _bot_cache:
             return _bot_cache[bot_name]
@@ -526,15 +528,23 @@ def _load_bot(bot_name: str):
     if not design_py.exists():
         raise FileNotFoundError(f"No design.py for bot {bot_name}")
 
+    t0 = time.monotonic()
+    print(f"[cad-steps] Loading bot {bot_name}...")
+
     spec = importlib.util.spec_from_file_location("design", design_py)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     bot = mod.build()
     bot.solve()
+    t1 = time.monotonic()
+    print(f"[cad-steps]   build + solve: {t1 - t0:.1f}s")
 
     from botcad.emit.cad import build_cad
 
     cad = build_cad(bot)
+    t2 = time.monotonic()
+    print(f"[cad-steps]   build_cad: {t2 - t1:.1f}s")
+    print(f"[cad-steps]   total: {t2 - t0:.1f}s ({len(bot.all_bodies)} bodies)")
 
     with _bot_cache_lock:
         _bot_cache[bot_name] = (bot, cad)
@@ -543,6 +553,8 @@ def _load_bot(bot_name: str):
 
 def _get_cad_steps(bot_name: str, body_name: str) -> list:
     """Get cached CAD steps for a body, computing on first access."""
+    import time
+
     cache_key = (bot_name, body_name)
     with _cad_steps_lock:
         if cache_key in _cad_steps_cache:
@@ -565,7 +577,11 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
 
     from botcad.emit.cad import make_body_solid_with_steps
 
+    t0 = time.monotonic()
+    print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
     steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+    t1 = time.monotonic()
+    print(f"[cad-steps]   {len(steps)} steps in {t1 - t0:.1f}s")
 
     with _cad_steps_lock:
         _cad_steps_cache[cache_key] = steps
