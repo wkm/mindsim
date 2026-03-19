@@ -505,6 +505,72 @@ _stl_cache_lock = threading.Lock()
 _catalog_json: bytes | None = None
 _bots_json: bytes | None = None
 
+# CAD steps cache: (bot_name, body_name) → list[CadStep]
+_cad_steps_cache: dict[tuple[str, str], list] = {}
+_cad_steps_lock = threading.Lock()
+
+# Bot object cache: bot_name → (bot, cad_model)
+_bot_cache: dict[str, tuple] = {}
+_bot_cache_lock = threading.Lock()
+
+
+def _load_bot(bot_name: str):
+    """Lazily load and solve a bot, returning (bot, cad_model). Thread-safe."""
+    with _bot_cache_lock:
+        if bot_name in _bot_cache:
+            return _bot_cache[bot_name]
+
+    import importlib.util
+
+    design_py = Path("bots") / bot_name / "design.py"
+    if not design_py.exists():
+        raise FileNotFoundError(f"No design.py for bot {bot_name}")
+
+    spec = importlib.util.spec_from_file_location("design", design_py)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    bot = mod.build()
+    bot.solve()
+
+    from botcad.emit.cad import build_cad
+
+    cad = build_cad(bot)
+
+    with _bot_cache_lock:
+        _bot_cache[bot_name] = (bot, cad)
+    return bot, cad
+
+
+def _get_cad_steps(bot_name: str, body_name: str) -> list:
+    """Get cached CAD steps for a body, computing on first access."""
+    cache_key = (bot_name, body_name)
+    with _cad_steps_lock:
+        if cache_key in _cad_steps_cache:
+            return _cad_steps_cache[cache_key]
+
+    bot, cad = _load_bot(bot_name)
+
+    # Find the body
+    target = None
+    for body in bot.all_bodies:
+        if body.name == body_name:
+            target = body
+            break
+    if target is None:
+        raise KeyError(f"Body '{body_name}' not found in bot '{bot_name}'")
+
+    parent_joint = cad.parent_joint_map.get(body_name)
+    wire_segs = cad.body_wire_segments.get(body_name)
+    wire_segs_tuple = tuple(wire_segs) if wire_segs else None
+
+    from botcad.emit.cad import make_body_solid_with_steps
+
+    steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+
+    with _cad_steps_lock:
+        _cad_steps_cache[cache_key] = steps
+    return steps
+
 
 def _solid_to_stl_bytes(solid) -> bytes:
     """Export a build123d Solid to STL bytes via a temp file."""
@@ -618,6 +684,26 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self._handle_component_fasteners(m.group(1))
             return
 
+        # /api/bots/<bot>/body/<body>/cad-steps
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps$", self.path)
+        if m:
+            self._handle_cad_steps_meta(m.group(1), m.group(2))
+            return
+
+        # /api/bots/<bot>/body/<body>/cad-steps/<idx>/stl
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/stl$", self.path)
+        if m:
+            self._handle_cad_step_stl(m.group(1), m.group(2), int(m.group(3)))
+            return
+
+        # /api/bots/<bot>/body/<body>/cad-steps/<idx>/tool-stl
+        m = re.match(
+            r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/tool-stl$", self.path
+        )
+        if m:
+            self._handle_cad_step_tool_stl(m.group(1), m.group(2), int(m.group(3)))
+            return
+
         # /api/components/<name>/stl/<part>
         m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", self.path)
         if m:
@@ -711,6 +797,106 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             )
 
         self._send_json(json.dumps({"fasteners": fasteners}).encode())
+
+    def _handle_cad_steps_meta(self, bot_name: str, body_name: str):
+        """Return JSON metadata for all CAD construction steps of a body."""
+        try:
+            steps = _get_cad_steps(bot_name, body_name)
+        except FileNotFoundError as e:
+            self.send_error(404, str(e))
+            return
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"CAD step generation failed: {e}")
+            return
+
+        payload = json.dumps(
+            {
+                "bot": bot_name,
+                "body": body_name,
+                "steps": [
+                    {
+                        "index": i,
+                        "label": s.label,
+                        "op": s.op,
+                        "has_tool": s.tool is not None,
+                    }
+                    for i, s in enumerate(steps)
+                ],
+            }
+        ).encode()
+        self._send_json(payload)
+
+    def _handle_cad_step_stl(self, bot_name: str, body_name: str, step_idx: int):
+        """Return STL bytes for a specific CAD construction step."""
+        cache_key = (f"cadstep_{bot_name}_{body_name}", str(step_idx))
+        with _stl_cache_lock:
+            cached = _stl_cache.get(cache_key)
+        if cached:
+            self._send_binary(cached, f"{body_name}_step{step_idx}.stl")
+            return
+
+        try:
+            steps = _get_cad_steps(bot_name, body_name)
+        except (FileNotFoundError, KeyError) as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"CAD step generation failed: {e}")
+            return
+
+        if step_idx < 0 or step_idx >= len(steps):
+            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
+            return
+
+        try:
+            stl_bytes = _solid_to_stl_bytes(steps[step_idx].solid)
+        except Exception as e:
+            self.send_error(500, f"STL export failed for step {step_idx}: {e}")
+            return
+
+        with _stl_cache_lock:
+            _stl_cache[cache_key] = stl_bytes
+        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}.stl")
+
+    def _handle_cad_step_tool_stl(self, bot_name: str, body_name: str, step_idx: int):
+        """Return STL bytes for the tool solid used in a CAD step."""
+        cache_key = (f"cadstep_tool_{bot_name}_{body_name}", str(step_idx))
+        with _stl_cache_lock:
+            cached = _stl_cache.get(cache_key)
+        if cached:
+            self._send_binary(cached, f"{body_name}_step{step_idx}_tool.stl")
+            return
+
+        try:
+            steps = _get_cad_steps(bot_name, body_name)
+        except (FileNotFoundError, KeyError) as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"CAD step generation failed: {e}")
+            return
+
+        if step_idx < 0 or step_idx >= len(steps):
+            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
+            return
+
+        tool = steps[step_idx].tool
+        if tool is None:
+            self.send_error(404, f"Step {step_idx} has no tool solid")
+            return
+
+        try:
+            stl_bytes = _solid_to_stl_bytes(tool)
+        except Exception as e:
+            self.send_error(500, f"Tool STL export failed for step {step_idx}: {e}")
+            return
+
+        with _stl_cache_lock:
+            _stl_cache[cache_key] = stl_bytes
+        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}_tool.stl")
 
     def log_message(self, format, *args):
         # Quieter logging — skip successful static file requests
