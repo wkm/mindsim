@@ -297,7 +297,8 @@ def build_cad(bot: Bot) -> CadModel:
         t0 = time.monotonic()
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
-        solid = _make_body_solid(body, pj, wire_segs or None)
+        steps = _build_body_solid(body, pj, wire_segs or None)
+        solid = steps[-1].solid if steps else None
         if solid is not None:
             body_solids[body.name] = solid
             _update_mass_from_solid(body, solid)
@@ -1108,14 +1109,13 @@ def _build_body_solid(
     return steps
 
 
-@lru_cache(maxsize=128)
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
 ):
-    """Create a build123d solid for a body. Returns only the final solid.
+    """Convenience wrapper — returns only the final solid from _build_body_solid.
 
-    This is the cached entry point used by build_cad(). The actual construction
-    logic lives in _build_body_solid() which captures every intermediate step.
+    Kept for backward compatibility with tests. Production code (build_cad)
+    calls _build_body_solid directly.
     """
     steps = _build_body_solid(body, parent_joint, wire_segments)
     return steps[-1].solid if steps else None
@@ -1126,8 +1126,7 @@ def make_body_solid_with_steps(
 ) -> list[CadStep]:
     """Build a body solid step-by-step, capturing each intermediate result.
 
-    Same geometry as _make_body_solid() — both call _build_body_solid().
-    Not cached — tool solids would keep large OCCT objects alive indefinitely.
+    Same code path as build_cad() — both call _build_body_solid().
     """
     return _build_body_solid(body, parent_joint, wire_segments)
 

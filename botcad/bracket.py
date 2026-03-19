@@ -498,12 +498,13 @@ def _scs0009_solid(servo: ServoSpec):
     r = 0.0010  # small fillet for plastic molding
 
     # Body center at Z=0, spans ±body_z/2
-    z_top = body_z / 2   # +11.25mm
-    z_bot = -body_z / 2  # -11.25mm
+    z_top = body_z / 2  # +11.25mm
 
     # ── 1. Main body ──────────────────────────────────────────────
     body = Box(
-        body_x, body_y, body_z,
+        body_x,
+        body_y,
+        body_z,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
     )
     body = _as_solid(fillet(body.edges().filter_by(Axis.Z), r))
@@ -520,18 +521,20 @@ def _scs0009_solid(servo: ServoSpec):
     # Ears protrude in ±X from body sides, at roughly 2/3 height.
     # Each ear: ~4.65mm extension beyond body, full body_y width,
     # ~2.5mm thick in Z.
-    ear_ext = 0.00465    # extension beyond body edge in X
-    ear_thick = 0.0025   # thickness in Z
+    ear_ext = 0.00465  # extension beyond body edge in X
+    ear_thick = 0.0025  # thickness in Z
     ear_total_x = body_x + 2 * ear_ext  # ~32.5mm total
 
     # Ears sit with top aligned to a point ~7.75mm below body top
     # (i.e. about 3.5mm above body center for a 22.5mm body)
-    ear_top_z = z_top - 0.00775   # ~3.5mm above center
+    ear_top_z = z_top - 0.00775  # ~3.5mm above center
     ear_bot_z = ear_top_z - ear_thick
     ear_cz = (ear_top_z + ear_bot_z) / 2
 
     ear = Box(
-        ear_total_x, body_y, ear_thick,
+        ear_total_x,
+        body_y,
+        ear_thick,
         align=(Align.CENTER, Align.CENTER, Align.CENTER),
     )
     ear = ear.locate(Location((0, 0, ear_cz)))
@@ -595,8 +598,8 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
     wall = spec.wall
 
     # Ear tab geometry (must match _scs0009_solid)
-    ear_ext = 0.00465    # tab extension beyond body in ±X
-    ear_thick = 0.0025   # tab thickness in Z
+    ear_ext = 0.00465  # tab extension beyond body in ±X
+    ear_thick = 0.0025  # tab thickness in Z
     ear_top_z = body_z / 2 - 0.00775  # top of ear tab
 
     # --- Bracket extent ---
@@ -612,14 +615,18 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
     outer_z = outer_top_z - outer_bot_z
     outer_cz = (outer_top_z + outer_bot_z) / 2
 
-    outer = Box(outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    outer = Box(
+        outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER)
+    )
     outer = outer.locate(Location((0, 0, outer_cz)))
 
     # --- Body pocket (open on +Z for servo insertion) ---
     pocket_x = body_x + 2 * tol
     pocket_y = body_y + 2 * tol
     pocket_z = outer_z + 0.002  # through the full height (open top)
-    pocket = Box(pocket_x, pocket_y, pocket_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    pocket = Box(
+        pocket_x, pocket_y, pocket_z, align=(Align.CENTER, Align.CENTER, Align.CENTER)
+    )
     pocket = pocket.locate(Location((0, 0, outer_cz)))
     shell = outer - pocket
 
@@ -676,7 +683,9 @@ def _scs0009_bracket_envelope(servo: ServoSpec, spec: BracketSpec):
     outer_z = outer_top_z - outer_bot_z
     outer_cz = (outer_top_z + outer_bot_z) / 2
 
-    outer = Box(outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+    outer = Box(
+        outer_x, outer_y, outer_z, align=(Align.CENTER, Align.CENTER, Align.CENTER)
+    )
     outer = outer.locate(Location((0, 0, outer_cz)))
     return outer
 
