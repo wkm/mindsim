@@ -148,7 +148,7 @@ const EdgeDetectShader = {
     edgeColor: { value: new THREE.Color(EDGE_COLOR) },
     edgeOpacity: { value: EDGE_OPACITY },
     normalThreshold: { value: 0.3 },
-    depthThreshold: { value: 0.002 },
+    depthThreshold: { value: 0.0001 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
