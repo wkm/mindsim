@@ -291,7 +291,7 @@ def build_cad(bot: Bot) -> CadModel:
     # Build body solids and refine mass from actual geometry
     import os
 
-    use_shapescript = os.environ.get("SHAPESCRIPT", "0") == "1"
+    use_shapescript = os.environ.get("SHAPESCRIPT", "1") == "1"
 
     body_solids: dict[str, object] = {}
     if use_shapescript:

@@ -643,7 +643,7 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
     wire_segs = cad.body_wire_segments.get(body_name)
     wire_segs_tuple = tuple(wire_segs) if wire_segs else None
 
-    use_shapescript = os.environ.get("SHAPESCRIPT", "0") == "1"
+    use_shapescript = os.environ.get("SHAPESCRIPT", "1") == "1"
 
     t0 = time.monotonic()
     print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
