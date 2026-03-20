@@ -940,6 +940,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Random seed for target placement (only with --regenerate)",
     )
 
+    # ir-debug
+    p_irdebug = sub.add_parser("ir-debug", help="Step-by-step CadIR debugger (Rerun)")
+    p_irdebug.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: wheeler_arm)"
+    )
+    p_irdebug.add_argument(
+        "--body",
+        type=str,
+        default=None,
+        help="Body name to debug (default: first body)",
+    )
+
     return parser
 
 
@@ -1088,6 +1100,9 @@ def main():
         pipeline = pipeline_for_bot(bot_name)
         print(pipeline.describe())
 
+    elif args.command == "ir-debug":
+        _run_ir_debug(args.bot, args.body)
+
     elif args.command == "replay":
         from viz.replay import run_replay
 
@@ -1101,6 +1116,52 @@ def main():
             regenerate=args.regenerate,
             last_n=args.last,
         )
+
+
+def _run_ir_debug(bot_name: str | None, body_name: str | None):
+    """Build a bot via IR and launch Rerun debugger for a body."""
+    import importlib
+
+    bot_name = bot_name or "wheeler_arm"
+    mod = importlib.import_module(f"bots.{bot_name}.design")
+    bot = mod.build()
+    bot.solve()
+
+    # Find parent joint and wire segments for the target body
+    pj_map = {}
+    for j in bot.all_joints:
+        if j.child is not None:
+            pj_map[j.child.name] = j
+    ws_map: dict[str, list] = {}
+    for r in bot.wire_routes:
+        for seg in r.segments:
+            ws_map.setdefault(seg.body_name, []).append((seg, r.bus_type))
+
+    # Select body
+    if body_name is None:
+        body = bot.all_bodies[0]
+    else:
+        matches = [b for b in bot.all_bodies if b.name == body_name]
+        if not matches:
+            names = [b.name for b in bot.all_bodies]
+            print(f"Body '{body_name}' not found. Available: {names}", file=sys.stderr)
+            sys.exit(1)
+        body = matches[0]
+
+    pj = pj_map.get(body.name)
+    ws = tuple(ws_map.get(body.name, [])) or None
+
+    print(
+        f"Debugging {bot_name}/{body.name} ({len(body.joints)} joints, "
+        f"{len(body.mounts)} mounts)"
+    )
+
+    from botcad.ir.debug_rerun import debug_program
+    from botcad.ir.emit_body import emit_body_ir
+
+    prog = emit_body_ir(body, pj, ws)
+    print(f"IR program: {len(prog.ops)} ops")
+    debug_program(prog, spawn_viewer=True)
 
 
 def _validate_rewards(bot_name: str | None):
