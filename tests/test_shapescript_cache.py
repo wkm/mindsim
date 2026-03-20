@@ -1,16 +1,16 @@
-"""Tests for botcad.ir.cache.DiskCache."""
+"""Tests for botcad.shapescript.cache.DiskCache."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from botcad.ir.cache import DiskCache
-from botcad.ir.program import CadProgram
+from botcad.shapescript.cache import DiskCache
+from botcad.shapescript.program import ShapeScript
 
 
-def _make_box_program(width: float = 0.06) -> CadProgram:
+def _make_box_program(width: float = 0.06) -> ShapeScript:
     """Helper: build a simple box program."""
-    prog = CadProgram()
+    prog = ShapeScript()
     box = prog.box(width, 0.04, 0.02)
     prog.query_volume(box)
     prog.output_ref = box

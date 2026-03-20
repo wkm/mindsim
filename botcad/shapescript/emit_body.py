@@ -1,10 +1,10 @@
-"""Translate _make_body_solid logic into CadIR programs.
+"""Translate _make_body_solid logic into ShapeScript programs.
 
 This module mirrors botcad/emit/cad.py:_make_body_solid() line-by-line,
 but emits IR ops instead of calling build123d directly. The resulting
-CadProgram can be executed by the OCCT backend to produce the same solid.
+ShapeScript can be executed by the OCCT backend to produce the same solid.
 
-The key invariant: for every bot, the IR path must produce body solids
+The key invariant: for every bot, the ShapeScript path must produce body solids
 whose volumes and bounding boxes match the direct build123d path.
 """
 
@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from botcad.ir.ops import Align3
-from botcad.ir.program import CadProgram
+from botcad.shapescript.ops import Align3
+from botcad.shapescript.program import ShapeScript
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Joint
@@ -23,8 +23,8 @@ def emit_body_ir(
     body: Body,
     parent_joint: Joint | None = None,
     wire_segments: tuple | None = None,
-) -> CadProgram:
-    """Emit a CadProgram that builds the solid for a single body.
+) -> ShapeScript:
+    """Emit a ShapeScript that builds the solid for a single body.
 
     This is a 1:1 translation of cad.py:_make_body_solid(). The result
     can be executed via OcctBackend to produce an identical solid.
@@ -35,12 +35,12 @@ def emit_body_ir(
         wire_segments: Tuple of (segment, bus_type) pairs for wire channel cutting.
 
     Returns:
-        A CadProgram whose output_ref is the final body solid.
+        A ShapeScript whose output_ref is the final body solid.
     """
     from botcad.component import BearingSpec, CameraSpec
     from botcad.skeleton import BodyShape, BracketStyle
 
-    prog = CadProgram()
+    prog = ShapeScript()
     dims = body.dimensions
 
     # ── 1. Base shell (cad.py:748-801) ──
@@ -223,7 +223,7 @@ def emit_body_ir(
 
 
 def _emit_orient_z_to_axis(
-    prog: CadProgram,
+    prog: ShapeScript,
     shape_ref,
     axis: tuple[float, float, float],
     quat: tuple[float, float, float, float] | None = None,

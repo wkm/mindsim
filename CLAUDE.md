@@ -30,19 +30,19 @@ uv run mjpython main.py scene              # Scene gen preview
 
 `--bot NAME`: bot directory name (e.g., `wheeler_arm`). Shortcuts: `make`, `make view`, `make train`.
 
-## CadIR (Intermediate Representation)
+## ShapeScript (Intermediate Representation)
 
-The CAD pipeline has an optional IR layer between parametric design code and build123d/OCCT. It enables caching, swappable backends, and step-by-step visual debugging.
+The CAD pipeline has an optional ShapeScript layer between parametric design code and build123d/OCCT. It enables caching, swappable backends, and step-by-step visual debugging.
 
 ```bash
-BOTCAD_IR=1 uv run mjpython main.py view --bot wheeler_arm  # Use IR path
-uv run python main.py ir-debug --bot wheeler_arm --body base  # Step-by-step Rerun debugger
+SHAPESCRIPT=1 uv run mjpython main.py view --bot wheeler_arm  # Use ShapeScript path
+uv run python main.py shapescript-debug --bot wheeler_arm --body base  # Step-by-step Rerun debugger
 ```
 
-- **Enable:** Set `BOTCAD_IR=1` env var. Direct build123d path remains the default.
-- **Debug:** `ir-debug` subcommand builds a body via IR and launches Rerun with per-op mesh snapshots.
-- **Architecture:** `emit_body_ir()` translates `_make_body_solid()` logic into typed IR ops (`botcad/ir/ops.py`). `OcctBackend` executes the IR against build123d. Bracket/component solids are injected as `PrebuiltOp`.
-- **Key files:** `botcad/ir/emit_body.py`, `botcad/ir/backend_occt.py`, `botcad/ir/program.py`, `botcad/ir/ops.py`
+- **Enable:** Set `SHAPESCRIPT=1` env var. Direct build123d path remains the default.
+- **Debug:** `shapescript-debug` subcommand builds a body via ShapeScript and launches Rerun with per-op mesh snapshots.
+- **Architecture:** `emit_body_ir()` translates `_make_body_solid()` logic into typed ShapeScript ops (`botcad/shapescript/ops.py`). `OcctBackend` executes the ShapeScript against build123d. Bracket/component solids are injected as `PrebuiltOp`.
+- **Key files:** `botcad/shapescript/emit_body.py`, `botcad/shapescript/backend_occt.py`, `botcad/shapescript/program.py`, `botcad/shapescript/ops.py`
 
 ## Development
 

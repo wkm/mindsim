@@ -1,4 +1,4 @@
-"""Tests for the OCCT backend -- executes IR against build123d.
+"""Tests for the OCCT backend -- executes ShapeScript against build123d.
 
 Property tests validate geometric invariants that must hold regardless
 of backend implementation. These tests double as a backend conformance
@@ -12,13 +12,13 @@ import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.ir.backend_occt import ExecutionResult, OcctBackend
-from botcad.ir.program import CadProgram
+from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend
+from botcad.shapescript.program import ShapeScript
 
 # -- Helpers --
 
 
-def _exec(prog: CadProgram) -> ExecutionResult:
+def _exec(prog: ShapeScript) -> ExecutionResult:
     return OcctBackend().execute(prog)
 
 
@@ -27,14 +27,14 @@ def _exec(prog: CadProgram) -> ExecutionResult:
 
 class TestPrimitiveVolume:
     def test_box_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(1.0, 2.0, 3.0)
         prog.query_volume(b)
         result = _exec(prog)
         assert result.queries[0] == pytest.approx(6.0, rel=1e-6)
 
     def test_cylinder_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         c = prog.cylinder(1.0, 2.0)
         prog.query_volume(c)
         result = _exec(prog)
@@ -42,7 +42,7 @@ class TestPrimitiveVolume:
         assert result.queries[0] == pytest.approx(expected, rel=1e-4)
 
     def test_sphere_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         s = prog.sphere(1.0)
         prog.query_volume(s)
         result = _exec(prog)
@@ -51,9 +51,9 @@ class TestPrimitiveVolume:
 
     def test_box_min_z_align(self):
         """MIN_Z aligned box has its bottom at z=0."""
-        from botcad.ir.ops import Align3
+        from botcad.shapescript.ops import Align3
 
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(1.0, 1.0, 2.0, align=Align3.MIN_Z)
         prog.query_bbox(b)
         result = _exec(prog)
@@ -67,7 +67,7 @@ class TestPrimitiveVolume:
 
 class TestBooleanInvariants:
     def test_cut_reduces_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)
         result = prog.cut(box, hole)
@@ -77,7 +77,7 @@ class TestBooleanInvariants:
         assert r.queries[1] < r.queries[0]
 
     def test_cut_exact_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)  # through-hole
         result = prog.cut(box, hole)
@@ -87,7 +87,7 @@ class TestBooleanInvariants:
         assert r.queries[0] == pytest.approx(expected, rel=0.01)
 
     def test_fuse_nonoverlapping_is_sum(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.box(1, 1, 1)
         b = prog.locate(b, pos=(5.0, 0, 0))
@@ -97,7 +97,7 @@ class TestBooleanInvariants:
         assert r.queries[0] == pytest.approx(2.0, rel=0.001)
 
     def test_fuse_overlapping_less_than_sum(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.box(1, 1, 1)
         b = prog.locate(b, pos=(0.5, 0, 0))  # 50% overlap
@@ -110,7 +110,7 @@ class TestBooleanInvariants:
 
     def test_cut_nonoverlapping_preserves_target(self):
         """Cut with non-overlapping tool should preserve target volume."""
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1)
         tool = prog.box(0.5, 0.5, 0.5)
         tool = prog.locate(tool, pos=(10, 10, 10))  # far away
@@ -126,7 +126,7 @@ class TestBooleanInvariants:
 
 class TestTransforms:
     def test_locate_preserves_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.locate(a, pos=(10, 20, 30))
         prog.query_volume(a)
@@ -135,7 +135,7 @@ class TestTransforms:
         assert r.queries[0] == pytest.approx(r.queries[1], rel=1e-9)
 
     def test_locate_moves_centroid(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.locate(a, pos=(10, 0, 0))
         prog.query_centroid(b)
@@ -145,7 +145,7 @@ class TestTransforms:
 
     def test_locate_rotation(self):
         """90-degree rotation around Z swaps X and Y centroids."""
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(2, 1, 1)
         a = prog.locate(a, pos=(5, 0, 0))
         b = prog.locate(a, euler_deg=(0, 0, 90))
@@ -158,7 +158,7 @@ class TestTransforms:
 
     def test_locate_preserves_bbox_size(self):
         """Translation should not change bounding box dimensions."""
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(2, 3, 4)
         b = prog.locate(a, pos=(100, 200, 300))
         prog.query_bbox(a)
@@ -177,7 +177,7 @@ class TestTransforms:
 
 class TestQueries:
     def test_query_bbox(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(2, 4, 6)
         prog.query_bbox(b)
         r = _exec(prog)
@@ -188,14 +188,14 @@ class TestQueries:
         assert mx[1] == pytest.approx(2, abs=0.01)
 
     def test_query_area(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(1, 1, 1)
         prog.query_area(b)
         r = _exec(prog)
         assert r.queries[0] == pytest.approx(6.0, rel=1e-6)
 
     def test_query_inertia_returns_3x3(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(1, 1, 1)
         prog.query_inertia(b)
         r = _exec(prog)
@@ -204,7 +204,7 @@ class TestQueries:
         assert len(mat[0]) == 3
 
     def test_multiple_queries(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(2, 3, 4)
         prog.query_volume(b)
         prog.query_area(b)
@@ -215,7 +215,7 @@ class TestQueries:
 
     def test_query_centroid_centered_box(self):
         """Centered box should have centroid at origin."""
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(2, 4, 6)
         prog.query_centroid(b)
         r = _exec(prog)
@@ -226,7 +226,7 @@ class TestQueries:
 
     def test_sphere_area(self):
         """Sphere surface area = 4*pi*r^2."""
-        prog = CadProgram()
+        prog = ShapeScript()
         s = prog.sphere(1.0)
         prog.query_area(s)
         r = _exec(prog)
@@ -240,7 +240,7 @@ class TestQueries:
 class TestFilletWithTags:
     def test_fillet_reduces_volume_slightly(self):
         """Fillet on a box removes corner material."""
-        prog = CadProgram()
+        prog = ShapeScript()
         b = prog.box(1, 1, 1, tag="edges")
         f = prog.fillet(b, tags=("edges",), radius=0.05)
         prog.query_volume(b)
@@ -251,7 +251,7 @@ class TestFilletWithTags:
 
     def test_fillet_on_cut_edges(self):
         """Tags from a cylinder propagate through cut, fillet resolves them."""
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.2, 2, tag="hole")
         result = prog.cut(box, hole)
@@ -269,9 +269,9 @@ class TestPrebuiltOp:
         """PrebuiltOp correctly injects a pre-built solid."""
         from build123d import Box
 
-        from botcad.ir.ops import PrebuiltOp
+        from botcad.shapescript.ops import PrebuiltOp
 
-        prog = CadProgram()
+        prog = ShapeScript()
         prebuilt_box = Box(1, 1, 1)
         ref = prog._next_ref("pre")
         prog.ops.append(PrebuiltOp(ref=ref, solid_hash="abc123", tag="bracket"))
@@ -283,9 +283,9 @@ class TestPrebuiltOp:
 
     def test_prebuilt_missing_raises(self):
         """PrebuiltOp without associated solid raises ValueError."""
-        from botcad.ir.ops import PrebuiltOp, ShapeRef
+        from botcad.shapescript.ops import PrebuiltOp, ShapeRef
 
-        prog = CadProgram()
+        prog = ShapeScript()
         ref = ShapeRef("missing_0")
         prog.ops.append(PrebuiltOp(ref=ref, solid_hash="abc123"))
 
@@ -299,7 +299,7 @@ class TestPrebuiltOp:
 class TestTagPropagation:
     def test_tags_propagate_through_cut(self):
         """Tags from tool propagate through cut op."""
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1, tag="shell")
         hole = prog.cylinder(0.1, 2, tag="pocket")
         result = prog.cut(box, hole)
@@ -310,7 +310,7 @@ class TestTagPropagation:
 
     def test_tags_propagate_through_fuse(self):
         """Tags from both operands propagate through fuse."""
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1, tag="base")
         b = prog.box(0.5, 0.5, 0.5, tag="mount")
         b = prog.locate(b, pos=(2, 0, 0))
@@ -321,7 +321,7 @@ class TestTagPropagation:
 
     def test_tags_propagate_through_locate(self):
         """Tags survive a locate transform."""
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.cylinder(0.5, 1.0, tag="shaft")
         b = prog.locate(a, pos=(5, 5, 5))
         r = _exec(prog)
@@ -334,7 +334,7 @@ class TestTagPropagation:
 class TestShapeTable:
     def test_all_shape_producing_ops_in_table(self):
         """Every shape-producing op's ref should be in result.shapes."""
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.cylinder(0.5, 2)
         c = prog.fuse(a, b)
@@ -345,7 +345,7 @@ class TestShapeTable:
 
     def test_execution_result_has_tags(self):
         """ExecutionResult includes a populated TagRegistry."""
-        prog = CadProgram()
+        prog = ShapeScript()
         prog.box(1, 1, 1, tag="shell")
         r = _exec(prog)
         assert isinstance(r.tags, type(r.tags))

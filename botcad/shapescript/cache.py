@@ -1,6 +1,6 @@
-"""Disk cache for CadIR execution results.
+"""Disk cache for ShapeScript execution results.
 
-Keyed by CadProgram.content_hash() (SHA-256). Stores arbitrary picklable
+Keyed by ShapeScript.content_hash() (SHA-256). Stores arbitrary picklable
 data (dicts with volume, centroid, area, inertia, stl_bytes, etc.) as
 individual .pkl files in a cache directory.
 """
@@ -11,13 +11,13 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-from botcad.ir.program import CadProgram
+from botcad.shapescript.program import ShapeScript
 
 DEFAULT_CACHE_DIR = Path(".botcad_cache")
 
 
 class DiskCache:
-    """Simple file-backed cache for CadProgram execution results.
+    """Simple file-backed cache for ShapeScript execution results.
 
     Each entry is stored as ``<content_hash>.pkl`` inside *cache_dir*.
     """
@@ -26,10 +26,10 @@ class DiskCache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _path_for(self, prog: CadProgram) -> Path:
+    def _path_for(self, prog: ShapeScript) -> Path:
         return self.cache_dir / f"{prog.content_hash()}.pkl"
 
-    def get(self, prog: CadProgram) -> Any | None:
+    def get(self, prog: ShapeScript) -> Any | None:
         """Return cached data for *prog*, or ``None`` on miss."""
         path = self._path_for(prog)
         if not path.exists():
@@ -37,13 +37,13 @@ class DiskCache:
         with path.open("rb") as f:
             return pickle.load(f)  # noqa: S301
 
-    def put(self, prog: CadProgram, data: Any) -> None:
+    def put(self, prog: ShapeScript, data: Any) -> None:
         """Store *data* (must be picklable) for *prog*."""
         path = self._path_for(prog)
         with path.open("wb") as f:
             pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def invalidate(self, prog: CadProgram) -> None:
+    def invalidate(self, prog: ShapeScript) -> None:
         """Remove the cached entry for *prog*, if any."""
         path = self._path_for(prog)
         path.unlink(missing_ok=True)

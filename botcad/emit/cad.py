@@ -280,12 +280,12 @@ def build_cad(bot: Bot) -> CadModel:
     # Build body solids and refine mass from actual geometry
     import os
 
-    use_ir = os.environ.get("BOTCAD_IR", "0") == "1"
+    use_ir = os.environ.get("SHAPESCRIPT", "0") == "1"
 
     body_solids: dict[str, object] = {}
     if use_ir:
-        from botcad.ir.backend_occt import OcctBackend
-        from botcad.ir.emit_body import emit_body_ir
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.emit_body import emit_body_ir
 
         ir_backend = OcctBackend()
 

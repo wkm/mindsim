@@ -1,4 +1,4 @@
-"""Rerun-based step-by-step debugger for CadIR programs.
+"""Rerun-based step-by-step debugger for ShapeScript programs.
 
 Each IR op maps to a Rerun timestep. Shape-producing ops export their
 mesh and log it as a 3D entity. Boolean ops log both operands (tool in
@@ -10,29 +10,29 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from botcad.ir.backend_occt import OcctBackend
-from botcad.ir.ops import CutOp, FuseOp
-from botcad.ir.program import CadProgram
+from botcad.shapescript.backend_occt import OcctBackend
+from botcad.shapescript.ops import CutOp, FuseOp
+from botcad.shapescript.program import ShapeScript
 
 log = logging.getLogger(__name__)
 
 
 def debug_program(
-    prog: CadProgram,
+    prog: ShapeScript,
     spawn_viewer: bool = True,
     mesh_dir: Path | None = None,
 ) -> None:
     """Execute program step-by-step, logging each op to Rerun.
 
     Args:
-        prog: The CadProgram to debug.
+        prog: The ShapeScript to debug.
         spawn_viewer: If True, launch the Rerun viewer.
         mesh_dir: If set, export per-step STL files here.
     """
     import rerun as rr
     from build123d import export_stl
 
-    rr.init("botcad_ir_debug", spawn=spawn_viewer)
+    rr.init("botcad_shapescript_debug", spawn=spawn_viewer)
 
     # Execute the full program to get all shapes
     backend = OcctBackend()

@@ -1,4 +1,4 @@
-"""Tag registry for tracking named edges through IR operations.
+"""Tag registry for tracking named edges through ShapeScript operations.
 
 Tags are declared on primitive ops (e.g. a cylinder tagged "pocket").
 When that shape participates in boolean ops, the resulting shape inherits
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from botcad.ir.ops import ShapeRef
+from botcad.shapescript.ops import ShapeRef
 
 
 @dataclass

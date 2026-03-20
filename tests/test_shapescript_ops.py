@@ -1,8 +1,9 @@
-"""Tests for CadIR operation dataclasses, CadProgram, and TagRegistry."""
+"""Tests for ShapeScript operation dataclasses, ShapeScript, and TagRegistry."""
 from __future__ import annotations
 
 import pytest
-from botcad.ir.ops import (
+
+from botcad.shapescript.ops import (
     Align3,
     BoxOp,
     ChamferOp,
@@ -159,25 +160,25 @@ class TestOpHashing:
         assert hash(a) != hash(b)
 
 
-# ── Task 2: CadProgram tests ──
+# ── Task 2: ShapeScript tests ──
 
-from botcad.ir.program import CadProgram
+from botcad.shapescript.program import ShapeScript
 
 
-class TestCadProgram:
+class TestShapeScript:
     def test_box_returns_shape_ref(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         ref = prog.box(0.06, 0.04, 0.02)
         assert isinstance(ref, ShapeRef)
 
     def test_ops_are_recorded(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         prog.box(1, 1, 1)
         assert len(prog.ops) == 1
         assert isinstance(prog.ops[0], BoxOp)
 
     def test_cut_records_both_refs(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.cylinder(0.1, 2)
         c = prog.cut(a, b)
@@ -189,12 +190,12 @@ class TestCadProgram:
         assert cut_op.ref == c
 
     def test_content_hash_deterministic(self):
-        p1 = CadProgram()
+        p1 = ShapeScript()
         a = p1.box(1, 1, 1)
         b = p1.cylinder(0.1, 2)
         p1.cut(a, b)
 
-        p2 = CadProgram()
+        p2 = ShapeScript()
         a = p2.box(1, 1, 1)
         b = p2.cylinder(0.1, 2)
         p2.cut(a, b)
@@ -202,67 +203,67 @@ class TestCadProgram:
         assert p1.content_hash() == p2.content_hash()
 
     def test_content_hash_changes_with_params(self):
-        p1 = CadProgram()
+        p1 = ShapeScript()
         p1.box(1, 1, 1)
 
-        p2 = CadProgram()
+        p2 = ShapeScript()
         p2.box(2, 1, 1)
 
         assert p1.content_hash() != p2.content_hash()
 
     def test_locate_with_defaults(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.locate(a, pos=(0.01, 0, 0))
         assert isinstance(prog.ops[1], LocateOp)
         assert prog.ops[1].euler_deg == (0.0, 0.0, 0.0)
 
     def test_fillet_with_tags(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1, tag="edges")
         b = prog.fillet(a, tags=("edges",), radius=0.05)
         assert isinstance(prog.ops[1], FilletOp)
         assert prog.ops[1].tags == ("edges",)
 
     def test_query_volume(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         prog.query_volume(a)
         assert len(prog.ops) == 2
         assert isinstance(prog.ops[1], QueryVolumeOp)
 
     def test_to_json_roundtrip(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1, tag="shell")
         b = prog.cylinder(0.1, 2, tag="pocket")
         prog.cut(a, b)
         prog.query_volume(prog.ops[2].ref)
 
         json_str = prog.to_json()
-        prog2 = CadProgram.from_json(json_str)
+        prog2 = ShapeScript.from_json(json_str)
         assert prog.content_hash() == prog2.content_hash()
         assert len(prog2.ops) == len(prog.ops)
 
     def test_output_ref_field(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         assert prog.output_ref is None
         ref = prog.box(1, 1, 1)
         prog.output_ref = ref
         assert prog.output_ref == ref
 
     def test_prebuilt_solids_field(self):
-        prog = CadProgram()
+        prog = ShapeScript()
         assert prog.prebuilt_solids == {}
         prog.prebuilt_solids["pre_0"] = object()
         assert "pre_0" in prog.prebuilt_solids
 
     def test_content_hash_includes_prebuilt_hashes(self):
         """Programs with different prebuilt solid hashes produce different content hashes."""
-        p1 = CadProgram()
+        p1 = ShapeScript()
         p1.ops.append(PrebuiltOp(ref=ShapeRef("pre_0"), solid_hash="hash_a"))
         p1._counter = 1
 
-        p2 = CadProgram()
+        p2 = ShapeScript()
         p2.ops.append(PrebuiltOp(ref=ShapeRef("pre_0"), solid_hash="hash_b"))
         p2._counter = 1
 
@@ -271,7 +272,7 @@ class TestCadProgram:
 
 # ── Task 3: TagRegistry tests ──
 
-from botcad.ir.tags import TagRegistry
+from botcad.shapescript.tags import TagRegistry
 
 
 class TestTagRegistry:

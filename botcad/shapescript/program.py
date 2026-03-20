@@ -1,4 +1,4 @@
-"""CadProgram — ordered op sequence with builder API and content hashing."""
+"""ShapeScript — ordered op sequence with builder API and content hashing."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 
-from botcad.ir.ops import (
+from botcad.shapescript.ops import (
     Align3,
     BoxOp,
-    CadOp,
     ChamferOp,
     CutOp,
     CylinderOp,
@@ -24,6 +23,7 @@ from botcad.ir.ops import (
     QueryCentroidOp,
     QueryInertiaOp,
     QueryVolumeOp,
+    ShapeOp,
     ShapeRef,
     SphereOp,
     Vec3,
@@ -31,11 +31,11 @@ from botcad.ir.ops import (
 
 
 @dataclass
-class CadProgram:
+class ShapeScript:
     """Ordered sequence of IR ops with a builder API.
 
     Usage:
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(0.06, 0.04, 0.02)
         hole = prog.cylinder(0.01, 0.1, tag="pocket")
         hole = prog.locate(hole, pos=(0.01, 0, 0))
@@ -44,7 +44,7 @@ class CadProgram:
         prog.output_ref = result
     """
 
-    ops: list[CadOp] = field(default_factory=list)
+    ops: list[ShapeOp] = field(default_factory=list)
     output_ref: ShapeRef | None = None  # explicit final shape
     prebuilt_solids: dict[str, object] = field(default_factory=dict)  # ref.id -> solid
     _counter: int = field(default=0, repr=False)
@@ -207,9 +207,9 @@ class CadProgram:
         )
 
     @classmethod
-    def from_json(cls, json_str: str) -> CadProgram:
+    def from_json(cls, json_str: str) -> ShapeScript:
         """Deserialize from canonical JSON."""
-        import botcad.ir.ops as ops_mod
+        import botcad.shapescript.ops as ops_mod
 
         ops_data = json.loads(json_str)
         prog = cls()

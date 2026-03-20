@@ -1,4 +1,4 @@
-"""Typed IR operations for the CAD pipeline.
+"""Typed ShapeScript operations for the CAD pipeline.
 
 Every operation is a frozen dataclass. Shape-producing ops carry a ShapeRef
 that downstream ops use to reference the result. Tags are optional string
@@ -172,6 +172,6 @@ QueryOp = Union[
     QueryVolumeOp, QueryCentroidOp, QueryInertiaOp, QueryBBoxOp, QueryAreaOp
 ]
 ExportOp = Union[ExportSTLOp, ExportSTEPOp]
-CadOp = Union[
+ShapeOp = Union[
     PrimitiveOp, BooleanOp, TransformOp, ModificationOp, QueryOp, ExportOp
 ]

@@ -1,4 +1,4 @@
-"""Golden-file roundtrip tests: IR path vs direct build123d path.
+"""Golden-file roundtrip tests: ShapeScript path vs direct build123d path.
 
 Tests build bodies through both paths and compare volumes/bounding boxes.
 Uses synthetic bodies first (fast), then real bots (slower, marked).
@@ -52,9 +52,9 @@ def _build_direct(body, pj=None, wire_segs=None):
 
 
 def _build_ir(body, pj=None, wire_segs=None):
-    """Build via IR path."""
-    from botcad.ir.backend_occt import OcctBackend
-    from botcad.ir.emit_body import emit_body_ir
+    """Build via ShapeScript path."""
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.emit_body import emit_body_ir
 
     prog = emit_body_ir(body, pj, wire_segs)
     backend = OcctBackend()
@@ -244,7 +244,7 @@ class TestIREmitCylinderOrientation:
         _assert_solids_match(ir, direct, "cyl_z_axis")
 
     def test_cylinder_child_x_axis(self):
-        """Child cylinder on X axis — 90° rotation."""
+        """Child cylinder on X axis — 90 rotation."""
         from botcad.components.servo import STS3215
         from botcad.geometry import rotation_between
         from botcad.skeleton import Body, BodyShape, Joint
@@ -323,11 +323,11 @@ class TestIRRoundtripBots:
 
 @pytest.mark.slow
 class TestBuildCadIntegration:
-    """build_cad() through IR path produces valid CadModel."""
+    """build_cad() through ShapeScript path produces valid CadModel."""
 
     @pytest.mark.timeout(300)
     def test_build_cad_via_ir(self, bot_fixture, monkeypatch):
-        monkeypatch.setenv("BOTCAD_IR", "1")
+        monkeypatch.setenv("SHAPESCRIPT", "1")
         _clear_all_caches()
 
         from botcad.emit.cad import build_cad

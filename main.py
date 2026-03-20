@@ -940,8 +940,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Random seed for target placement (only with --regenerate)",
     )
 
-    # ir-debug
-    p_irdebug = sub.add_parser("ir-debug", help="Step-by-step CadIR debugger (Rerun)")
+    # shapescript-debug
+    p_irdebug = sub.add_parser(
+        "shapescript-debug", help="Step-by-step ShapeScript debugger (Rerun)"
+    )
     p_irdebug.add_argument(
         "--bot", type=str, default=None, help="Bot name (default: wheeler_arm)"
     )
@@ -1100,8 +1102,8 @@ def main():
         pipeline = pipeline_for_bot(bot_name)
         print(pipeline.describe())
 
-    elif args.command == "ir-debug":
-        _run_ir_debug(args.bot, args.body)
+    elif args.command == "shapescript-debug":
+        _run_shapescript_debug(args.bot, args.body)
 
     elif args.command == "replay":
         from viz.replay import run_replay
@@ -1118,8 +1120,8 @@ def main():
         )
 
 
-def _run_ir_debug(bot_name: str | None, body_name: str | None):
-    """Build a bot via IR and launch Rerun debugger for a body."""
+def _run_shapescript_debug(bot_name: str | None, body_name: str | None):
+    """Build a bot via ShapeScript and launch Rerun debugger for a body."""
     import importlib
 
     bot_name = bot_name or "wheeler_arm"
@@ -1156,11 +1158,11 @@ def _run_ir_debug(bot_name: str | None, body_name: str | None):
         f"{len(body.mounts)} mounts)"
     )
 
-    from botcad.ir.debug_rerun import debug_program
-    from botcad.ir.emit_body import emit_body_ir
+    from botcad.shapescript.debug_rerun import debug_program
+    from botcad.shapescript.emit_body import emit_body_ir
 
     prog = emit_body_ir(body, pj, ws)
-    print(f"IR program: {len(prog.ops)} ops")
+    print(f"ShapeScript program: {len(prog.ops)} ops")
     debug_program(prog, spawn_viewer=True)
 
 

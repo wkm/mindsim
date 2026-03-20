@@ -1,4 +1,4 @@
-"""OCCT backend -- executes CadIR programs against build123d.
+"""OCCT backend -- executes ShapeScript programs against build123d.
 
 Walks the op list sequentially, maintaining a shape table (ShapeRef -> Solid)
 and a tag registry. Returns an ExecutionResult with query answers and
@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from botcad.ir.ops import (
+from botcad.shapescript.ops import (
     Align3,
     BoxOp,
     ChamferOp,
@@ -33,15 +33,15 @@ from botcad.ir.ops import (
     QueryVolumeOp,
     SphereOp,
 )
-from botcad.ir.program import CadProgram
-from botcad.ir.tags import TagRegistry
+from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.tags import TagRegistry
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class ExecutionResult:
-    """Result of executing a CadProgram."""
+    """Result of executing a ShapeScript."""
 
     shapes: dict[str, object] = field(default_factory=dict)  # ref.id -> build123d Solid
     queries: list[Any] = field(default_factory=list)  # ordered query results
@@ -49,9 +49,9 @@ class ExecutionResult:
 
 
 class OcctBackend:
-    """Executes CadProgram ops against build123d/OCCT."""
+    """Executes ShapeScript ops against build123d/OCCT."""
 
-    def execute(self, program: CadProgram) -> ExecutionResult:
+    def execute(self, program: ShapeScript) -> ExecutionResult:
         from build123d import (
             Align,
             Box,

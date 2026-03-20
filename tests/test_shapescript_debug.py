@@ -1,4 +1,4 @@
-"""Smoke test for the Rerun IR debugger."""
+"""Smoke test for the Rerun ShapeScript debugger."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ import pytest
 b3d = pytest.importorskip("build123d")
 rr = pytest.importorskip("rerun")
 
-from botcad.ir.program import CadProgram
+from botcad.shapescript.program import ShapeScript
 
 
-class TestIRDebugRerun:
+class TestShapeScriptDebugRerun:
     def test_debug_simple_program(self):
         """Debug a simple program without crashing."""
-        from botcad.ir.debug_rerun import debug_program
+        from botcad.shapescript.debug_rerun import debug_program
 
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1, tag="shell")
         hole = prog.cylinder(0.2, 2, tag="hole")
         result = prog.cut(box, hole)
@@ -25,9 +25,9 @@ class TestIRDebugRerun:
 
     def test_debug_with_export(self, tmp_path):
         """Debug produces per-step mesh files."""
-        from botcad.ir.debug_rerun import debug_program
+        from botcad.shapescript.debug_rerun import debug_program
 
-        prog = CadProgram()
+        prog = ShapeScript()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)
         prog.cut(box, hole)
@@ -39,9 +39,9 @@ class TestIRDebugRerun:
 
     def test_debug_fuse_op(self):
         """FuseOp should log without error."""
-        from botcad.ir.debug_rerun import debug_program
+        from botcad.shapescript.debug_rerun import debug_program
 
-        prog = CadProgram()
+        prog = ShapeScript()
         a = prog.box(1, 1, 1)
         b = prog.sphere(0.3)
         prog.fuse(a, b)
