@@ -579,6 +579,10 @@ _bots_json: bytes | None = None
 _cad_steps_cache: dict[tuple[str, str], list] = {}
 _cad_steps_lock = threading.Lock()
 
+# Component ShapeScript steps cache: component_name → list[CadStep]
+_component_steps_cache: dict[str, list] = {}
+_component_steps_lock = threading.Lock()
+
 # Bot object cache: bot_name → (bot, cad_model)
 _bot_cache: dict[str, tuple] = {}
 _bot_cache_lock = threading.Lock()
@@ -666,6 +670,69 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
 
     with _cad_steps_lock:
         _cad_steps_cache[cache_key] = steps
+    return steps
+
+
+def _get_component_steps(comp_name: str, registry: dict) -> list:
+    """Get cached ShapeScript steps for a component, computing on first access.
+
+    Looks up the component in the registry, finds a matching *_script()
+    emitter in botcad.shapescript.emit_components, executes it, and
+    converts the result to CadStep objects.
+
+    Raises KeyError if no ShapeScript emitter exists for this component.
+    """
+    with _component_steps_lock:
+        if comp_name in _component_steps_cache:
+            return _component_steps_cache[comp_name]
+
+    if comp_name not in registry:
+        raise KeyError(f"Unknown component: {comp_name}")
+
+    _factory, comp, category = registry[comp_name]
+
+    # Auto-discover emitter: try {category}_script in emit_components
+    from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+    from botcad.shapescript import emit_components
+
+    script_fn = None
+    if isinstance(comp, CameraSpec):
+        script_fn = emit_components.camera_script
+    elif isinstance(comp, BatterySpec):
+        script_fn = emit_components.battery_script
+    elif isinstance(comp, BearingSpec):
+        script_fn = emit_components.bearing_script
+    elif isinstance(comp, ServoSpec):
+        script_fn = emit_components.horn_script
+    else:
+        # Fallback: try {category}_script
+        fn = getattr(emit_components, f"{category}_script", None)
+        if callable(fn):
+            script_fn = fn
+
+    if script_fn is None:
+        raise KeyError(f"No ShapeScript emitter for component: {comp_name}")
+
+    import time
+
+    t0 = time.monotonic()
+    print(f"[shapescript] Building steps for component {comp_name}...")
+
+    prog = script_fn(comp)
+    if prog is None:
+        raise KeyError(f"ShapeScript emitter returned None for: {comp_name}")
+
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+
+    result = OcctBackend().execute(prog)
+    steps = shapescript_to_cad_steps(prog, result)
+
+    t1 = time.monotonic()
+    print(f"[shapescript]   {len(steps)} steps in {t1 - t0:.1f}s")
+
+    with _component_steps_lock:
+        _component_steps_cache[comp_name] = steps
     return steps
 
 
@@ -844,6 +911,24 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             self._handle_cad_step_tool_stl(m.group(1), m.group(2), int(m.group(3)))
             return
 
+        # /api/components/<name>/shapescript
+        m = re.match(r"^/api/components/([^/]+)/shapescript$", path)
+        if m:
+            self._handle_component_shapescript(m.group(1))
+            return
+
+        # /api/components/<name>/shapescript/<idx>/stl
+        m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/stl$", path)
+        if m:
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="solid")
+            return
+
+        # /api/components/<name>/shapescript/<idx>/tool-stl
+        m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/tool-stl$", path)
+        if m:
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="tool")
+            return
+
         # /api/components/<name>/stl/<part>
         m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", path)
         if m:
@@ -1018,6 +1103,70 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
         self._send_json(json.dumps({"fasteners": fasteners}).encode())
 
+    def _handle_component_shapescript(self, name: str):
+        """Return JSON metadata for ShapeScript construction steps of a component."""
+        try:
+            steps = _get_component_steps(name, self.component_registry)
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"ShapeScript step generation failed: {e}")
+            return
+
+        payload = json.dumps(
+            {
+                "component": name,
+                "steps": [
+                    {
+                        "index": i,
+                        "label": s.label,
+                        "op": s.op,
+                        "has_tool": s.tool is not None,
+                    }
+                    for i, s in enumerate(steps)
+                ],
+            }
+        ).encode()
+        self._send_json(payload)
+
+    def _handle_component_step_stl(self, name: str, step_idx: int, attr: str):
+        """Serve STL bytes for a component ShapeScript step's solid or tool."""
+        cache_key = (f"compstep_{attr}_{name}", str(step_idx))
+        with _stl_cache_lock:
+            cached = _stl_cache.get(cache_key)
+        if cached:
+            self._send_binary(cached, f"{name}_step{step_idx}_{attr}.stl")
+            return
+
+        try:
+            steps = _get_component_steps(name, self.component_registry)
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"ShapeScript step generation failed: {e}")
+            return
+
+        if step_idx < 0 or step_idx >= len(steps):
+            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
+            return
+
+        solid = getattr(steps[step_idx], attr, None)
+        if solid is None:
+            self.send_error(404, f"Step {step_idx} has no {attr}")
+            return
+
+        try:
+            stl_bytes = _solid_to_stl_bytes(solid)
+        except Exception as e:
+            self.send_error(500, f"STL export failed for step {step_idx} {attr}: {e}")
+            return
+
+        with _stl_cache_lock:
+            _stl_cache[cache_key] = stl_bytes
+        self._send_binary(stl_bytes, f"{name}_step{step_idx}_{attr}.stl")
+
     def _handle_cad_steps_meta(self, bot_name: str, body_name: str):
         """Return JSON metadata for all CAD construction steps of a body."""
         try:
@@ -1042,6 +1191,7 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
                         "label": s.label,
                         "op": s.op,
                         "has_tool": s.tool is not None,
+                        "group": getattr(s, "group", None),
                     }
                     for i, s in enumerate(steps)
                 ],

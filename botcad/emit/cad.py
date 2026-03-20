@@ -79,6 +79,7 @@ class CadStep:
     solid: object  # build123d Solid at this stage
     op: str  # "create" | "cut" | "union"
     tool: object | None = None  # cutting/union tool solid (placed in body frame)
+    group: str | None = None  # CallOp sub-program key, for viewer grouping
 
 
 def _update_mass_from_solid(body: Body, solid) -> None:

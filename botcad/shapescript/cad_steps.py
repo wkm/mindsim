@@ -28,6 +28,7 @@ def shapescript_to_cad_steps(
     from botcad.emit.cad import CadStep
     from botcad.shapescript.ops import (
         BoxOp,
+        CallOp,
         CutOp,
         CylinderOp,
         FuseOp,
@@ -40,6 +41,10 @@ def shapescript_to_cad_steps(
     shapes = result.shapes
 
     for op in prog.ops:
+        # Query/export ops have no ref — skip them early
+        if not hasattr(op, "ref"):
+            continue
+
         solid = shapes.get(op.ref.id)
         if solid is None:
             continue
@@ -61,6 +66,12 @@ def shapescript_to_cad_steps(
             case PrebuiltOp(ref=ref, tag=tag):
                 label = "Prebuilt" + (f" ({tag})" if tag else "")
                 steps.append(CadStep(label=label, solid=solid, op="create"))
+
+            case CallOp(ref=ref, sub_program_key=key, tag=tag):
+                label = f"Call: {key}" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", group=key)
+                )
 
             # Booleans — cut/union steps with tool
             case CutOp(ref=ref, target=t, tool=tl):
@@ -91,6 +102,7 @@ def shapescript_to_cad_steps(
                         solid=solid,
                         op=steps[-1].op,
                         tool=steps[-1].tool,
+                        group=steps[-1].group,
                     )
                 # Otherwise ignore — transforms between booleans are intermediate
 
@@ -104,6 +116,6 @@ def shapescript_to_cad_steps(
 def _find_tag_for_ref(prog: ShapeScript, ref) -> str | None:
     """Find the tag associated with a ShapeRef by scanning the program ops."""
     for op in prog.ops:
-        if op.ref == ref:
+        if hasattr(op, "ref") and op.ref == ref:
             return getattr(op, "tag", None)
     return None

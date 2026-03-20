@@ -266,14 +266,30 @@ class CadStepsViewer {
     panel.appendChild(listTitle);
 
     this.stepListEl = document.createElement('div');
+    let currentGroup = null;
     for (const step of this.steps) {
+      // Insert group header when entering a new CallOp group
+      if (step.group && step.group !== currentGroup) {
+        const header = document.createElement('div');
+        header.style.cssText = `
+          font-size: 11px; padding: 4px 6px 2px; margin-top: 6px;
+          color: var(--bp-gray1); font-weight: 600; letter-spacing: 0.3px;
+          border-bottom: 1px solid var(--bp-light-gray1, #E1E8ED);
+        `;
+        header.textContent = step.group;
+        this.stepListEl.appendChild(header);
+      }
+      currentGroup = step.group || null;
+
       const row = document.createElement('div');
+      const indent = step.group ? 'padding-left: 16px;' : '';
       row.style.cssText = `
         font-size: 12px; padding: 4px 6px; border-radius: 4px; cursor: pointer;
         margin-bottom: 2px; display: flex; align-items: center; gap: 6px;
-        transition: background 0.1s;
+        transition: background 0.1s; ${indent}
       `;
       row.dataset.index = step.index;
+      if (step.group) row.classList.add('step-group-call');
 
       const dot = document.createElement('span');
       const color = OP_COLORS[step.op] || 0x5C7080;
