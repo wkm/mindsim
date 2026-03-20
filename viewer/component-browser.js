@@ -203,6 +203,9 @@ class ComponentBrowser {
           this.controls.enabled = true;
         }
         measureBtn.classList.toggle('active', active);
+        // Show/hide clear button with measure tool
+        const clearEl = document.getElementById('measure-clear');
+        if (clearEl) clearEl.style.display = active ? '' : 'none';
       });
     }
 
@@ -277,6 +280,11 @@ class ComponentBrowser {
       } else if (e.key === 's' && !ctrl) {
         e.preventDefault();
         sectionToggle?.click();
+      } else if (e.key === 'Escape') {
+        const modal = document.getElementById('svg-modal');
+        if (modal && modal.style.display !== 'none') {
+          modal.style.display = 'none';
+        }
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
         this._arrowKeyNav(e.key, e.shiftKey);
@@ -368,14 +376,6 @@ class ComponentBrowser {
       dropdown.querySelectorAll('[data-view]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.view === this.activePreset);
       });
-    }
-    // Update dropdown button label
-    const dropdownBtn = document.getElementById('view-dropdown-btn');
-    if (dropdownBtn && this.activePreset) {
-      const preset = VIEW_PRESETS[this.activePreset];
-      if (preset) {
-        dropdownBtn.textContent = `${preset.label} \u25BE`;
-      }
     }
   }
 
