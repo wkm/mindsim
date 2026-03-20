@@ -12,7 +12,10 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
-import { BP, tintColor, createMaterial, addMeshWithEdges } from './presentation.js';
+import {
+  BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
+  tintColor, createMaterial, addMeshWithEdges,
+} from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
 // ---------------------------------------------------------------------------
@@ -587,7 +590,15 @@ class ComponentBrowser {
       group.visible = false;
     }
 
-    this._fitCameraToVisibleMeshes();
+    // Re-fit the frustum without changing camera angle
+    const box = this._getVisibleBBox();
+    this._fitOrthoFrustum(box);
+    this.controls.update();
+
+    // Re-apply section plane (clips new geometry, rebuilds caps)
+    if (this.sectionEnabled) {
+      this._updateSectionPlane();
+    }
   }
 
   async loadComponent(name) {
@@ -775,7 +786,7 @@ class ComponentBrowser {
         depthWrite: false,
       });
       this._sectionViz = new THREE.Mesh(geom, mat);
-      this._sectionViz.renderOrder = 999;
+      this._sectionViz.renderOrder = RENDER_ORDER.SECTION_VIZ;
       this._sectionViz.raycast = () => {};
       this.scene.add(this._sectionViz);
 
@@ -833,96 +844,117 @@ class ComponentBrowser {
     this._capGroup.name = 'section-caps';
     this.scene.add(this._capGroup);
 
-    // Collect all visible meshes
-    const meshes = [];
-    for (const id of ALL_LAYER_IDS) {
-      const group = this.layerGroups[id];
-      if (!group.visible) continue;
-      group.traverse(child => {
-        if (child.isMesh && child.geometry) {
-          meshes.push(child);
-        }
-      });
-    }
-
-    // Create stencil helpers for each mesh
-    for (const mesh of meshes) {
-      // Back-face pass — increment stencil
-      const backMat = new THREE.MeshBasicMaterial({
-        colorWrite: false,
-        depthWrite: false,
-        side: THREE.BackSide,
-        clippingPlanes: clips,
-        stencilWrite: true,
-        stencilFunc: THREE.AlwaysStencilFunc,
-        stencilFail: THREE.KeepStencilOp,
-        stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.IncrementWrapStencilOp,
-      });
-      const backMesh = new THREE.Mesh(mesh.geometry, backMat);
-      backMesh.position.copy(mesh.position);
-      backMesh.quaternion.copy(mesh.quaternion);
-      backMesh.scale.copy(mesh.scale);
-      backMesh.renderOrder = -2;
-      backMesh.raycast = () => {};
-      this._capGroup.add(backMesh);
-
-      // Front-face pass — decrement stencil
-      const frontMat = new THREE.MeshBasicMaterial({
-        colorWrite: false,
-        depthWrite: false,
-        side: THREE.FrontSide,
-        clippingPlanes: clips,
-        stencilWrite: true,
-        stencilFunc: THREE.AlwaysStencilFunc,
-        stencilFail: THREE.KeepStencilOp,
-        stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.DecrementWrapStencilOp,
-      });
-      const frontMesh = new THREE.Mesh(mesh.geometry, frontMat);
-      frontMesh.position.copy(mesh.position);
-      frontMesh.quaternion.copy(mesh.quaternion);
-      frontMesh.scale.copy(mesh.scale);
-      frontMesh.renderOrder = -1;
-      frontMesh.raycast = () => {};
-      this._capGroup.add(frontMesh);
-    }
-
-    // Cap plane — renders only where stencil != 0 (cross-section interior)
-    // stencilWrite must be true for Three.js to enable the stencil test;
-    // all ops are KEEP so it doesn't modify the stencil buffer.
     const box = this._getVisibleBBox();
     const capSize = box
       ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
       : 0.2;
-    const capGeom = new THREE.PlaneGeometry(capSize, capSize);
-    const capMat = new THREE.MeshBasicMaterial({
-      color: BP.GRAY5,    // cross-section fill
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      stencilWrite: true,
-      stencilFunc: THREE.NotEqualStencilFunc,
-      stencilRef: 0,
-      stencilFail: THREE.KeepStencilOp,
-      stencilZFail: THREE.KeepStencilOp,
-      stencilZPass: THREE.KeepStencilOp,
-    });
-    const capPlane = new THREE.Mesh(capGeom, capMat);
-    capPlane.raycast = () => {};
-    capPlane.renderOrder = 1;
 
-    // Position and orient to match the section plane
-    if (this._sectionViz) {
-      capPlane.position.copy(this._sectionViz.position);
-      capPlane.rotation.copy(this._sectionViz.rotation);
+    const allMeshes = [];
+    let layerIndex = 0;
+
+    // Process each layer separately so each gets its own cap color
+    for (const id of ALL_LAYER_IDS) {
+      const group = this.layerGroups[id];
+      if (!group.visible) continue;
+
+      const layerMeshes = [];
+      group.traverse(child => {
+        if (child.isMesh && child.geometry) {
+          layerMeshes.push(child);
+        }
+      });
+      if (layerMeshes.length === 0) continue;
+
+      const ref = layerIndex + 1;  // stencil ref (1-based, 0 = empty)
+      const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
+      layerIndex++;
+
+      // Stencil helpers for this layer's meshes
+      for (const mesh of layerMeshes) {
+        // Back-face pass — write ref
+        const backMat = new THREE.MeshBasicMaterial({
+          colorWrite: false,
+          depthWrite: false,
+          side: THREE.BackSide,
+          clippingPlanes: clips,
+          stencilWrite: true,
+          stencilFunc: THREE.AlwaysStencilFunc,
+          stencilRef: ref,
+          stencilFail: THREE.KeepStencilOp,
+          stencilZFail: THREE.KeepStencilOp,
+          stencilZPass: THREE.ReplaceStencilOp,
+        });
+        const backMesh = new THREE.Mesh(mesh.geometry, backMat);
+        backMesh.position.copy(mesh.position);
+        backMesh.quaternion.copy(mesh.quaternion);
+        backMesh.scale.copy(mesh.scale);
+        backMesh.renderOrder = orderBase + RENDER_ORDER.STENCIL_BACK;
+        backMesh.raycast = () => {};
+        this._capGroup.add(backMesh);
+
+        // Front-face pass — clear to 0
+        const frontMat = new THREE.MeshBasicMaterial({
+          colorWrite: false,
+          depthWrite: false,
+          side: THREE.FrontSide,
+          clippingPlanes: clips,
+          stencilWrite: true,
+          stencilFunc: THREE.AlwaysStencilFunc,
+          stencilRef: 0,
+          stencilFail: THREE.KeepStencilOp,
+          stencilZFail: THREE.KeepStencilOp,
+          stencilZPass: THREE.ReplaceStencilOp,
+        });
+        const frontMesh = new THREE.Mesh(mesh.geometry, frontMat);
+        frontMesh.position.copy(mesh.position);
+        frontMesh.quaternion.copy(mesh.quaternion);
+        frontMesh.scale.copy(mesh.scale);
+        frontMesh.renderOrder = orderBase + RENDER_ORDER.STENCIL_FRONT;
+        frontMesh.raycast = () => {};
+        this._capGroup.add(frontMesh);
+      }
+
+      // Cap plane for this layer — darker tint of the layer color
+      const meta = LAYER_META[id] || { colorHex: null };
+      const entityColor = meta.colorHex !== null
+        ? meta.colorHex
+        : new THREE.Color(
+            this.currentComponent.color[0],
+            this.currentComponent.color[1],
+            this.currentComponent.color[2],
+          );
+      // 60% tint for the cap fill (darker than the 50% body tint)
+      const capColor = tintColor(entityColor, 0.6);
+
+      const capGeom = new THREE.PlaneGeometry(capSize, capSize);
+      const capMat = new THREE.MeshBasicMaterial({
+        color: capColor,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        stencilWrite: true,
+        stencilFunc: THREE.EqualStencilFunc,
+        stencilRef: ref,
+        stencilFail: THREE.KeepStencilOp,
+        stencilZFail: THREE.KeepStencilOp,
+        stencilZPass: THREE.ZeroStencilOp,  // clear after rendering
+      });
+      const capPlane = new THREE.Mesh(capGeom, capMat);
+      capPlane.raycast = () => {};
+      capPlane.renderOrder = orderBase + RENDER_ORDER.STENCIL_CAP;
+
+      if (this._sectionViz) {
+        capPlane.position.copy(this._sectionViz.position);
+        capPlane.rotation.copy(this._sectionViz.rotation);
+      }
+
+      this._capGroup.add(capPlane);
+      allMeshes.push(...layerMeshes);
     }
 
-    this._capGroup.add(capPlane);
-
-    // Compute cross-section contour lines (mesh-plane intersection)
+    // Compute cross-section contour lines across all layers
     const contourSegments = [];
     const plane = this.sectionPlane;
-    for (const mesh of meshes) {
+    for (const mesh of allMeshes) {
       this._computeMeshPlaneContour(mesh, plane, contourSegments);
     }
 
@@ -931,7 +963,7 @@ class ComponentBrowser {
       lineGeom.setPositions(contourSegments);
       const lineMat = new LineMaterial({
         color: BP.DARK_GRAY3,
-        linewidth: 3,        // px (screen-space, via Line2)
+        linewidth: 3,
         resolution: new THREE.Vector2(
           this.renderer.domElement.width,
           this.renderer.domElement.height,
@@ -939,10 +971,10 @@ class ComponentBrowser {
         clippingPlanes: clips,
       });
       const contourLines = new LineSegments2(lineGeom, lineMat);
-      contourLines.renderOrder = 2;
+      contourLines.renderOrder = RENDER_ORDER.SECTION_CONTOUR;
       contourLines.raycast = () => {};
       this._capGroup.add(contourLines);
-      this._contourLineMat = lineMat;  // keep ref for resolution updates
+      this._contourLineMat = lineMat;
     }
   }
 
@@ -1013,8 +1045,13 @@ class ComponentBrowser {
     const layers = ALL_LAYER_IDS.filter(id => this.layerGroups[id].visible);
     if (layers.length === 0) return;
 
-    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
-    const up = this.camera.up.clone();
+    // Extract actual view axes from camera world matrix (not camera.up,
+    // which is just a lookAt hint and drifts after orbiting)
+    this.camera.updateMatrixWorld();
+    const dir = new THREE.Vector3();
+    dir.setFromMatrixColumn(this.camera.matrixWorld, 2);  // +Z = backward (camera toward scene)
+    const up = new THREE.Vector3();
+    up.setFromMatrixColumn(this.camera.matrixWorld, 1);   // +Y = screen up
 
     // Determine view label for annotation
     const preset = VIEW_PRESETS[this.activePreset];

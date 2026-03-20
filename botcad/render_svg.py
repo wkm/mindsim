@@ -85,7 +85,7 @@ def render_component_svg(
         )
 
     if section_plane is not None:
-        _add_section_view(svg, solids, section_plane)
+        _add_section_view(svg, solids, section_plane, view_origin, view_up)
     else:
         _add_projection_view(svg, solids, view_origin, view_up)
 
@@ -133,9 +133,59 @@ def _add_projection_view(svg, solids, view_origin, view_up):
                 svg.add_shape(edge, layer=f"{layer_id}_hidden")
 
 
-def _add_section_view(svg, solids, section_plane):
-    """Add a section view (cross-section fills with outlines) to the SVG."""
-    to_xy = section_plane.location.inverse()
+def _add_section_view(svg, solids, section_plane, view_origin, view_up):
+    """Add a section view with canonical orientation.
+
+    Section cuts are camera-independent — the orientation is determined
+    by the section plane's axis using standard technical drawing convention:
+      X section: right = Y, up = Z
+      Y section: right = X, up = Z
+      Z section: right = X, up = Y
+    """
+    from build123d import Plane as Bd3Plane
+    from build123d import Vector
+
+    plane_normal = (
+        float(section_plane.z_dir.X),
+        float(section_plane.z_dir.Y),
+        float(section_plane.z_dir.Z),
+    )
+    plane_origin = section_plane.origin
+
+    # Canonical x_dir for each axis-aligned section (normals are always +1).
+    #
+    # build123d: y_dir = z_dir × x_dir
+    # SVG scale(1,-1): visual_up = -y_dir = -(normal × x_dir)
+    #
+    # Desired visual orientations and the x_dir that produces them:
+    #   +X normal: visual_right = +Y, visual_up = +Z  →  x_dir = (0,1,0)
+    #   +Y normal: visual_right = +X, visual_up = +Z  →  x_dir = (1,0,0)
+    #   +Z normal: visual_right = +X, visual_up = +Y  →  x_dir = (1,0,0)
+    #
+    # Verification: -(normal × x_dir) = desired_up
+    #   +X: -((1,0,0)×(0,1,0)) = -(0,0,1) ... that's -Z, not +Z!
+    #
+    # The math says x_dir must be negated for +X normal. Let's solve
+    # properly: -(n × x) = up  →  n × x = -up
+    #   +X, want up=+Z: (1,0,0) × x = (0,0,-1) → x = (0,-1,0)
+    #   +Y, want up=+Z: (0,1,0) × x = (0,0,-1) → x = (1,0,0)  (verify: (0,1,0)×(1,0,0)=(0,0,-1) ✓)
+    #   +Z, want up=+Y: (0,0,1) × x = (0,-1,0) → x = (1,0,0)  (verify: (0,0,1)×(1,0,0)=(0,-1,0) ✓)
+    nx, ny, nz = plane_normal
+    if abs(nx) > 0.5:
+        x_dir = (0, -1, 0)
+    elif abs(ny) > 0.5:
+        x_dir = (1, 0, 0)
+    else:
+        x_dir = (1, 0, 0)
+
+    cam_plane = Bd3Plane(
+        origin=Vector(
+            float(plane_origin.X), float(plane_origin.Y), float(plane_origin.Z)
+        ),
+        x_dir=Vector(*x_dir),
+        z_dir=Vector(*plane_normal),
+    )
+    to_xy = cam_plane.location.inverse()
 
     for layer_id, solid, _rgb in solids:
         try:
