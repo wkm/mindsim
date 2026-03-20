@@ -259,6 +259,9 @@ class ComponentBrowser {
       } else if (e.key === 's' && !ctrl) {
         e.preventDefault();
         sectionToggle?.click();
+      } else if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        this._arrowKeyNav(e.key, e.shiftKey);
       }
     });
   }
@@ -288,6 +291,57 @@ class ComponentBrowser {
     this._fitOrthoFrustum(box);
     this.controls.update();
     this._updatePresetButtons();
+  }
+
+  /** Orbit or pan the camera via arrow keys. */
+  _arrowKeyNav(key, shift) {
+    const ORBIT_STEP = Math.PI / 12;  // 15° per keypress
+    const target = this.controls.target;
+    const pos = this.camera.position;
+    const offset = pos.clone().sub(target);
+
+    if (shift) {
+      // Shift+Arrow: pan
+      const panStep = this.camera.top * 0.15;  // 15% of visible height
+      this.camera.updateMatrixWorld();
+      const right = new THREE.Vector3();
+      const up = new THREE.Vector3();
+      right.setFromMatrixColumn(this.camera.matrixWorld, 0);
+      up.setFromMatrixColumn(this.camera.matrixWorld, 1);
+
+      let dx = 0, dy = 0;
+      if (key === 'ArrowLeft')  dx = -panStep;
+      if (key === 'ArrowRight') dx = panStep;
+      if (key === 'ArrowUp')    dy = panStep;
+      if (key === 'ArrowDown')  dy = -panStep;
+
+      const move = right.multiplyScalar(dx).add(up.multiplyScalar(dy));
+      target.add(move);
+      pos.add(move);
+    } else {
+      // Arrow: orbit
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        // Horizontal orbit around Z axis
+        const angle = key === 'ArrowLeft' ? ORBIT_STEP : -ORBIT_STEP;
+        offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+      } else {
+        // Vertical orbit — rotate around camera's local X axis
+        const angle = key === 'ArrowUp' ? -ORBIT_STEP : ORBIT_STEP;
+        this.camera.updateMatrixWorld();
+        const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+        offset.applyAxisAngle(right, angle);
+        // Update up vector to stay coherent
+        this.camera.up.applyAxisAngle(right, angle);
+      }
+      pos.copy(target).add(offset);
+      this.camera.lookAt(target);
+    }
+
+    // Unlock rotation since we're now in a custom orientation
+    this.controls.enableRotate = true;
+    this.activePreset = null;
+    this._updatePresetButtons();
+    this.controls.update();
   }
 
   _updatePresetButtons() {
