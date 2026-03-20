@@ -164,3 +164,37 @@ class TestHornScript:
         # Minimal servo with no horn_mounting_points
         servo = ServoSpec(name="dummy", dimensions=(0.01, 0.01, 0.01), mass=0.01)
         assert horn_script(servo) is None
+
+
+class TestServoScript:
+    """servo_script() vs servo_solid() roundtrip."""
+
+    def test_sts3215_volume(self):
+        from botcad.bracket import servo_solid
+        from botcad.components.servo import STS3215
+        from botcad.shapescript.emit_servo import sts_series_script
+
+        servo = STS3215()
+        direct = servo_solid(servo)
+        ir_solid = _execute(sts_series_script(servo))
+
+        direct_vol = abs(direct.volume)
+        ir_vol = abs(ir_solid.volume)
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"STS3215 volume mismatch: direct={direct_vol:.6e}, IR={ir_vol:.6e}"
+        )
+
+    def test_scs0009_volume(self):
+        from botcad.bracket import servo_solid
+        from botcad.components.servo import SCS0009
+        from botcad.shapescript.emit_servo import scs0009_script
+
+        servo = SCS0009()
+        direct = servo_solid(servo)
+        ir_solid = _execute(scs0009_script(servo))
+
+        direct_vol = abs(direct.volume)
+        ir_vol = abs(ir_solid.volume)
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"SCS0009 volume mismatch: direct={direct_vol:.6e}, IR={ir_vol:.6e}"
+        )
