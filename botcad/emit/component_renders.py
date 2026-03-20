@@ -751,13 +751,13 @@ def render_fastener_catalog() -> Image.Image:
 
 
 def render_connector_catalog() -> Image.Image:
-    """Render every connector in the catalog as plug + receptacle pairs.
+    """Render every connector as a mating pair — plug approaching receptacle.
 
-    Each row shows one connector type: the plug/jack (with cable stub)
-    on the left, the PCB receptacle on the right. No component body —
-    just the connectors themselves as a visual baseline.
+    Each cell shows one connector type with plug and receptacle in a single
+    scene, separated along the mating axis so the insertion mechanism is
+    visible. Both parts at the same scale.
     """
-    from build123d import export_stl
+    from build123d import Location, export_stl
 
     from botcad.connectors import (
         ConnectorType,
@@ -776,24 +776,38 @@ def render_connector_catalog() -> Image.Image:
 
     for ct in ConnectorType:
         cspec = connector_spec(ct.value)
+        mx, my, mz = cspec.mating_direction
+        bx, by, bz = cspec.body_dimensions
 
-        # ── Plug scene ──
-        plug_solid = connector_solid(cspec)
-        plug_stl = f"plug_{ct.value}.stl"
-        export_stl(plug_solid, str(temp_dir / plug_stl))
+        # Separation gap along mating axis — enough to see both parts
+        gap = max(bx, by, bz) * 1.5
 
-        scene = SceneBuilder(model_name=f"plug_{ct.value}", width=WIDTH, height=HEIGHT)
+        # Plug offset: pulled back along mating direction
+        plug_offset = (-mx * gap, -my * gap, -mz * gap)
+
+        # Export plug (moved away from receptacle along mating axis)
+        plug_s = connector_solid(cspec).moved(Location(plug_offset))
+        plug_stl = f"pair_plug_{ct.value}.stl"
+        export_stl(plug_s, str(temp_dir / plug_stl))
+
+        # Export receptacle at origin
+        rcpt_s = receptacle_solid(cspec)
+        rcpt_stl = f"pair_rcpt_{ct.value}.stl"
+        export_stl(rcpt_s, str(temp_dir / rcpt_stl))
+
+        scene = SceneBuilder(model_name=f"pair_{ct.value}", width=WIDTH, height=HEIGHT)
         scene.add_mesh("plug", plug_stl, plug_color)
+        scene.add_mesh("receptacle", rcpt_stl, receptacle_color)
 
-        # Cable stub
-        cable_r = max(cspec.body_dimensions) * 0.2
+        # Cable stub on the plug
+        cable_r = max(bx, by, bz) * 0.2
         cable_len = 0.012
         ex, ey, ez = cspec.wire_exit_direction
         ox, oy, oz = cspec.wire_exit_offset
         cable_mid = (
-            ox + ex * cable_len / 2,
-            oy + ey * cable_len / 2,
-            oz + ez * cable_len / 2,
+            plug_offset[0] + ox + ex * cable_len / 2,
+            plug_offset[1] + oy + ey * cable_len / 2,
+            plug_offset[2] + oz + ez * cable_len / 2,
         )
         scene.annotate_cylinder(
             "cable",
@@ -810,36 +824,19 @@ def render_connector_catalog() -> Image.Image:
             rendered = r.render_views(
                 {"three-quarter": {"azimuth": 135, "elevation": -30}}
             )
-        cells.append((rendered[0][0], f"{cspec.label} — plug"))
-
-        # ── Receptacle scene ──
-        rcpt_solid = receptacle_solid(cspec)
-        rcpt_stl = f"receptacle_{ct.value}.stl"
-        export_stl(rcpt_solid, str(temp_dir / rcpt_stl))
-
-        scene2 = SceneBuilder(
-            model_name=f"receptacle_{ct.value}", width=WIDTH, height=HEIGHT
-        )
-        scene2.add_mesh("receptacle", rcpt_stl, receptacle_color)
-
-        scene2.set_mesh_dir(temp_dir)
-        xml2 = scene2.to_xml()
-        with Renderer3D(xml2, WIDTH, HEIGHT) as r:
-            rendered2 = r.render_views(
-                {"three-quarter": {"azimuth": 135, "elevation": -30}}
-            )
-        cells.append((rendered2[0][0], f"{cspec.label} — receptacle"))
+        cells.append((rendered[0][0], cspec.label))
 
     try:
+        # Single column so each pair gets a wide cell
         result = grid(
-            "Connector Catalog — plugs and receptacles",
+            "Connector Catalog — plug + receptacle mating pairs",
             [
                 (plug_color.label, plug_color.rgb_int),
                 (receptacle_color.label, receptacle_color.rgb_int),
                 (cable_color.label, cable_color.rgb_int),
             ],
             cells,
-            cols=2,
+            cols=1,
         )
         return result
     finally:
