@@ -465,3 +465,298 @@ def _build_fastener_head(spec: FastenerSpec):
         head = head - slot1 - slot2
 
     return head
+
+
+# ── Wheel / Wire Channel / Clearance Volume emitters ─────────────
+
+
+def wheel_script(radius: float, width: float) -> ShapeScript:
+    """Translate _make_wheel_solid() to ShapeScript ops.
+
+    Pololu-style wheel: tire ring with 60 tread grooves, rim, hub disc
+    with 6 M3 holes, 6 spokes with M2 accessory slots, center bore.
+    All rotation loops (treads, holes, spokes) use native LocateOp with
+    euler angles — no PrebuiltOp needed.
+    """
+    import math
+
+    prog = ShapeScript()
+
+    # Radial dimensions (proportional to wheel radius)
+    tire_r = radius
+    rim_outer_r = radius * 0.889
+    rim_inner_r = radius * 0.756
+    spoke_inner_r = radius * 0.267
+    hub_r = spoke_inner_r
+    bore_r = 0.0029  # 5.8mm diameter (25T spline)
+
+    # Axial widths
+    tire_w = width
+    rim_w = width
+    spoke_w = width * 0.5
+    hub_w = width * 0.68
+
+    # --- Tire ring (silicone rubber) ---
+    tire_outer = prog.cylinder(tire_r, tire_w)
+    tire_inner = prog.cylinder(rim_outer_r, tire_w + 0.001)
+    tire = prog.cut(tire_outer, tire_inner)
+
+    # --- Treads (60 horizontal grooves) ---
+    # Fuse all tread boxes first, then cut once from tire (avoids 60 sequential
+    # boolean cuts that cause cascading OCCT numerical issues).
+    n_treads = 60
+    tread_w = 0.0015
+    tread_depth = 0.0008
+    all_treads = None
+    for i in range(n_treads):
+        angle = i * (360 / n_treads)
+        tread = prog.box(tread_depth * 2, tire_w + 0.001, tread_w)
+        tread = prog.locate(tread, pos=(radius, 0, 0), euler_deg=(0, angle, 0))
+        if all_treads is None:
+            all_treads = tread
+        else:
+            all_treads = prog.fuse(all_treads, tread)
+    tire = prog.cut(tire, all_treads)
+
+    # --- Rim ring ---
+    rim_outer_cyl = prog.cylinder(rim_outer_r, rim_w)
+    rim_inner_cyl = prog.cylinder(rim_inner_r, rim_w + 0.001)
+    rim = prog.cut(rim_outer_cyl, rim_inner_cyl)
+
+    # --- Hub disc ---
+    hub = prog.cylinder(hub_r, hub_w)
+
+    # --- M3 mounting holes (6x) ---
+    m3_r = 0.0016
+    for i in range(6):
+        angle_rad = i * math.pi / 3
+        r_bcd = 0.00635 if (i % 3 == 0) else 0.00955
+        mx = r_bcd * math.cos(angle_rad)
+        my = r_bcd * math.sin(angle_rad)
+        hole = prog.cylinder(m3_r, hub_w + 0.002)
+        hole = prog.locate(hole, pos=(mx, my, 0))
+        hub = prog.cut(hub, hole)
+
+    # --- 6 spokes connecting hub to rim ---
+    spoke_tangential = radius * 0.16
+    spoke_length = rim_inner_r - spoke_inner_r + 0.004
+    mid_r = (spoke_inner_r + rim_inner_r) / 2
+
+    spokes_ref = None
+    for i in range(6):
+        angle_rad = i * math.pi / 3
+        angle_deg = math.degrees(angle_rad)
+        cx = mid_r * math.cos(angle_rad)
+        cy = mid_r * math.sin(angle_rad)
+
+        spoke = prog.box(spoke_length, spoke_tangential, spoke_w)
+        spoke = prog.locate(spoke, pos=(cx, cy, 0), euler_deg=(0, 0, angle_deg))
+
+        # --- M2 accessory slot in spoke ---
+        slot_r_start = spoke_inner_r + 0.006
+        slot_r_end = rim_inner_r - 0.004
+        slot_dia = 0.0022
+        slot_len = slot_r_end - slot_r_start
+        slot_thick = spoke_w + 0.002
+        slot_mid = (slot_r_start + slot_r_end) / 2
+
+        # Slot = box + 2 end cylinders (stadium shape)
+        s_box = prog.box(slot_len - slot_dia, slot_dia, slot_thick)
+        c1 = prog.cylinder(slot_dia / 2, slot_thick)
+        c1 = prog.locate(c1, pos=((slot_len - slot_dia) / 2, 0, 0))
+        c2 = prog.cylinder(slot_dia / 2, slot_thick)
+        c2 = prog.locate(c2, pos=(-(slot_len - slot_dia) / 2, 0, 0))
+        slot = prog.fuse(prog.fuse(s_box, c1), c2)
+
+        # Place slot at radial midpoint, then rotate to spoke angle
+        slot = prog.locate(slot, pos=(slot_mid, 0, 0))
+        slot = prog.locate(slot, euler_deg=(0, 0, angle_deg))
+
+        spoke = prog.cut(spoke, slot)
+
+        if spokes_ref is None:
+            spokes_ref = spoke
+        else:
+            spokes_ref = prog.fuse(spokes_ref, spoke)
+
+    # --- Center bore ---
+    bore = prog.cylinder(bore_r, width + 0.002)
+
+    # --- Assembly: hub + spokes + rim + tire - bore ---
+    wheel = prog.fuse(hub, spokes_ref)
+    wheel = prog.fuse(wheel, rim)
+    wheel = prog.fuse(wheel, tire)
+    wheel = prog.cut(wheel, bore)
+
+    prog.output_ref = wheel
+    return prog
+
+
+# ── Wire channel radius table (mirrors cad.py:_CHANNEL_RADIUS) ──
+
+_CHANNEL_RADIUS = {
+    "uart_half_duplex": 0.0015,
+    "csi": 0.003,
+    "power": 0.002,
+}
+
+
+def emit_wire_channel(prog: ShapeScript, seg, bus_type: BusType) -> ShapeRef | None:
+    """Emit ShapeScript ops for a cylindrical wire channel along a segment.
+
+    Translates cad.py:_wire_channel() to native Cylinder + LocateOp.
+    Returns None for degenerate (too-short) segments.
+    """
+    import math
+
+
+    dx = seg.end[0] - seg.start[0]
+    dy = seg.end[1] - seg.start[1]
+    dz = seg.end[2] - seg.start[2]
+    length = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if length < 0.001:
+        return None
+
+    radius = _CHANNEL_RADIUS.get(str(bus_type), 0.0015)
+
+    mid = (
+        (seg.start[0] + seg.end[0]) / 2,
+        (seg.start[1] + seg.end[1]) / 2,
+        (seg.start[2] + seg.end[2]) / 2,
+    )
+
+    # Compute euler angles to rotate Z-aligned cylinder to segment direction
+    ax, ay, az = dx / length, dy / length, dz / length
+
+    if abs(az) > 0.999:
+        if az < 0:
+            euler = (180.0, 0.0, 0.0)
+        else:
+            euler = (0.0, 0.0, 0.0)
+    else:
+        from botcad.emit.cad import _axis_angle_to_quat
+        from botcad.geometry import quat_to_euler
+
+        rot_angle = math.acos(max(-1.0, min(1.0, az)))
+        rot_axis_x = -ay
+        rot_axis_y = ax
+        rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
+        if rot_mag < 1e-9:
+            euler = (0.0, 0.0, 0.0)
+        else:
+            quat = _axis_angle_to_quat(
+                (rot_axis_x / rot_mag, rot_axis_y / rot_mag, 0), rot_angle
+            )
+            euler = quat_to_euler(quat)
+
+    channel = prog.cylinder(radius, length, tag=f"wire_{bus_type}")
+    channel = prog.locate(channel, pos=mid, euler_deg=euler)
+    return channel
+
+
+def _emit_envelope_local(prog: ShapeScript, child: Body) -> ShapeRef | None:
+    """Emit ShapeScript ops for a child body's outer envelope in Z-up local frame.
+
+    Translates cad.py:_child_outer_envelope_local() to native ops.
+    """
+    from botcad.skeleton import BodyShape
+
+    dims = child.dimensions
+    tol = 0.005 if child.is_wheel_body else 0.0005
+
+    if child.shape is BodyShape.CYLINDER:
+        r = (child.radius or dims[0] / 2) + tol
+        nominal_h = child.width or child.height or dims[2]
+        if child.is_wheel_body:
+            h = nominal_h + tol
+            outer = prog.cylinder(r, h)
+            outer = prog.locate(outer, pos=(0, 0, tol / 2))
+        else:
+            h = nominal_h + 2 * tol
+            outer = prog.cylinder(r, h)
+            outer = prog.locate(outer, pos=(0, 0, h / 2))
+        return outer
+
+    elif child.shape is BodyShape.TUBE:
+        r = (child.outer_r or dims[0] / 2) + tol
+        length = (child.length or dims[2]) + tol
+        outer = prog.cylinder(r, length)
+        outer = prog.locate(outer, pos=(0, 0, length / 2))
+        return outer
+
+    elif child.shape is BodyShape.SPHERE:
+        r = (child.radius or dims[0] / 2) + tol
+        return prog.sphere(r)
+
+    elif child.shape is BodyShape.JAW:
+        jw = (child.jaw_width or dims[0]) + 2 * tol
+        jt = (child.jaw_thickness or dims[1]) * 2 + 2 * tol
+        jl = (child.jaw_length or dims[2]) + tol
+        from botcad.shapescript.ops import ALIGN_MIN_Z
+
+        return prog.box(jw, jt, jl, align=ALIGN_MIN_Z)
+
+    else:  # box
+        return prog.box(
+            dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol
+        )
+
+
+def emit_child_clearance(
+    prog: ShapeScript, child: Body, joint: Joint
+) -> ShapeRef | None:
+    """Emit ShapeScript ops for a child body's swept clearance volume.
+
+    Translates cad.py:_child_clearance_volume() to native ops:
+    1. Build envelope as ShapeScript primitives
+    2. Sweep via LocateOp rotations + FuseOp union chain
+    3. Place with orientation + position LocateOp
+
+    Uses native ops throughout — no PrebuiltOp.
+    """
+    import math
+
+    from botcad.emit.cad import _axis_to_quat
+    from botcad.geometry import quat_to_euler
+    from botcad.skeleton import BodyShape
+
+    envelope = _emit_envelope_local(prog, child)
+    if envelope is None:
+        return None
+
+    # Sweep around local Z axis for non-symmetric shapes
+    is_symmetric = child.shape in (BodyShape.SPHERE, BodyShape.CYLINDER)
+    if is_symmetric:
+        clearance = envelope
+    else:
+        lo, hi = joint.effective_range
+        if lo == 0.0 and hi == 0.0:
+            lo, hi = 0.0, 2 * math.pi
+
+        range_deg = abs(math.degrees(hi - lo))
+        n_samples = max(8, int(range_deg / 15))
+
+        clearance = envelope  # angle=0 (rest pose)
+        for i in range(1, n_samples + 1):
+            angle = lo + (hi - lo) * i / n_samples
+            angle_deg = math.degrees(angle)
+            rotated = prog.locate(envelope, euler_deg=(0, 0, angle_deg))
+            clearance = prog.fuse(clearance, rotated)
+
+    # Place: orientation from axis + position from joint
+    orient_quat = _axis_to_quat(joint.axis)
+    euler = quat_to_euler(orient_quat)
+
+    if child.is_wheel_body:
+        offset = joint.wheel_outboard_offset()
+        ax, ay, az = joint.axis
+        pos = (
+            joint.pos[0] + ax * offset,
+            joint.pos[1] + ay * offset,
+            joint.pos[2] + az * offset,
+        )
+    else:
+        pos = joint.pos
+
+    clearance = prog.locate(clearance, pos=pos, euler_deg=euler)
+    return clearance

@@ -207,12 +207,12 @@ def emit_body_ir(
 
     # ── 6. Wire channels (cad.py:875-881) ──
 
+    from botcad.shapescript.emit_components import emit_wire_channel
 
     if wire_segments:
         for seg, bus_type in wire_segments:
-            channel = _wire_channel(seg, bus_type)
-            if channel is not None:
-                ch_ref = prog.prebuilt(channel, tag=f"wire_{bus_type}")
+            ch_ref = emit_wire_channel(prog, seg, bus_type)
+            if ch_ref is not None:
                 shell = prog.cut(shell, ch_ref)
 
     prog.output_ref = shell
