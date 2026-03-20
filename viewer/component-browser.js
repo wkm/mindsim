@@ -52,6 +52,7 @@ const LAYER_META = {
   fasteners:        { label: 'Fasteners',        colorHex: 0xD4A843, opts: {} },
 };
 const ALL_LAYER_IDS = Object.keys(LAYER_META);
+const AXIS_INDEX = { x: 0, y: 1, z: 2 };
 
 // ---------------------------------------------------------------------------
 // ComponentBrowser class
@@ -618,17 +619,7 @@ class ComponentBrowser {
 
     // Clear measurements, section, and layers
     this.measureTool.clearAll();
-    if (this.sectionEnabled) {
-      this.sectionEnabled = false;
-      this.sectionFlipped = false;
-      const sectionBtn = document.querySelector('#section-toggle');
-      if (sectionBtn) sectionBtn.classList.remove('active');
-      const flipBtn = document.querySelector('#section-flip');
-      if (flipBtn) flipBtn.classList.remove('active');
-      const controls = document.querySelector('#section-controls');
-      if (controls) controls.style.display = 'none';
-      this._removeSectionViz();
-    }
+    this._resetSection();
     for (const id of ALL_LAYER_IDS) {
       clearGroup(this.layerGroups[id]);
       this.layerGroups[id].visible = false;
@@ -738,9 +729,9 @@ class ComponentBrowser {
       // Compute plane position from slider fraction along the chosen axis
       const min = box.min;
       const max = box.max;
-      const axisIdx = { x: 0, y: 1, z: 2 }[this.sectionAxis];
-      const axisMin = [min.x, min.y, min.z][axisIdx];
-      const axisMax = [max.x, max.y, max.z][axisIdx];
+      const axisIdx = AXIS_INDEX[this.sectionAxis];
+      const axisMin = min.getComponent(axisIdx);
+      const axisMax = max.getComponent(axisIdx);
       const pos = axisMin + (axisMax - axisMin) * this.sectionFraction;
 
       // Plane normal: default clips geometry on the + side; flip reverses
@@ -817,6 +808,19 @@ class ComponentBrowser {
     // Z = default orientation (no rotation needed)
   }
 
+  _resetSection() {
+    if (!this.sectionEnabled) return;
+    this.sectionEnabled = false;
+    this.sectionFlipped = false;
+    const sectionBtn = document.querySelector('#section-toggle');
+    if (sectionBtn) sectionBtn.classList.remove('active');
+    const flipBtn = document.querySelector('#section-flip');
+    if (flipBtn) flipBtn.classList.remove('active');
+    const controls = document.querySelector('#section-controls');
+    if (controls) controls.style.display = 'none';
+    this._removeSectionViz();
+  }
+
   _removeSectionViz() {
     if (this._sectionViz) {
       this._sectionViz.visible = false;
@@ -871,47 +875,10 @@ class ComponentBrowser {
 
       // Stencil helpers for this layer's meshes
       for (const mesh of layerMeshes) {
-        // Back-face pass — write ref
-        const backMat = new THREE.MeshBasicMaterial({
-          colorWrite: false,
-          depthWrite: false,
-          side: THREE.BackSide,
-          clippingPlanes: clips,
-          stencilWrite: true,
-          stencilFunc: THREE.AlwaysStencilFunc,
-          stencilRef: ref,
-          stencilFail: THREE.KeepStencilOp,
-          stencilZFail: THREE.KeepStencilOp,
-          stencilZPass: THREE.ReplaceStencilOp,
-        });
-        const backMesh = new THREE.Mesh(mesh.geometry, backMat);
-        backMesh.position.copy(mesh.position);
-        backMesh.quaternion.copy(mesh.quaternion);
-        backMesh.scale.copy(mesh.scale);
-        backMesh.renderOrder = orderBase + RENDER_ORDER.STENCIL_BACK;
-        backMesh.raycast = () => {};
-        this._capGroup.add(backMesh);
-
-        // Front-face pass — clear to 0
-        const frontMat = new THREE.MeshBasicMaterial({
-          colorWrite: false,
-          depthWrite: false,
-          side: THREE.FrontSide,
-          clippingPlanes: clips,
-          stencilWrite: true,
-          stencilFunc: THREE.AlwaysStencilFunc,
-          stencilRef: 0,
-          stencilFail: THREE.KeepStencilOp,
-          stencilZFail: THREE.KeepStencilOp,
-          stencilZPass: THREE.ReplaceStencilOp,
-        });
-        const frontMesh = new THREE.Mesh(mesh.geometry, frontMat);
-        frontMesh.position.copy(mesh.position);
-        frontMesh.quaternion.copy(mesh.quaternion);
-        frontMesh.scale.copy(mesh.scale);
-        frontMesh.renderOrder = orderBase + RENDER_ORDER.STENCIL_FRONT;
-        frontMesh.raycast = () => {};
-        this._capGroup.add(frontMesh);
+        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
+          orderBase + RENDER_ORDER.STENCIL_BACK);
+        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
+          orderBase + RENDER_ORDER.STENCIL_FRONT);
       }
 
       // Cap plane for this layer — darker tint of the layer color
@@ -1023,6 +990,29 @@ class ComponentBrowser {
     return new THREE.Vector3().lerpVectors(p1, p2, t);
   }
 
+  /** Create an invisible stencil helper mesh that writes to the stencil buffer. */
+  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
+    const mat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      side,
+      clippingPlanes: clips,
+      stencilWrite: true,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilRef,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
+    mesh.position.copy(sourceMesh.position);
+    mesh.quaternion.copy(sourceMesh.quaternion);
+    mesh.scale.copy(sourceMesh.scale);
+    mesh.renderOrder = renderOrder;
+    mesh.raycast = () => {};
+    this._capGroup.add(mesh);
+  }
+
   _clearSectionCaps() {
     if (this._capGroup) {
       this._capGroup.traverse(child => {
@@ -1032,6 +1022,7 @@ class ComponentBrowser {
       this.scene.remove(this._capGroup);
       this._capGroup = null;
     }
+    this._contourLineMat = null;
   }
 
   // -----------------------------------------------------------------------
@@ -1073,10 +1064,9 @@ class ComponentBrowser {
     if (this.sectionEnabled) {
       const box = this._getVisibleBBox();
       if (box) {
-        const axisIdx = { x: 0, y: 1, z: 2 }[this.sectionAxis];
-        const min = [box.min.x, box.min.y, box.min.z][axisIdx];
-        const max = [box.max.x, box.max.y, box.max.z][axisIdx];
-        const pos = min + (max - min) * this.sectionFraction;
+        const axisIdx = AXIS_INDEX[this.sectionAxis];
+        const pos = box.min.getComponent(axisIdx) +
+          (box.max.getComponent(axisIdx) - box.min.getComponent(axisIdx)) * this.sectionFraction;
         body.section = {
           axis: this.sectionAxis,
           position: pos,

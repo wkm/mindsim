@@ -17,7 +17,10 @@ import { BP } from './presentation.js';
 // ---------------------------------------------------------------------------
 const SNAP_SCREEN_PX = 12;        // snap radius in screen pixels
 const ARROW_SIZE = 6;             // arrowhead size in SVG pixels
-const DIM_COLOR = '#0E5A8A';      // BP.BLUE1
+/** Convert a numeric hex color to a CSS hex string. */
+function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
+
+const DIM_COLOR = hexStr(BP.BLUE1);
 const DIM_FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const EXTENSION_GAP = 4;          // gap between geometry and extension line start
 const EXTENSION_OVERSHOOT = 6;    // how far extension line extends past dim line
@@ -108,6 +111,7 @@ export class MeasureTool {
     this.measurements = [];
     this._firstPoint = null;
     this._rubberLine.style.display = 'none';
+    this._edgeVertexCache.clear();
     this.update();
   }
 
@@ -247,9 +251,9 @@ export class MeasureTool {
     const dy = Math.abs(point.y - origin.y);
     const dz = Math.abs(point.z - origin.z);
 
-    if (dx >= dy && dx >= dz) return '#DB3737';  // X = red
-    if (dy >= dx && dy >= dz) return '#0F9960';  // Y = green
-    return '#2B95D6';                             // Z = blue
+    if (dx >= dy && dx >= dz) return hexStr(BP.RED3);
+    if (dy >= dx && dy >= dz) return hexStr(BP.GREEN3);
+    return hexStr(BP.BLUE4);
   }
 
   // -----------------------------------------------------------------------
@@ -341,12 +345,8 @@ export class MeasureTool {
 
       if (dist < bestDist) {
         bestDist = dist;
-        // Interpolate in 3D
-        bestPoint = a.clone().lerp(b.clone().applyMatrix4(new THREE.Matrix4()), 0);
-        // Actually recompute properly
-        const wa = new THREE.Vector3(edgeVerts[i], edgeVerts[i + 1], edgeVerts[i + 2]).applyMatrix4(mesh.matrixWorld);
-        const wb = new THREE.Vector3(edgeVerts[i + 3], edgeVerts[i + 4], edgeVerts[i + 5]).applyMatrix4(mesh.matrixWorld);
-        bestPoint = wa.lerp(wb, t);
+        // Interpolate in 3D between the world-space edge endpoints
+        bestPoint = a.clone().lerp(b, t);
       }
     }
 
@@ -414,7 +414,6 @@ export class MeasureTool {
     g.setAttribute('class', 'dimension');
 
     // Extension lines (from geometry point to dimension line, with gap)
-    const gapFrac = EXTENSION_GAP / off;
     const overFrac = 1 + EXTENSION_OVERSHOOT / off;
     this._svgLine(g, s1.x + nx * EXTENSION_GAP, s1.y + ny * EXTENSION_GAP,
                       s1.x + nx * off * overFrac, s1.y + ny * off * overFrac, '0.5');
@@ -439,7 +438,6 @@ export class MeasureTool {
     text.setAttribute('y', mid.y - 4);
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('fill', DIM_COLOR);
-    text.setAttribute('font', DIM_FONT);
     text.setAttribute('style', `font: ${DIM_FONT}`);
     text.setAttribute('transform', `rotate(${textAngle}, ${mid.x}, ${mid.y})`);
 
