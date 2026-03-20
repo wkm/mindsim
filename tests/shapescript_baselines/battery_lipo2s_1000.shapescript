@@ -1,0 +1,7 @@
+pre_0 = Prebuilt(vol:2.08)  # battery_body
+box_1 = Box(w=0.0511, l=0.0210, h=0.0005)
+loc_2 = Locate(box_1, pos=(0.0000, 0.0000, 0.0089))
+box_3 = Box(w=0.0060, l=0.0120, h=0.0144)
+loc_4 = Locate(box_3, pos=(0.0355, 0.0000, 0.0000))
+fuse_5 = Fuse(pre_0, loc_2)
+fuse_6 = Fuse(fuse_5, loc_4)

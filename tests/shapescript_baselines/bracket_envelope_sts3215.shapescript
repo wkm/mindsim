@@ -1,0 +1,2 @@
+box_0 = Box(w=0.0518, l=0.0313, h=0.2466)  # bracket_envelope
+loc_1 = Locate(box_0, pos=(0.0000, 0.0000, 0.1012))

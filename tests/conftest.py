@@ -8,3 +8,9 @@ def pytest_addoption(parser):
         default=False,
         help="Write discovered ROM as new baseline (replaces existing baselines)",
     )
+    parser.addoption(
+        "--update-shapescript-baselines",
+        action="store_true",
+        default=False,
+        help="Accept current ShapeScript output as new baselines",
+    )

@@ -1,0 +1,19 @@
+box_0 = Box(w=0.0088, l=0.0313, h=0.0101)  # cradle_outer
+loc_1 = Locate(box_0, pos=(-0.0215, 0.0000, -0.0171))
+box_2 = Box(w=0.0458, l=0.0253, h=0.0121)  # cradle_pocket
+loc_3 = Locate(box_2, pos=(0.0000, 0.0000, -0.0171))
+cut_4 = Cut(loc_1, loc_3)
+cyl_5 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_6 = Locate(cyl_5, pos=(-0.0170, -0.0103, -0.0231))
+cut_7 = Cut(cut_4, loc_6)
+cyl_8 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_9 = Locate(cyl_8, pos=(-0.0170, -0.0103, -0.0231))
+cut_10 = Cut(cut_7, loc_9)
+cyl_11 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_12 = Locate(cyl_11, pos=(-0.0170, 0.0103, -0.0231))
+cut_13 = Cut(cut_10, loc_12)
+cyl_14 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_15 = Locate(cyl_14, pos=(-0.0170, 0.0103, -0.0231))
+cut_16 = Cut(cut_13, loc_15)
+pre_17 = Prebuilt(vol:9.47)  # connector_port
+cut_18 = Cut(cut_16, pre_17)

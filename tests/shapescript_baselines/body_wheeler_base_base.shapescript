@@ -1,0 +1,90 @@
+pre_0 = Prebuilt(vol:6.76)  # custom_solid
+box_1 = Box(w=0.0355, l=0.0735, h=0.0185)
+loc_2 = Locate(box_1, pos=(0.0000, 0.0000, -0.0135))
+cut_3 = Cut(pre_0, loc_2)
+box_4 = Box(w=0.0255, l=0.0245, h=0.0095)
+loc_5 = Locate(box_4, pos=(0.0000, 0.0280, 0.0000))
+cut_6 = Cut(cut_3, loc_5)
+cyl_7 = Cylinder(r=0.0040, h=0.1320)
+loc_8 = Locate(cyl_7, pos=(0.0000, 0.0280, 0.0000))
+cut_9 = Cut(cut_6, loc_8)
+box_10 = Box(w=0.0170, l=0.1320, h=0.0020)
+loc_11 = Locate(box_10, pos=(0.0000, 0.0160, 0.0000))
+cut_12 = Cut(cut_9, loc_11)
+box_13 = Box(w=0.0305, l=0.0655, h=0.0055)
+loc_14 = Locate(box_13, pos=(0.0000, 0.0000, 0.0200))
+cut_15 = Cut(cut_12, loc_14)
+call_16 = Call('bracket_env_STS3215')  # bracket_env_left_wheel
+loc_17 = Locate(call_16, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
+call_18 = Call('bracket_STS3215')  # bracket_left_wheel
+loc_19 = Locate(call_18, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
+cut_20 = Cut(cut_15, loc_17)
+fuse_21 = Fuse(cut_20, loc_19)
+call_22 = Call('bracket_env_STS3215')  # bracket_env_right_wheel
+loc_23 = Locate(call_22, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
+call_24 = Call('bracket_STS3215')  # bracket_right_wheel
+loc_25 = Locate(call_24, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
+cut_26 = Cut(fuse_21, loc_23)
+fuse_27 = Fuse(cut_26, loc_25)
+cyl_28 = Cylinder(r=0.0500, h=0.0150)
+loc_29 = Locate(cyl_28, pos=(0.0000, 0.0000, 0.0025))
+loc_30 = Locate(loc_29, pos=(-0.0730, 0.0000, 0.0000), rot=(0.0, -90.0, -0.0))
+cut_31 = Cut(fuse_27, loc_30)
+cyl_32 = Cylinder(r=0.0500, h=0.0150)
+loc_33 = Locate(cyl_32, pos=(0.0000, 0.0000, 0.0025))
+loc_34 = Locate(loc_33, pos=(0.0730, 0.0000, 0.0000), rot=(0.0, 90.0, 0.0))
+cut_35 = Cut(cut_31, loc_34)
+
+--- sub-program: bracket_STS3215 ---
+  box_0 = Box(w=0.0518, l=0.0313, h=0.0411)  # bracket_outer
+  loc_1 = Locate(box_0, pos=(0.0000, 0.0000, -0.0016))
+  box_2 = Box(w=0.0458, l=0.0253, h=0.0363)  # pocket
+  loc_3 = Locate(box_2, pos=(0.0000, 0.0000, 0.0019))
+  cut_4 = Cut(loc_1, loc_3)
+  cyl_5 = Cylinder(r=0.0100, h=0.0050)  # horn_hole
+  loc_6 = Locate(cyl_5, pos=(0.0125, 0.0000, 0.0150))
+  cut_7 = Cut(cut_4, loc_6)
+  cyl_8 = Cylinder(r=0.0048, h=0.0043)  # shaft_boss
+  loc_9 = Locate(cyl_8, pos=(0.0125, 0.0000, 0.0150))
+  cut_10 = Cut(cut_7, loc_9)
+  cyl_11 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_12 = Locate(cyl_11, pos=(0.0170, -0.0103, -0.0231))
+  cut_13 = Cut(cut_10, loc_12)
+  cyl_14 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_15 = Locate(cyl_14, pos=(0.0170, -0.0103, -0.0231))
+  cut_16 = Cut(cut_13, loc_15)
+  cyl_17 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_18 = Locate(cyl_17, pos=(0.0000, -0.0103, -0.0231))
+  cut_19 = Cut(cut_16, loc_18)
+  cyl_20 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_21 = Locate(cyl_20, pos=(0.0000, -0.0103, -0.0231))
+  cut_22 = Cut(cut_19, loc_21)
+  cyl_23 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_24 = Locate(cyl_23, pos=(0.0170, 0.0103, -0.0231))
+  cut_25 = Cut(cut_22, loc_24)
+  cyl_26 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_27 = Locate(cyl_26, pos=(0.0170, 0.0103, -0.0231))
+  cut_28 = Cut(cut_25, loc_27)
+  cyl_29 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_30 = Locate(cyl_29, pos=(0.0000, 0.0103, -0.0231))
+  cut_31 = Cut(cut_28, loc_30)
+  cyl_32 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_33 = Locate(cyl_32, pos=(0.0000, 0.0103, -0.0231))
+  cut_34 = Cut(cut_31, loc_33)
+  cyl_35 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_36 = Locate(cyl_35, pos=(-0.0170, -0.0103, -0.0231))
+  cut_37 = Cut(cut_34, loc_36)
+  cyl_38 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_39 = Locate(cyl_38, pos=(-0.0170, -0.0103, -0.0231))
+  cut_40 = Cut(cut_37, loc_39)
+  cyl_41 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+  loc_42 = Locate(cyl_41, pos=(-0.0170, 0.0103, -0.0231))
+  cut_43 = Cut(cut_40, loc_42)
+  cyl_44 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+  loc_45 = Locate(cyl_44, pos=(-0.0170, 0.0103, -0.0231))
+  cut_46 = Cut(cut_43, loc_45)
+  pre_47 = Prebuilt(vol:9.47)  # connector_port
+  cut_48 = Cut(cut_46, pre_47)
+--- sub-program: bracket_env_STS3215 ---
+  box_0 = Box(w=0.0518, l=0.0313, h=0.2466)  # bracket_envelope
+  loc_1 = Locate(box_0, pos=(0.0000, 0.0000, 0.1012))

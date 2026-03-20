@@ -1,0 +1,49 @@
+box_0 = Box(w=0.0518, l=0.0313, h=0.0411)  # bracket_outer
+loc_1 = Locate(box_0, pos=(0.0000, 0.0000, -0.0016))
+box_2 = Box(w=0.0458, l=0.0253, h=0.0363)  # pocket
+loc_3 = Locate(box_2, pos=(0.0000, 0.0000, 0.0019))
+cut_4 = Cut(loc_1, loc_3)
+cyl_5 = Cylinder(r=0.0100, h=0.0050)  # horn_hole
+loc_6 = Locate(cyl_5, pos=(0.0125, 0.0000, 0.0150))
+cut_7 = Cut(cut_4, loc_6)
+cyl_8 = Cylinder(r=0.0048, h=0.0043)  # shaft_boss
+loc_9 = Locate(cyl_8, pos=(0.0125, 0.0000, 0.0150))
+cut_10 = Cut(cut_7, loc_9)
+cyl_11 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_12 = Locate(cyl_11, pos=(0.0170, -0.0103, -0.0231))
+cut_13 = Cut(cut_10, loc_12)
+cyl_14 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_15 = Locate(cyl_14, pos=(0.0170, -0.0103, -0.0231))
+cut_16 = Cut(cut_13, loc_15)
+cyl_17 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_18 = Locate(cyl_17, pos=(0.0000, -0.0103, -0.0231))
+cut_19 = Cut(cut_16, loc_18)
+cyl_20 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_21 = Locate(cyl_20, pos=(0.0000, -0.0103, -0.0231))
+cut_22 = Cut(cut_19, loc_21)
+cyl_23 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_24 = Locate(cyl_23, pos=(0.0170, 0.0103, -0.0231))
+cut_25 = Cut(cut_22, loc_24)
+cyl_26 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_27 = Locate(cyl_26, pos=(0.0170, 0.0103, -0.0231))
+cut_28 = Cut(cut_25, loc_27)
+cyl_29 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_30 = Locate(cyl_29, pos=(0.0000, 0.0103, -0.0231))
+cut_31 = Cut(cut_28, loc_30)
+cyl_32 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_33 = Locate(cyl_32, pos=(0.0000, 0.0103, -0.0231))
+cut_34 = Cut(cut_31, loc_33)
+cyl_35 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_36 = Locate(cyl_35, pos=(-0.0170, -0.0103, -0.0231))
+cut_37 = Cut(cut_34, loc_36)
+cyl_38 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_39 = Locate(cyl_38, pos=(-0.0170, -0.0103, -0.0231))
+cut_40 = Cut(cut_37, loc_39)
+cyl_41 = Cylinder(r=0.0017, h=0.0096)  # fastener_hole
+loc_42 = Locate(cyl_41, pos=(-0.0170, 0.0103, -0.0231))
+cut_43 = Cut(cut_40, loc_42)
+cyl_44 = Cylinder(r=0.0029, h=0.0035)  # counterbore
+loc_45 = Locate(cyl_44, pos=(-0.0170, 0.0103, -0.0231))
+cut_46 = Cut(cut_43, loc_45)
+pre_47 = Prebuilt(vol:9.47)  # connector_port
+cut_48 = Cut(cut_46, pre_47)
