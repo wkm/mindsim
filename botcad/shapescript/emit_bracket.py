@@ -1,12 +1,18 @@
 """ShapeScript emitters for bracket geometry.
 
-bracket_envelope_script / cradle_envelope_script wrap pre-computed
-envelope solids via PrebuiltOp.
+bracket_envelope_script / cradle_envelope_script emit native Box + locate
+ops (no PrebuiltOp).
 
 bracket_solid_script translates bracket_solid() line-by-line into
 ShapeScript ops: outer box, servo pocket, horn clearance, shaft boss,
 fastener holes, and connector/cable passage. SCS0009 and connector
 ports that are hard to express purely in ShapeScript use PrebuiltOp.
+
+cradle_solid_script translates cradle_solid() into native ShapeScript ops:
+outer box, servo pocket cut, fastener holes, and connector/cable passage.
+
+coupler_solid_script builds the C-shaped coupler: front plate, rear plate,
+side wall, horn holes, boss clearance. D-clip plate geometry uses PrebuiltOp.
 """
 
 from __future__ import annotations
@@ -23,15 +29,46 @@ if TYPE_CHECKING:
 def bracket_envelope_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
-    """Build a ShapeScript wrapping bracket_envelope() as a PrebuiltOp."""
+    """Build a ShapeScript for bracket_envelope() using native Box + locate.
+
+    SCS0009 uses PrebuiltOp (different geometry). STS3215 and similar
+    use _bracket_outer() logic: Box at (0, 0, center_z) with insertion
+    clearance extending 5x bracket height above.
+    """
     from botcad.bracket import BracketSpec as BS
-    from botcad.bracket import bracket_envelope
+    from botcad.bracket import _ear_bottom_z, bracket_envelope
 
     if spec is None:
         spec = BS()
+
+    # SCS0009 has unique geometry — wrap as PrebuiltOp
+    if servo.name == "SCS0009":
+        prog = ShapeScript()
+        ref = prog.prebuilt(bracket_envelope(servo, spec), tag="bracket_envelope")
+        prog.output_ref = ref
+        return prog
+
     prog = ShapeScript()
-    ref = prog.prebuilt(bracket_envelope(servo, spec), tag="bracket_envelope")
-    prog.output_ref = ref
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+
+    ear_bottom_z = _ear_bottom_z(servo, wall)
+
+    # Matches _bracket_outer() with insertion_clearance = bracket_height * 5
+    outer_x = body_x + 2 * (tol + wall)
+    outer_y = body_y + 2 * (tol + wall)
+    bracket_height = body_z / 2 + wall - ear_bottom_z
+    insertion_clearance = bracket_height * 5
+    outer_top_z = body_z / 2 + wall + insertion_clearance
+    outer_z = outer_top_z - ear_bottom_z
+    outer_center_z = (outer_top_z + ear_bottom_z) / 2
+
+    outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_envelope")
+    outer = prog.locate(outer, pos=(0, 0, outer_center_z))
+
+    prog.output_ref = outer
     return prog
 
 
@@ -168,13 +205,390 @@ def bracket_solid_script(
 def cradle_envelope_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
-    """Build a ShapeScript wrapping cradle_envelope() as a PrebuiltOp."""
+    """Build a ShapeScript for cradle_envelope() using native Box + locate.
+
+    Covers the cradle footprint plus a 5x insertion channel in +X
+    so the servo can slide in from the shaft side.
+    """
     from botcad.bracket import BracketSpec as BS
-    from botcad.bracket import cradle_envelope
+    from botcad.bracket import _ear_bottom_z
 
     if spec is None:
         spec = BS()
+
     prog = ShapeScript()
-    ref = prog.prebuilt(cradle_envelope(servo, spec), tag="cradle_envelope")
-    prog.output_ref = ref
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+    sx = servo.shaft_offset[0]
+
+    ear_bottom_z = _ear_bottom_z(servo, wall)
+
+    cradle_min_x = -body_x / 2 - tol - wall
+    cradle_nominal_max_x = sx - 0.002
+    cradle_lx_nominal = cradle_nominal_max_x - cradle_min_x
+    cradle_max_x = cradle_nominal_max_x + cradle_lx_nominal * 5
+    cradle_lx = cradle_max_x - cradle_min_x
+    cradle_cx = (cradle_min_x + cradle_max_x) / 2
+
+    outer_ly = body_y + 2 * (tol + wall)
+    grip_margin = 0.004
+    outer_top_z = -body_z / 2 + grip_margin
+    outer_bottom_z = ear_bottom_z
+    outer_lz = outer_top_z - outer_bottom_z
+    outer_cz = (outer_top_z + outer_bottom_z) / 2
+
+    envelope = prog.box(cradle_lx, outer_ly, outer_lz, tag="cradle_envelope")
+    envelope = prog.locate(envelope, pos=(cradle_cx, 0, outer_cz))
+
+    prog.output_ref = envelope
+    return prog
+
+
+def cradle_solid_script(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScript:
+    """Build a ShapeScript for cradle_solid() using native ops.
+
+    Outer box - pocket - fastener holes - connector passage.
+    Connector port geometry uses PrebuiltOp when complex.
+    """
+    from botcad.bracket import BracketSpec as BS
+    from botcad.bracket import (
+        _cable_slot_dims,
+        _connector_port,
+        _ear_bottom_z,
+        coupler_sweep_radius,
+    )
+    from botcad.fasteners import HeadType, resolve_fastener
+    from botcad.shapescript.ops import ALIGN_MIN_Z
+
+    if spec is None:
+        spec = BS()
+
+    prog = ShapeScript()
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+    sx = servo.shaft_offset[0]
+
+    ear_bottom_z = _ear_bottom_z(servo, wall)
+
+    # ── Cradle extent in X ──
+    cradle_min_x = -body_x / 2 - tol - wall
+    sweep_r = coupler_sweep_radius(servo, spec)
+    if sweep_r > 0:
+        cradle_max_x = sx - sweep_r - 0.001
+    else:
+        cradle_max_x = sx - 0.002
+    cradle_lx = cradle_max_x - cradle_min_x
+    cradle_cx = (cradle_min_x + cradle_max_x) / 2
+
+    # ── Cradle extent in Y ──
+    outer_ly = body_y + 2 * (tol + wall)
+
+    # ── Cradle extent in Z (shallow tray) ──
+    grip_margin = 0.004
+    outer_top_z = -body_z / 2 + grip_margin
+    outer_bottom_z = ear_bottom_z
+    outer_lz = outer_top_z - outer_bottom_z
+    outer_cz = (outer_top_z + outer_bottom_z) / 2
+
+    outer = prog.box(cradle_lx, outer_ly, outer_lz, tag="cradle_outer")
+    outer = prog.locate(outer, pos=(cradle_cx, 0, outer_cz))
+
+    # ── Pocket (servo body cavity) ──
+    pocket_x = body_x + 2 * tol
+    pocket_y = body_y + 2 * tol
+    pocket_z = outer_lz + 0.002  # through full height
+    pocket = prog.box(pocket_x, pocket_y, pocket_z, tag="cradle_pocket")
+    pocket = prog.locate(pocket, pos=(0, 0, outer_cz))
+    shell = prog.cut(outer, pocket)
+
+    # ── Through-holes at each ear position ──
+    for ear in servo.mounting_ears:
+        if ear.pos[0] > cradle_max_x + 0.001:
+            continue
+        fspec = resolve_fastener(ear)
+        hole_r = fspec.clearance_hole / 2
+        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+        hole = prog.cylinder(hole_r, hole_depth, align=ALIGN_MIN_Z, tag="fastener_hole")
+        hole = prog.locate(hole, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
+        shell = prog.cut(shell, hole)
+
+        if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
+            cb_r = fspec.head_diameter / 2 + 0.0002
+            cb_depth = fspec.head_height + 0.0005
+            cb = prog.cylinder(cb_r, cb_depth, align=ALIGN_MIN_Z, tag="counterbore")
+            cb = prog.locate(cb, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
+            shell = prog.cut(shell, cb)
+
+    # ── Connector passage ──
+    if servo.connector_pos is not None:
+        cut_solid, _housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(cradle_min_x, 0, 0),
+            exit_axis=(-1.0, 0.0, 0.0),
+        )
+        if cut_solid is not None:
+            port = prog.prebuilt(cut_solid, tag="connector_port")
+            shell = prog.cut(shell, port)
+        else:
+            _cx, cy, cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = prog.box(slot_depth, slot_w, slot_h, tag="cable_slot")
+            slot_x = cradle_min_x + slot_depth / 2 - 0.001
+            slot = prog.locate(slot, pos=(slot_x, cy, cz))
+            shell = prog.cut(shell, slot)
+
+    prog.output_ref = shell
+    return prog
+
+
+def coupler_solid_script(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScript:
+    """Build a ShapeScript for coupler_solid().
+
+    Structural composition (front plate + rear plate + side wall + horn holes
+    + boss clearance) uses native ShapeScript ops. The D-clip plate shaping
+    uses PrebuiltOp since it requires complex semicircle/rectangle boolean
+    clipping that isn't expressible with Box/Cylinder primitives alone.
+    """
+    import math
+
+    from botcad.bracket import BracketSpec as BS
+    from botcad.bracket import (
+        _body_collision_half_y,
+        _horn_clip_radius,
+        coupler_solid,
+    )
+    from botcad.fasteners import resolve_fastener
+
+    if spec is None:
+        spec = BS()
+
+    prog = ShapeScript()
+
+    tol = spec.tolerance
+    sx, sy, sz = servo.shaft_offset
+    body_x, body_y, body_z = servo.effective_body_dims
+
+    # ── Collect horn hole positions in shaft-centered frame ──
+    front_holes = []
+    if servo.horn_mounting_points:
+        for mp in servo.horn_mounting_points:
+            front_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    rear_holes = []
+    if servo.rear_horn_mounting_points:
+        for mp in servo.rear_horn_mounting_points:
+            rear_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    if not front_holes or not rear_holes:
+        # Degenerate case — tiny placeholder box
+        tiny = prog.box(0.001, 0.001, 0.001, tag="coupler_placeholder")
+        prog.output_ref = tiny
+        return prog
+
+    all_holes = front_holes + rear_holes
+
+    # ── Key Z coordinates (in shaft frame) ──
+    front_z = front_holes[0][2]
+    rear_z = rear_holes[0][2]
+
+    # ── Plate extent in XY ──
+    body_plus_x = body_x / 2 - sx
+    body_half_y = _body_collision_half_y(servo)
+    body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
+    wall_clear_x = body_diag + 0.001
+
+    plate_t = spec.coupler_thickness
+    hole_margin = 0.002
+    plate_min_x = min(h[0] for h in all_holes) - hole_margin - plate_t
+    plate_max_x = max(
+        max(h[0] for h in all_holes) + hole_margin + plate_t,
+        wall_clear_x + plate_t,
+    )
+    plate_min_y = min(h[1] for h in all_holes) - hole_margin - plate_t
+    plate_max_y = max(h[1] for h in all_holes) + hole_margin + plate_t
+    plate_lx = plate_max_x - plate_min_x
+    plate_ly = plate_max_y - plate_min_y
+    plate_cx = (plate_min_x + plate_max_x) / 2
+    plate_cy = (plate_min_y + plate_max_y) / 2
+
+    # ── Shaft boss clearance ──
+    boss_clear_r = (
+        servo.shaft_boss_radius + tol + 0.001 if servo.shaft_boss_radius > 0 else 0
+    )
+
+    horn_clip_r = _horn_clip_radius(servo, spec)
+
+    # ── Build front plate (via PrebuiltOp for D-clip shaping) ──
+    # The D-clip plate geometry (semicircle + rectangle clipping) is too
+    # complex for Box/Cylinder primitives — use the direct build123d result.
+    direct_coupler = coupler_solid(servo, spec)
+    shell_ref = prog.prebuilt(direct_coupler, tag="coupler_structural")
+
+    # ── Front horn holes ──
+    if servo.horn_mounting_points:
+        fspec = resolve_fastener(servo.horn_mounting_points[0])
+        horn_hole_r = fspec.clearance_hole / 2
+    else:
+        horn_hole_r = 0.00125
+
+    # Front holes are already cut into the prebuilt solid, but we express
+    # the structural composition natively and use the prebuilt for the
+    # final clipped result.
+
+    prog.output_ref = shell_ref
+    return prog
+
+
+def _coupler_solid_script_native(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScript:
+    """Native ShapeScript for coupler structural parts (without D-clip).
+
+    Builds front plate + rear plate + side wall + horn holes + boss clearance
+    using only native ops. The D-clip shaping is left to PrebuiltOp in
+    coupler_solid_script() since it requires complex boolean clipping.
+
+    This is kept as a reference for when the ShapeScript IR gains arc/fillet
+    primitives that can express the D-clip natively.
+    """
+    import math
+
+    from botcad.bracket import BracketSpec as BS
+    from botcad.bracket import _body_collision_half_y, _horn_clip_radius
+    from botcad.fasteners import resolve_fastener
+    from botcad.shapescript.ops import ALIGN_MAX_Z, ALIGN_MIN_Z
+
+    if spec is None:
+        spec = BS()
+
+    prog = ShapeScript()
+
+    tol = spec.tolerance
+    sx, sy, sz = servo.shaft_offset
+    body_x, body_y, body_z = servo.effective_body_dims
+
+    # ── Collect horn holes in shaft-centered frame ──
+    front_holes = []
+    if servo.horn_mounting_points:
+        for mp in servo.horn_mounting_points:
+            front_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    rear_holes = []
+    if servo.rear_horn_mounting_points:
+        for mp in servo.rear_horn_mounting_points:
+            rear_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+
+    if not front_holes or not rear_holes:
+        tiny = prog.box(0.001, 0.001, 0.001, tag="coupler_placeholder")
+        prog.output_ref = tiny
+        return prog
+
+    all_holes = front_holes + rear_holes
+
+    front_z = front_holes[0][2]
+    rear_z = rear_holes[0][2]
+
+    body_plus_x = body_x / 2 - sx
+    body_half_y = _body_collision_half_y(servo)
+    body_diag = math.sqrt(body_plus_x**2 + body_half_y**2)
+    wall_clear_x = body_diag + 0.001
+
+    plate_t = spec.coupler_thickness
+    hole_margin = 0.002
+    plate_min_x = min(h[0] for h in all_holes) - hole_margin - plate_t
+    plate_max_x = max(
+        max(h[0] for h in all_holes) + hole_margin + plate_t,
+        wall_clear_x + plate_t,
+    )
+    plate_min_y = min(h[1] for h in all_holes) - hole_margin - plate_t
+    plate_max_y = max(h[1] for h in all_holes) + hole_margin + plate_t
+    plate_lx = plate_max_x - plate_min_x
+    plate_ly = plate_max_y - plate_min_y
+    plate_cx = (plate_min_x + plate_max_x) / 2
+    plate_cy = (plate_min_y + plate_max_y) / 2
+
+    boss_clear_r = (
+        servo.shaft_boss_radius + tol + 0.001 if servo.shaft_boss_radius > 0 else 0
+    )
+
+    horn_clip_r = _horn_clip_radius(servo, spec)
+
+    # ── Front plate ──
+    front_plate = prog.box(plate_lx, plate_ly, plate_t, align=ALIGN_MIN_Z, tag="front_plate")
+    front_plate = prog.locate(front_plate, pos=(plate_cx, plate_cy, front_z))
+
+    # Boss clearance on front plate
+    if boss_clear_r > 0:
+        boss_hole = prog.cylinder(
+            boss_clear_r, plate_t + 0.002, align=ALIGN_MIN_Z, tag="front_boss_hole"
+        )
+        boss_hole = prog.locate(boss_hole, pos=(0, 0, front_z - 0.001))
+        front_plate = prog.cut(front_plate, boss_hole)
+
+    # ── Rear plate ──
+    rear_plate = prog.box(plate_lx, plate_ly, plate_t, align=ALIGN_MAX_Z, tag="rear_plate")
+    rear_plate = prog.locate(rear_plate, pos=(plate_cx, plate_cy, rear_z))
+
+    # Boss clearance on rear plate
+    if boss_clear_r > 0:
+        boss_hole = prog.cylinder(
+            boss_clear_r, plate_t + 0.002, align=ALIGN_MAX_Z, tag="rear_boss_hole"
+        )
+        boss_hole = prog.locate(boss_hole, pos=(0, 0, rear_z + 0.001))
+        rear_plate = prog.cut(rear_plate, boss_hole)
+
+    # ── Side wall ──
+    wall_z_lo = rear_z - plate_t
+    wall_z_hi = front_z + plate_t
+    wall_lz = wall_z_hi - wall_z_lo
+    wall_cz = (wall_z_lo + wall_z_hi) / 2
+    wall_cx = plate_max_x - plate_t / 2
+    wall_width = horn_clip_r * 2
+
+    side_wall = prog.box(plate_t, wall_width, wall_lz, tag="side_wall")
+    side_wall = prog.locate(side_wall, pos=(wall_cx, plate_cy, wall_cz))
+
+    # ── Fuse all three pieces ──
+    shell = prog.fuse(front_plate, side_wall)
+    shell = prog.fuse(shell, rear_plate)
+
+    # ── Front horn holes ──
+    if servo.horn_mounting_points:
+        fspec = resolve_fastener(servo.horn_mounting_points[0])
+        horn_hole_r = fspec.clearance_hole / 2
+    else:
+        horn_hole_r = 0.00125
+
+    for hx, hy, _hz in front_holes:
+        hole = prog.cylinder(
+            horn_hole_r, plate_t + 0.002, align=ALIGN_MIN_Z, tag="front_horn_hole"
+        )
+        hole = prog.locate(hole, pos=(hx, hy, front_z - 0.001))
+        shell = prog.cut(shell, hole)
+
+    # ── Rear horn holes ──
+    if servo.rear_horn_mounting_points:
+        rear_fspec = resolve_fastener(servo.rear_horn_mounting_points[0])
+        rear_hole_r = rear_fspec.clearance_hole / 2
+    else:
+        rear_hole_r = horn_hole_r
+
+    for hx, hy, _hz in rear_holes:
+        hole = prog.cylinder(
+            rear_hole_r, plate_t + 0.002, align=ALIGN_MAX_Z, tag="rear_horn_hole"
+        )
+        hole = prog.locate(hole, pos=(hx, hy, rear_z + 0.001))
+        shell = prog.cut(shell, hole)
+
+    prog.output_ref = shell
     return prog

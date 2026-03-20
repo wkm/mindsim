@@ -1,4 +1,4 @@
-"""Roundtrip volume tests for bracket/cradle envelope ShapeScript wrappers.
+"""Roundtrip volume tests for bracket/cradle/coupler ShapeScript emitters.
 
 Verifies that executing the ShapeScript program through the OCCT backend
 produces a solid whose volume matches the direct build123d solid.
@@ -13,7 +13,9 @@ b3d = pytest.importorskip("build123d")
 from botcad.shapescript.backend_occt import OcctBackend
 from botcad.shapescript.emit_bracket import (
     bracket_envelope_script,
+    coupler_solid_script,
     cradle_envelope_script,
+    cradle_solid_script,
 )
 
 
@@ -21,6 +23,16 @@ def _servo():
     from botcad.components.servo import STS3215
 
     return STS3215()
+
+
+def _total_volume(solid):
+    """Get absolute volume, handling both Solid and Compound."""
+    return abs(solid.volume)
+
+
+def _exec(prog):
+    """Execute a ShapeScript through the OCCT backend."""
+    return OcctBackend().execute(prog)
 
 
 class TestBracketEnvelopeRoundtrip:
@@ -32,13 +44,11 @@ class TestBracketEnvelopeRoundtrip:
         servo = _servo()
         spec = BracketSpec()
 
-        # Direct path
         direct_solid = bracket_envelope(servo, spec)
         direct_vol = abs(direct_solid.volume)
 
-        # ShapeScript path
         prog = bracket_envelope_script(servo, spec)
-        result = OcctBackend().execute(prog)
+        result = _exec(prog)
         ir_solid = result.shapes[prog.output_ref.id]
         ir_vol = abs(ir_solid.volume)
 
@@ -46,20 +56,20 @@ class TestBracketEnvelopeRoundtrip:
             f"bracket_envelope volume mismatch: IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
         )
 
-    def test_has_prebuilt_op(self):
-        from botcad.shapescript.ops import PrebuiltOp
+    def test_has_native_ops(self):
+        """STS3215 bracket_envelope should use native Box + LocateOp, not PrebuiltOp."""
+        from botcad.shapescript.ops import BoxOp, LocateOp
 
         servo = _servo()
         prog = bracket_envelope_script(servo)
-        assert len(prog.ops) == 1
-        assert isinstance(prog.ops[0], PrebuiltOp)
-        assert prog.ops[0].tag == "bracket_envelope"
+        op_types = {type(op) for op in prog.ops}
+        assert BoxOp in op_types
+        assert LocateOp in op_types
 
     def test_output_ref_set(self):
         servo = _servo()
         prog = bracket_envelope_script(servo)
         assert prog.output_ref is not None
-        assert prog.output_ref == prog.ops[0].ref
 
 
 class TestCradleEnvelopeRoundtrip:
@@ -71,13 +81,11 @@ class TestCradleEnvelopeRoundtrip:
         servo = _servo()
         spec = BracketSpec()
 
-        # Direct path
         direct_solid = cradle_envelope(servo, spec)
         direct_vol = abs(direct_solid.volume)
 
-        # ShapeScript path
         prog = cradle_envelope_script(servo, spec)
-        result = OcctBackend().execute(prog)
+        result = _exec(prog)
         ir_solid = result.shapes[prog.output_ref.id]
         ir_vol = abs(ir_solid.volume)
 
@@ -85,30 +93,83 @@ class TestCradleEnvelopeRoundtrip:
             f"cradle_envelope volume mismatch: IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
         )
 
-    def test_has_prebuilt_op(self):
-        from botcad.shapescript.ops import PrebuiltOp
+    def test_has_native_ops(self):
+        """cradle_envelope should use native Box + LocateOp, not PrebuiltOp."""
+        from botcad.shapescript.ops import BoxOp, LocateOp
 
         servo = _servo()
         prog = cradle_envelope_script(servo)
-        assert len(prog.ops) == 1
-        assert isinstance(prog.ops[0], PrebuiltOp)
-        assert prog.ops[0].tag == "cradle_envelope"
+        op_types = {type(op) for op in prog.ops}
+        assert BoxOp in op_types
+        assert LocateOp in op_types
 
     def test_output_ref_set(self):
         servo = _servo()
         prog = cradle_envelope_script(servo)
         assert prog.output_ref is not None
-        assert prog.output_ref == prog.ops[0].ref
 
 
-def _total_volume(solid):
-    """Get absolute volume, handling both Solid and Compound."""
-    return abs(solid.volume)
+class TestCradleSolidRoundtrip:
+    """cradle_solid via ShapeScript must match direct build123d volume."""
+
+    def test_volume_matches(self):
+        from botcad.bracket import BracketSpec, cradle_solid
+
+        servo = _servo()
+        spec = BracketSpec()
+
+        direct_solid = cradle_solid(servo, spec)
+        direct_vol = _total_volume(direct_solid)
+
+        prog = cradle_solid_script(servo, spec)
+        result = _exec(prog)
+        ir_vol = _total_volume(result.shapes[prog.output_ref.id])
+
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"cradle_solid volume mismatch: IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
+        )
+
+    def test_has_native_ops(self):
+        """cradle_solid should use native Box/Cylinder/Cut ops."""
+        from botcad.shapescript.ops import BoxOp, CutOp
+
+        servo = _servo()
+        prog = cradle_solid_script(servo)
+        op_types = {type(op) for op in prog.ops}
+        assert BoxOp in op_types
+        assert CutOp in op_types
+        assert len(prog.ops) > 5
+
+    def test_output_ref_set(self):
+        servo = _servo()
+        prog = cradle_solid_script(servo)
+        assert prog.output_ref is not None
 
 
-def _exec(prog):
-    """Execute a ShapeScript through the OCCT backend."""
-    return OcctBackend().execute(prog)
+class TestCouplerSolidRoundtrip:
+    """coupler_solid via ShapeScript must match direct build123d volume."""
+
+    def test_volume_matches(self):
+        from botcad.bracket import BracketSpec, coupler_solid
+
+        servo = _servo()
+        spec = BracketSpec()
+
+        direct_solid = coupler_solid(servo, spec)
+        direct_vol = _total_volume(direct_solid)
+
+        prog = coupler_solid_script(servo, spec)
+        result = _exec(prog)
+        ir_vol = _total_volume(result.shapes[prog.output_ref.id])
+
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"coupler_solid volume mismatch: IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
+        )
+
+    def test_output_ref_set(self):
+        servo = _servo()
+        prog = coupler_solid_script(servo)
+        assert prog.output_ref is not None
 
 
 class TestBracketSolidScript:
@@ -122,11 +183,9 @@ class TestBracketSolidScript:
         servo = STS3215()
         spec = BracketSpec()
 
-        # Direct path
         direct = bracket_solid(servo, spec)
         direct_vol = _total_volume(direct)
 
-        # ShapeScript path
         prog = bracket_solid_script(servo, spec)
         result = _exec(prog)
         ir_vol = _total_volume(result.shapes[prog.output_ref.id])
@@ -143,11 +202,9 @@ class TestBracketSolidScript:
         servo = SCS0009()
         spec = BracketSpec()
 
-        # Direct path
         direct = bracket_solid(servo, spec)
         direct_vol = _total_volume(direct)
 
-        # ShapeScript path
         prog = bracket_solid_script(servo, spec)
         result = _exec(prog)
         ir_vol = _total_volume(result.shapes[prog.output_ref.id])
@@ -166,11 +223,9 @@ class TestBracketSolidScript:
         prog = bracket_solid_script(servo)
 
         op_types = {type(op) for op in prog.ops}
-        # Should have native box, cylinder, cut ops (not just a single PrebuiltOp)
         assert BoxOp in op_types
         assert CylinderOp in op_types
         assert CutOp in op_types
-        # Should have at least several ops (outer + pocket + cuts)
         assert len(prog.ops) > 10
 
     def test_scs0009_uses_prebuilt(self):

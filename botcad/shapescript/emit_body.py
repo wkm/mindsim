@@ -42,10 +42,9 @@ def emit_body_ir(
     from botcad.bracket import (
         BracketSpec,
         coupler_solid,
-        cradle_solid,
     )
     from botcad.component import BearingSpec, CameraSpec
-    from botcad.emit.cad import _child_clearance_volume, _ensure_solid, _wire_channel
+    from botcad.emit.cad import _ensure_solid
     from botcad.geometry import quat_to_euler, rotate_vec
     from botcad.skeleton import BodyShape, BracketStyle
 
@@ -62,11 +61,13 @@ def emit_body_ir(
         h = body.width or dims[2]
 
         if body.is_wheel_body:
-            # Wheels: centered on origin (hub at center)
-            from botcad.emit.cad import _make_wheel_solid
+            # Wheels: sub-program (define once per size, call via CallOp)
+            from botcad.shapescript.emit_components import wheel_script
 
-            wheel_solid = _make_wheel_solid(r, h)
-            shell = prog.prebuilt(wheel_solid, tag="wheel")
+            wheel_key = f"wheel_{r:.6f}_{h:.6f}"
+            if wheel_key not in prog.sub_programs:
+                prog.sub_programs[wheel_key] = wheel_script(r, h)
+            shell = prog.call(wheel_key, tag="wheel")
 
         elif parent_joint is not None:
             # Child cylinder: bottom face at origin, offset so z=0 is joint end
@@ -158,6 +159,7 @@ def emit_body_ir(
         bracket_envelope_script,
         bracket_solid_script,
         cradle_envelope_script,
+        cradle_solid_script,
     )
 
     for joint in body.joints:
@@ -171,12 +173,9 @@ def emit_body_ir(
             brk_key = f"cradle_{servo.name}"
             if env_key not in prog.sub_programs:
                 prog.sub_programs[env_key] = cradle_envelope_script(servo, bracket_spec)
-                # cradle_solid_script not yet ported — wrap as PrebuiltOp sub-program
-                sub = ShapeScript()
-                sub.output_ref = sub.prebuilt(
-                    cradle_solid(servo, bracket_spec), tag="cradle"
+                prog.sub_programs[brk_key] = cradle_solid_script(
+                    servo, bracket_spec
                 )
-                prog.sub_programs[brk_key] = sub
         else:
             env_key = f"bracket_env_{servo.name}"
             brk_key = f"bracket_{servo.name}"
@@ -198,12 +197,12 @@ def emit_body_ir(
 
     # ── 5. Child clearance volumes (cad.py:867-873) ──
 
+    from botcad.shapescript.emit_components import emit_child_clearance
 
     for joint in body.joints:
         if joint.child is not None:
-            clearance = _child_clearance_volume(joint.child, joint)
-            if clearance is not None:
-                clr_ref = prog.prebuilt(clearance, tag=f"clearance_{joint.name}")
+            clr_ref = emit_child_clearance(prog, joint.child, joint)
+            if clr_ref is not None:
                 shell = prog.cut(shell, clr_ref)
 
     # ── 6. Wire channels (cad.py:875-881) ──

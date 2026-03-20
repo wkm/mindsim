@@ -25,6 +25,8 @@ class Align3:
 # Convenience constants
 ALIGN_CENTER = Align3()
 ALIGN_MIN_Z = Align3(z="min")
+ALIGN_MAX_Z = Align3(z="max")
+ALIGN_MIN_X = Align3(x="min")
 
 
 @dataclass(frozen=True)
