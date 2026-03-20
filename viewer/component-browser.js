@@ -75,6 +75,18 @@ class ComponentBrowser {
     this.sectionFlipped = false;
     this.sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
     this.sectionFraction = 0.5;   // slider position (0–1 along bbox)
+
+    // ShapeScript steps state
+    this.stepsMode = false;
+    this.stepsData = null;        // { component, steps: [{index, label, op, has_tool}] }
+    this.stepsCurrentIdx = 0;
+    this.stepsStlCache = {};      // idx → BufferGeometry
+    this.stepsToolStlCache = {};  // idx → BufferGeometry
+    this.stepsGroup = new THREE.Group();
+    this.stepsGroup.name = 'shapescript-steps';
+    this.stepsToolGroup = new THREE.Group();
+    this.stepsToolGroup.name = 'shapescript-tool';
+    this.showStepTool = true;
   }
 
   async init() {
@@ -141,6 +153,10 @@ class ComponentBrowser {
 
     // Grid (200mm with 5mm divisions)
     this.scene.add(new THREE.GridHelper(0.2, 40, 0xBFCCD6, 0xCED9E0));
+
+    // ShapeScript step groups (used in steps mode)
+    this.scene.add(this.stepsGroup);
+    this.scene.add(this.stepsToolGroup);
 
     // Create a group per layer
     for (const id of ALL_LAYER_IDS) {
@@ -219,6 +235,12 @@ class ComponentBrowser {
     const renderBtn = document.getElementById('render-svg');
     if (renderBtn) {
       renderBtn.addEventListener('click', () => this._requestSVGRender());
+    }
+
+    // Steps toggle
+    const stepsBtn = document.getElementById('steps-toggle');
+    if (stepsBtn) {
+      stepsBtn.addEventListener('click', () => this._toggleStepsMode());
     }
 
     // Section plane controls
@@ -690,9 +712,20 @@ class ComponentBrowser {
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
-    // Clear measurements, section, and layers
+    // Clear measurements, section, steps mode, and layers
     this.measureTool.clearAll();
     this._resetSection();
+    if (this.stepsMode) {
+      this.stepsMode = false;
+      clearGroup(this.stepsGroup);
+      clearGroup(this.stepsToolGroup);
+      this.stepsGroup.visible = false;
+      this.stepsToolGroup.visible = false;
+      this.stepsData = null;
+      this._stepsHasFramed = false;
+      const btn = document.getElementById('steps-toggle');
+      if (btn) btn.classList.remove('active');
+    }
     for (const id of ALL_LAYER_IDS) {
       clearGroup(this.layerGroups[id]);
       this.layerGroups[id].visible = false;
@@ -788,6 +821,341 @@ class ComponentBrowser {
 
     geometry.computeVertexNormals();
     addMeshWithEdges(geometry, color, group, opts);
+  }
+
+  // -----------------------------------------------------------------------
+  // ShapeScript steps mode
+  // -----------------------------------------------------------------------
+
+  async _toggleStepsMode() {
+    if (!this.currentComponent) return;
+
+    if (this.stepsMode) {
+      this._exitStepsMode();
+      return;
+    }
+
+    const btn = document.getElementById('steps-toggle');
+    if (btn) {
+      btn.textContent = 'Loading...';
+      btn.disabled = true;
+    }
+
+    try {
+      const resp = await fetch(`/api/components/${this.currentComponent.name}/shapescript`);
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          this._showStepsUnavailable();
+        } else {
+          console.error('ShapeScript steps fetch failed:', resp.status);
+        }
+        return;
+      }
+
+      this.stepsData = await resp.json();
+      if (!this.stepsData.steps || this.stepsData.steps.length === 0) {
+        this._showStepsUnavailable();
+        return;
+      }
+
+      this._enterStepsMode();
+    } catch (err) {
+      console.error('Failed to fetch ShapeScript steps:', err);
+    } finally {
+      if (btn) {
+        btn.textContent = 'Steps';
+        btn.disabled = false;
+      }
+    }
+  }
+
+  _showStepsUnavailable() {
+    const panel = document.getElementById('side-panel');
+    const msg = document.createElement('div');
+    msg.style.cssText = 'color: var(--bp-gray3); font-size: 13px; padding: 12px; background: rgba(206,217,224,0.1); border-radius: 6px; margin-top: 12px;';
+    msg.textContent = 'ShapeScript not available for this component';
+    msg.id = 'steps-unavailable';
+    panel.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }
+
+  _enterStepsMode() {
+    this.stepsMode = true;
+    const btn = document.getElementById('steps-toggle');
+    if (btn) btn.classList.add('active');
+
+    // Hide layer geometry, show steps groups
+    for (const id of ALL_LAYER_IDS) {
+      this.layerGroups[id].visible = false;
+    }
+    if (this._markerGroup) this._markerGroup.visible = false;
+    this.stepsGroup.visible = true;
+    this.stepsToolGroup.visible = true;
+
+    // Reset caches
+    this.stepsStlCache = {};
+    this.stepsToolStlCache = {};
+
+    // Build steps UI in side panel
+    this._buildStepsPanel();
+
+    // Show last step
+    this._showComponentStep(this.stepsData.steps.length - 1);
+  }
+
+  _exitStepsMode() {
+    this.stepsMode = false;
+    const btn = document.getElementById('steps-toggle');
+    if (btn) btn.classList.remove('active');
+
+    // Clear steps geometry
+    clearGroup(this.stepsGroup);
+    clearGroup(this.stepsToolGroup);
+    this.stepsGroup.visible = false;
+    this.stepsToolGroup.visible = false;
+
+    // Restore layer geometry
+    if (this._markerGroup) this._markerGroup.visible = true;
+    const comp = this.currentComponent;
+    if (comp) {
+      const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
+      this.layerGroups[defaultLayer].visible = true;
+    }
+
+    // Rebuild normal side panel
+    if (comp) this._updateSidePanel(comp);
+    this._fitCameraToVisibleMeshes();
+  }
+
+  _buildStepsPanel() {
+    const panel = document.getElementById('side-panel');
+    const comp = this.currentComponent;
+    const steps = this.stepsData.steps;
+
+    let html = `<h2>${comp.name}</h2>`;
+    html += `<div class="prop-badge" style="margin-bottom:12px">ShapeScript Steps</div>`;
+
+    // Step info box
+    html += `<div id="step-info" class="step-info"><div class="step-title">Loading...</div></div>`;
+
+    // Slider
+    html += `<div class="slider-group">`;
+    html += `<div class="slider-label"><span class="name">Step</span><span class="value" id="step-value">0</span></div>`;
+    html += `<input type="range" id="steps-slider" min="0" max="${steps.length - 1}" value="${steps.length - 1}">`;
+    html += `</div>`;
+
+    // Prev/Next buttons
+    html += `<div style="display:flex;gap:8px;margin-bottom:12px">`;
+    html += `<button class="btn" id="step-prev">Prev</button>`;
+    html += `<button class="btn" id="step-next">Next</button>`;
+    html += `</div>`;
+
+    // Tool toggle
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">`;
+    html += `<input type="checkbox" id="step-tool-toggle" ${this.showStepTool ? 'checked' : ''}>`;
+    html += `<label for="step-tool-toggle" style="font-size:12px;color:var(--bp-gray1);cursor:pointer">Show tool solid</label>`;
+    html += `</div>`;
+
+    // Step list
+    html += `<h3>All Steps</h3>`;
+    html += `<div id="steps-list">`;
+    const OP_COLORS = { create: '#2B95D6', cut: '#DB3737', union: '#0F9960' };
+    for (const step of steps) {
+      html += `<div class="step-row" data-step-idx="${step.index}" style="font-size:12px;padding:4px 6px;border-radius:4px;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:6px;transition:background 0.1s">`;
+      html += `<span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${OP_COLORS[step.op] || '#5C7080'}"></span>`;
+      html += `<span style="color:var(--bp-dark-gray5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Input Sans Narrow','SF Mono',monospace;font-size:11px">${step.script || step.label}</span>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+
+    // Exit button
+    html += `<div style="margin-top:16px"><button class="btn" id="steps-exit">Exit Steps</button></div>`;
+
+    panel.innerHTML = html;
+
+    // Wire up controls
+    const slider = document.getElementById('steps-slider');
+    slider.addEventListener('input', () => this._showComponentStep(parseInt(slider.value)));
+
+    document.getElementById('step-prev').addEventListener('click', () => {
+      if (this.stepsCurrentIdx > 0) {
+        slider.value = String(this.stepsCurrentIdx - 1);
+        this._showComponentStep(this.stepsCurrentIdx - 1);
+      }
+    });
+    document.getElementById('step-next').addEventListener('click', () => {
+      if (this.stepsCurrentIdx < steps.length - 1) {
+        slider.value = String(this.stepsCurrentIdx + 1);
+        this._showComponentStep(this.stepsCurrentIdx + 1);
+      }
+    });
+    document.getElementById('step-tool-toggle').addEventListener('change', (e) => {
+      this.showStepTool = e.target.checked;
+      this._updateStepToolMesh();
+    });
+    document.getElementById('steps-exit').addEventListener('click', () => this._exitStepsMode());
+
+    // Step list click handlers
+    panel.querySelectorAll('.step-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = parseInt(row.dataset.stepIdx);
+        slider.value = String(idx);
+        this._showComponentStep(idx);
+      });
+      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(206,217,224,0.5)'; });
+      row.addEventListener('mouseleave', () => {
+        if (parseInt(row.dataset.stepIdx) !== this.stepsCurrentIdx) {
+          row.style.background = '';
+        }
+      });
+    });
+  }
+
+  async _showComponentStep(idx) {
+    const steps = this.stepsData.steps;
+    if (idx < 0 || idx >= steps.length) return;
+    this.stepsCurrentIdx = idx;
+    const step = steps[idx];
+
+    // Update info
+    const infoEl = document.getElementById('step-info');
+    if (infoEl) {
+      const opLabel = step.op === 'cut' ? 'subtract' : step.op === 'union' ? 'add' : step.op;
+      const scriptLine = step.script
+        ? `<div style="font-family:'Input Sans Narrow','SF Mono',monospace;font-size:11px;margin-top:4px;padding:4px 6px;background:var(--bp-dark-gray1,#1C2127);color:#ABB3BF;border-radius:3px;overflow-x:auto;white-space:nowrap">${step.script.replace(/</g, '&lt;')}</div>`
+        : '';
+      infoEl.innerHTML = `<div class="step-title">${step.label}</div><div class="step-desc">Step ${idx + 1} of ${steps.length} &mdash; <code>${opLabel}</code></div>${scriptLine}`;
+    }
+    const valueEl = document.getElementById('step-value');
+    if (valueEl) valueEl.textContent = `${idx + 1} / ${steps.length}`;
+
+    // Highlight in step list
+    document.querySelectorAll('.step-row').forEach(row => {
+      row.style.background = parseInt(row.dataset.stepIdx) === idx ? 'rgba(19,124,189,0.15)' : '';
+    });
+
+    // Load body STL — for steps with a tool, show state BEFORE the operation
+    const hasPrev = idx > 0 && step.has_tool;
+    const bodyIdx = hasPrev ? idx - 1 : idx;
+    const geometry = await this._loadComponentStepSTL(bodyIdx);
+    if (!geometry) return;
+
+    // Clear and rebuild meshes
+    clearGroup(this.stepsGroup);
+    const material = new THREE.MeshPhysicalMaterial({
+      color: 0xCED9E0, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
+    });
+    this.stepsGroup.add(new THREE.Mesh(geometry, material));
+
+    // Edge outlines
+    const edges = new THREE.EdgesGeometry(geometry, 28);
+    const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.6,
+    }));
+    lines.raycast = () => {};
+    this.stepsGroup.add(lines);
+
+    // Tool overlay
+    await this._updateStepToolMesh();
+
+    // Prefetch adjacent
+    this._prefetchComponentStep(idx - 1);
+    this._prefetchComponentStep(idx + 1);
+
+    // Auto-frame on first load
+    if (!this._stepsHasFramed) {
+      this._stepsFrameCamera(geometry);
+      this._stepsHasFramed = true;
+    }
+  }
+
+  async _updateStepToolMesh() {
+    clearGroup(this.stepsToolGroup);
+    const step = this.stepsData?.steps[this.stepsCurrentIdx];
+    if (!this.showStepTool || !step || !step.has_tool) return;
+
+    const name = this.currentComponent.name;
+    const geometry = await this._loadStepSTLGeneric(
+      this.stepsToolStlCache, this.stepsCurrentIdx,
+      `/api/components/${name}/shapescript/${this.stepsCurrentIdx}/tool-stl`
+    );
+    if (!geometry) return;
+
+    const isCut = step.op === 'cut';
+    const toolColor = isCut ? 0xDB3737 : 0x0F9960;
+    const material = new THREE.MeshPhysicalMaterial({
+      color: toolColor, transparent: true, opacity: 0.35,
+      roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide, depthWrite: false,
+    });
+    this.stepsToolGroup.add(new THREE.Mesh(geometry, material));
+
+    const toolEdges = new THREE.EdgesGeometry(geometry, 28);
+    const toolLines = new THREE.LineSegments(toolEdges, new THREE.LineBasicMaterial({
+      color: toolColor, transparent: true, opacity: 0.4,
+    }));
+    toolLines.raycast = () => {};
+    this.stepsToolGroup.add(toolLines);
+  }
+
+  async _loadComponentStepSTL(idx) {
+    const name = this.currentComponent.name;
+    return this._loadStepSTLGeneric(
+      this.stepsStlCache, idx,
+      `/api/components/${name}/shapescript/${idx}/stl`
+    );
+  }
+
+  async _loadStepSTLGeneric(cache, idx, url) {
+    if (idx < 0) return null;
+    if (cache[idx]) return cache[idx];
+
+    return new Promise((resolve) => {
+      this.stlLoader.load(url, (geometry) => {
+        geometry.computeVertexNormals();
+        cache[idx] = geometry;
+        resolve(geometry);
+      }, undefined, () => resolve(null));
+    });
+  }
+
+  _prefetchComponentStep(idx) {
+    const steps = this.stepsData?.steps;
+    if (!steps || idx < 0 || idx >= steps.length) return;
+    if (!this.stepsStlCache[idx]) this._loadComponentStepSTL(idx);
+    if (steps[idx]?.has_tool && !this.stepsToolStlCache[idx]) {
+      const name = this.currentComponent.name;
+      this._loadStepSTLGeneric(
+        this.stepsToolStlCache, idx,
+        `/api/components/${name}/shapescript/${idx}/tool-stl`
+      );
+    }
+  }
+
+  _stepsFrameCamera(geometry) {
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+
+    const preset = VIEW_PRESETS.iso;
+    const dist = maxDim * 2;
+    this.camera.position.copy(center).addScaledVector(preset.dir, dist);
+    this.camera.up.copy(preset.up);
+    this.controls.target.copy(center);
+    this.camera.lookAt(center);
+    this.controls.enableRotate = true;
+
+    const pad = maxDim * 0.15;
+    const container = document.getElementById('canvas-container');
+    const aspect = container.offsetWidth / container.offsetHeight;
+    const halfH = (maxDim / 2) + pad;
+    this.camera.left = -halfH * aspect;
+    this.camera.right = halfH * aspect;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
   }
 
   // -----------------------------------------------------------------------
@@ -1314,5 +1682,11 @@ export async function initComponentBrowser(componentParam) {
 
   if (componentParam && componentParam !== 'catalog') {
     await browser.loadComponent(componentParam);
+
+    // Auto-open steps mode if ?steps=true
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('steps') === 'true') {
+      await browser._toggleStepsMode();
+    }
   }
 }

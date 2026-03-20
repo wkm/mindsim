@@ -300,8 +300,13 @@ class CadStepsViewer {
       row.appendChild(dot);
 
       const label = document.createElement('span');
-      label.textContent = step.label;
-      label.style.cssText = 'color: var(--bp-dark-gray5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+      // Show ShapeScript code line if available, otherwise fall back to label
+      label.textContent = step.script || step.label;
+      label.style.cssText = `
+        color: var(--bp-dark-gray5); white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis; font-family: 'Input Sans Narrow', 'SF Mono', monospace;
+        font-size: 11px;
+      `;
       row.appendChild(label);
 
       row.addEventListener('click', () => {
@@ -350,9 +355,13 @@ class CadStepsViewer {
     // Update UI
     this.stepValueEl.textContent = `${idx + 1} / ${this.steps.length}`;
     const opLabel = step.op === 'cut' ? 'subtract' : step.op === 'union' ? 'add' : step.op;
+    const scriptLine = step.script
+      ? `<div class="step-script" style="font-family: 'Input Sans Narrow', 'SF Mono', monospace; font-size: 11px; color: var(--bp-dark-gray3); margin-top: 4px; padding: 4px 6px; background: var(--bp-dark-gray1, #1C2127); color: #ABB3BF; border-radius: 3px; overflow-x: auto; white-space: nowrap;">${step.script.replace(/</g, '&lt;')}</div>`
+      : '';
     this.stepInfoEl.innerHTML = `
       <div class="step-title">${step.label}</div>
       <div class="step-desc">Step ${idx + 1} of ${this.steps.length} &mdash; <code>${opLabel}</code></div>
+      ${scriptLine}
     `;
 
     // Highlight in step list

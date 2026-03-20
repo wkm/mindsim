@@ -1123,6 +1123,7 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
                         "label": s.label,
                         "op": s.op,
                         "has_tool": s.tool is not None,
+                        "script": getattr(s, "script", ""),
                     }
                     for i, s in enumerate(steps)
                 ],
@@ -1192,6 +1193,7 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
                         "op": s.op,
                         "has_tool": s.tool is not None,
                         "group": getattr(s, "group", None),
+                        "script": getattr(s, "script", ""),
                     }
                     for i, s in enumerate(steps)
                 ],

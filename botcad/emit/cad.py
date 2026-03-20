@@ -80,6 +80,7 @@ class CadStep:
     op: str  # "create" | "cut" | "union"
     tool: object | None = None  # cutting/union tool solid (placed in body frame)
     group: str | None = None  # CallOp sub-program key, for viewer grouping
+    script: str = ""  # ShapeScript code line, e.g. "cut_3 = Cut(box_0, loc_2)"
 
 
 def _update_mass_from_solid(body: Body, solid) -> None:

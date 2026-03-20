@@ -49,38 +49,39 @@ def shapescript_to_cad_steps(
         if solid is None:
             continue
 
+        script_line = format_op(op)
+
         match op:
             # Primitives — create steps
             case BoxOp(ref=ref, tag=tag):
                 label = "Create box" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create"))
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
             case CylinderOp(ref=ref, tag=tag):
                 label = "Create cylinder" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create"))
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
             case SphereOp(ref=ref, tag=tag):
                 label = "Create sphere" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create"))
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
             case PrebuiltOp(ref=ref, tag=tag):
                 label = "Prebuilt" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create"))
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
             case CallOp(ref=ref, sub_program_key=key, tag=tag):
                 label = f"Call: {key}" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", group=key)
+                    CadStep(label=label, solid=solid, op="create", group=key, script=script_line)
                 )
 
             # Booleans — cut/union steps with tool
             case CutOp(ref=ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
-                # Build a label from the tool's tag if available
                 tool_tag = _find_tag_for_ref(prog, tl)
                 label = "Cut" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="cut", tool=tool_solid)
+                    CadStep(label=label, solid=solid, op="cut", tool=tool_solid, script=script_line)
                 )
 
             case FuseOp(ref=ref, target=t, tool=tl):
@@ -88,14 +89,11 @@ def shapescript_to_cad_steps(
                 tool_tag = _find_tag_for_ref(prog, tl)
                 label = "Union" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="union", tool=tool_solid)
+                    CadStep(label=label, solid=solid, op="union", tool=tool_solid, script=script_line)
                 )
 
             # Transforms — update the previous step's solid (don't create new step)
             case LocateOp(ref=ref, target=t):
-                # A LocateOp repositions a shape. Replace the previous step's
-                # solid with the repositioned version so the viewer shows the
-                # shape in its final position.
                 if steps and steps[-1].solid is shapes.get(t.id):
                     steps[-1] = CadStep(
                         label=steps[-1].label,
@@ -103,11 +101,10 @@ def shapescript_to_cad_steps(
                         op=steps[-1].op,
                         tool=steps[-1].tool,
                         group=steps[-1].group,
+                        script=script_line,
                     )
-                # Otherwise ignore — transforms between booleans are intermediate
 
             case _:
-                # Query/export ops don't produce visible steps
                 pass
 
     return steps
@@ -119,3 +116,82 @@ def _find_tag_for_ref(prog: ShapeScript, ref) -> str | None:
         if hasattr(op, "ref") and op.ref == ref:
             return getattr(op, "tag", None)
     return None
+
+
+def format_op(op) -> str:
+    """Format a ShapeScript op as a code-like string for the viewer.
+
+    Produces output like:
+        box_0 = Box(w=0.0600, l=0.0400, h=0.0200)
+        cut_3 = Cut(box_0, loc_2)
+        loc_5 = Locate(cyl_4, pos=(0.01, 0, 0))
+    """
+    from botcad.shapescript.ops import (
+        BoxOp,
+        CallOp,
+        ChamferOp,
+        CutOp,
+        CylinderOp,
+        FilletOp,
+        FuseOp,
+        LocateOp,
+        PrebuiltOp,
+        SphereOp,
+    )
+
+    ref = getattr(op, "ref", None)
+    prefix = f"{ref.id} = " if ref else ""
+
+    match op:
+        case BoxOp(width=w, length=l, height=h, tag=tag):
+            s = f"Box(w={w:.4f}, l={l:.4f}, h={h:.4f})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case CylinderOp(radius=r, height=h, tag=tag):
+            s = f"Cylinder(r={r:.4f}, h={h:.4f})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case SphereOp(radius=r, tag=tag):
+            s = f"Sphere(r={r:.4f})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case PrebuiltOp(solid_hash=sh, tag=tag):
+            s = f"Prebuilt({sh[:8]})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case CallOp(sub_program_key=key, tag=tag):
+            s = f"Call({key!r})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case FuseOp(target=t, tool=tl):
+            return prefix + f"Fuse({t.id}, {tl.id})"
+
+        case CutOp(target=t, tool=tl):
+            return prefix + f"Cut({t.id}, {tl.id})"
+
+        case LocateOp(target=t, pos=pos, euler_deg=euler):
+            parts = [t.id]
+            if any(p != 0 for p in pos):
+                parts.append(f"pos=({pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f})")
+            if any(e != 0 for e in euler):
+                parts.append(f"rot=({euler[0]:.1f}, {euler[1]:.1f}, {euler[2]:.1f})")
+            return prefix + f"Locate({', '.join(parts)})"
+
+        case FilletOp(target=t, tags=tags, radius=r):
+            return prefix + f"Fillet({t.id}, tags={tags}, r={r:.4f})"
+
+        case ChamferOp(target=t, tags=tags, size=sz):
+            return prefix + f"Chamfer({t.id}, tags={tags}, size={sz:.4f})"
+
+        case _:
+            return prefix + type(op).__name__
