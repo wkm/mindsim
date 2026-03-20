@@ -41,10 +41,7 @@ def emit_body_ir(
 
     from botcad.bracket import (
         BracketSpec,
-        bracket_envelope,
-        bracket_solid,
         coupler_solid,
-        cradle_envelope,
         cradle_solid,
     )
     from botcad.component import BearingSpec, CameraSpec
@@ -155,36 +152,49 @@ def emit_body_ir(
         shell = prog.fuse(shell, coupler_ref)
 
     # ── 4. Bracket footprint cut + bracket union (cad.py:845-865) ──
+    # Brackets are sub-programs: defined once per servo type, called at each joint.
+
+    from botcad.shapescript.emit_bracket import (
+        bracket_envelope_script,
+        bracket_solid_script,
+        cradle_envelope_script,
+    )
 
     for joint in body.joints:
         servo = joint.servo
         center = joint.solved_servo_center
         euler = quat_to_euler(joint.solved_servo_quat)
 
-        # Use .moved() to match direct path (cad.py:1008-1036) — .locate()
-        # mutates @lru_cache'd shapes. See memory/feedback_build123d_locate.md.
+        # Register sub-programs once per servo type (define once, use many)
         if joint.bracket_style is BracketStyle.COUPLER:
-            env_solid = cradle_envelope(servo, bracket_spec)
-            env_solid = env_solid.moved(Location(center, euler))
-            env_ref = prog.prebuilt(env_solid, tag=f"cradle_env_{joint.name}")
-
-            crad_solid = cradle_solid(servo, bracket_spec)
-            crad_solid = crad_solid.moved(Location(center, euler))
-            crad_ref = prog.prebuilt(crad_solid, tag=f"cradle_{joint.name}")
-
-            shell = prog.cut(shell, env_ref)
-            shell = prog.fuse(shell, crad_ref)
+            env_key = f"cradle_env_{servo.name}"
+            brk_key = f"cradle_{servo.name}"
+            if env_key not in prog.sub_programs:
+                prog.sub_programs[env_key] = cradle_envelope_script(servo, bracket_spec)
+                # cradle_solid_script not yet ported — wrap as PrebuiltOp sub-program
+                sub = ShapeScript()
+                sub.output_ref = sub.prebuilt(
+                    cradle_solid(servo, bracket_spec), tag="cradle"
+                )
+                prog.sub_programs[brk_key] = sub
         else:
-            env_solid = bracket_envelope(servo, bracket_spec)
-            env_solid = env_solid.moved(Location(center, euler))
-            env_ref = prog.prebuilt(env_solid, tag=f"bracket_env_{joint.name}")
+            env_key = f"bracket_env_{servo.name}"
+            brk_key = f"bracket_{servo.name}"
+            if env_key not in prog.sub_programs:
+                prog.sub_programs[env_key] = bracket_envelope_script(
+                    servo, bracket_spec
+                )
+                prog.sub_programs[brk_key] = bracket_solid_script(
+                    servo, bracket_spec
+                )
 
-            brk_solid = bracket_solid(servo, bracket_spec)
-            brk_solid = brk_solid.moved(Location(center, euler))
-            brk_ref = prog.prebuilt(brk_solid, tag=f"bracket_{joint.name}")
-
-            shell = prog.cut(shell, env_ref)
-            shell = prog.fuse(shell, brk_ref)
+        # Call sub-programs and locate at joint position
+        env_ref = prog.call(env_key, tag=f"bracket_env_{joint.name}")
+        env_ref = prog.locate(env_ref, pos=center, euler_deg=euler)
+        brk_ref = prog.call(brk_key, tag=f"bracket_{joint.name}")
+        brk_ref = prog.locate(brk_ref, pos=center, euler_deg=euler)
+        shell = prog.cut(shell, env_ref)
+        shell = prog.fuse(shell, brk_ref)
 
     # ── 5. Child clearance volumes (cad.py:867-873) ──
 
