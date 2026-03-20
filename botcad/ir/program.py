@@ -18,6 +18,7 @@ from botcad.ir.ops import (
     FilletOp,
     FuseOp,
     LocateOp,
+    PrebuiltOp,
     QueryAreaOp,
     QueryBBoxOp,
     QueryCentroidOp,
@@ -92,6 +93,23 @@ class CadProgram:
     def sphere(self, radius: float, tag: str | None = None) -> ShapeRef:
         ref = self._next_ref("sph")
         self.ops.append(SphereOp(ref=ref, radius=radius, tag=tag))
+        return ref
+
+    def prebuilt(self, solid: object, tag: str | None = None) -> ShapeRef:
+        """Inject a pre-built solid (e.g. from bracket.py factories).
+
+        The solid is stored out-of-band in prebuilt_solids and referenced
+        by its ShapeRef id. A content hash of the solid's volume is used
+        for cache invalidation.
+        """
+        ref = self._next_ref("pre")
+        solid_hash = str(hash(id(solid)))  # identity-based; real hash is volume-based
+        try:
+            solid_hash = f"vol:{abs(solid.volume):.10e}"
+        except Exception:
+            pass
+        self.ops.append(PrebuiltOp(ref=ref, solid_hash=solid_hash, tag=tag))
+        self.prebuilt_solids[ref.id] = solid
         return ref
 
     # ── Booleans ──

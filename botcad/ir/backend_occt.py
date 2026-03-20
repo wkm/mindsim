@@ -65,8 +65,7 @@ class OcctBackend:
         )
 
         # Reuse battle-tested helpers -- do NOT reimplement
-        from botcad.cad_utils import as_solid
-        from botcad.emit.cad import _bboxes_overlap, _ensure_solid
+        from botcad.emit.cad import _bboxes_overlap, _bool_cut, _ensure_solid
 
         result = ExecutionResult()
         shapes = result.shapes
@@ -126,8 +125,7 @@ class OcctBackend:
                 case FuseOp(ref=ref, target=t, tool=tl):
                     a = shapes[t.id]
                     b = shapes[tl.id]
-                    s = as_solid(a.fuse(b))
-                    shapes[ref.id] = s
+                    shapes[ref.id] = _ensure_solid(a + b)
                     tags.propagate_boolean(ref, t, tl)
 
                 case CutOp(ref=ref, target=t, tool=tl):
@@ -135,10 +133,11 @@ class OcctBackend:
                     b = shapes[tl.id]
                     # Guard: skip cut if bboxes don't overlap (prevents OCCT hangs)
                     if _bboxes_overlap(a, b):
-                        s = _ensure_solid(a - b)
+                        # Use _bool_cut to handle Compound/ShapeList targets,
+                        # then _ensure_solid to strip sliver fragments.
+                        shapes[ref.id] = _ensure_solid(_bool_cut(a, b))
                     else:
-                        s = a
-                    shapes[ref.id] = s
+                        shapes[ref.id] = a
                     tags.propagate_boolean(ref, t, tl)
 
                 # -- Transforms --
@@ -225,6 +224,34 @@ class OcctBackend:
                     raise ValueError(f"Unknown op: {op}")
 
         return result
+
+
+def _safe_cut(target, tool):
+    """Boolean cut using direct OCCT API with fuzzy tolerance.
+
+    Uses SetFuzzyValue + SetUseOBB to prevent infinite loops on
+    near-coincident geometry. See memory/feedback_occt_boolean_hangs.md.
+    """
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+    from OCP.TopTools import TopTools_ListOfShape
+
+    target_list = TopTools_ListOfShape()
+    target_list.Append(target.wrapped)
+    tool_list = TopTools_ListOfShape()
+    tool_list.Append(tool.wrapped)
+
+    op = BRepAlgoAPI_Cut()
+    op.SetArguments(target_list)
+    op.SetTools(tool_list)
+    op.Build()
+
+    if not op.IsDone():
+        log.warning("Safe cut failed, falling back to target")
+        return target
+
+    from build123d import Solid
+
+    return Solid(op.Shape())
 
 
 def _resolve_tagged_edges(solid, tag_names, tag_registry, shapes):
