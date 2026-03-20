@@ -195,6 +195,10 @@ export class ExploreMode {
       }
     }
 
+    // CAD steps link
+    const botName = this.manifest.bot_name;
+    html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}" class="bp5-button bp5-small" style="display:inline-block;margin-top:8px;text-decoration:none;">CAD Steps</a>`;
+
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
   }
@@ -250,7 +254,7 @@ export class ExploreMode {
     }
     html += this._propRow('Mass', `${(mount.mass * 1000).toFixed(1)} g`);
     html += '</div>';
-    html += `<a href="?component=${encodeURIComponent(mount.component_name)}" class="btn" style="display:inline-block;margin-top:8px;text-decoration:none;">View in Component Browser</a>`;
+    html += `<a href="?component=${encodeURIComponent(mount.component_name)}" class="bp5-button bp5-small" style="display:inline-block;margin-top:8px;text-decoration:none;">View in Component Browser</a>`;
 
     // Type-specific specs
     if (mount.component_type === 'camera') {

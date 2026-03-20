@@ -596,15 +596,15 @@ def _emit_camera(parent_el: Element, body: Body) -> None:
         if isinstance(mount.component, CameraSpec):
             cam = mount.component
             pos = mount.resolved_pos
-            # Camera looks forward (+Y in MuJoCo convention)
-            # Rotate 180° around Y to flip the image right-side up
+            # MuJoCo cameras look along local -Z.  Rotate +90° around X
+            # so -Z maps to +Y (forward) and +Y maps to +Z (up).
             SubElement(
                 parent_el,
                 "camera",
                 name=f"{mount.label}_cam",
                 fovy=f"{cam.fov_deg:.1f}",
                 pos=_fmt_vec3(pos),
-                euler=f"0 {math.pi} 0",
+                euler=f"{math.pi / 2} 0 0",
             )
             return
 
