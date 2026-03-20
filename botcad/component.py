@@ -32,6 +32,8 @@ class WirePort:
     label: str  # e.g. "uart_in", "uart_out", "power", "csi"
     pos: Vec3  # position relative to component origin (meters)
     bus_type: BusType
+    connector_type: str = ""  # e.g. "5264_3pin", "xt30", "csi_15pin"
+    permanent: bool = False  # True if wire is soldered/molded (not a removable plug)
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,7 @@ class MountPoint:
     diameter: float  # hole diameter (meters)
     axis: Vec3 = (0.0, 0.0, 1.0)  # fastener insertion direction
     fastener_type: str = ""  # "M2", "M2.5", "M3", "press_fit", etc.
+    head_type: str = ""  # HeadType value, empty = socket_head_cap
 
 
 def MountingEar(

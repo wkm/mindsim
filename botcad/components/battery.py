@@ -26,9 +26,19 @@ def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
         mass=mass,
         wire_ports=(
             # XT30 power connector on one end
-            WirePort("power", pos=(length / 2, 0.0, 0.0), bus_type=BusType.POWER),
+            WirePort(
+                "power",
+                pos=(length / 2, 0.0, 0.0),
+                bus_type=BusType.POWER,
+                connector_type="xt30",
+            ),
             # Balance lead
-            WirePort("balance", pos=(length / 2, 0.01, 0.0), bus_type=BusType.BALANCE),
+            WirePort(
+                "balance",
+                pos=(length / 2, 0.01, 0.0),
+                bus_type=BusType.BALANCE,
+                connector_type="jst_xh_3pin",
+            ),
         ),
         color=COLOR_POWER_BATTERY.rgba,
         chemistry="LiPo",

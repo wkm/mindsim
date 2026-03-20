@@ -32,6 +32,212 @@ if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
 
+def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
+    """Cut a clearance hole + optional counterbore at a mounting ear position.
+
+    Uses the fastener catalog for clearance diameter and head dimensions.
+    Socket head cap screws get a counterbore so the head sits flush.
+    """
+    from build123d import Align, Cylinder, Location
+
+    from botcad.fasteners import HeadType, resolve_fastener
+
+    fspec = resolve_fastener(ear)
+    hole_r = fspec.clearance_hole / 2
+    hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+    hole = Cylinder(hole_r, hole_depth, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+    shell = shell - hole
+
+    if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
+        cb_r = fspec.head_diameter / 2 + 0.0002  # 0.2mm clearance
+        cb_depth = fspec.head_height + 0.0005  # 0.5mm extra
+        cb = Cylinder(cb_r, cb_depth, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        cb = cb.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+        shell = shell - cb
+
+    return shell
+
+
+def _fuse_servo_connector(body, servo: ServoSpec):
+    """Fuse connector receptacles onto the servo body at each wire port.
+
+    Each non-permanent wire port with a connector_type gets a receptacle
+    fused at its position. The receptacle is rotated so pins run along X
+    (servo long axis) and the mating cavity faces outward from the body.
+    Permanent wires (soldered/molded) are skipped.
+    """
+    from build123d import Location
+
+    from botcad.connectors import connector_spec, receptacle_solid
+
+    for wp in servo.wire_ports:
+        if not wp.connector_type or wp.permanent:
+            continue
+        try:
+            cspec = connector_spec(wp.connector_type)
+        except KeyError:
+            continue
+
+        rcpt = receptacle_solid(cspec)
+        cx, cy, cz = wp.pos
+
+        # Rotate receptacle: mating cavity faces outward from servo body,
+        # and pins run along X (servo long axis). The 5264 connector's
+        # default mating direction is +Z; we flip 180° for bottom-face
+        # connectors and add 90° around Z so pins align with servo X.
+        mx, my, mz = cspec.mating_direction
+        if abs(mz) > 0.5:
+            flip = 180 if cz < 0 else 0
+            euler = (flip, 0, 90)  # 90° around Z so pins run along X
+        elif abs(mx) > 0.5:
+            euler = (0, -90 if cx < 0 else 90, 0)
+        else:
+            euler = (90 if cy < 0 else -90, 0, 0)
+
+        rcpt_placed = rcpt.moved(Location((cx, cy, cz), euler))
+        body = _as_solid(body.fuse(rcpt_placed))
+
+    return body
+
+
+def _connector_port(
+    servo: ServoSpec,
+    spec: BracketSpec,
+    wall_center: tuple[float, float, float],
+    exit_axis: tuple[float, float, float],
+):
+    """Build a shaped passage through a bracket wall for all connector plugs.
+
+    Computes a single cut that covers all wire port positions with their
+    connector envelopes + clearance. For servos with two side-by-side
+    connectors (e.g. STS3215 daisy-chain), the passage spans both.
+
+    Returns (cut_solid, None) positioned in servo-local frame,
+    or (None, None) if no connector info is available.
+    """
+    from build123d import Align, Box, Location
+
+    from botcad.connectors import connector_spec
+
+    # Collect all wire ports with connectors
+    ports = []
+    for wp in servo.wire_ports:
+        if wp.connector_type:
+            try:
+                cspec = connector_spec(wp.connector_type)
+                ports.append((wp, cspec))
+            except KeyError:
+                pass
+
+    if not ports:
+        return None, None
+
+    tol = spec.tolerance
+    wall = spec.wall
+    ax, ay, az = exit_axis
+
+    # Compute bounding box of all connector envelopes in the passage plane
+    # Each connector is at wp.pos with dimensions from cspec.body_dimensions
+    # The connectors are rotated 90° (pins along X), so effective footprint
+    # in the wall plane swaps dimensions accordingly.
+    clearance = tol + 0.001  # per side
+
+    # Accumulate min/max across all ports in the two axes perpendicular to exit
+    if abs(ax) > 0.5:
+        # Passage through X wall — footprint in Y-Z plane
+        y_coords = []
+        z_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            # Connector rotated 90°: long dim (bx) runs along X, by along Y
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            y_coords.extend([wp.pos[1] - hw, wp.pos[1] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(y_coords) - min(y_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = Box(
+            passage_depth,
+            cut_w,
+            cut_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (wall_center[0], center_y, center_z)
+    elif abs(az) > 0.5:
+        # Passage through Z wall — footprint in X-Y plane
+        x_coords = []
+        y_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            y_coords.extend([wp.pos[1] - hh, wp.pos[1] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(y_coords) - min(y_coords)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = Box(
+            cut_w,
+            cut_h,
+            passage_depth,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (center_x, center_y, wall_center[2])
+    else:
+        # Passage through Y wall — footprint in X-Z plane
+        x_coords = []
+        z_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = Box(
+            cut_w,
+            passage_depth,
+            cut_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (center_x, wall_center[1], center_z)
+
+    cut = cut.locate(Location(cut_pos))
+
+    return cut, None
+
+
+def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:
+    """Derive cable slot width and height from the servo's connector spec.
+
+    Falls back to BracketSpec defaults if no connector info is available.
+    """
+    # Find the UART wire port with a connector_type
+    for wp in servo.wire_ports:
+        if wp.connector_type:
+            try:
+                from botcad.connectors import connector_spec
+
+                cspec = connector_spec(wp.connector_type)
+                bx, by, bz = cspec.body_dimensions
+                # Slot should fit connector + 2mm tolerance per side
+                tol = 0.002
+                return max(bx, by) + tol, max(min(bx, by), bz) + tol
+            except KeyError:
+                break
+    return spec.cable_slot_width, spec.cable_slot_height
+
+
 def _group_ears_by_y_side(ears) -> dict[str, list]:
     """Group mounting ears into +Y and -Y sides."""
     sides: dict[str, list] = {}
@@ -254,35 +460,35 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         )
         shell = shell - boss
 
-    # --- M3 through-holes at each ear position ---
+    # --- Through-holes at each ear position (clearance from catalog) ---
     for ear in servo.mounting_ears:
-        hole_r = ear.diameter / 2
-        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
-        hole = Cylinder(
-            hole_r,
-            hole_depth,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
-        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-        shell = shell - hole
+        shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Cable exit slot on -Z face ---
-    # Slot through the bottom wall for the connector cable.
+    # --- Connector passage (shaped cutout for plug + cable to pass through) ---
     if servo.connector_pos is not None:
-        _cx, cy, cz = servo.connector_pos
-        slot_w = spec.cable_slot_width
-        slot_h = spec.cable_slot_height
-        slot_depth = wall + tol + 0.002
-        slot = Box(
-            slot_w,
-            slot_h,
-            slot_depth,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        wall_x = -outer_x / 2
+        cut, _housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(wall_x, 0, 0),
+            exit_axis=(-1.0, 0.0, 0.0),
         )
-        # Position at the bottom wall, centered on connector XY
-        slot_z = ear_bottom_z + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((_cx, cy, slot_z)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+        else:
+            # Fallback to rectangular slot if no connector info
+            cx, cy, cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_depth,
+                slot_w,
+                slot_h,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_x = wall_x + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((slot_x, cy, cz)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
@@ -444,6 +650,10 @@ def _sts_series_solid(servo: ServoSpec):
             h = h.locate(Location((ear.pos[0], ear.pos[1], f_z_bot)))
             body = _as_solid(body.cut(h))
 
+    # Connector receptacle on the servo body (where wires plug in)
+    if servo.connector_pos is not None:
+        body = _fuse_servo_connector(body, servo)
+
     return body
 
 
@@ -522,6 +732,10 @@ def _scs0009_solid(servo: ServoSpec):
             )
             hole = hole.locate(Location((mp.pos[0], mp.pos[1], ear_cz)))
             body = _as_solid(body.cut(hole))
+
+    # Connector receptacle on the servo body
+    if servo.connector_pos is not None:
+        body = _fuse_servo_connector(body, servo)
 
     return body
 
@@ -602,31 +816,42 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
     pocket = pocket.locate(Location((0, 0, outer_cz)))
     shell = outer - pocket
 
-    # --- M2 through-holes at each ear position ---
+    # --- Through-holes at each ear position (clearance from catalog) ---
+    from botcad.fasteners import resolve_fastener
+
     for ear in servo.mounting_ears:
+        fspec = resolve_fastener(ear)
         hole = Cylinder(
-            ear.diameter / 2,
+            fspec.clearance_hole / 2,
             outer_z + 0.002,
             align=(Align.CENTER, Align.CENTER, Align.CENTER),
         )
         hole = hole.locate(Location((ear.pos[0], ear.pos[1], outer_cz)))
         shell = shell - hole
 
-    # --- Cable exit slot (-Z face) ---
+    # --- Connector passage (-Z face) ---
     if servo.connector_pos is not None:
-        _cx, cy, _cz = servo.connector_pos
-        slot_w = 0.006  # 6mm wide
-        slot_h = 0.004  # 4mm tall
-        slot_depth = wall + tol + 0.002
-        slot = Box(
-            slot_w,
-            slot_h,
-            slot_depth,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        cut, _housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(0, 0, outer_bot_z),
+            exit_axis=(0.0, 0.0, -1.0),
         )
-        slot_z = outer_bot_z + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((0, cy, slot_z)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+        else:
+            _cx, cy, _cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_w,
+                slot_h,
+                slot_depth,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_z = outer_bot_z + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((0, cy, slot_z)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
@@ -703,7 +928,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
 
     Built in servo local frame (origin = body center, Z = shaft axis).
     """
-    from build123d import Align, Box, Cylinder, Location
+    from build123d import Align, Box, Location
 
     if spec is None:
         spec = BracketSpec()
@@ -764,35 +989,35 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     pocket = pocket.locate(Location((0, 0, outer_cz)))
     shell = outer - pocket
 
-    # --- M3 through-holes at each ear position ---
+    # --- Through-holes at each ear position (clearance from catalog) ---
     for ear in servo.mounting_ears:
         if ear.pos[0] > cradle_max_x + 0.001:
             continue
-        hole_r = ear.diameter / 2
-        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
-        hole = Cylinder(
-            hole_r,
-            hole_depth,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
-        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-        shell = shell - hole
+        shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Cable exit slot (connector is at -X/-Z corner) ---
+    # --- Connector passage (connector is at -X end) ---
     if servo.connector_pos is not None:
-        _cx, cy, cz = servo.connector_pos
-        slot_w = spec.cable_slot_width
-        slot_h = spec.cable_slot_height
-        slot_depth = wall + tol + 0.002
-        slot = Box(
-            slot_depth,
-            slot_w,
-            slot_h,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        cut, _housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(cradle_min_x, 0, 0),
+            exit_axis=(-1.0, 0.0, 0.0),
         )
-        slot_x = cradle_min_x + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((slot_x, cy, cz)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+        else:
+            _cx, cy, cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_depth,
+                slot_w,
+                slot_h,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_x = cradle_min_x + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((slot_x, cy, cz)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
@@ -1151,20 +1376,34 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     # Fuse all three pieces (wall overlaps both plates at their +X edges)
     shell = front_plate.fuse(side_wall).fuse(rear_plate)
 
-    # --- Through-holes for front horn mounting (M2.5) ---
+    # --- Through-holes for front horn mounting ---
+    from botcad.fasteners import resolve_fastener
+
+    if servo.horn_mounting_points:
+        fspec = resolve_fastener(servo.horn_mounting_points[0])
+        horn_hole_r = fspec.clearance_hole / 2
+    else:
+        horn_hole_r = 0.00125  # fallback
+
     for hx, hy, _hz in front_holes:
         hole = Cylinder(
-            0.00125,  # M2.5 clearance
+            horn_hole_r,
             plate_t + 0.002,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
         hole = hole.locate(Location((hx, hy, front_z - 0.001)))
         shell = shell - hole
 
-    # --- Through-holes for rear horn mounting (M2.5) ---
+    # --- Through-holes for rear horn mounting ---
+    if servo.rear_horn_mounting_points:
+        rear_fspec = resolve_fastener(servo.rear_horn_mounting_points[0])
+        rear_hole_r = rear_fspec.clearance_hole / 2
+    else:
+        rear_hole_r = horn_hole_r
+
     for hx, hy, _hz in rear_holes:
         hole = Cylinder(
-            0.00125,  # M2.5 clearance
+            rear_hole_r,
             plate_t + 0.002,
             align=(Align.CENTER, Align.CENTER, Align.MAX),
         )

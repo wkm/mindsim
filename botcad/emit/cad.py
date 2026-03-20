@@ -367,42 +367,30 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
                 servo_stl_count += 1
 
     # --- Per-hardware STLs (for MuJoCo mesh geoms) ---
-    # Many screws/pins share the same diameter/geometry.
-    # screw_solid() is @lru_cache'd; we just track which diameters we've exported.
-    hardware_exported: set[float] = set()
+    # Many screws share the same designation+head_type geometry.
+    # fastener_solid() is @lru_cache'd; we track which keys we've exported.
+    hardware_exported: set[tuple[str, str]] = set()
+
+    from botcad.fasteners import fastener_key, fastener_stl_stem
+
+    def _export_hardware(mp):
+        key = fastener_key(mp)
+        if key not in hardware_exported:
+            solid = screw_solid(key[0], key[1])
+            export_stl(solid, str(meshes_dir / f"{fastener_stl_stem(mp)}.stl"))
+            hardware_exported.add(key)
+
     for body in bot.all_bodies:
-        # Hardware on joints
         for joint in body.joints:
             for ear in joint.servo.mounting_ears:
-                if ear.diameter not in hardware_exported:
-                    export_stl(
-                        screw_solid(ear.diameter),
-                        str(meshes_dir / f"hardware_{ear.diameter:.4f}.stl"),
-                    )
-                    hardware_exported.add(ear.diameter)
+                _export_hardware(ear)
             for mp in joint.servo.horn_mounting_points:
-                if mp.diameter not in hardware_exported:
-                    export_stl(
-                        screw_solid(mp.diameter),
-                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
-                    )
-                    hardware_exported.add(mp.diameter)
+                _export_hardware(mp)
             for mp in joint.servo.rear_horn_mounting_points:
-                if mp.diameter not in hardware_exported:
-                    export_stl(
-                        screw_solid(mp.diameter),
-                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
-                    )
-                    hardware_exported.add(mp.diameter)
-        # Hardware on components
+                _export_hardware(mp)
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                if mp.diameter not in hardware_exported:
-                    export_stl(
-                        screw_solid(mp.diameter),
-                        str(meshes_dir / f"hardware_{mp.diameter:.4f}.stl"),
-                    )
-                    hardware_exported.add(mp.diameter)
+                _export_hardware(mp)
 
     # --- Per-horn STLs ---
     for body in bot.all_bodies:
@@ -1494,25 +1482,19 @@ def _orient_z_to_axis(
     return solid.moved(Location((0, 0, 0), euler))
 
 
-@lru_cache(maxsize=32)
-def screw_solid(diameter: float):
-    """Build a premium-looking screw solid (cylinder + chamfered head)."""
-    from build123d import Align, Axis, Cylinder, chamfer
+def screw_solid(designation: str, head_type: str = "", length: float = 0.004):
+    """Build an accurate screw solid from the fastener catalog.
 
-    # Generic screw: 1mm head height, 1.8x diameter head
-    head_h = 0.001
-    head_d = diameter * 1.8
-    shank_h = 0.002  # just a nub for visualization
+    Args:
+        designation: Fastener designation, e.g. "M2", "M2.5", "M3".
+        head_type: HeadType value string, empty = socket_head_cap.
+        length: Shank length in meters (default 4mm visualization nub).
+    """
+    from botcad.fasteners import HeadType, fastener_solid, fastener_spec
 
-    head = Cylinder(head_d / 2, head_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    # Select the top face (max Z) for the head chamfer
-    head_top_face = head.faces().sort_by(Axis.Z)[-1]
-    head = chamfer(head_top_face.edges(), 0.2 * head_h)
-
-    shank = Cylinder(
-        diameter / 2, shank_h, align=(Align.CENTER, Align.CENTER, Align.MAX)
-    )
-    return head + shank
+    ht = HeadType(head_type) if head_type else HeadType.SOCKET_HEAD_CAP
+    spec = fastener_spec(designation, ht)
+    return fastener_solid(spec, length)
 
 
 def _wire_segment_solid(start: Vec3, end: Vec3, radius: float):
