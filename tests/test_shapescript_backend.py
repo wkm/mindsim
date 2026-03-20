@@ -54,8 +54,44 @@ class TestPrimitiveVolume:
         from botcad.shapescript.ops import Align3
 
         prog = ShapeScript()
-        b = prog.box(1.0, 1.0, 2.0, align=Align3.MIN_Z)
+        b = prog.box(1.0, 1.0, 2.0, align=Align3(z="min"))
         prog.query_bbox(b)
+        result = _exec(prog)
+        (mn, mx) = result.queries[0]
+        assert mn[2] == pytest.approx(0.0, abs=1e-9)
+        assert mx[2] == pytest.approx(2.0, abs=1e-9)
+
+    def test_box_min_x_align(self):
+        """MIN X aligned box has its left face at x=0."""
+        from botcad.shapescript.ops import Align3
+
+        prog = ShapeScript()
+        b = prog.box(2.0, 1.0, 1.0, align=Align3(x="min"))
+        prog.query_bbox(b)
+        result = _exec(prog)
+        (mn, mx) = result.queries[0]
+        assert mn[0] == pytest.approx(0.0, abs=1e-9)
+        assert mx[0] == pytest.approx(2.0, abs=1e-9)
+
+    def test_box_max_y_align(self):
+        """MAX Y aligned box has its top face at y=0."""
+        from botcad.shapescript.ops import Align3
+
+        prog = ShapeScript()
+        b = prog.box(1.0, 3.0, 1.0, align=Align3(y="max"))
+        prog.query_bbox(b)
+        result = _exec(prog)
+        (mn, mx) = result.queries[0]
+        assert mn[1] == pytest.approx(-3.0, abs=1e-9)
+        assert mx[1] == pytest.approx(0.0, abs=1e-9)
+
+    def test_cylinder_min_z_align(self):
+        """MIN Z cylinder has bottom at z=0."""
+        from botcad.shapescript.ops import Align3
+
+        prog = ShapeScript()
+        c = prog.cylinder(0.5, 2.0, align=Align3(z="min"))
+        prog.query_bbox(c)
         result = _exec(prog)
         (mn, mx) = result.queries[0]
         assert mn[2] == pytest.approx(0.0, abs=1e-9)
@@ -350,3 +386,87 @@ class TestShapeTable:
         r = _exec(prog)
         assert isinstance(r.tags, type(r.tags))
         assert "shell" in r.tags.tags_on(prog.ops[0].ref)
+
+
+# -- CallOp Backend Tests --
+
+
+class TestCallOp:
+    def test_call_produces_solid(self):
+        """Sub-program box -> query volume = 1.0."""
+        sub = ShapeScript()
+        b = sub.box(1.0, 1.0, 1.0)
+        sub.output_ref = b
+
+        prog = ShapeScript()
+        prog.sub_programs["unit_box"] = sub
+        ref = prog.call("unit_box")
+        prog.query_volume(ref)
+        r = _exec(prog)
+        assert r.queries[0] == pytest.approx(1.0, rel=1e-6)
+
+    def test_call_then_cut(self):
+        """Call result usable in subsequent boolean ops."""
+        sub = ShapeScript()
+        b = sub.box(2.0, 2.0, 2.0)
+        sub.output_ref = b
+
+        prog = ShapeScript()
+        prog.sub_programs["big_box"] = sub
+        base = prog.call("big_box")
+        hole = prog.cylinder(0.5, 10.0)
+        result = prog.cut(base, hole)
+        prog.query_volume(result)
+        r = _exec(prog)
+        expected = 8.0 - math.pi * 0.5**2 * 2.0
+        assert r.queries[0] == pytest.approx(expected, rel=0.01)
+
+    def test_call_with_locate(self):
+        """Call result can be moved."""
+        sub = ShapeScript()
+        b = sub.box(1.0, 1.0, 1.0)
+        sub.output_ref = b
+
+        prog = ShapeScript()
+        prog.sub_programs["unit_box"] = sub
+        ref = prog.call("unit_box")
+        moved = prog.locate(ref, pos=(10.0, 0, 0))
+        prog.query_centroid(moved)
+        r = _exec(prog)
+        cx, cy, cz = r.queries[0]
+        assert cx == pytest.approx(10.0, abs=0.01)
+
+    def test_same_sub_program_called_twice(self):
+        """Two calls produce independent shapes, fused volume = 2.0."""
+        sub = ShapeScript()
+        b = sub.box(1.0, 1.0, 1.0)
+        sub.output_ref = b
+
+        prog = ShapeScript()
+        prog.sub_programs["unit_box"] = sub
+        a = prog.call("unit_box")
+        b = prog.call("unit_box")
+        b = prog.locate(b, pos=(5.0, 0, 0))  # non-overlapping
+        fused = prog.fuse(a, b)
+        prog.query_volume(fused)
+        r = _exec(prog)
+        assert r.queries[0] == pytest.approx(2.0, rel=0.001)
+
+    def test_call_missing_sub_program_raises(self):
+        """CallOp with missing sub-program raises ValueError."""
+        prog = ShapeScript()
+        prog.call("nonexistent")
+        with pytest.raises(ValueError, match="sub-program 'nonexistent' not found"):
+            _exec(prog)
+
+    def test_call_with_tag(self):
+        """CallOp tag is declared in the tag registry."""
+        sub = ShapeScript()
+        b = sub.box(1.0, 1.0, 1.0)
+        sub.output_ref = b
+
+        prog = ShapeScript()
+        prog.sub_programs["unit_box"] = sub
+        ref = prog.call("unit_box", tag="bracket")
+        r = _exec(prog)
+        assert "bracket" in r.tags.tags_on(ref)

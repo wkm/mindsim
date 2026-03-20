@@ -7,8 +7,10 @@ import json
 from dataclasses import asdict, dataclass, field
 
 from botcad.shapescript.ops import (
+    ALIGN_CENTER,
     Align3,
     BoxOp,
+    CallOp,
     ChamferOp,
     CutOp,
     CylinderOp,
@@ -47,6 +49,7 @@ class ShapeScript:
     ops: list[ShapeOp] = field(default_factory=list)
     output_ref: ShapeRef | None = None  # explicit final shape
     prebuilt_solids: dict[str, object] = field(default_factory=dict)  # ref.id -> solid
+    sub_programs: dict[str, ShapeScript] = field(default_factory=dict)
     _counter: int = field(default=0, repr=False)
 
     def _next_ref(self, prefix: str) -> ShapeRef:
@@ -61,7 +64,7 @@ class ShapeScript:
         width: float,
         length: float,
         height: float,
-        align: Align3 = Align3.CENTER,
+        align: Align3 = ALIGN_CENTER,
         tag: str | None = None,
     ) -> ShapeRef:
         ref = self._next_ref("box")
@@ -81,7 +84,7 @@ class ShapeScript:
         self,
         radius: float,
         height: float,
-        align: Align3 = Align3.CENTER,
+        align: Align3 = ALIGN_CENTER,
         tag: str | None = None,
     ) -> ShapeRef:
         ref = self._next_ref("cyl")
@@ -110,6 +113,12 @@ class ShapeScript:
             pass
         self.ops.append(PrebuiltOp(ref=ref, solid_hash=solid_hash, tag=tag))
         self.prebuilt_solids[ref.id] = solid
+        return ref
+
+    def call(self, key: str, tag: str | None = None) -> ShapeRef:
+        """Invoke a sub-program stored in sub_programs[key]."""
+        ref = self._next_ref("call")
+        self.ops.append(CallOp(ref=ref, sub_program_key=key, tag=tag))
         return ref
 
     # ── Booleans ──
@@ -181,30 +190,22 @@ class ShapeScript:
         """SHA-256 of the canonical JSON representation.
 
         Includes prebuilt solid hashes so cache invalidates when
-        bracket/component geometry changes.
+        bracket/component geometry changes. Also includes sub-program
+        hashes so cache invalidates when sub-programs change.
         """
-        canonical = self.to_json()
-        return hashlib.sha256(canonical.encode()).hexdigest()
+        parts = [self.to_json()]
+        for key in sorted(self.sub_programs):
+            parts.append(f"{key}:{self.sub_programs[key].content_hash()}")
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
     def to_json(self) -> str:
         """Canonical JSON serialization (deterministic key order)."""
-        from enum import Enum
-
-        def _default(obj: object) -> object:
-            if isinstance(obj, Enum):
-                return obj.value
-            raise TypeError(
-                f"Object of type {type(obj).__name__} is not JSON serializable"
-            )
-
         ops_data = []
         for op in self.ops:
             d = asdict(op)
             d["_type"] = type(op).__name__
             ops_data.append(d)
-        return json.dumps(
-            ops_data, sort_keys=True, separators=(",", ":"), default=_default
-        )
+        return json.dumps(ops_data, sort_keys=True, separators=(",", ":"))
 
     @classmethod
     def from_json(cls, json_str: str) -> ShapeScript:
@@ -225,9 +226,9 @@ class ShapeScript:
                     d[key] = tuple(ShapeRef(v["id"]) for v in val)
                 elif isinstance(val, list):
                     d[key] = tuple(val)
-            # Reconstruct enums
-            if "align" in d and isinstance(d["align"], str):
-                d["align"] = Align3(d["align"])
+            # Reconstruct Align3 dataclass from dict
+            if "align" in d and isinstance(d["align"], dict):
+                d["align"] = Align3(**d["align"])
             op = op_cls(**d)
             prog.ops.append(op)
             if hasattr(op, "ref"):

@@ -45,7 +45,7 @@ class TestPrimitiveOps:
 
     def test_box_defaults(self):
         op = BoxOp(ref=ShapeRef("b0"), width=1, length=1, height=1)
-        assert op.align == Align3.CENTER
+        assert op.align == Align3()
         assert op.tag is None
 
     def test_box_with_tag(self):
@@ -160,6 +160,63 @@ class TestOpHashing:
         assert hash(a) != hash(b)
 
 
+class TestAlign3:
+    def test_default_is_center(self):
+        a = Align3()
+        assert a.x == "center"
+        assert a.y == "center"
+        assert a.z == "center"
+
+    def test_per_axis_construction(self):
+        a = Align3(x="min", y="max", z="center")
+        assert a.x == "min"
+        assert a.y == "max"
+        assert a.z == "center"
+
+    def test_equality(self):
+        assert Align3() == Align3()
+        assert Align3(z="min") == Align3(z="min")
+        assert Align3() != Align3(z="min")
+
+    def test_hashable(self):
+        s = {Align3(), Align3(z="min"), Align3()}
+        assert len(s) == 2
+
+    def test_frozen(self):
+        a = Align3()
+        with pytest.raises(AttributeError):
+            a.x = "min"
+
+    def test_convenience_constants(self):
+        from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
+
+        assert ALIGN_CENTER == Align3()
+        assert ALIGN_MIN_Z == Align3(z="min")
+
+
+class TestCallOp:
+    def test_fields(self):
+        from botcad.shapescript.ops import CallOp
+
+        op = CallOp(ref=ShapeRef("call_0"), sub_program_key="bracket")
+        assert op.ref == ShapeRef("call_0")
+        assert op.sub_program_key == "bracket"
+        assert op.tag is None
+
+    def test_with_tag(self):
+        from botcad.shapescript.ops import CallOp
+
+        op = CallOp(ref=ShapeRef("call_0"), sub_program_key="bracket", tag="brk")
+        assert op.tag == "brk"
+
+    def test_frozen(self):
+        from botcad.shapescript.ops import CallOp
+
+        op = CallOp(ref=ShapeRef("call_0"), sub_program_key="bracket")
+        with pytest.raises(AttributeError):
+            op.sub_program_key = "other"
+
+
 # ── Task 2: ShapeScript tests ──
 
 from botcad.shapescript.program import ShapeScript
@@ -268,6 +325,58 @@ class TestShapeScript:
         p2._counter = 1
 
         assert p1.content_hash() != p2.content_hash()
+
+    def test_call_sub_program(self):
+        """call() builds a CallOp correctly."""
+        from botcad.shapescript.ops import CallOp
+
+        prog = ShapeScript()
+        sub = ShapeScript()
+        sub_box = sub.box(1, 1, 1)
+        sub.output_ref = sub_box
+        prog.sub_programs["bracket"] = sub
+
+        ref = prog.call("bracket", tag="brk")
+        assert isinstance(prog.ops[0], CallOp)
+        assert prog.ops[0].sub_program_key == "bracket"
+        assert prog.ops[0].tag == "brk"
+        assert prog.ops[0].ref == ref
+
+    def test_content_hash_includes_sub_programs(self):
+        """Different sub-programs produce different content hashes."""
+        p1 = ShapeScript()
+        p1.box(1, 1, 1)
+        sub1 = ShapeScript()
+        sub1.box(1, 1, 1)
+        sub1.output_ref = sub1.ops[0].ref
+        p1.sub_programs["sub"] = sub1
+
+        p2 = ShapeScript()
+        p2.box(1, 1, 1)
+        sub2 = ShapeScript()
+        sub2.box(2, 2, 2)
+        sub2.output_ref = sub2.ops[0].ref
+        p2.sub_programs["sub"] = sub2
+
+        assert p1.content_hash() != p2.content_hash()
+
+    def test_content_hash_same_with_same_sub_programs(self):
+        """Identical sub-programs produce identical content hashes."""
+        p1 = ShapeScript()
+        p1.box(1, 1, 1)
+        sub1 = ShapeScript()
+        sub1.box(1, 1, 1)
+        sub1.output_ref = sub1.ops[0].ref
+        p1.sub_programs["sub"] = sub1
+
+        p2 = ShapeScript()
+        p2.box(1, 1, 1)
+        sub2 = ShapeScript()
+        sub2.box(1, 1, 1)
+        sub2.output_ref = sub2.ops[0].ref
+        p2.sub_programs["sub"] = sub2
+
+        assert p1.content_hash() == p2.content_hash()
 
 
 # ── Task 3: TagRegistry tests ──

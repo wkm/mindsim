@@ -8,17 +8,23 @@ reference edges by name rather than by topological index.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from typing import Union
 
 Vec3 = tuple[float, float, float]
 
 
-class Align3(Enum):
-    """3-axis alignment for primitives."""
+@dataclass(frozen=True)
+class Align3:
+    """Per-axis alignment for primitives. Maps to build123d Align enum."""
 
-    CENTER = "center"
-    MIN_Z = "min_z"  # centered XY, min Z (bottom-aligned)
+    x: str = "center"  # "center" | "min" | "max"
+    y: str = "center"
+    z: str = "center"
+
+
+# Convenience constants
+ALIGN_CENTER = Align3()
+ALIGN_MIN_Z = Align3(z="min")
 
 
 @dataclass(frozen=True)
@@ -40,7 +46,7 @@ class BoxOp:
     width: float
     length: float
     height: float
-    align: Align3 = Align3.CENTER
+    align: Align3 = ALIGN_CENTER
     tag: str | None = None
 
 
@@ -49,7 +55,7 @@ class CylinderOp:
     ref: ShapeRef
     radius: float
     height: float
-    align: Align3 = Align3.CENTER
+    align: Align3 = ALIGN_CENTER
     tag: str | None = None
 
 
@@ -70,6 +76,15 @@ class PrebuiltOp:
 
     ref: ShapeRef
     solid_hash: str
+    tag: str | None = None
+
+
+@dataclass(frozen=True)
+class CallOp:
+    """Invoke a sub-program and produce its output shape."""
+
+    ref: ShapeRef
+    sub_program_key: str
     tag: str | None = None
 
 
@@ -164,7 +179,7 @@ class ExportSTEPOp:
 
 
 # Union of all ops for type narrowing
-PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp]
+PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp]
 BooleanOp = Union[FuseOp, CutOp]
 TransformOp = LocateOp
 ModificationOp = Union[FilletOp, ChamferOp]

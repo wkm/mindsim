@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from botcad.shapescript.ops import Align3
+from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
 from botcad.shapescript.program import ShapeScript
 
 if TYPE_CHECKING:
@@ -73,10 +73,10 @@ def emit_body_ir(
 
         elif parent_joint is not None:
             # Child cylinder: bottom face at origin, offset so z=0 is joint end
-            shell = prog.cylinder(r, h, align=Align3.CENTER)
+            shell = prog.cylinder(r, h, align=ALIGN_CENTER)
             shell = prog.locate(shell, pos=(0, 0, h / 2))
         else:
-            shell = prog.cylinder(r, h, align=Align3.CENTER)
+            shell = prog.cylinder(r, h, align=ALIGN_CENTER)
 
         # CRITICAL: orient Z to axis UNCONDITIONALLY after all sub-branches
         # if parent_joint is not None (cad.py:770-771)
@@ -88,7 +88,7 @@ def emit_body_ir(
     elif body.shape is BodyShape.TUBE:
         r = body.outer_r or dims[0] / 2
         length = body.length or dims[2]
-        shell = prog.cylinder(r, length, align=Align3.CENTER)
+        shell = prog.cylinder(r, length, align=ALIGN_CENTER)
         shell = prog.locate(shell, pos=(0, 0, length / 2))
 
     elif body.shape is BodyShape.SPHERE:
@@ -101,15 +101,15 @@ def emit_body_ir(
         jl = body.jaw_length or dims[2]
         knuckle_h = 0.008  # thicker base for horn attachment
         # Knuckle at base (z=0 to z=knuckle_h)
-        knuckle = prog.box(jw, jt * 2, knuckle_h, align=Align3.MIN_Z)
+        knuckle = prog.box(jw, jt * 2, knuckle_h, align=ALIGN_MIN_Z)
         # Jaw plate extending from knuckle to full length
-        plate = prog.box(jw, jt, jl - knuckle_h, align=Align3.MIN_Z)
+        plate = prog.box(jw, jt, jl - knuckle_h, align=ALIGN_MIN_Z)
         plate = prog.locate(plate, pos=(0, 0, knuckle_h))
         shell = prog.fuse(knuckle, plate)
 
     else:
         # BOX (default)
-        shell = prog.box(dims[0], dims[1], dims[2], align=Align3.CENTER)
+        shell = prog.box(dims[0], dims[1], dims[2], align=ALIGN_CENTER)
 
     # ── 2. Cut component pockets (cad.py:802-825) ──
 
@@ -121,14 +121,14 @@ def emit_body_ir(
                 tol = 0.0005  # 0.5mm total diameter clearance
                 pocket_r = mount.component.od / 2 + tol / 2
                 pocket_h = mount.component.width + 0.001  # through-cut margin
-                pocket = prog.cylinder(pocket_r, pocket_h, align=Align3.CENTER)
+                pocket = prog.cylinder(pocket_r, pocket_h, align=ALIGN_CENTER)
             else:
                 # Default: box pocket
                 pocket = prog.box(
                     cd[0] + 0.0005,
                     cd[1] + 0.0005,
                     cd[2] + 0.0005,
-                    align=Align3.CENTER,
+                    align=ALIGN_CENTER,
                 )
             pocket = prog.locate(pocket, pos=mount.resolved_pos)
             shell = prog.cut(shell, pocket)
@@ -263,7 +263,7 @@ def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims):
     else:
         euler = (0, 0, 0)
 
-    aperture = prog.cylinder(aperture_r, wall_depth, align=Align3.CENTER)
+    aperture = prog.cylinder(aperture_r, wall_depth, align=ALIGN_CENTER)
     # NOTE: The direct path does two .locate() calls (rotation then position),
     # but .locate() replaces the location, so the rotation is lost.
     # We match that behavior by only emitting the position LocateOp.
@@ -282,11 +282,11 @@ def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims):
         slot_pos = (pos[0], pos[1], pos[2] - cd[1] / 2)
 
     if abs(ax) > 0.5:
-        ribbon_slot = prog.box(wall_depth, ribbon_w, ribbon_h, align=Align3.CENTER)
+        ribbon_slot = prog.box(wall_depth, ribbon_w, ribbon_h, align=ALIGN_CENTER)
     elif abs(ay) > 0.5:
-        ribbon_slot = prog.box(ribbon_w, wall_depth, ribbon_h, align=Align3.CENTER)
+        ribbon_slot = prog.box(ribbon_w, wall_depth, ribbon_h, align=ALIGN_CENTER)
     else:
-        ribbon_slot = prog.box(ribbon_w, ribbon_h, wall_depth, align=Align3.CENTER)
+        ribbon_slot = prog.box(ribbon_w, ribbon_h, wall_depth, align=ALIGN_CENTER)
 
     ribbon_slot = prog.locate(ribbon_slot, pos=slot_pos)
     shell = prog.cut(shell, ribbon_slot)

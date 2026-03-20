@@ -17,9 +17,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     pass
 
-from botcad.shapescript.ops import (
+from botcad.shapescript.ops import (  # noqa: F401
     Align3,
     BoxOp,
+    CallOp,
     ChamferOp,
     CutOp,
     CylinderOp,
@@ -77,10 +78,8 @@ class OcctBackend:
         tags = result.tags
 
         def _align(a: Align3):
-            if a == Align3.CENTER:
-                return (Align.CENTER, Align.CENTER, Align.CENTER)
-            elif a == Align3.MIN_Z:
-                return (Align.CENTER, Align.CENTER, Align.MIN)
+            _MAP = {"center": Align.CENTER, "min": Align.MIN, "max": Align.MAX}
+            return (_MAP[a.x], _MAP[a.y], _MAP[a.z])
 
         def _to_solid(part):
             """Convert Part subclass (Box, Cylinder, etc.) to plain Solid.
@@ -121,6 +120,19 @@ class OcctBackend:
                         shapes[ref.id] = s
                     else:
                         raise ValueError(f"PrebuiltOp {ref.id} has no associated solid")
+                    if tag:
+                        tags.declare(tag, ref)
+
+                case CallOp(ref=ref, sub_program_key=key, tag=tag):
+                    sub_prog = program.sub_programs.get(key)
+                    if sub_prog is None:
+                        raise ValueError(f"CallOp: sub-program '{key}' not found")
+                    sub_result = self.execute(sub_prog)
+                    if sub_prog.output_ref is None:
+                        raise ValueError(
+                            f"CallOp: sub-program '{key}' has no output_ref"
+                        )
+                    shapes[ref.id] = sub_result.shapes[sub_prog.output_ref.id]
                     if tag:
                         tags.declare(tag, ref)
 
