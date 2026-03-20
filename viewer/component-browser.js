@@ -58,6 +58,12 @@ class ComponentBrowser {
     this.stlCache = {};       // url → BufferGeometry
     this.layerGroups = {};    // layer id → THREE.Group
     this.activePreset = 'iso';
+
+    // Section plane state
+    this.sectionEnabled = false;
+    this.sectionAxis = 'z';       // 'x', 'y', or 'z'
+    this.sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+    this.sectionFraction = 0.5;   // slider position (0–1 along bbox)
   }
 
   async init() {
@@ -100,6 +106,7 @@ class ComponentBrowser {
     this.renderer.setSize(vw, vh);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -172,6 +179,38 @@ class ComponentBrowser {
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         this.measureTool.clearAll();
+      });
+    }
+
+    // Section plane controls
+    const sectionToggle = toolbar.querySelector('#section-toggle');
+    if (sectionToggle) {
+      sectionToggle.addEventListener('click', () => {
+        this.sectionEnabled = !this.sectionEnabled;
+        sectionToggle.classList.toggle('active', this.sectionEnabled);
+        const controls = toolbar.querySelector('#section-controls');
+        if (controls) controls.style.display = this.sectionEnabled ? 'flex' : 'none';
+        this._updateSectionPlane();
+      });
+    }
+
+    for (const axis of ['x', 'y', 'z']) {
+      const btn = toolbar.querySelector(`[data-section-axis="${axis}"]`);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          this.sectionAxis = axis;
+          toolbar.querySelectorAll('[data-section-axis]').forEach(b =>
+            b.classList.toggle('active', b.dataset.sectionAxis === axis));
+          this._updateSectionPlane();
+        });
+      }
+    }
+
+    const slider = toolbar.querySelector('#section-slider');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        this.sectionFraction = parseFloat(slider.value) / 100;
+        this._updateSectionPlane();
       });
     }
   }
@@ -543,8 +582,16 @@ class ComponentBrowser {
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
-    // Clear measurements and layers
+    // Clear measurements, section, and layers
     this.measureTool.clearAll();
+    if (this.sectionEnabled) {
+      this.sectionEnabled = false;
+      const sectionBtn = document.querySelector('#section-toggle');
+      if (sectionBtn) sectionBtn.classList.remove('active');
+      const controls = document.querySelector('#section-controls');
+      if (controls) controls.style.display = 'none';
+      this._removeSectionViz();
+    }
     for (const id of ALL_LAYER_IDS) {
       clearGroup(this.layerGroups[id]);
       this.layerGroups[id].visible = false;
@@ -640,6 +687,93 @@ class ComponentBrowser {
 
     geometry.computeVertexNormals();
     addMeshWithEdges(geometry, color, group, opts);
+  }
+
+  // -----------------------------------------------------------------------
+  // Section plane
+  // -----------------------------------------------------------------------
+
+  _updateSectionPlane() {
+    const box = this._getVisibleBBox();
+    const clips = this.sectionEnabled ? [this.sectionPlane] : [];
+
+    if (this.sectionEnabled && box) {
+      // Compute plane position from slider fraction along the chosen axis
+      const min = box.min;
+      const max = box.max;
+      const axisIdx = { x: 0, y: 1, z: 2 }[this.sectionAxis];
+      const axisMin = [min.x, min.y, min.z][axisIdx];
+      const axisMax = [max.x, max.y, max.z][axisIdx];
+      const pos = axisMin + (axisMax - axisMin) * this.sectionFraction;
+
+      // Plane normal points in -axis direction (clips geometry on the + side)
+      const normal = new THREE.Vector3();
+      normal.setComponent(axisIdx, -1);
+      this.sectionPlane.normal.copy(normal);
+      this.sectionPlane.constant = pos;
+
+      this._updateSectionViz(box, axisIdx, pos);
+    } else {
+      this._removeSectionViz();
+    }
+
+    // Apply clipping planes to all mesh materials in layer groups
+    for (const id of ALL_LAYER_IDS) {
+      this.layerGroups[id].traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material.clippingPlanes = clips;
+          child.material.clipShadows = true;
+        }
+      });
+    }
+  }
+
+  _updateSectionViz(box, axisIdx, pos) {
+    if (!this._sectionViz) {
+      const geom = new THREE.PlaneGeometry(1, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x2B95D6,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      this._sectionViz = new THREE.Mesh(geom, mat);
+      this._sectionViz.renderOrder = 999;
+      this._sectionViz.raycast = () => {};
+      this.scene.add(this._sectionViz);
+
+      // Edge ring around the plane
+      const ringGeom = new THREE.EdgesGeometry(geom);
+      this._sectionRing = new THREE.LineSegments(ringGeom, new THREE.LineBasicMaterial({
+        color: 0x2B95D6, transparent: true, opacity: 0.4,
+      }));
+      this._sectionRing.raycast = () => {};
+      this._sectionViz.add(this._sectionRing);
+    }
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const planeSize = Math.max(size.x, size.y, size.z) * 1.5;
+
+    this._sectionViz.scale.set(planeSize, planeSize, 1);
+    this._sectionViz.visible = true;
+
+    // Position and orient the plane quad
+    center.setComponent(axisIdx, pos);
+    this._sectionViz.position.copy(center);
+
+    // Rotate plane to face along the section axis
+    this._sectionViz.rotation.set(0, 0, 0);
+    if (axisIdx === 0) this._sectionViz.rotation.y = Math.PI / 2;      // X
+    else if (axisIdx === 1) this._sectionViz.rotation.x = Math.PI / 2;  // Y
+    // Z = default orientation (no rotation needed)
+  }
+
+  _removeSectionViz() {
+    if (this._sectionViz) {
+      this._sectionViz.visible = false;
+    }
   }
 
   // -----------------------------------------------------------------------

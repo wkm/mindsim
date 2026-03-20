@@ -283,6 +283,8 @@
     #view-toolbar button:hover { background: rgba(206,217,224,0.5); color: var(--bp-dark-gray1); }
     #view-toolbar button.active { background: var(--bp-blue3); color: #fff; }
     .toolbar-sep { width: 1px; height: 20px; background: var(--bp-light-gray1); flex-shrink: 0; }
+    .axis-btn { min-width: 24px; font-weight: 600; font-size: 10px; }
+    #section-slider { accent-color: var(--bp-blue3); cursor: pointer; }
 
     /* ── Quick Switcher (Ctrl+K) ── */
     #quick-switcher-overlay {
@@ -379,6 +381,14 @@
       <span class="toolbar-sep"></span>
       <button id="measure-toggle" title="Measure distance (click two points)">Measure</button>
       <button id="measure-clear" title="Clear all measurements">Clear</button>
+      <span class="toolbar-sep"></span>
+      <button id="section-toggle" title="Toggle section cut plane">Section</button>
+      <span id="section-controls" style="display:none; align-items:center; gap:4px">
+        <button data-section-axis="x" class="axis-btn">X</button>
+        <button data-section-axis="y" class="axis-btn">Y</button>
+        <button data-section-axis="z" class="axis-btn active">Z</button>
+        <input id="section-slider" type="range" min="0" max="100" value="50" style="width:100px">
+      </span>
     </div>
   </div>
 
