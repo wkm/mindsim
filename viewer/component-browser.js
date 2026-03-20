@@ -1175,45 +1175,68 @@ class ComponentBrowser {
     const svg = this._gizmoSvg;
     if (!svg) return;
 
-    const cx = 40, cy = 40;  // center of the 80×80 SVG
-    const len = 28;           // axis line length in px
+    const cx = 50, cy = 50;  // center of the 100×100 SVG
+    const len = 32;           // axis line length in px
     svg.innerHTML = '';
 
     this.camera.updateMatrixWorld();
-    const mat = this.camera.matrixWorld;
+    const invMat = this.camera.matrixWorld.clone().invert();
 
-    for (const axis of this._gizmoAxes) {
-      // Project world axis direction into screen space via camera matrix
-      const d = axis.dir.clone().transformDirection(mat.clone().invert());
-      // d.x = screen right, d.y = screen up, d.z = into screen
+    // Sort axes by depth so front-most draws last (on top)
+    const projected = this._gizmoAxes.map(axis => {
+      const d = axis.dir.clone().transformDirection(invMat);
+      return { ...axis, d, depth: d.z };
+    }).sort((a, b) => b.depth - a.depth);  // back-to-front
+
+    for (const { d, color, label } of projected) {
+      const behind = d.z > 0.2;
+      const opacity = behind ? 0.3 : 1.0;
+      const lineW = behind ? 1.5 : 2.5;
       const sx = d.x * len;
-      const sy = -d.y * len;  // SVG Y is downward
+      const sy = -d.y * len;
 
-      // Draw axis line
+      // Axis line
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', cx);
       line.setAttribute('y1', cy);
       line.setAttribute('x2', cx + sx);
       line.setAttribute('y2', cy + sy);
-      line.setAttribute('stroke', axis.color);
-      line.setAttribute('stroke-width', d.z > 0 ? '1.5' : '2.5');  // thinner when pointing away
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', lineW);
       line.setAttribute('stroke-linecap', 'round');
-      if (d.z > 0.3) line.setAttribute('opacity', '0.4');  // fade when behind
+      line.setAttribute('opacity', opacity);
       svg.appendChild(line);
 
-      // Label at the tip
+      // Dot at the tip
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', cx + sx);
+      dot.setAttribute('cy', cy + sy);
+      dot.setAttribute('r', behind ? 3 : 5);
+      dot.setAttribute('fill', color);
+      dot.setAttribute('opacity', opacity);
+      svg.appendChild(dot);
+
+      // Label next to the dot
+      const labelDist = len + 12;
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      const labelDist = len + 10;
       text.setAttribute('x', cx + d.x * labelDist);
       text.setAttribute('y', cy - d.y * labelDist);
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('dominant-baseline', 'central');
-      text.setAttribute('fill', axis.color);
-      text.setAttribute('style', 'font: bold 10px system-ui, sans-serif');
-      if (d.z > 0.3) text.setAttribute('opacity', '0.4');
-      text.textContent = axis.label;
+      text.setAttribute('fill', color);
+      text.setAttribute('opacity', opacity);
+      text.setAttribute('style', 'font: 600 11px system-ui, -apple-system, sans-serif');
+      text.textContent = label;
       svg.appendChild(text);
     }
+
+    // Center dot
+    const centerDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    centerDot.setAttribute('cx', cx);
+    centerDot.setAttribute('cy', cy);
+    centerDot.setAttribute('r', 2);
+    centerDot.setAttribute('fill', '#8A9BA8');
+    svg.appendChild(centerDot);
   }
 
   // -----------------------------------------------------------------------
