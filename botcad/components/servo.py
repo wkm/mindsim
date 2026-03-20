@@ -24,27 +24,30 @@ from botcad.component import BusType, MountingEar, MountPoint, ServoSpec, WirePo
 
 # ── Feetech STS3215 (C018, 12V variant) ─────────────────────────────
 #
-# Datasheet: 45.2 x 24.7 x 35mm (with ears), 55g, 30 kg-cm @ 12V
+# Datasheet: 45.23 x 24.73 x 35mm (with ears), 55g, 30 kg-cm @ 12V
 # 0.222s/60° no-load, UART half-duplex (TTL), 25T spline output shaft
 #
 # STEP model body spans (mm):
-#   X: -22.7 to +22.7 (45.4mm, long axis)
-#   Y: -12.4 to +12.4 (24.8mm, width)
-#   Z: -15.9 to +15.9 (31.8mm, body only)
+#   X: -22.615 to +22.615 (45.23mm, long axis)
+#   Y: -12.365 to +12.365 (24.73mm, width)
+#   Z: -16.0 to +16.0 (32.0mm, body only; 29.0mm at horn cutouts)
 #
-# Mounting flanges extend 3.2mm below body bottom (35.0 - 31.8 = 3.2mm)
-#   Flange bottom at Z = -19.1mm, screw holes at Z ≈ -17.5mm
+# Mounting flanges extend 3.0mm below body bottom
+#   Flange bottom at Z = -19.0mm, screw holes at Z ≈ -17.5mm
 #   6x M3 clearance holes (ø3.2mm) at X: +17.0, 0.0, -17.0mm
 #
-# Output shaft center at X=+12.5, Y=0, Z=+15.9 (body top face)
+# Output shaft center at X=+12.5, Y=0, Z=+16.0 (body top face)
 # Rear (blind) shaft at same XY, support bearing in -Z
 # Connector (5264-2.54 3-pin) on bottom face, toward -X (back) end
 
 # Overall envelope (with ears and shaft boss, per refined CAD)
-_STS3215_DIMS = (0.0454, 0.0248, 0.0379)
+# Z = 35mm (body + mounting ears below + shaft boss above)
+# Full extent with axles = 36.5mm
+_STS3215_DIMS = (0.04523, 0.02473, 0.0350)
 
 # Main body only (no ears, no horn — the solid rectangular block)
-_STS3215_BODY_DIMS = (0.0454, 0.0248, 0.0326)
+# Narrowest Z at horn cutout recesses = 29mm
+_STS3215_BODY_DIMS = (0.04523, 0.02473, 0.0320)
 
 _STS3215_MASS = 0.055  # kg
 _STS3215_STALL_TORQUE = 2.942  # N-m (30 kg-cm @ 12V)
@@ -55,20 +58,21 @@ _STS3215_TYPICAL_CURRENT = 0.180  # A (no-load current at 12V)
 _STS3215_VOLTAGE = 12.0
 
 # Output shaft offset from body center (meters)
-# Shaft is at X=+12.5mm along the long axis, at the +Z face (16.3mm from center)
-_STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0163)
+# Shaft is at X=+12.5mm along the long axis, at the +Z face (16.0mm from center)
+_STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0160)
 
-# Horn mount XY coordinates (4x M2.5 pattern around shaft center)
-# Spacing: 9.9mm x 9.9mm; shared between front horn and rear horn
-_HORN_XY = (
-    (+0.00755, +0.00495),
-    (+0.01745, +0.00495),
-    (+0.00755, -0.00495),
-    (+0.01745, -0.00495),
+# Case screw XY coordinates (4x M2.5 self-tapping at corners of each face)
+# These pass through both output (top) and bottom faces at the same XY.
+# ~3mm inset from each edge of the 45.23 x 24.73mm face.
+_CASE_SCREW_XY = (
+    (+0.0195, +0.0094),  # corner: +X, +Y
+    (+0.0195, -0.0094),  # corner: +X, -Y
+    (-0.0195, +0.0094),  # corner: -X, +Y
+    (-0.0195, -0.0094),  # corner: -X, -Y
 )
-_HORN_FRONT_Z = +0.0180  # output face (1.7mm above body top)
-_HORN_REAR_Z = -0.0176  # blind/rear face (1.3mm below body bottom)
-_HORN_HOLE_DIA = 0.0025  # M2.5
+_CASE_SCREW_TOP_Z = +0.0160  # output face (body top, Z = +16mm)
+_CASE_SCREW_BOTTOM_Z = -0.0160  # bottom face (body bottom, Z = -16mm)
+_CASE_SCREW_DIA = 0.0025  # M2.5
 
 
 def STS3215(continuous: bool = False) -> ServoSpec:
@@ -95,15 +99,17 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             # Also has a short 5264/2.54 pigtail lead (~15cm)
             WirePort(
                 "uart_bus",
-                pos=(-0.0080, 0.0, -0.0163),
+                pos=(-0.0080, 0.0, -0.0160),
                 bus_type=BusType.UART_HALF_DUPLEX,
             ),
         ),
         mounting_points=tuple(
             MountPoint(
-                f"horn_{i + 1}", pos=(x, y, _HORN_FRONT_Z), diameter=_HORN_HOLE_DIA
+                f"case_top_{i + 1}",
+                pos=(x, y, _CASE_SCREW_TOP_Z),
+                diameter=_CASE_SCREW_DIA,
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
         color=COLOR_STRUCTURE_DARK.rgba,
         stall_torque=_STS3215_STALL_TORQUE,
@@ -119,53 +125,53 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
         shaft_boss_radius=0.0045,  # 4.5mm radius
-        shaft_boss_height=0.0032,  # 3.2mm protrusion above body top
+        shaft_boss_height=0.0030,  # 3.0mm protrusion above body top (35mm - 32mm body)
         mounting_ears=(
             # 6x M3 clearance holes (ø3.2mm) in mounting flanges below body
-            # Flanges extend 2.1mm below body bottom (Z=-16.3mm)
-            # Screw hole centers at Z=-17.35mm (midpoint of flange)
+            # Flanges extend below body bottom (Z=-16.0mm)
+            # Screw hole centers at Z=-17.5mm (midpoint of flange)
             # Y=±10.25mm (inside body width), symmetric X positions
             MountingEar(
-                "ear_1", pos=(+0.0170, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_1", pos=(+0.0170, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_2", pos=(0.0000, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_2", pos=(0.0000, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_3", pos=(+0.0170, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_3", pos=(+0.0170, +0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_4", pos=(0.0000, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_4", pos=(0.0000, +0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_5", pos=(-0.0170, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_5", pos=(-0.0170, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_6", pos=(-0.0170, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_6", pos=(-0.0170, +0.01025, -0.01750), hole_diameter=0.0032
             ),
         ),
         horn_mounting_points=tuple(
             MountPoint(
                 f"out_{i + 1}",
-                pos=(x, y, _HORN_FRONT_Z),
-                diameter=_HORN_HOLE_DIA,
+                pos=(x, y, _CASE_SCREW_TOP_Z),
+                diameter=_CASE_SCREW_DIA,
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M2.5",
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
         rear_horn_mounting_points=tuple(
             MountPoint(
                 f"rear_{i + 1}",
-                pos=(x, y, _HORN_REAR_Z),
-                diameter=_HORN_HOLE_DIA,
+                pos=(x, y, _CASE_SCREW_BOTTOM_Z),
+                diameter=_CASE_SCREW_DIA,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2.5",
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
         # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
-        connector_pos=(-0.0080, 0.0, -0.0163),
+        connector_pos=(-0.0080, 0.0, -0.0160),
     )
 
 
@@ -177,7 +183,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
 # heavier (74.5g vs 55g).
 #
 # Datasheet: HLS3950M-C001 Edition A/0 (2024-04-25)
-# Dimensions: 45.22 x 24.72 x 35mm (with ears) — matches STS3215 envelope
+# Dimensions: 45.23 x 24.73 x 35mm (with ears) — matches STS3215 envelope
 # Weight: 74.5 ± 1g
 # Stall torque: 50 kg-cm @ 12V (4.905 N-m)
 # No-load speed: 0.133s/60° @ 12V (75 RPM)
@@ -213,15 +219,17 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         wire_ports=(
             WirePort(
                 "uart_bus",
-                pos=(-0.0080, 0.0, -0.0163),
+                pos=(-0.0080, 0.0, -0.0160),
                 bus_type=BusType.UART_HALF_DUPLEX,
             ),
         ),
         mounting_points=tuple(
             MountPoint(
-                f"horn_{i + 1}", pos=(x, y, _HORN_FRONT_Z), diameter=_HORN_HOLE_DIA
+                f"case_top_{i + 1}",
+                pos=(x, y, _CASE_SCREW_TOP_Z),
+                diameter=_CASE_SCREW_DIA,
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
         color=COLOR_STRUCTURE_DARK.rgba,
         stall_torque=_STS3250_STALL_TORQUE,
@@ -237,48 +245,48 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         # Extended geometry — identical to STS3215
         body_dimensions=_STS3215_BODY_DIMS,
         shaft_boss_radius=0.0045,
-        shaft_boss_height=0.0032,
+        shaft_boss_height=0.0030,  # 3.0mm (matches STS3215)
         mounting_ears=(
             MountingEar(
-                "ear_1", pos=(+0.0170, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_1", pos=(+0.0170, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_2", pos=(0.0000, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_2", pos=(0.0000, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_3", pos=(+0.0170, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_3", pos=(+0.0170, +0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_4", pos=(0.0000, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_4", pos=(0.0000, +0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_5", pos=(-0.0170, -0.01025, -0.01735), hole_diameter=0.0032
+                "ear_5", pos=(-0.0170, -0.01025, -0.01750), hole_diameter=0.0032
             ),
             MountingEar(
-                "ear_6", pos=(-0.0170, +0.01025, -0.01735), hole_diameter=0.0032
+                "ear_6", pos=(-0.0170, +0.01025, -0.01750), hole_diameter=0.0032
             ),
         ),
         horn_mounting_points=tuple(
             MountPoint(
                 f"out_{i + 1}",
-                pos=(x, y, _HORN_FRONT_Z),
-                diameter=_HORN_HOLE_DIA,
+                pos=(x, y, _CASE_SCREW_TOP_Z),
+                diameter=_CASE_SCREW_DIA,
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M2.5",
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
         rear_horn_mounting_points=tuple(
             MountPoint(
                 f"rear_{i + 1}",
-                pos=(x, y, _HORN_REAR_Z),
-                diameter=_HORN_HOLE_DIA,
+                pos=(x, y, _CASE_SCREW_BOTTOM_Z),
+                diameter=_CASE_SCREW_DIA,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2.5",
             )
-            for i, (x, y) in enumerate(_HORN_XY)
+            for i, (x, y) in enumerate(_CASE_SCREW_XY)
         ),
-        connector_pos=(-0.0080, 0.0, -0.0163),
+        connector_pos=(-0.0080, 0.0, -0.0160),
     )
 
 
