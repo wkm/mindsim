@@ -542,6 +542,31 @@ def _component_to_json(comp, category: str) -> dict:
     return info
 
 
+# Layer colors — mirrors client-side LAYER_META.colorHex
+_LAYER_COLORS: dict[str, tuple[int, int, int]] = {
+    "servo": (24, 32, 38),
+    "horn": (232, 232, 232),
+    "bracket": (206, 217, 224),
+    "cradle": (206, 217, 224),
+    "coupler": (245, 86, 86),
+    "bracket_envelope": (245, 86, 86),
+    "cradle_envelope": (245, 86, 86),
+    "fasteners": (212, 168, 67),
+}
+
+
+def _layer_color(comp, layer_id: str) -> tuple[int, int, int]:
+    """Return RGB color for a component layer."""
+    if layer_id in _LAYER_COLORS:
+        return _LAYER_COLORS[layer_id]
+    r, g, b = comp.color
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+# Solid object cache: (component_name, part_name) → Solid
+_solid_cache: dict[tuple[str, str], object] = {}
+_solid_cache_lock = threading.Lock()
+
 # STL generation cache: (component_name, part_name) → bytes
 _stl_cache: dict[tuple[str, str], bytes] = {}
 _stl_cache_lock = threading.Lock()
@@ -642,18 +667,19 @@ def _solid_to_stl_bytes(solid) -> bytes:
         return Path(tmp.name).read_bytes()
 
 
-def _generate_stl_bytes(comp, part: str) -> bytes | None:
-    """Generate STL bytes for a component part. Returns None if not applicable.
+def _generate_solid(comp, part: str):
+    """Generate a build123d Solid for a component part. Returns None if not applicable.
 
-    Thread-safe: uses _stl_cache_lock to prevent duplicate generation.
+    Thread-safe with caching so solids are built once and reused for both
+    STL export and SVG rendering.
     """
     from botcad.component import ServoSpec
     from botcad.emit.cad import make_component_solid
 
     cache_key = (comp.name, part)
-    with _stl_cache_lock:
-        if cache_key in _stl_cache:
-            return _stl_cache[cache_key]
+    with _solid_cache_lock:
+        if cache_key in _solid_cache:
+            return _solid_cache[cache_key]
 
     solid = None
     if part == "body":
@@ -698,6 +724,21 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
         elif part == "cradle_envelope":
             solid = cradle_envelope(comp, spec)
 
+    if solid is not None:
+        with _solid_cache_lock:
+            _solid_cache[cache_key] = solid
+
+    return solid
+
+
+def _generate_stl_bytes(comp, part: str) -> bytes | None:
+    """Generate STL bytes for a component part. Returns None if not applicable."""
+    cache_key = (comp.name, part)
+    with _stl_cache_lock:
+        if cache_key in _stl_cache:
+            return _stl_cache[cache_key]
+
+    solid = _generate_solid(comp, part)
     if solid is None:
         return None
 
@@ -798,6 +839,80 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
         # Fall through to static file serving
         super().do_GET()
+
+    def do_POST(self):
+        from urllib.parse import unquote
+
+        path = unquote(self.path)
+
+        m = re.match(r"^/api/components/([^/]+)/render-svg$", path)
+        if m:
+            self._handle_render_svg(m.group(1))
+            return
+
+        self.send_error(404)
+
+    def _handle_render_svg(self, name: str):
+        """Render a high-quality 2D SVG projection/section of a component."""
+        if name not in self.component_registry:
+            self.send_error(404, f"Unknown component: {name}")
+            return
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(content_length))
+
+        view_dir = body["view_dir"]
+        view_up = body.get("view_up", [0, 0, 1])
+        layers = body.get("layers", [])
+        section_params = body.get("section")
+
+        _factory, comp, _category = self.component_registry[name]
+
+        # Build solids for requested layers
+        solids = []
+        for layer_id in layers:
+            solid = _generate_solid(comp, layer_id)
+            if solid is None:
+                continue
+            rgb = _layer_color(comp, layer_id)
+            solids.append((layer_id, solid, rgb))
+
+        if not solids:
+            self.send_error(400, "No valid layers to render")
+            return
+
+        # Camera origin: far along view direction, looking toward world origin
+        origin = tuple(d * 10 for d in view_dir)
+
+        # Section plane
+        section_plane = None
+        if section_params:
+            from build123d import Plane, Vector
+
+            axis_idx = {"x": 0, "y": 1, "z": 2}[section_params["axis"]]
+            normal = [0.0, 0.0, 0.0]
+            normal[axis_idx] = 1.0
+            plane_origin = [0.0, 0.0, 0.0]
+            plane_origin[axis_idx] = section_params["position"]
+            section_plane = Plane(
+                origin=Vector(*plane_origin),
+                z_dir=Vector(*normal),
+            )
+
+        try:
+            from botcad.render_svg import render_component_svg
+
+            svg = render_component_svg(solids, origin, tuple(view_up), section_plane)
+        except Exception as e:
+            self.send_error(500, f"SVG render failed: {e}")
+            return
+
+        svg_bytes = svg.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(svg_bytes)))
+        self.end_headers()
+        self.wfile.write(svg_bytes)
 
     def _handle_bots_list(self):
         global _bots_json

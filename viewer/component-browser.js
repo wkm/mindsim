@@ -186,6 +186,12 @@ class ComponentBrowser {
       });
     }
 
+    // Render SVG button
+    const renderBtn = toolbar.querySelector('#render-svg');
+    if (renderBtn) {
+      renderBtn.addEventListener('click', () => this._requestSVGRender());
+    }
+
     // Section plane controls
     const sectionToggle = toolbar.querySelector('#section-toggle');
     if (sectionToggle) {
@@ -993,6 +999,73 @@ class ComponentBrowser {
       });
       this.scene.remove(this._capGroup);
       this._capGroup = null;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Server-side SVG render
+  // -----------------------------------------------------------------------
+
+  async _requestSVGRender() {
+    const comp = this.currentComponent;
+    if (!comp) return;
+
+    const layers = ALL_LAYER_IDS.filter(id => this.layerGroups[id].visible);
+    if (layers.length === 0) return;
+
+    // Camera direction (from target toward camera)
+    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
+    const up = this.camera.up.clone();
+
+    const body = {
+      view_dir: [dir.x, dir.y, dir.z],
+      view_up: [up.x, up.y, up.z],
+      layers,
+    };
+
+    // Include section plane if active
+    if (this.sectionEnabled) {
+      const box = this._getVisibleBBox();
+      if (box) {
+        const axisIdx = { x: 0, y: 1, z: 2 }[this.sectionAxis];
+        const min = [box.min.x, box.min.y, box.min.z][axisIdx];
+        const max = [box.max.x, box.max.y, box.max.z][axisIdx];
+        const pos = min + (max - min) * this.sectionFraction;
+        body.section = {
+          axis: this.sectionAxis,
+          position: pos,
+          flipped: this.sectionFlipped,
+        };
+      }
+    }
+
+    // Show loading state
+    const btn = document.querySelector('#render-svg');
+    const origText = btn.textContent;
+    btn.textContent = 'Rendering...';
+    btn.disabled = true;
+
+    try {
+      const resp = await fetch(`/api/components/${comp.name}/render-svg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (resp.ok) {
+        const svgText = await resp.text();
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        const err = await resp.text();
+        console.error('SVG render failed:', err);
+      }
+    } catch (err) {
+      console.error('SVG render request failed:', err);
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
     }
   }
 
