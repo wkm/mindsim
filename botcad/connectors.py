@@ -183,3 +183,90 @@ def connector_solid(spec: ConnectorSpec):
             body = body.fuse(row)
 
     return _as_solid(body)
+
+
+@lru_cache(maxsize=16)
+def receptacle_solid(spec: ConnectorSpec):
+    """Build a simplified receptacle (PCB header / panel socket) solid.
+
+    The mating counterpart to connector_solid(). Slightly larger housing
+    with an open cavity facing the mating direction where the plug inserts.
+
+    Centered at origin. Returns a build123d Solid.
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    from botcad.cad_utils import as_solid as _as_solid
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    bx, by, bz = spec.body_dimensions
+
+    # Receptacle is slightly larger than the plug
+    wall = 0.0008  # 0.8mm housing wall
+    rx, ry, rz = bx + 2 * wall, by + 2 * wall, bz * 0.7
+
+    body = Box(rx, ry, rz, align=C)
+
+    # Cavity facing the mating direction
+    mx, my, mz = spec.mating_direction
+    cavity_depth = rz * 0.6
+    cavity = Box(bx + 0.0002, by + 0.0002, cavity_depth, align=C)
+
+    # Position cavity at the mating face
+    if abs(mz) > 0.5:
+        cz = (rz / 2 - cavity_depth / 2) * (1 if mz > 0 else -1)
+        cavity = cavity.locate(Location((0, 0, cz)))
+    elif abs(mx) > 0.5:
+        cavity = Box(cavity_depth, by + 0.0002, bz * 0.5, align=C)
+        cx = (rx / 2 - cavity_depth / 2) * (1 if mx > 0 else -1)
+        cavity = cavity.locate(Location((cx, 0, 0)))
+    elif abs(my) > 0.5:
+        cavity = Box(bx + 0.0002, cavity_depth, bz * 0.5, align=C)
+        cy = (ry / 2 - cavity_depth / 2) * (1 if my > 0 else -1)
+        cavity = cavity.locate(Location((0, cy, 0)))
+
+    body = body - cavity
+
+    if spec.connector_type == ConnectorType.GPIO_2X20:
+        # Shroud walls around pin header
+        shroud_h = rz * 0.4
+        shroud = Box(rx, ry, shroud_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        shroud = shroud.locate(Location((0, 0, rz / 2)))
+        inner = Box(
+            bx - 0.001,
+            by - 0.001,
+            shroud_h + 0.001,
+            align=(Align.CENTER, Align.CENTER, Align.MIN),
+        )
+        inner = inner.locate(Location((0, 0, rz / 2)))
+        shroud = shroud - inner
+        body = body.fuse(shroud)
+
+    elif spec.connector_type == ConnectorType.XT30:
+        # Panel mount flange
+        flange_w = rx + 0.004
+        flange_h = ry + 0.004
+        flange_t = 0.001
+        flange = Box(flange_w, flange_h, flange_t, align=C)
+        # Position at the back face (opposite mating direction)
+        fx = (
+            (-rx / 2 - flange_t / 2)
+            if mx > 0
+            else (rx / 2 + flange_t / 2)
+            if mx < 0
+            else 0
+        )
+        flange = flange.locate(Location((fx, 0, 0)))
+        body = body.fuse(flange)
+
+    # Solder pins on bottom
+    pin_h = 0.003
+    n_pins = max(2, int(bx / 0.00254))  # ~2.54mm pitch
+    if spec.connector_type != ConnectorType.GPIO_2X20:
+        for i in range(min(n_pins, 6)):
+            px = -bx / 2 + bx * (i + 0.5) / min(n_pins, 6)
+            pin = Cylinder(0.0003, pin_h, align=(Align.CENTER, Align.CENTER, Align.MAX))
+            pin = pin.locate(Location((px, 0, -rz / 2)))
+            body = body.fuse(pin)
+
+    return _as_solid(body)

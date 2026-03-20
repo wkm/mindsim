@@ -750,6 +750,102 @@ def render_fastener_catalog() -> Image.Image:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def render_connector_catalog() -> Image.Image:
+    """Render every connector in the catalog as plug + receptacle pairs.
+
+    Each row shows one connector type: the plug/jack (with cable stub)
+    on the left, the PCB receptacle on the right. No component body —
+    just the connectors themselves as a visual baseline.
+    """
+    from build123d import export_stl
+
+    from botcad.connectors import (
+        ConnectorType,
+        connector_solid,
+        connector_spec,
+        receptacle_solid,
+    )
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_connector_catalog_"))
+
+    plug_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "plug (orange)")
+    receptacle_color = Color(0.75, 0.75, 0.78, 1.0, "receptacle (silver)")
+    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
+
+    cells: list[tuple[Image.Image, str]] = []
+
+    for ct in ConnectorType:
+        cspec = connector_spec(ct.value)
+
+        # ── Plug scene ──
+        plug_solid = connector_solid(cspec)
+        plug_stl = f"plug_{ct.value}.stl"
+        export_stl(plug_solid, str(temp_dir / plug_stl))
+
+        scene = SceneBuilder(model_name=f"plug_{ct.value}", width=WIDTH, height=HEIGHT)
+        scene.add_mesh("plug", plug_stl, plug_color)
+
+        # Cable stub
+        cable_r = max(cspec.body_dimensions) * 0.2
+        cable_len = 0.012
+        ex, ey, ez = cspec.wire_exit_direction
+        ox, oy, oz = cspec.wire_exit_offset
+        cable_mid = (
+            ox + ex * cable_len / 2,
+            oy + ey * cable_len / 2,
+            oz + ez * cable_len / 2,
+        )
+        scene.annotate_cylinder(
+            "cable",
+            pos=cable_mid,
+            radius=cable_r,
+            half_height=cable_len / 2,
+            color=cable_color,
+            quat=_axis_quat((ex, ey, ez)),
+        )
+
+        scene.set_mesh_dir(temp_dir)
+        xml = scene.to_xml()
+        with Renderer3D(xml, WIDTH, HEIGHT) as r:
+            rendered = r.render_views(
+                {"three-quarter": {"azimuth": 135, "elevation": -30}}
+            )
+        cells.append((rendered[0][0], f"{cspec.label} — plug"))
+
+        # ── Receptacle scene ──
+        rcpt_solid = receptacle_solid(cspec)
+        rcpt_stl = f"receptacle_{ct.value}.stl"
+        export_stl(rcpt_solid, str(temp_dir / rcpt_stl))
+
+        scene2 = SceneBuilder(
+            model_name=f"receptacle_{ct.value}", width=WIDTH, height=HEIGHT
+        )
+        scene2.add_mesh("receptacle", rcpt_stl, receptacle_color)
+
+        scene2.set_mesh_dir(temp_dir)
+        xml2 = scene2.to_xml()
+        with Renderer3D(xml2, WIDTH, HEIGHT) as r:
+            rendered2 = r.render_views(
+                {"three-quarter": {"azimuth": 135, "elevation": -30}}
+            )
+        cells.append((rendered2[0][0], f"{cspec.label} — receptacle"))
+
+    try:
+        result = grid(
+            "Connector Catalog — plugs and receptacles",
+            [
+                (plug_color.label, plug_color.rgb_int),
+                (receptacle_color.label, receptacle_color.rgb_int),
+                (cable_color.label, cable_color.rgb_int),
+            ],
+            cells,
+            cols=2,
+        )
+        return result
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 # ── Pipeline entry point ──
 
 

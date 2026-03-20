@@ -118,6 +118,14 @@ def regen_component_renders() -> None:
     save_png(img, out_path)
     print(f"  fastener detail: {out_path}")
 
+    # Connector catalog — every connector type plug + receptacle
+    from botcad.emit.component_renders import render_connector_catalog
+
+    img = render_connector_catalog()
+    out_path = out_dir / "test_connector_catalog.png"
+    save_png(img, out_path)
+    print(f"  connector catalog: {out_path}")
+
     # Connector detail — ghost body + connectors + cables, 4 views
     from botcad.emit.component_renders import render_connector_detail
 
