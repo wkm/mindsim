@@ -28,6 +28,33 @@ if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
 
+def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
+    """Cut a clearance hole + optional counterbore at a mounting ear position.
+
+    Uses the fastener catalog for clearance diameter and head dimensions.
+    Socket head cap screws get a counterbore so the head sits flush.
+    """
+    from build123d import Align, Cylinder, Location
+
+    from botcad.fasteners import HeadType, resolve_fastener
+
+    fspec = resolve_fastener(ear)
+    hole_r = fspec.clearance_hole / 2
+    hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+    hole = Cylinder(hole_r, hole_depth, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+    shell = shell - hole
+
+    if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
+        cb_r = fspec.head_diameter / 2 + 0.0002  # 0.2mm clearance
+        cb_depth = fspec.head_height + 0.0005  # 0.5mm extra
+        cb = Cylinder(cb_r, cb_depth, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        cb = cb.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
+        shell = shell - cb
+
+    return shell
+
+
 def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:
     """Derive cable slot width and height from the servo's connector spec.
 
@@ -302,32 +329,8 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
             # pocket, so it exists naturally. No union needed.
 
     # --- Through-holes at each ear position (clearance from catalog) ---
-    from botcad.fasteners import resolve_fastener
-
     for ear in servo.mounting_ears:
-        fspec = resolve_fastener(ear)
-        hole_r = fspec.clearance_hole / 2
-        # Hole goes from bracket bottom through to above ear position
-        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
-        hole = Cylinder(
-            hole_r,
-            hole_depth,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
-        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-        shell = shell - hole
-
-        # Counterbore for socket head cap screws (recesses the head)
-        if fspec.head_type.value == "socket_head_cap":
-            cb_r = fspec.head_diameter / 2 + 0.0002  # 0.2mm clearance
-            cb_depth = fspec.head_height + 0.0005  # 0.5mm extra
-            cb = Cylinder(
-                cb_r,
-                cb_depth,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
-            cb = cb.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-            shell = shell - cb
+        shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
     # --- Cable exit slot ---
     # Derive slot size from connector spec if available, else use BracketSpec defaults
@@ -753,7 +756,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
 
     Built in servo local frame (origin = body center, Z = shaft axis).
     """
-    from build123d import Align, Box, Cylinder, Location
+    from build123d import Align, Box, Location
 
     if spec is None:
         spec = BracketSpec()
@@ -814,34 +817,11 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     shell = outer - pocket
 
     # --- Through-holes at each ear position (clearance from catalog) ---
-    from botcad.fasteners import resolve_fastener
-
     for ear in servo.mounting_ears:
         # Only include ears within the cradle's X range
         if ear.pos[0] > cradle_max_x + 0.001:
             continue
-        fspec = resolve_fastener(ear)
-        hole_r = fspec.clearance_hole / 2
-        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
-        hole = Cylinder(
-            hole_r,
-            hole_depth,
-            align=(Align.CENTER, Align.CENTER, Align.MIN),
-        )
-        hole = hole.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-        shell = shell - hole
-
-        # Counterbore for socket head cap screws
-        if fspec.head_type.value == "socket_head_cap":
-            cb_r = fspec.head_diameter / 2 + 0.0002
-            cb_depth = fspec.head_height + 0.0005
-            cb = Cylinder(
-                cb_r,
-                cb_depth,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
-            cb = cb.locate(Location((ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)))
-            shell = shell - cb
+        shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
     # --- Cable exit slot (connector is at -X end) ---
     if servo.connector_pos is not None:

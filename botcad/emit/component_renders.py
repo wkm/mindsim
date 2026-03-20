@@ -252,6 +252,102 @@ def _render_scene(scene: SceneBuilder, temp_dir: Path, title: str) -> Image.Imag
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# ── Shared helpers for scene builders ──
+
+
+def _add_screws_to_scene(
+    scene: SceneBuilder,
+    component: Component,
+    temp_dir: Path,
+    exported_screws: dict[tuple[str, str], str],
+) -> None:
+    """Export and place screw meshes at each mount point."""
+    from build123d import export_stl
+
+    from botcad.colors import COLOR_METAL_BRASS
+    from botcad.emit.cad import screw_solid
+    from botcad.fasteners import fastener_key
+
+    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
+
+    for i, mp in enumerate(component.mounting_points):
+        key = fastener_key(mp)
+        if key not in exported_screws:
+            stl_name = f"screw_{key[0]}_{key[1] or 'shc'}.stl"
+            export_stl(screw_solid(key[0], key[1]), str(temp_dir / stl_name))
+            exported_screws[key] = stl_name
+
+        scene.add_mesh(
+            f"screw_{i}",
+            exported_screws[key],
+            screw_color,
+            pos=mp.pos,
+            quat=_axis_quat(mp.axis),
+        )
+
+
+def _add_connectors_to_scene(
+    scene: SceneBuilder,
+    component: Component,
+    temp_dir: Path,
+    exported_connectors: dict[str, str],
+    pos_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    cable_len: float = 0.015,
+) -> None:
+    """Export and place connector meshes + cable stubs at each wire port."""
+    from build123d import export_stl
+
+    from botcad.connectors import connector_solid, connector_spec
+
+    connector_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "connector (orange)")
+    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
+
+    for i, wp in enumerate(component.wire_ports):
+        if not wp.connector_type:
+            continue
+        try:
+            cspec = connector_spec(wp.connector_type)
+        except KeyError:
+            continue
+
+        # Export connector housing STL (once per type)
+        if wp.connector_type not in exported_connectors:
+            c_solid = connector_solid(cspec)
+            c_stl = f"connector_{wp.connector_type}.stl"
+            export_stl(c_solid, str(temp_dir / c_stl))
+            exported_connectors[wp.connector_type] = c_stl
+
+        conn_pos = (
+            wp.pos[0] + pos_offset[0],
+            wp.pos[1] + pos_offset[1],
+            wp.pos[2] + pos_offset[2],
+        )
+        scene.add_mesh(
+            f"connector_{i}",
+            exported_connectors[wp.connector_type],
+            connector_color,
+            pos=conn_pos,
+        )
+
+        # Cable stub — cylinder along wire_exit_direction
+        cable_r = max(cspec.body_dimensions) * 0.2
+        ex, ey, ez = cspec.wire_exit_direction
+        ox, oy, oz = cspec.wire_exit_offset
+        cable_mid = (
+            conn_pos[0] + ox + ex * cable_len / 2,
+            conn_pos[1] + oy + ey * cable_len / 2,
+            conn_pos[2] + oz + ez * cable_len / 2,
+        )
+        scene.annotate_cylinder(
+            f"cable_{i}",
+            pos=cable_mid,
+            radius=cable_r,
+            half_height=cable_len / 2,
+            color=cable_color,
+            quat=_axis_quat((ex, ey, ez)),
+        )
+
+
 # ── Scene builders ──
 
 
@@ -368,7 +464,7 @@ def build_fastener_showcase_scene(component: Component) -> tuple[SceneBuilder, P
     """
     from build123d import export_stl
 
-    from botcad.emit.cad import make_component_solid, screw_solid
+    from botcad.emit.cad import make_component_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_"))
     solid = make_component_solid(component)
@@ -377,86 +473,11 @@ def build_fastener_showcase_scene(component: Component) -> tuple[SceneBuilder, P
     scene = SceneBuilder(model_name="fastener_showcase", width=WIDTH, height=HEIGHT)
     scene.add_mesh("comp", "component.stl", _body_render_color(component))
 
-    # Export and place a screw mesh at each mount point
-    from botcad.colors import COLOR_METAL_BRASS
-
-    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
     exported_screws: dict[tuple[str, str], str] = {}
+    _add_screws_to_scene(scene, component, temp_dir, exported_screws)
 
-    for i, mp in enumerate(component.mounting_points):
-        ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-        ht = getattr(mp, "head_type", "") or ""
-        key = (ft, ht)
-        if key not in exported_screws:
-            stl_name = f"screw_{ft}_{ht or 'shc'}.stl"
-            export_stl(screw_solid(ft, ht), str(temp_dir / stl_name))
-            exported_screws[key] = stl_name
-
-        scene.add_mesh(
-            f"screw_{i}",
-            exported_screws[key],
-            screw_color,
-            pos=mp.pos,
-            quat=_axis_quat(mp.axis),
-        )
-
-    # Export and place connector + cable stub at each wire port
-    from botcad.connectors import connector_solid, connector_spec
-
-    connector_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "connector (orange)")
-    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
     exported_connectors: dict[str, str] = {}
-
-    for i, wp in enumerate(component.wire_ports):
-        if not wp.connector_type:
-            continue
-        try:
-            cspec = connector_spec(wp.connector_type)
-        except KeyError:
-            continue
-
-        # Export connector housing STL (once per type)
-        if wp.connector_type not in exported_connectors:
-            c_solid = connector_solid(cspec)
-            c_stl = f"connector_{wp.connector_type}.stl"
-            export_stl(c_solid, str(temp_dir / c_stl))
-            exported_connectors[wp.connector_type] = c_stl
-
-        scene.add_mesh(
-            f"connector_{i}",
-            exported_connectors[wp.connector_type],
-            connector_color,
-            pos=wp.pos,
-        )
-
-        # Cable stub — short cylinder along wire_exit_direction
-        cable_r = max(cspec.body_dimensions) * 0.2  # proportional to connector
-        cable_len = 0.015  # 15mm stub
-        ex, ey, ez = cspec.wire_exit_direction
-        ox, oy, oz = cspec.wire_exit_offset
-        cable_start = (
-            wp.pos[0] + ox,
-            wp.pos[1] + oy,
-            wp.pos[2] + oz,
-        )
-        cable_end = (
-            cable_start[0] + ex * cable_len,
-            cable_start[1] + ey * cable_len,
-            cable_start[2] + ez * cable_len,
-        )
-        cable_mid = (
-            (cable_start[0] + cable_end[0]) / 2,
-            (cable_start[1] + cable_end[1]) / 2,
-            (cable_start[2] + cable_end[2]) / 2,
-        )
-        scene.annotate_cylinder(
-            f"cable_{i}",
-            pos=cable_mid,
-            radius=cable_r,
-            half_height=cable_len / 2,
-            color=cable_color,
-            quat=_axis_quat((ex, ey, ez)),
-        )
+    _add_connectors_to_scene(scene, component, temp_dir, exported_connectors)
 
     _add_axis_annotations(scene, component.dimensions)
 
@@ -561,7 +582,7 @@ def build_fastener_detail_scene(component: Component) -> tuple[SceneBuilder, Pat
     """
     from build123d import export_stl
 
-    from botcad.emit.cad import make_component_solid, screw_solid
+    from botcad.emit.cad import make_component_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_detail_"))
     solid = make_component_solid(component)
@@ -573,28 +594,8 @@ def build_fastener_detail_scene(component: Component) -> tuple[SceneBuilder, Pat
     ghost_color = Color(0.6, 0.65, 0.7, 0.15, "body (ghost)")
     scene.add_mesh("comp", "component.stl", ghost_color)
 
-    # Fastener solids
-    from botcad.colors import COLOR_METAL_BRASS
-
-    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
     exported_screws: dict[tuple[str, str], str] = {}
-
-    for i, mp in enumerate(component.mounting_points):
-        ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-        ht = getattr(mp, "head_type", "") or ""
-        key = (ft, ht)
-        if key not in exported_screws:
-            stl_name = f"screw_{ft}_{ht or 'shc'}.stl"
-            export_stl(screw_solid(ft, ht), str(temp_dir / stl_name))
-            exported_screws[key] = stl_name
-
-        scene.add_mesh(
-            f"screw_{i}",
-            exported_screws[key],
-            screw_color,
-            pos=mp.pos,
-            quat=_axis_quat(mp.axis),
-        )
+    _add_screws_to_scene(scene, component, temp_dir, exported_screws)
 
     return scene, temp_dir
 
@@ -608,14 +609,9 @@ def render_fastener_detail(component: Component, name: str) -> Image.Image:
 
 
 def build_connector_detail_scene(component: Component) -> tuple[SceneBuilder, Path]:
-    """Build scene showing only connectors + cable stubs against a ghost body.
-
-    The component body is rendered translucent so connector housing shape,
-    cable exit direction, and plug proportions are clearly visible.
-    """
+    """Build scene showing only connectors + cable stubs against a ghost body."""
     from build123d import export_stl
 
-    from botcad.connectors import connector_solid, connector_spec
     from botcad.emit.cad import make_component_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_connector_detail_"))
@@ -623,57 +619,11 @@ def build_connector_detail_scene(component: Component) -> tuple[SceneBuilder, Pa
     export_stl(solid, str(temp_dir / "component.stl"))
 
     scene = SceneBuilder(model_name="connector_detail", width=WIDTH, height=HEIGHT)
-
-    # Ghost body
     ghost_color = Color(0.6, 0.65, 0.7, 0.15, "body (ghost)")
     scene.add_mesh("comp", "component.stl", ghost_color)
 
-    # Connector solids + cable stubs
-    connector_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "connector (orange)")
-    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
     exported_connectors: dict[str, str] = {}
-
-    for i, wp in enumerate(component.wire_ports):
-        if not wp.connector_type:
-            continue
-        try:
-            cspec = connector_spec(wp.connector_type)
-        except KeyError:
-            continue
-
-        # Export connector housing STL (once per type)
-        if wp.connector_type not in exported_connectors:
-            c_solid = connector_solid(cspec)
-            c_stl = f"connector_{wp.connector_type}.stl"
-            export_stl(c_solid, str(temp_dir / c_stl))
-            exported_connectors[wp.connector_type] = c_stl
-
-        scene.add_mesh(
-            f"connector_{i}",
-            exported_connectors[wp.connector_type],
-            connector_color,
-            pos=wp.pos,
-        )
-
-        # Cable stub — cylinder along wire_exit_direction
-        cable_r = max(cspec.body_dimensions) * 0.2
-        cable_len = 0.015  # 15mm stub
-        ex, ey, ez = cspec.wire_exit_direction
-        ox, oy, oz = cspec.wire_exit_offset
-        cable_start = (wp.pos[0] + ox, wp.pos[1] + oy, wp.pos[2] + oz)
-        cable_mid = (
-            cable_start[0] + ex * cable_len / 2,
-            cable_start[1] + ey * cable_len / 2,
-            cable_start[2] + ez * cable_len / 2,
-        )
-        scene.annotate_cylinder(
-            f"cable_{i}",
-            pos=cable_mid,
-            radius=cable_r,
-            half_height=cable_len / 2,
-            color=cable_color,
-            quat=_axis_quat((ex, ey, ez)),
-        )
+    _add_connectors_to_scene(scene, component, temp_dir, exported_connectors)
 
     return scene, temp_dir
 

@@ -120,30 +120,31 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
 
     # ── Fastener inventory (with head type) ─────────────────────────
     # Key: (designation, head_type_label) -> count
+    from botcad.fasteners import fastener_key
+
     fasteners: dict[tuple[str, str], int] = {}
 
-    def _fastener_key(mp) -> tuple[str, str]:
-        ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-        ht = getattr(mp, "head_type", "") or ""
+    def _fastener_bom_key(mp) -> tuple[str, str]:
+        ft, ht = fastener_key(mp)
         label = ht.replace("_", " ").title() if ht else "Socket Head Cap"
         return (ft, label)
 
     for joint in joints:
         s = joint.servo
         for ear in s.mounting_ears:
-            k = _fastener_key(ear)
+            k = _fastener_bom_key(ear)
             fasteners[k] = fasteners.get(k, 0) + 1
         for hp in s.horn_mounting_points:
-            k = _fastener_key(hp)
+            k = _fastener_bom_key(hp)
             fasteners[k] = fasteners.get(k, 0) + 1
         for hp in s.rear_horn_mounting_points:
-            k = _fastener_key(hp)
+            k = _fastener_bom_key(hp)
             fasteners[k] = fasteners.get(k, 0) + 1
 
     for body in bodies:
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                k = _fastener_key(mp)
+                k = _fastener_bom_key(mp)
                 fasteners[k] = fasteners.get(k, 0) + 1
 
     if fasteners:
@@ -157,7 +158,7 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
             s = joint.servo
             ear_types: dict[tuple[str, str], int] = {}
             for ear in s.mounting_ears:
-                k = _fastener_key(ear)
+                k = _fastener_bom_key(ear)
                 ear_types[k] = ear_types.get(k, 0) + 1
             for k, n in ear_types.items():
                 usage.setdefault(k, []).append(
@@ -166,7 +167,7 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
 
             horn_types: dict[tuple[str, str], int] = {}
             for hp in list(s.horn_mounting_points) + list(s.rear_horn_mounting_points):
-                k = _fastener_key(hp)
+                k = _fastener_bom_key(hp)
                 horn_types[k] = horn_types.get(k, 0) + 1
             for k, n in horn_types.items():
                 usage.setdefault(k, []).append(
@@ -178,7 +179,7 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
             for mount in body.mounts:
                 comp_types: dict[tuple[str, str], int] = {}
                 for mp in mount.component.mounting_points:
-                    k = _fastener_key(mp)
+                    k = _fastener_bom_key(mp)
                     comp_types[k] = comp_types.get(k, 0) + 1
                 for k, n in comp_types.items():
                     usage.setdefault(k, []).append(f"{n}x for {mount.component.name}")

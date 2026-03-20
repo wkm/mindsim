@@ -28,25 +28,13 @@ from botcad.colors import (
 )
 from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
+from botcad.fasteners import fastener_key as _hw_key
+from botcad.fasteners import fastener_stl_stem as _hw_name
 from botcad.geometry import rotate_vec, rotation_between
 from botcad.skeleton import BaseType, BodyShape
 
 if TYPE_CHECKING:
-    from botcad.component import MountPoint
     from botcad.skeleton import Body, Bot, Joint
-
-
-def _hw_key(mp: MountPoint) -> tuple[str, str]:
-    """Hardware mesh key: (designation, head_type)."""
-    ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-    ht = getattr(mp, "head_type", "") or ""
-    return (ft, ht)
-
-
-def _hw_name(mp: MountPoint) -> str:
-    """Hardware mesh filename stem, e.g. 'hardware_M3_shc'."""
-    ft, ht = _hw_key(mp)
-    return f"hardware_{ft}_{ht or 'shc'}"
 
 
 def emit_mujoco(bot: Bot, output_dir: Path) -> None:

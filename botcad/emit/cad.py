@@ -352,14 +352,13 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     # fastener_solid() is @lru_cache'd; we track which keys we've exported.
     hardware_exported: set[tuple[str, str]] = set()
 
+    from botcad.fasteners import fastener_key, fastener_stl_stem
+
     def _export_hardware(mp):
-        ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-        ht = getattr(mp, "head_type", "") or ""
-        key = (ft, ht)
+        key = fastener_key(mp)
         if key not in hardware_exported:
-            solid = screw_solid(ft, ht)
-            stl_name = f"hardware_{ft}_{ht or 'shc'}.stl"
-            export_stl(solid, str(meshes_dir / stl_name))
+            solid = screw_solid(key[0], key[1])
+            export_stl(solid, str(meshes_dir / f"{fastener_stl_stem(mp)}.stl"))
             hardware_exported.add(key)
 
     for body in bot.all_bodies:

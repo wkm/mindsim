@@ -134,6 +134,22 @@ def fastener_spec(
     return _CATALOG[(designation, head_type)]
 
 
+def fastener_key(mp: MountPoint) -> tuple[str, str]:
+    """Derive the (designation, head_type) key from a MountPoint.
+
+    Used for deduplication in hardware export, BOM, and MuJoCo emitters.
+    """
+    ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
+    ht = mp.head_type or ""
+    return (ft, ht)
+
+
+def fastener_stl_stem(mp: MountPoint) -> str:
+    """Filename stem for hardware STL, e.g. 'hardware_M3_shc'."""
+    ft, ht = fastener_key(mp)
+    return f"hardware_{ft}_{ht or 'shc'}"
+
+
 def resolve_fastener(mp: MountPoint) -> FastenerSpec:
     """Resolve a MountPoint to a full FastenerSpec.
 
@@ -206,7 +222,7 @@ def fastener_solid(spec: FastenerSpec, length: float):
         hex_profile = RegularPolygon(hex_r, 6)
         hex_solid = extrude(hex_profile, recess_depth)
         # Position: centered at top of head, extruding downward
-        hex_solid = hex_solid.locate(Location((0, 0, -recess_depth)))
+        hex_solid = hex_solid.moved(Location((0, 0, -recess_depth)))
         head = head - hex_solid
 
     elif spec.head_type == HeadType.PAN_HEAD_PHILLIPS:
@@ -226,6 +242,6 @@ def fastener_solid(spec: FastenerSpec, length: float):
 
     # Shank (extends from Z=-head_h to Z=-(head_h + length))
     shank = Cylinder(shank_r, length, align=(Align.CENTER, Align.CENTER, Align.MAX))
-    shank = shank.locate(Location((0, 0, -head_h)))
+    shank = shank.moved(Location((0, 0, -head_h)))
 
     return head + shank

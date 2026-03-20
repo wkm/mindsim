@@ -147,12 +147,12 @@ def connector_solid(spec: ConnectorSpec):
     if spec.connector_type == ConnectorType.MOLEX_5264_3PIN:
         # Polarization rib on one side (asymmetric key)
         rib = Box(bx * 0.15, by * 0.12, bz * 0.7, align=C)
-        rib = rib.locate(Location((-bx * 0.35, by / 2, -bz * 0.05)))
+        rib = rib.moved(Location((-bx * 0.35, by / 2, -bz * 0.05)))
         body = body.fuse(rib)
 
         # Locking tab on opposite side
         tab = Box(bx * 0.4, by * 0.08, bz * 0.15, align=C)
-        tab = tab.locate(Location((0, -by / 2, bz * 0.25)))
+        tab = tab.moved(Location((0, -by / 2, bz * 0.25)))
         body = body.fuse(tab)
 
         # 3 pin blades protruding from mating face (+Z)
@@ -165,39 +165,39 @@ def connector_solid(spec: ConnectorSpec):
             pin = Box(
                 pin_w, pin_d, pin_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
             )
-            pin = pin.locate(Location((px, 0, bz / 2)))
+            pin = pin.moved(Location((px, 0, bz / 2)))
             body = body.fuse(pin)
 
         # Wire entry channels on back face (-Z) — 3 circular dips
         for i in range(3):
             px = -pitch + i * pitch
             chan = Cylinder(0.0005, by * 0.3, align=C)
-            chan = chan.locate(Location((px, 0, -bz / 2)))
+            chan = chan.moved(Location((px, 0, -bz / 2)))
             body = body - chan
 
     elif spec.connector_type == ConnectorType.CSI_15PIN:
         # ZIF lever on top (hinged flap)
         lever_h = bz * 0.2
         lever = Box(bx * 0.92, by * 0.6, lever_h, align=C)
-        lever = lever.locate(Location((0, 0, bz / 2 + lever_h / 2 - 0.0002)))
+        lever = lever.moved(Location((0, 0, bz / 2 + lever_h / 2 - 0.0002)))
         body = body.fuse(lever)
 
         # Ribbon cable slot on bottom face — wide thin opening
         slot = Box(bx * 0.85, by * 0.4, bz * 0.3, align=C)
-        slot = slot.locate(Location((0, -by * 0.1, -bz * 0.35)))
+        slot = slot.moved(Location((0, -by * 0.1, -bz * 0.35)))
         body = body - slot
 
         # Contact ridges inside (visible through slot)
         for i in range(7):
             rx = -bx * 0.38 + i * bx * 0.76 / 6
             ridge = Box(0.0003, by * 0.2, bz * 0.15, align=C)
-            ridge = ridge.locate(Location((rx, -by * 0.1, -bz * 0.15)))
+            ridge = ridge.moved(Location((rx, -by * 0.1, -bz * 0.15)))
             body = body.fuse(ridge)
 
     elif spec.connector_type == ConnectorType.XT30:
         # Keying: one corner chamfered (polarization)
         chamfer_block = Box(bx * 0.15, by * 0.15, bz + 0.001, align=C)
-        chamfer_block = chamfer_block.locate(Location((bx / 2, by / 2, 0)))
+        chamfer_block = chamfer_block.moved(Location((bx / 2, by / 2, 0)))
         body = body - chamfer_block
 
         # Two pin sockets on mating face (+X) — round and square
@@ -205,23 +205,23 @@ def connector_solid(spec: ConnectorSpec):
         round_pin = Cylinder(
             0.001, 0.003, align=(Align.CENTER, Align.CENTER, Align.MIN)
         )
-        round_pin = round_pin.locate(Location((bx / 2, -by * 0.2, 0)))
+        round_pin = round_pin.moved(Location((bx / 2, -by * 0.2, 0)))
         body = body.fuse(round_pin)
 
         flat_pin = Box(
             0.002, 0.001, 0.003, align=(Align.CENTER, Align.CENTER, Align.MIN)
         )
-        flat_pin = flat_pin.locate(Location((bx / 2, by * 0.2, 0)))
+        flat_pin = flat_pin.moved(Location((bx / 2, by * 0.2, 0)))
         body = body.fuse(flat_pin)
 
         # Grip ridges on sides
         for i in range(3):
             gz = -bz * 0.3 + i * bz * 0.3
             ridge = Box(bx * 0.8, by * 0.06, 0.0005, align=C)
-            ridge = ridge.locate(Location((0, by / 2, gz)))
+            ridge = ridge.moved(Location((0, by / 2, gz)))
             body = body.fuse(ridge)
             ridge2 = Box(bx * 0.8, by * 0.06, 0.0005, align=C)
-            ridge2 = ridge2.locate(Location((0, -by / 2, gz)))
+            ridge2 = ridge2.moved(Location((0, -by / 2, gz)))
             body = body.fuse(ridge2)
 
     elif spec.connector_type == ConnectorType.JST_XH_3PIN:
@@ -230,12 +230,12 @@ def connector_solid(spec: ConnectorSpec):
         tab_h = bz * 0.12
         tab_d = by * 0.08
         tab = Box(tab_w, tab_d, tab_h, align=C)
-        tab = tab.locate(Location((0, by / 2 + tab_d / 2, bz * 0.2)))
+        tab = tab.moved(Location((0, by / 2 + tab_d / 2, bz * 0.2)))
         body = body.fuse(tab)
 
         # Polarization groove on housing
         groove = Box(bx * 0.12, by + 0.001, bz * 0.15, align=C)
-        groove = groove.locate(Location((-bx * 0.35, 0, bz * 0.3)))
+        groove = groove.moved(Location((-bx * 0.35, 0, bz * 0.3)))
         body = body - groove
 
         # 3 pin blades on mating face (+Z)
@@ -248,7 +248,7 @@ def connector_solid(spec: ConnectorSpec):
             pin = Box(
                 pin_w, pin_d, pin_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
             )
-            pin = pin.locate(Location((px, 0, bz / 2)))
+            pin = pin.moved(Location((px, 0, bz / 2)))
             body = body.fuse(pin)
 
         # Wire entry on back face (-Z) — strain relief bumps
@@ -257,18 +257,19 @@ def connector_solid(spec: ConnectorSpec):
             bump = Cylinder(
                 0.0006, 0.001, align=(Align.CENTER, Align.CENTER, Align.MAX)
             )
-            bump = bump.locate(Location((px, 0, -bz / 2)))
+            bump = bump.moved(Location((px, 0, -bz / 2)))
             body = body.fuse(bump)
 
     elif spec.connector_type == ConnectorType.GPIO_2X20:
         # 2x20 socket connector (female) — shroud with pin cavities
         # Keying notch on one side
         notch = Box(0.003, by + 0.001, bz * 0.4, align=C)
-        notch = notch.locate(Location((bx / 2 - 0.001, 0, bz * 0.15)))
+        notch = notch.moved(Location((bx / 2 - 0.001, 0, bz * 0.15)))
         body = body - notch
 
-        # Two rows of socket holes on mating face (-Z)
+        # Two rows of socket holes on mating face (-Z) — batch into one cut
         pitch = 0.00254
+        holes = None
         for row_y in [-0.00127, 0.00127]:
             for i in range(20):
                 px = -pitch * 9.5 + i * pitch
@@ -277,12 +278,13 @@ def connector_solid(spec: ConnectorSpec):
                     bz * 0.5,
                     align=(Align.CENTER, Align.CENTER, Align.MAX),
                 )
-                hole = hole.locate(Location((px, row_y, -bz / 2)))
-                body = body - hole
+                hole = hole.moved(Location((px, row_y, -bz / 2)))
+                holes = hole if holes is None else holes.fuse(hole)
+        body = body - holes
 
         # Strain relief cable exit on top
         cable_exit = Box(bx * 0.8, by * 0.6, 0.002, align=C)
-        cable_exit = cable_exit.locate(Location((0, 0, bz / 2 + 0.001)))
+        cable_exit = cable_exit.moved(Location((0, 0, bz / 2 + 0.001)))
         body = body.fuse(cable_exit)
 
     return _as_solid(body)
@@ -318,15 +320,15 @@ def receptacle_solid(spec: ConnectorSpec):
     # Position cavity at the mating face
     if abs(mz) > 0.5:
         cz = (rz / 2 - cavity_depth / 2) * (1 if mz > 0 else -1)
-        cavity = cavity.locate(Location((0, 0, cz)))
+        cavity = cavity.moved(Location((0, 0, cz)))
     elif abs(mx) > 0.5:
         cavity = Box(cavity_depth, by + 0.0002, bz * 0.5, align=C)
         cx = (rx / 2 - cavity_depth / 2) * (1 if mx > 0 else -1)
-        cavity = cavity.locate(Location((cx, 0, 0)))
+        cavity = cavity.moved(Location((cx, 0, 0)))
     elif abs(my) > 0.5:
         cavity = Box(bx + 0.0002, cavity_depth, bz * 0.5, align=C)
         cy = (ry / 2 - cavity_depth / 2) * (1 if my > 0 else -1)
-        cavity = cavity.locate(Location((0, cy, 0)))
+        cavity = cavity.moved(Location((0, cy, 0)))
 
     body = body - cavity
 
@@ -334,14 +336,14 @@ def receptacle_solid(spec: ConnectorSpec):
         # Shroud walls around pin header
         shroud_h = rz * 0.4
         shroud = Box(rx, ry, shroud_h, align=(Align.CENTER, Align.CENTER, Align.MIN))
-        shroud = shroud.locate(Location((0, 0, rz / 2)))
+        shroud = shroud.moved(Location((0, 0, rz / 2)))
         inner = Box(
             bx - 0.001,
             by - 0.001,
             shroud_h + 0.001,
             align=(Align.CENTER, Align.CENTER, Align.MIN),
         )
-        inner = inner.locate(Location((0, 0, rz / 2)))
+        inner = inner.moved(Location((0, 0, rz / 2)))
         shroud = shroud - inner
         body = body.fuse(shroud)
 
@@ -359,7 +361,7 @@ def receptacle_solid(spec: ConnectorSpec):
             if mx < 0
             else 0
         )
-        flange = flange.locate(Location((fx, 0, 0)))
+        flange = flange.moved(Location((fx, 0, 0)))
         body = body.fuse(flange)
 
     # Solder pins on bottom
@@ -369,7 +371,7 @@ def receptacle_solid(spec: ConnectorSpec):
         for i in range(min(n_pins, 6)):
             px = -bx / 2 + bx * (i + 0.5) / min(n_pins, 6)
             pin = Cylinder(0.0003, pin_h, align=(Align.CENTER, Align.CENTER, Align.MAX))
-            pin = pin.locate(Location((px, 0, -rz / 2)))
+            pin = pin.moved(Location((px, 0, -rz / 2)))
             body = body.fuse(pin)
 
     return _as_solid(body)
