@@ -70,6 +70,7 @@ class TestComponentToJson:
         "layers",
         "mounting_points",
         "wire_ports",
+        "drawings",
     }
 
     def test_required_keys_present(self, component_registry):

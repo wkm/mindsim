@@ -46,6 +46,7 @@ if (cadstepsParam) {
   document.getElementById('top-bar').style.display = '';
   document.getElementById('side-panel').style.display = '';
   document.getElementById('component-browser').style.display = 'block';
+  document.getElementById('view-toolbar').style.display = 'flex';
   document.getElementById('bot-name').textContent = 'Components';
   import('./component-browser.js').then(m => m.initComponentBrowser(componentParam));
 

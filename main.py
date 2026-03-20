@@ -503,6 +503,25 @@ def _component_to_json(comp, category: str) -> dict:
             "gear_ratio": comp.gear_ratio,
             "continuous": comp.continuous,
         }
+    # Discover available 2D technical drawings
+    if isinstance(comp, ServoSpec):
+        safe = comp.name.lower()
+        drawing_types = ["pocket", "coupler", "cradle", "coupler_assembly"]
+        drawings = []
+        for dt in drawing_types:
+            svg_path = Path("botcad/components") / f"drawing_{dt}_{safe}.svg"
+            if svg_path.exists():
+                drawings.append(
+                    {
+                        "type": dt,
+                        "label": dt.replace("_", " ").title(),
+                        "url": f"/{svg_path}",
+                    }
+                )
+        info["drawings"] = drawings
+    else:
+        info["drawings"] = []
+
     info["mounting_points"] = [
         {
             "label": mp.label,
@@ -733,43 +752,46 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        # Decode percent-encoded path segments (e.g. spaces in component names)
+        from urllib.parse import unquote
+
+        path = unquote(self.path)
+
         # API routes
-        if self.path == "/api/bots":
+        if path == "/api/bots":
             self._handle_bots_list()
             return
 
-        if self.path == "/api/components":
+        if path == "/api/components":
             self._handle_component_catalog()
             return
 
         # /api/components/<name>/fasteners
-        m = re.match(r"^/api/components/([^/]+)/fasteners$", self.path)
+        m = re.match(r"^/api/components/([^/]+)/fasteners$", path)
         if m:
             self._handle_component_fasteners(m.group(1))
             return
 
         # /api/bots/<bot>/body/<body>/cad-steps
-        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps$", self.path)
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps$", path)
         if m:
             self._handle_cad_steps_meta(m.group(1), m.group(2))
             return
 
         # /api/bots/<bot>/body/<body>/cad-steps/<idx>/stl
-        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/stl$", self.path)
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/stl$", path)
         if m:
             self._handle_cad_step_stl(m.group(1), m.group(2), int(m.group(3)))
             return
 
         # /api/bots/<bot>/body/<body>/cad-steps/<idx>/tool-stl
-        m = re.match(
-            r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/tool-stl$", self.path
-        )
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/tool-stl$", path)
         if m:
             self._handle_cad_step_tool_stl(m.group(1), m.group(2), int(m.group(3)))
             return
 
         # /api/components/<name>/stl/<part>
-        m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", self.path)
+        m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", path)
         if m:
             self._handle_component_stl(m.group(1), m.group(2))
             return

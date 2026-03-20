@@ -1,15 +1,15 @@
 /**
- * MindSim Component Browser — Three.js-based component 3D viewer.
+ * MindSim Component Browser — Three.js-based component viewer.
  *
- * Checkbox-based layer system: each part (body, bracket, cradle, coupler,
- * envelopes, fasteners) is an independently toggleable layer. Multiple
- * layers can be visible simultaneously for debugging component geometry.
+ * Orthographic camera with view presets (Front/Side/Top/Iso) and a
+ * checkbox-based layer system for inspecting component geometry.
  */
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { clearGroup, orientToAxis } from './utils.js';
+import { tintColor, createMaterial, addMeshWithEdges } from './presentation.js';
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -18,11 +18,21 @@ const SIDEBAR_WIDTH = 220;
 const SIDE_PANEL_WIDTH = 320;
 
 // ---------------------------------------------------------------------------
+// View presets — camera direction (from center) and up vector
+// ---------------------------------------------------------------------------
+const VIEW_PRESETS = {
+  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front' },
+  side:  { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Side' },
+  top:   { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top' },
+  iso:   { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso' },
+};
+
+// ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
-// Layer display metadata — keyed by layer ID returned from the backend.
-// The backend's `layers` array on each component determines which layers
-// are available; this table just supplies labels, colors, and material opts.
+// True entity colors — the actual physical color of each part.
+// At render time these are tinted via presentation.tintColor() so
+// edges and annotations remain visible against lighter geometry.
 const LAYER_META = {
   body:             { label: 'Body',             colorHex: null,     opts: {} },
   servo:            { label: 'Servo',            colorHex: 0x182026, opts: {} },
@@ -34,7 +44,6 @@ const LAYER_META = {
   cradle_envelope:  { label: 'Cradle Envelope',  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
   fasteners:        { label: 'Fasteners',        colorHex: 0xD4A843, opts: {} },
 };
-// All known layer IDs (superset) — used to create THREE.Groups up-front.
 const ALL_LAYER_IDS = Object.keys(LAYER_META);
 
 // ---------------------------------------------------------------------------
@@ -47,15 +56,21 @@ class ComponentBrowser {
     this.stlLoader = new STLLoader();
     this.stlCache = {};       // url → BufferGeometry
     this.layerGroups = {};    // layer id → THREE.Group
+    this.activePreset = 'iso';
   }
 
   async init() {
     this._setupThreeJS();
+    this._setupViewToolbar();
     await this._fetchCatalog();
     this._buildSidebar();
     this._buildSidePanel();
     this._animate();
   }
+
+  // -----------------------------------------------------------------------
+  // Three.js setup — orthographic camera
+  // -----------------------------------------------------------------------
 
   _setupThreeJS() {
     const container = document.getElementById('canvas-container');
@@ -65,13 +80,23 @@ class ComponentBrowser {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xF5F8FA);
 
-    const viewWidth = window.innerWidth - SIDEBAR_WIDTH - SIDE_PANEL_WIDTH;
-    this.camera = new THREE.PerspectiveCamera(45, viewWidth / window.innerHeight, 0.0001, 10);
-    this.camera.position.set(0.06, 0.06, 0.08);
+    const vw = window.innerWidth - SIDEBAR_WIDTH - SIDE_PANEL_WIDTH;
+    const vh = window.innerHeight;
+    const aspect = vw / vh;
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    // Orthographic camera — frustum sized to a typical component (~0.1m)
+    const frustum = 0.06;
+    this.camera = new THREE.OrthographicCamera(
+      -frustum * aspect, frustum * aspect,
+      frustum, -frustum,
+      0.0001, 10,
+    );
+    this.camera.position.set(0.06, -0.06, 0.05);
+    this.camera.up.set(0, 0, 1);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(viewWidth, window.innerHeight);
+    this.renderer.setSize(vw, vh);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -79,9 +104,10 @@ class ComponentBrowser {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.1;
+    this.controls.enableRotate = true;
     this.controls.update();
 
-    // Lighting — match bot viewer (bright, with fill light)
+    // Lighting
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
     dirLight.position.set(0.2, 0.4, 0.3);
@@ -91,7 +117,7 @@ class ComponentBrowser {
     fillLight.position.set(-0.2, 0.1, -0.2);
     this.scene.add(fillLight);
 
-    // Grid (200mm with 5mm divisions) — light theme colors
+    // Grid (200mm with 5mm divisions)
     this.scene.add(new THREE.GridHelper(0.2, 40, 0xBFCCD6, 0xCED9E0));
 
     // Create a group per layer
@@ -102,13 +128,147 @@ class ComponentBrowser {
       this.layerGroups[id] = g;
     }
 
-    window.addEventListener('resize', () => {
-      const vw = window.innerWidth - SIDEBAR_WIDTH - SIDE_PANEL_WIDTH;
-      this.camera.aspect = vw / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(vw, window.innerHeight);
+    window.addEventListener('resize', () => this._updateLayout());
+  }
+
+  // -----------------------------------------------------------------------
+  // View preset toolbar
+  // -----------------------------------------------------------------------
+
+  _setupViewToolbar() {
+    const toolbar = document.getElementById('view-toolbar');
+    if (!toolbar) return;
+
+    for (const [key, preset] of Object.entries(VIEW_PRESETS)) {
+      const btn = toolbar.querySelector(`[data-view="${key}"]`);
+      if (btn) {
+        btn.addEventListener('click', () => this._setViewPreset(key));
+      }
+    }
+  }
+
+  _setViewPreset(key) {
+    const preset = VIEW_PRESETS[key];
+    if (!preset) return;
+
+    this.activePreset = key;
+
+    // Get bounding box center and size for framing
+    const box = this._getVisibleBBox();
+    const center = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+    const size = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
+    const maxDim = Math.max(size.x, size.y, size.z);
+
+    // Position camera along preset direction
+    const dist = maxDim * 2;
+    this.camera.position.copy(center).addScaledVector(preset.dir, dist);
+    this.camera.up.copy(preset.up);
+    this.controls.target.copy(center);
+    this.camera.lookAt(center);
+
+    // Lock rotation for axis-aligned views, allow for iso
+    this.controls.enableRotate = (key === 'iso');
+
+    this._fitOrthoFrustum(box);
+    this.controls.update();
+    this._updatePresetButtons();
+  }
+
+  _updatePresetButtons() {
+    const toolbar = document.getElementById('view-toolbar');
+    if (!toolbar) return;
+    toolbar.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === this.activePreset);
     });
   }
+
+  // -----------------------------------------------------------------------
+  // Orthographic frustum helpers
+  // -----------------------------------------------------------------------
+
+  _getVisibleBBox() {
+    const box = new THREE.Box3();
+    let hasGeometry = false;
+
+    for (const id of ALL_LAYER_IDS) {
+      const group = this.layerGroups[id];
+      if (!group.visible) continue;
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.geometry.computeBoundingBox();
+          const childBox = child.geometry.boundingBox.clone();
+          childBox.applyMatrix4(child.matrixWorld);
+          box.union(childBox);
+          hasGeometry = true;
+        }
+      });
+    }
+
+    return hasGeometry ? box : null;
+  }
+
+  _fitOrthoFrustum(box) {
+    if (!box) return;
+
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const pad = maxDim * 0.15;  // 15% padding
+
+    const container = document.getElementById('canvas-container');
+    const aspect = container.offsetWidth / container.offsetHeight;
+    const halfH = (maxDim / 2) + pad;
+    const halfW = halfH * aspect;
+
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
+    this.camera.updateProjectionMatrix();
+  }
+
+  _fitCameraToVisibleMeshes() {
+    const box = this._getVisibleBBox();
+    if (!box) return;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+
+    // Position along active preset direction
+    const preset = VIEW_PRESETS[this.activePreset] || VIEW_PRESETS.iso;
+    const dist = maxDim * 2;
+    this.camera.position.copy(center).addScaledVector(preset.dir, dist);
+    this.camera.up.copy(preset.up);
+    this.controls.target.copy(center);
+    this.camera.lookAt(center);
+
+    this._fitOrthoFrustum(box);
+    this.controls.update();
+  }
+
+  _updateLayout() {
+    const container = document.getElementById('canvas-container');
+    container.style.left = SIDEBAR_WIDTH + 'px';
+    container.style.right = SIDE_PANEL_WIDTH + 'px';
+
+    requestAnimationFrame(() => {
+      const w = container.offsetWidth;
+      const h = container.offsetHeight;
+      if (w > 0 && h > 0) {
+        // Update ortho frustum aspect ratio
+        const aspect = w / h;
+        const halfH = this.camera.top;  // preserve current zoom level
+        this.camera.left = -halfH * aspect;
+        this.camera.right = halfH * aspect;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Component catalog + sidebar
+  // -----------------------------------------------------------------------
 
   async _fetchCatalog() {
     try {
@@ -150,6 +310,10 @@ class ComponentBrowser {
       }
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Side panel
+  // -----------------------------------------------------------------------
 
   _buildSidePanel() {
     const panel = document.getElementById('side-panel');
@@ -250,8 +414,11 @@ class ComponentBrowser {
     });
   }
 
+  // -----------------------------------------------------------------------
+  // 3D markers (mounting points, wire ports)
+  // -----------------------------------------------------------------------
+
   _createMarkers(comp) {
-    // Remove old markers
     if (this._markerGroup) {
       clearGroup(this._markerGroup);
       this.scene.remove(this._markerGroup);
@@ -271,25 +438,19 @@ class ComponentBrowser {
       roughness: 0.3, metalness: 0.1, emissive: 0x22aa44, emissiveIntensity: 0.5,
     });
 
-    // Mounting point markers — small cylinders oriented along mount axis
     for (const mp of comp.mounting_points) {
-      const r = (mp.diameter_mm / 1000) * 0.8; // slightly larger than hole
+      const r = (mp.diameter_mm / 1000) * 0.8;
       const h = 0.002;
       const geom = new THREE.CylinderGeometry(r, r, h, 12);
-      // CylinderGeometry is Y-up; rotate to align with mount axis
       const mesh = new THREE.Mesh(geom, markerMat.clone());
       mesh.position.set(mp.pos[0], mp.pos[1], mp.pos[2]);
-
-      // Orient cylinder axis to mount axis
       orientToAxis(mesh, new THREE.Vector3(mp.axis[0], mp.axis[1], mp.axis[2]));
-
       mesh.userData.defaultMat = mesh.material;
       mesh.userData.highlightMat = highlightMat;
       this._markerGroup.add(mesh);
       this._markers.mp.push(mesh);
     }
 
-    // Wire port markers — small spheres
     const wpMat = new THREE.MeshPhysicalMaterial({
       color: 0xff8844, transparent: true, opacity: 0.4,
       roughness: 0.3, metalness: 0.1,
@@ -315,16 +476,18 @@ class ComponentBrowser {
     if (!markers || !markers[idx]) return;
     const mesh = markers[idx];
     mesh.material = on ? mesh.userData.highlightMat : mesh.userData.defaultMat;
-    // Scale up when highlighted
     const s = on ? 1.8 : 1.0;
     mesh.scale.set(s, s, s);
   }
+
+  // -----------------------------------------------------------------------
+  // Layer loading
+  // -----------------------------------------------------------------------
 
   async _onLayerToggle(layerId, enabled) {
     const group = this.layerGroups[layerId];
 
     if (enabled) {
-      // Load if empty
       if (group.children.length === 0) {
         await this._loadLayer(layerId);
       }
@@ -347,7 +510,7 @@ class ComponentBrowser {
       el.classList.toggle('active', el.dataset.name === name);
     });
 
-    // Update top bar — hide mode tabs, show component name
+    // Update top bar
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
@@ -357,13 +520,13 @@ class ComponentBrowser {
       this.layerGroups[id].visible = false;
     }
 
-    // First layer in the backend list is the default
+    // First layer is the default
     const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
 
-    // Update side panel (includes layer checkboxes)
+    // Update side panel
     this._updateSidePanel(comp);
 
-    // Load default layer
+    // Load default layer and fit view
     await this._loadLayer(defaultLayer);
     this.layerGroups[defaultLayer].visible = true;
     this._fitCameraToVisibleMeshes();
@@ -380,11 +543,14 @@ class ComponentBrowser {
     }
 
     const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
-    const color = meta.colorHex !== null
+    const entityColor = meta.colorHex !== null
       ? meta.colorHex
       : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
 
-    await this._addSTLMesh(compName, layerId, color, meta.opts, group);
+    // Tint: 20% entity color on a light base — keeps edges visible
+    const renderColor = tintColor(entityColor);
+
+    await this._addSTLMesh(compName, layerId, renderColor, meta.opts, group);
   }
 
   async _loadFasteners(compName, group) {
@@ -393,7 +559,6 @@ class ComponentBrowser {
       if (!resp.ok) return;
       const data = await resp.json();
 
-      // Fetch unique screw STLs in parallel
       const uniqueUrls = [...new Set(data.fasteners.map(f => f.stl_url))];
       const geomCache = {};
       await Promise.all(uniqueUrls.map(async (url) => {
@@ -405,10 +570,7 @@ class ComponentBrowser {
         geomCache[url] = geom;
       }));
 
-      // Shared material for all fasteners
-      const fastenerMat = new THREE.MeshPhysicalMaterial({
-        color: 0xD4A843, roughness: 0.4, metalness: 0.3,
-      });
+      const fastenerMat = createMaterial(tintColor(0xD4A843));
 
       for (const f of data.fasteners) {
         const srcGeom = geomCache[f.stl_url];
@@ -447,74 +609,12 @@ class ComponentBrowser {
     }
 
     geometry.computeVertexNormals();
-
-    const matOpts = {
-      color: color,
-      roughness: 0.6,
-      metalness: 0.1,
-    };
-
-    if (opts.transparent) {
-      matOpts.transparent = true;
-      matOpts.opacity = opts.opacity || 0.3;
-      matOpts.side = THREE.DoubleSide;
-    }
-    if (opts.wireframe) {
-      matOpts.wireframe = true;
-    }
-
-    const material = new THREE.MeshPhysicalMaterial(matOpts);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = !opts.wireframe;
-    mesh.receiveShadow = !opts.wireframe;
-    group.add(mesh);
-
-    // Edge outlines (matching bot viewer style) — skip for wireframe/transparent
-    if (!opts.wireframe && !opts.transparent) {
-      const edges = new THREE.EdgesGeometry(geometry, 28);
-      const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
-        color: 0x000000, transparent: true, opacity: 0.6,
-      }));
-      lines.raycast = () => {};
-      group.add(lines);
-    }
+    addMeshWithEdges(geometry, color, group, opts);
   }
 
-  _fitCameraToVisibleMeshes() {
-    const box = new THREE.Box3();
-    let hasGeometry = false;
-
-    for (const id of ALL_LAYER_IDS) {
-      const group = this.layerGroups[id];
-      if (!group.visible) continue;
-      group.traverse(child => {
-        if (child.isMesh) {
-          child.geometry.computeBoundingBox();
-          const childBox = child.geometry.boundingBox.clone();
-          childBox.applyMatrix4(child.matrixWorld);
-          box.union(childBox);
-          hasGeometry = true;
-        }
-      });
-    }
-
-    if (!hasGeometry) return;
-
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const fov = this.camera.fov * (Math.PI / 180);
-    const dist = (maxDim / 2) / Math.tan(fov / 2) * 1.5;
-
-    this.controls.target.copy(center);
-    this.camera.position.set(
-      center.x + dist * 0.6,
-      center.y + dist * 0.5,
-      center.z + dist * 0.7,
-    );
-    this.camera.updateProjectionMatrix();
-    this.controls.update();
-  }
+  // -----------------------------------------------------------------------
+  // Animation loop
+  // -----------------------------------------------------------------------
 
   _animate() {
     const loop = () => {

@@ -264,6 +264,25 @@
     }
     .highlight-item:hover { background: rgba(206,217,224,0.5); color: var(--bp-dark-gray1); }
 
+    /* View toolbar (floating above canvas in component browser) */
+    #view-toolbar {
+      display: none; position: absolute; top: 52px; z-index: 85;
+      left: 228px;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
+      border: 1px solid var(--bp-light-gray1); border-radius: 6px;
+      padding: 4px; gap: 2px;
+      align-items: center; pointer-events: auto;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    #view-toolbar button {
+      background: none; border: none; cursor: pointer;
+      font-size: 11px; font-weight: 500; font-family: inherit;
+      padding: 5px 10px; border-radius: 4px;
+      color: var(--bp-gray1); transition: all 0.1s;
+    }
+    #view-toolbar button:hover { background: rgba(206,217,224,0.5); color: var(--bp-dark-gray1); }
+    #view-toolbar button.active { background: var(--bp-blue3); color: #fff; }
+
     /* ── Quick Switcher (Ctrl+K) ── */
     #quick-switcher-overlay {
       position: fixed; inset: 0; z-index: 2000;
@@ -351,6 +370,12 @@
   <!-- Component browser layout -->
   <div id="component-browser">
     <div id="component-sidebar"></div>
+    <div id="view-toolbar">
+      <button data-view="front">Front</button>
+      <button data-view="side">Side</button>
+      <button data-view="top">Top</button>
+      <button data-view="iso" class="active">Iso</button>
+    </div>
   </div>
 
   <!-- Quick Switcher -->
