@@ -34,7 +34,7 @@
 
 | Connector | Qty |
 |-----------|-----|
-| 5264_3pin | 2 |
+| 5264_3pin | 4 |
 | csi_15pin | 1 |
 | jst_xh_3pin | 1 |
 | xt30 | 1 |

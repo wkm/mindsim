@@ -91,11 +91,20 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         dimensions=_STS3215_DIMS,
         mass=_STS3215_MASS,
         wire_ports=(
-            # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
-            # Also has a short 5264/2.54 pigtail lead (~15cm)
+            # Two 5264-2.54 3-pin connectors side by side on bottom face,
+            # toward back (-X) end. Oriented with pins along X (long axis),
+            # sitting side by side along Y for daisy-chaining the UART bus.
+            # Each connector: 7.5mm (X) x 4.5mm (Y) x 6.0mm (Z)
+            # Spaced ~5mm apart center-to-center along Y
             WirePort(
-                "uart_bus",
-                pos=(-0.0080, 0.0, -0.0163),
+                "uart_in",
+                pos=(-0.0080, -0.0025, -0.0163),
+                bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
+            ),
+            WirePort(
+                "uart_out",
+                pos=(-0.0080, 0.0025, -0.0163),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),
@@ -213,8 +222,14 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         mass=_STS3250_MASS,
         wire_ports=(
             WirePort(
-                "uart_bus",
-                pos=(-0.0080, 0.0, -0.0163),
+                "uart_in",
+                pos=(-0.0080, -0.0025, -0.0163),
+                bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
+            ),
+            WirePort(
+                "uart_out",
+                pos=(-0.0080, 0.0025, -0.0163),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),

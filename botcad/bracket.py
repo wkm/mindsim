@@ -56,48 +56,45 @@ def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
 
 
 def _fuse_servo_connector(body, servo: ServoSpec):
-    """Fuse a connector receptacle onto the servo body at connector_pos.
+    """Fuse connector receptacles onto the servo body at each wire port.
 
-    The receptacle represents the built-in header where wires plug in.
-    Skipped for permanent (soldered/molded) wire connections — those
-    servos just have a wire exiting the body, no removable connector.
+    Each non-permanent wire port with a connector_type gets a receptacle
+    fused at its position. The receptacle is rotated so pins run along X
+    (servo long axis) and the mating cavity faces outward from the body.
+    Permanent wires (soldered/molded) are skipped.
     """
     from build123d import Location
 
+    from botcad.connectors import connector_spec, receptacle_solid
+
     for wp in servo.wire_ports:
-        if wp.connector_type and not wp.permanent:
-            try:
-                from botcad.connectors import connector_spec, receptacle_solid
+        if not wp.connector_type or wp.permanent:
+            continue
+        try:
+            cspec = connector_spec(wp.connector_type)
+        except KeyError:
+            continue
 
-                cspec = connector_spec(wp.connector_type)
-            except KeyError:
-                return body
-            break
-    else:
-        return body
+        rcpt = receptacle_solid(cspec)
+        cx, cy, cz = wp.pos
 
-    rcpt = receptacle_solid(cspec)
-    cx, cy, cz = servo.connector_pos
+        # Rotate receptacle: mating cavity faces outward from servo body,
+        # and pins run along X (servo long axis). The 5264 connector's
+        # default mating direction is +Z; we flip 180° for bottom-face
+        # connectors and add 90° around Z so pins align with servo X.
+        mx, my, mz = cspec.mating_direction
+        if abs(mz) > 0.5:
+            flip = 180 if cz < 0 else 0
+            euler = (flip, 0, 90)  # 90° around Z so pins run along X
+        elif abs(mx) > 0.5:
+            euler = (0, -90 if cx < 0 else 90, 0)
+        else:
+            euler = (90 if cy < 0 else -90, 0, 0)
 
-    # The receptacle's mating direction should face outward from the servo.
-    # For STS servos: connector is on the bottom face, mating direction is +Z
-    # (plug inserts upward). The receptacle should sit on the bottom face
-    # with its cavity facing downward (-Z) for the plug to insert from below.
-    mx, my, mz = cspec.mating_direction
+        rcpt_placed = rcpt.moved(Location((cx, cy, cz), euler))
+        body = _as_solid(body.fuse(rcpt_placed))
 
-    # Rotate receptacle so its mating cavity faces outward (away from servo center)
-    # The connector_pos is on the servo surface; the receptacle protrudes outward.
-    if abs(mz) > 0.5:
-        # Mating along Z: connector on top or bottom face
-        # Flip 180° so cavity faces away from servo center
-        euler = (180, 0, 0) if cz < 0 else (0, 0, 0)
-    elif abs(mx) > 0.5:
-        euler = (0, -90 if cx < 0 else 90, 0)
-    else:
-        euler = (90 if cy < 0 else -90, 0, 0)
-
-    rcpt_placed = rcpt.moved(Location((cx, cy, cz), euler))
-    return _as_solid(body.fuse(rcpt_placed))
+    return body
 
 
 def _connector_port(
@@ -106,123 +103,114 @@ def _connector_port(
     wall_center: tuple[float, float, float],
     exit_axis: tuple[float, float, float],
 ):
-    """Build connector-shaped cut and housing solids for a bracket wall.
+    """Build a shaped passage through a bracket wall for all connector plugs.
 
-    Instead of a rectangular cable slot, creates a receptacle-shaped passage
-    through the bracket wall: the plug can pass through, and guide walls
-    on the outside help align the mating connector.
+    Computes a single cut that covers all wire port positions with their
+    connector envelopes + clearance. For servos with two side-by-side
+    connectors (e.g. STS3215 daisy-chain), the passage spans both.
 
-    Returns (cut_solid, housing_solid) positioned in servo-local frame,
+    Returns (cut_solid, None) positioned in servo-local frame,
     or (None, None) if no connector info is available.
-
-    - cut_solid: subtract from bracket shell (passage through wall)
-    - housing_solid: union onto bracket shell (receptacle on outside face)
     """
     from build123d import Align, Box, Location
 
-    # Find the connector spec from the servo's wire ports
+    from botcad.connectors import connector_spec
+
+    # Collect all wire ports with connectors
+    ports = []
     for wp in servo.wire_ports:
         if wp.connector_type:
             try:
-                from botcad.connectors import (
-                    connector_spec,
-                    receptacle_solid,
-                )
-
                 cspec = connector_spec(wp.connector_type)
+                ports.append((wp, cspec))
             except KeyError:
-                return None, None
-            break
-    else:
+                pass
+
+    if not ports:
         return None, None
 
     tol = spec.tolerance
     wall = spec.wall
-    bx, by, bz = cspec.body_dimensions
-    cx, cy, cz = servo.connector_pos or (0, 0, 0)
     ax, ay, az = exit_axis
 
-    # Passage depth — must go fully through the bracket wall
-    passage_depth = wall + tol + 0.004
+    # Compute bounding box of all connector envelopes in the passage plane
+    # Each connector is at wp.pos with dimensions from cspec.body_dimensions
+    # The connectors are rotated 90° (pins along X), so effective footprint
+    # in the wall plane swaps dimensions accordingly.
+    clearance = tol + 0.001  # per side
 
-    # --- Cut solid: connector envelope + clearance, extruded through wall ---
-    # Use bounding box of plug + tolerance for a clean passage
-    cut_w = max(bx, by) + 2 * tol + 0.001  # clearance around plug
-    cut_h = max(min(bx, by), bz) + 2 * tol + 0.001
-
+    # Accumulate min/max across all ports in the two axes perpendicular to exit
     if abs(ax) > 0.5:
-        # Passage through X wall
+        # Passage through X wall — footprint in Y-Z plane
+        y_coords = []
+        z_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            # Connector rotated 90°: long dim (bx) runs along X, by along Y
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            y_coords.extend([wp.pos[1] - hw, wp.pos[1] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(y_coords) - min(y_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
         cut = Box(
             passage_depth,
             cut_w,
             cut_h,
             align=(Align.CENTER, Align.CENTER, Align.CENTER),
         )
-        cut_pos = (wall_center[0], cy, cz)
+        cut_pos = (wall_center[0], center_y, center_z)
     elif abs(az) > 0.5:
-        # Passage through Z wall
+        # Passage through Z wall — footprint in X-Y plane
+        x_coords = []
+        y_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            y_coords.extend([wp.pos[1] - hh, wp.pos[1] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(y_coords) - min(y_coords)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        passage_depth = wall + tol + 0.004
         cut = Box(
             cut_w,
             cut_h,
             passage_depth,
             align=(Align.CENTER, Align.CENTER, Align.CENTER),
         )
-        cut_pos = (cx, cy, wall_center[2])
+        cut_pos = (center_x, center_y, wall_center[2])
     else:
-        # Passage through Y wall
+        # Passage through Y wall — footprint in X-Z plane
+        x_coords = []
+        z_coords = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
         cut = Box(
             cut_w,
             passage_depth,
             cut_h,
             align=(Align.CENTER, Align.CENTER, Align.CENTER),
         )
-        cut_pos = (cx, wall_center[1], cz)
+        cut_pos = (center_x, wall_center[1], center_z)
 
     cut = cut.locate(Location(cut_pos))
 
-    # --- Housing solid: receptacle on the outside face ---
-    rcpt = receptacle_solid(cspec)
-
-    # Receptacle is built centered at origin in connector-local frame.
-    # Rotate so its mating direction faces inward (opposite to exit_axis),
-    # then position on the outside face of the bracket wall.
-
-    mx, my, mz = cspec.mating_direction
-    # The receptacle's mating face should face inward (-exit_axis).
-    # The receptacle is designed with mating along its mating_direction.
-    # We need to rotate from mating_direction to -exit_axis.
-
-    # For the common case (mating +Z, exit -X): rotate 90° around Y
-    # Use a general approach based on the exit axis
-    if abs(ax) > 0.5:
-        # Exit through ±X: rotate receptacle so mating face points in ±X
-        angle = -90.0 if ax < 0 else 90.0
-        euler = (0, angle, 0)
-    elif abs(az) > 0.5:
-        # Exit through ±Z: rotate receptacle appropriately
-        angle = 180.0 if az < 0 else 0.0
-        euler = (angle, 0, 0)
-    else:
-        # Exit through ±Y
-        angle = 90.0 if ay < 0 else -90.0
-        euler = (angle, 0, 0)
-
-    # Position: offset outward from wall center by half receptacle depth
-    rcpt_bx, rcpt_by, rcpt_bz = cspec.body_dimensions
-    rcpt_depth = rcpt_bz * 0.7 + 0.0008 * 2  # matches receptacle_solid sizing
-    outward_offset = rcpt_depth / 2 + 0.0005  # small gap for clean union
-
-    housing_pos = (
-        wall_center[0] + ax * outward_offset
-        if abs(ax) > 0.5
-        else (cx if abs(az) > 0.5 else cx),
-        cy if abs(ay) < 0.5 else wall_center[1] + ay * outward_offset,
-        cz if abs(az) < 0.5 else wall_center[2] + az * outward_offset,
-    )
-
-    housing = rcpt.moved(Location(housing_pos, euler))
-
-    return cut, housing
+    return cut, None
 
 
 def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:

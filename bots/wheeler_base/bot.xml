@@ -28,7 +28,7 @@
   <worldbody>
     <body name="base" pos="0 0 0.0450">
       <freejoint name="root"/>
-      <inertial pos="0.002930 0.000293 0.004229" mass="0.233412" fullinertia="1.385443e-04 4.733844e-04 5.000755e-04 5.842227e-07 7.544683e-06 3.763026e-07"/>
+      <inertial pos="0.002916 0.000293 0.004210" mass="0.233348" fullinertia="1.384761e-04 4.733123e-04 5.001845e-04 5.821826e-07 7.500681e-06 3.724105e-07"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
       <camera name="camera_cam" fovy="72.0" pos="0.000000 0.028000 0.000000" euler="0 3.141592653589793 0"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
