@@ -29,12 +29,12 @@ const SIDE_PANEL_WIDTH = 320;
 // ---------------------------------------------------------------------------
 const VIEW_PRESETS = {
   front:  { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '1' },
-  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: 'Ctrl+1' },
+  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: '2' },
   side:   { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '3' },
-  'side-left': { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: 'Ctrl+3' },
-  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '7' },
-  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: 'Ctrl+7' },
-  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '5' },
+  'side-left': { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '4' },
+  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '5' },
+  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '6' },
+  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '0' },
 };
 
 // ---------------------------------------------------------------------------
@@ -241,35 +241,19 @@ class ComponentBrowser {
       });
     }
 
-    // Keyboard shortcuts (numpad convention: 1=Front, 3=Right, 7=Top, 5=Iso)
-    // Ctrl+key = opposite face (Back, Left, Bottom)
-    // M = toggle measure, S = toggle section
+    // Keyboard shortcuts: 1-6 = views, 0 = iso, M = measure, S = section
     const keyMap = {
-      '1': 'front', '3': 'side', '7': 'top', '5': 'iso',
-    };
-    const ctrlKeyMap = {
-      '1': 'back', '3': 'side-left', '7': 'bottom',
+      '1': 'front', '2': 'back', '3': 'side', '4': 'side-left',
+      '5': 'top', '6': 'bottom', '0': 'iso',
     };
     document.addEventListener('keydown', (e) => {
-      // Don't capture when typing in inputs
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
       const ctrl = e.ctrlKey || e.metaKey;
 
-      // View presets
-      if (ctrl && ctrlKeyMap[e.key]) {
-        e.preventDefault();
-        this._setViewPreset(ctrlKeyMap[e.key]);
-        return;
-      }
       if (!ctrl && keyMap[e.key]) {
         e.preventDefault();
         this._setViewPreset(keyMap[e.key]);
-        return;
-      }
-
-      // Tool shortcuts
-      if (e.key === 'm' && !ctrl) {
+      } else if (e.key === 'm' && !ctrl) {
         e.preventDefault();
         measureBtn?.click();
       } else if (e.key === 's' && !ctrl) {
