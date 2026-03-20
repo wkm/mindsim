@@ -902,7 +902,13 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         try:
             from botcad.render_svg import render_component_svg
 
-            svg = render_component_svg(solids, origin, tuple(view_up), section_plane)
+            svg = render_component_svg(
+                solids,
+                origin,
+                tuple(view_up),
+                section_plane,
+                annotate=body.get("annotate"),
+            )
         except Exception as e:
             self.send_error(500, f"SVG render failed: {e}")
             return

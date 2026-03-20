@@ -286,6 +286,41 @@
     .axis-btn { min-width: 24px; font-weight: 600; font-size: 10px; }
     #section-slider { accent-color: var(--bp-blue3); cursor: pointer; }
 
+    /* SVG render modal */
+    #svg-modal {
+      position: fixed; inset: 0; z-index: 3000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #svg-modal-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+    }
+    #svg-modal-content {
+      position: relative; background: #fff; border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      width: 90vw; height: 85vh; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    #svg-modal-toolbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; border-bottom: 1px solid var(--bp-light-gray1);
+      background: var(--bp-light-gray5);
+    }
+    #svg-modal-title {
+      font-size: 13px; font-weight: 600; color: var(--bp-dark-gray1);
+    }
+    #svg-modal-toolbar button {
+      background: none; border: 1px solid var(--bp-light-gray1); border-radius: 4px;
+      cursor: pointer; font-size: 12px; font-family: inherit;
+      padding: 4px 12px; color: var(--bp-gray1); transition: all 0.1s;
+    }
+    #svg-modal-toolbar button:hover { background: rgba(206,217,224,0.5); color: var(--bp-dark-gray1); }
+    #svg-modal-close { font-size: 18px; border: none; padding: 4px 8px; }
+    #svg-modal-body {
+      flex: 1; overflow: auto; display: flex; align-items: center;
+      justify-content: center; padding: 20px; background: #fff;
+    }
+    #svg-modal-body svg { max-width: 100%; max-height: 100%; }
+
     /* ── Quick Switcher (Ctrl+K) ── */
     #quick-switcher-overlay {
       position: fixed; inset: 0; z-index: 2000;
@@ -382,8 +417,6 @@
       <button id="measure-toggle" title="Measure distance (click two points)">Measure</button>
       <button id="measure-clear" title="Clear all measurements">Clear</button>
       <span class="toolbar-sep"></span>
-      <button id="render-svg" title="Export high-quality 2D SVG">Render SVG</button>
-      <span class="toolbar-sep"></span>
       <button id="section-toggle" title="Toggle section cut plane">Section</button>
       <span id="section-controls" style="display:none; align-items:center; gap:4px">
         <button data-section-axis="x" class="axis-btn">X</button>
@@ -392,6 +425,22 @@
         <input id="section-slider" type="range" min="0" max="100" value="50" style="width:100px">
         <button id="section-flip" title="Flip cut direction" class="axis-btn">&#8645;</button>
       </span>
+      <span class="toolbar-sep"></span>
+      <button id="render-svg" title="Export high-quality 2D SVG">Render SVG</button>
+    </div>
+  </div>
+
+  <!-- SVG Render Modal -->
+  <div id="svg-modal" style="display:none">
+    <div id="svg-modal-backdrop"></div>
+    <div id="svg-modal-content">
+      <div id="svg-modal-toolbar">
+        <span id="svg-modal-title"></span>
+        <span style="flex:1"></span>
+        <button id="svg-modal-download" title="Download SVG">Download</button>
+        <button id="svg-modal-close" title="Close">&times;</button>
+      </div>
+      <div id="svg-modal-body"></div>
     </div>
   </div>
 

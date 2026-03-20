@@ -1013,17 +1013,26 @@ class ComponentBrowser {
     const layers = ALL_LAYER_IDS.filter(id => this.layerGroups[id].visible);
     if (layers.length === 0) return;
 
-    // Camera direction (from target toward camera)
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     const up = this.camera.up.clone();
+
+    // Determine view label for annotation
+    const preset = VIEW_PRESETS[this.activePreset];
+    const viewLabel = preset ? preset.label : 'Custom';
 
     const body = {
       view_dir: [dir.x, dir.y, dir.z],
       view_up: [up.x, up.y, up.z],
       layers,
+      annotate: {
+        component: comp.name,
+        view: viewLabel,
+        layers: layers.map(id => LAYER_META[id]?.label || id),
+        dimensions_mm: comp.dimensions_mm,
+        mass_g: comp.mass_g,
+      },
     };
 
-    // Include section plane if active
     if (this.sectionEnabled) {
       const box = this._getVisibleBBox();
       if (box) {
@@ -1036,10 +1045,10 @@ class ComponentBrowser {
           position: pos,
           flipped: this.sectionFlipped,
         };
+        body.annotate.section = `Section ${this.sectionAxis.toUpperCase()} @ ${(pos * 1000).toFixed(1)} mm`;
       }
     }
 
-    // Show loading state
     const btn = document.querySelector('#render-svg');
     const origText = btn.textContent;
     btn.textContent = 'Rendering...';
@@ -1054,12 +1063,9 @@ class ComponentBrowser {
 
       if (resp.ok) {
         const svgText = await resp.text();
-        const blob = new Blob([svgText], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        this._showSVGModal(svgText, comp.name, viewLabel);
       } else {
-        const err = await resp.text();
-        console.error('SVG render failed:', err);
+        console.error('SVG render failed:', await resp.text());
       }
     } catch (err) {
       console.error('SVG render request failed:', err);
@@ -1067,6 +1073,35 @@ class ComponentBrowser {
       btn.textContent = origText;
       btn.disabled = false;
     }
+  }
+
+  _showSVGModal(svgText, componentName, viewLabel) {
+    const modal = document.getElementById('svg-modal');
+    const title = document.getElementById('svg-modal-title');
+    const body = document.getElementById('svg-modal-body');
+
+    title.textContent = `${componentName} — ${viewLabel} view`;
+    body.innerHTML = svgText;
+
+    // Store for download
+    this._lastSvgText = svgText;
+    this._lastSvgName = `${componentName}_${viewLabel.toLowerCase()}`;
+
+    modal.style.display = 'flex';
+
+    // Wire close handlers (re-wire each time to keep it simple)
+    const close = () => { modal.style.display = 'none'; };
+    document.getElementById('svg-modal-backdrop').onclick = close;
+    document.getElementById('svg-modal-close').onclick = close;
+
+    document.getElementById('svg-modal-download').onclick = () => {
+      const blob = new Blob([this._lastSvgText], { type: 'image/svg+xml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${this._lastSvgName}.svg`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
   }
 
   // -----------------------------------------------------------------------
