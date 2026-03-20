@@ -319,3 +319,21 @@ class TestIRRoundtripBots:
             _clear_all_caches()
             direct_solid = _build_direct(body, pj, wire_segs)
             _assert_solids_match(ir_solid, direct_solid, f"bot:{bot.name}/{body.name}")
+
+
+@pytest.mark.slow
+class TestBuildCadIntegration:
+    """build_cad() through IR path produces valid CadModel."""
+
+    @pytest.mark.timeout(300)
+    def test_build_cad_via_ir(self, bot_fixture, monkeypatch):
+        monkeypatch.setenv("BOTCAD_IR", "1")
+        _clear_all_caches()
+
+        from botcad.emit.cad import build_cad
+
+        cad = build_cad(bot_fixture)
+
+        assert len(cad.body_solids) == len(bot_fixture.all_bodies)
+        for name, solid in cad.body_solids.items():
+            assert abs(solid.volume) > 1e-9, f"{name} has zero volume"

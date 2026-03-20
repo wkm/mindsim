@@ -278,11 +278,28 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
+    import os
+
+    use_ir = os.environ.get("BOTCAD_IR", "0") == "1"
+
     body_solids: dict[str, object] = {}
+    if use_ir:
+        from botcad.ir.backend_occt import OcctBackend
+        from botcad.ir.emit_body import emit_body_ir
+
+        ir_backend = OcctBackend()
+
     for body in bot.all_bodies:
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
-        solid = _make_body_solid(body, pj, wire_segs or None)
+
+        if use_ir:
+            prog = emit_body_ir(body, pj, wire_segs or None)
+            result = ir_backend.execute(prog)
+            solid = result.shapes[prog.output_ref.id]
+        else:
+            solid = _make_body_solid(body, pj, wire_segs or None)
+
         if solid is not None:
             body_solids[body.name] = solid
             _update_mass_from_solid(body, solid)
