@@ -126,14 +126,15 @@ def connector_spec(connector_type: str) -> ConnectorSpec:
 
 @lru_cache(maxsize=16)
 def connector_solid(spec: ConnectorSpec):
-    """Build a simplified connector housing solid.
+    """Build a detailed connector plug/jack solid.
 
-    Centered at origin, correct proportions with retention features
-    as bumps. No individual pins — "recognizable from 3 feet away."
+    Centered at origin with recognizable features: pin blades on the
+    mating face, polarization keys, locking tabs, wire entry channels.
+    Correct proportions from datasheets — "recognizable from 3 feet away."
 
     Returns a build123d Solid.
     """
-    from build123d import Align, Box, Location
+    from build123d import Align, Box, Cylinder, Location
 
     from botcad.cad_utils import as_solid as _as_solid
 
@@ -144,43 +145,145 @@ def connector_solid(spec: ConnectorSpec):
     body = Box(bx, by, bz, align=C)
 
     if spec.connector_type == ConnectorType.MOLEX_5264_3PIN:
-        # Retention bump on one side
-        bump = Box(bx * 0.6, by * 0.15, bz * 0.3, align=C)
-        bump = bump.locate(Location((0, by / 2, bz * 0.1)))
-        body = body.fuse(bump)
+        # Polarization rib on one side (asymmetric key)
+        rib = Box(bx * 0.15, by * 0.12, bz * 0.7, align=C)
+        rib = rib.locate(Location((-bx * 0.35, by / 2, -bz * 0.05)))
+        body = body.fuse(rib)
+
+        # Locking tab on opposite side
+        tab = Box(bx * 0.4, by * 0.08, bz * 0.15, align=C)
+        tab = tab.locate(Location((0, -by / 2, bz * 0.25)))
+        body = body.fuse(tab)
+
+        # 3 pin blades protruding from mating face (+Z)
+        pin_w = 0.0006  # 0.6mm wide blade
+        pin_d = 0.0002  # 0.2mm thick
+        pin_h = 0.002  # 2mm protrusion
+        pitch = 0.00254  # 2.54mm pitch
+        for i in range(3):
+            px = -pitch + i * pitch
+            pin = Box(
+                pin_w, pin_d, pin_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
+            )
+            pin = pin.locate(Location((px, 0, bz / 2)))
+            body = body.fuse(pin)
+
+        # Wire entry channels on back face (-Z) — 3 circular dips
+        for i in range(3):
+            px = -pitch + i * pitch
+            chan = Cylinder(0.0005, by * 0.3, align=C)
+            chan = chan.locate(Location((px, 0, -bz / 2)))
+            body = body - chan
 
     elif spec.connector_type == ConnectorType.CSI_15PIN:
-        # ZIF lever on top
-        lever = Box(bx * 0.9, by * 0.3, bz * 0.15, align=C)
-        lever = lever.locate(Location((0, 0, bz / 2)))
+        # ZIF lever on top (hinged flap)
+        lever_h = bz * 0.2
+        lever = Box(bx * 0.92, by * 0.6, lever_h, align=C)
+        lever = lever.locate(Location((0, 0, bz / 2 + lever_h / 2 - 0.0002)))
         body = body.fuse(lever)
 
+        # Ribbon cable slot on bottom face — wide thin opening
+        slot = Box(bx * 0.85, by * 0.4, bz * 0.3, align=C)
+        slot = slot.locate(Location((0, -by * 0.1, -bz * 0.35)))
+        body = body - slot
+
+        # Contact ridges inside (visible through slot)
+        for i in range(7):
+            rx = -bx * 0.38 + i * bx * 0.76 / 6
+            ridge = Box(0.0003, by * 0.2, bz * 0.15, align=C)
+            ridge = ridge.locate(Location((rx, -by * 0.1, -bz * 0.15)))
+            body = body.fuse(ridge)
+
     elif spec.connector_type == ConnectorType.XT30:
-        # Chamfered mating face (slight taper)
-        chamfer_block = Box(bx * 0.1, by * 0.1, bz, align=C)
+        # Keying: one corner chamfered (polarization)
+        chamfer_block = Box(bx * 0.15, by * 0.15, bz + 0.001, align=C)
         chamfer_block = chamfer_block.locate(Location((bx / 2, by / 2, 0)))
         body = body - chamfer_block
-        chamfer_block2 = Box(bx * 0.1, by * 0.1, bz, align=C)
-        chamfer_block2 = chamfer_block2.locate(Location((bx / 2, -by / 2, 0)))
-        body = body - chamfer_block2
+
+        # Two pin sockets on mating face (+X) — round and square
+        # XT30 has one round pin and one flat pin for polarity
+        round_pin = Cylinder(
+            0.001, 0.003, align=(Align.CENTER, Align.CENTER, Align.MIN)
+        )
+        round_pin = round_pin.locate(Location((bx / 2, -by * 0.2, 0)))
+        body = body.fuse(round_pin)
+
+        flat_pin = Box(
+            0.002, 0.001, 0.003, align=(Align.CENTER, Align.CENTER, Align.MIN)
+        )
+        flat_pin = flat_pin.locate(Location((bx / 2, by * 0.2, 0)))
+        body = body.fuse(flat_pin)
+
+        # Grip ridges on sides
+        for i in range(3):
+            gz = -bz * 0.3 + i * bz * 0.3
+            ridge = Box(bx * 0.8, by * 0.06, 0.0005, align=C)
+            ridge = ridge.locate(Location((0, by / 2, gz)))
+            body = body.fuse(ridge)
+            ridge2 = Box(bx * 0.8, by * 0.06, 0.0005, align=C)
+            ridge2 = ridge2.locate(Location((0, -by / 2, gz)))
+            body = body.fuse(ridge2)
 
     elif spec.connector_type == ConnectorType.JST_XH_3PIN:
-        # Retention bump
-        bump = Box(bx * 0.5, by * 0.12, bz * 0.25, align=C)
-        bump = bump.locate(Location((0, by / 2, bz * 0.15)))
-        body = body.fuse(bump)
+        # Locking tab (sprung clip on one side)
+        tab_w = bx * 0.35
+        tab_h = bz * 0.12
+        tab_d = by * 0.08
+        tab = Box(tab_w, tab_d, tab_h, align=C)
+        tab = tab.locate(Location((0, by / 2 + tab_d / 2, bz * 0.2)))
+        body = body.fuse(tab)
+
+        # Polarization groove on housing
+        groove = Box(bx * 0.12, by + 0.001, bz * 0.15, align=C)
+        groove = groove.locate(Location((-bx * 0.35, 0, bz * 0.3)))
+        body = body - groove
+
+        # 3 pin blades on mating face (+Z)
+        pitch = 0.0025  # 2.5mm XH pitch
+        pin_w = 0.0006
+        pin_d = 0.0002
+        pin_h = 0.002
+        for i in range(3):
+            px = -pitch + i * pitch
+            pin = Box(
+                pin_w, pin_d, pin_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
+            )
+            pin = pin.locate(Location((px, 0, bz / 2)))
+            body = body.fuse(pin)
+
+        # Wire entry on back face (-Z) — strain relief bumps
+        for i in range(3):
+            px = -pitch + i * pitch
+            bump = Cylinder(
+                0.0006, 0.001, align=(Align.CENTER, Align.CENTER, Align.MAX)
+            )
+            bump = bump.locate(Location((px, 0, -bz / 2)))
+            body = body.fuse(bump)
 
     elif spec.connector_type == ConnectorType.GPIO_2X20:
-        # Pin header rows (two ridges on bottom)
-        row_w = bx * 0.95
-        row_d = 0.001
-        row_h = bz * 0.3
-        for y_off in [-0.00127, 0.00127]:  # 2.54mm pitch / 2
-            row = Box(
-                row_w, row_d, row_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
-            )
-            row = row.locate(Location((0, y_off, -bz / 2)))
-            body = body.fuse(row)
+        # 2x20 socket connector (female) — shroud with pin cavities
+        # Keying notch on one side
+        notch = Box(0.003, by + 0.001, bz * 0.4, align=C)
+        notch = notch.locate(Location((bx / 2 - 0.001, 0, bz * 0.15)))
+        body = body - notch
+
+        # Two rows of socket holes on mating face (-Z)
+        pitch = 0.00254
+        for row_y in [-0.00127, 0.00127]:
+            for i in range(20):
+                px = -pitch * 9.5 + i * pitch
+                hole = Cylinder(
+                    0.0004,
+                    bz * 0.5,
+                    align=(Align.CENTER, Align.CENTER, Align.MAX),
+                )
+                hole = hole.locate(Location((px, row_y, -bz / 2)))
+                body = body - hole
+
+        # Strain relief cable exit on top
+        cable_exit = Box(bx * 0.8, by * 0.6, 0.002, align=C)
+        cable_exit = cable_exit.locate(Location((0, 0, bz / 2 + 0.001)))
+        body = body.fuse(cable_exit)
 
     return _as_solid(body)
 
