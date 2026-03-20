@@ -97,6 +97,14 @@ def regen_component_renders() -> None:
     save_png(img, out_path)
     print(f"  fastener+connector showcase: {out_path}")
 
+    # Fastener catalog — every screw variant rendered solo
+    from botcad.emit.component_renders import render_fastener_catalog
+
+    img = render_fastener_catalog()
+    out_path = out_dir / "test_fastener_catalog.png"
+    save_png(img, out_path)
+    print(f"  fastener catalog: {out_path}")
+
     # Fastener detail — ghost body + screws only, 4 views
     from botcad.emit.component_renders import render_fastener_detail
 

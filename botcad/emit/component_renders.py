@@ -686,6 +686,70 @@ def render_connector_detail(component: Component, name: str) -> Image.Image:
     return _render_scene_4view(scene, temp_dir, title)
 
 
+def render_fastener_catalog() -> Image.Image:
+    """Render every fastener in the catalog as individual close-ups in a grid.
+
+    Each cell shows one fastener (designation × head type) from a
+    three-quarter view. No component body — just the screw itself
+    so head geometry detail is clearly visible.
+    """
+    from build123d import export_stl
+
+    from botcad.colors import COLOR_METAL_BRASS
+    from botcad.fasteners import HeadType, fastener_solid, fastener_spec
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_catalog_"))
+    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
+
+    designations = ["M2", "M2.5", "M3"]
+    head_types = [
+        (HeadType.SOCKET_HEAD_CAP, "Socket Head Cap"),
+        (HeadType.PAN_HEAD_PHILLIPS, "Pan Head Phillips"),
+    ]
+
+    cells: list[tuple[Image.Image, str]] = []
+
+    for ht_enum, ht_label in head_types:
+        for des in designations:
+            spec = fastener_spec(des, ht_enum)
+            solid = fastener_solid(spec, 0.006)  # 6mm shank for visibility
+            stl_name = f"fastener_{des}_{ht_enum.value}.stl"
+            export_stl(solid, str(temp_dir / stl_name))
+
+            scene = SceneBuilder(
+                model_name=f"fastener_{des}_{ht_enum.value}",
+                width=WIDTH,
+                height=HEIGHT,
+            )
+            scene.add_mesh("screw", stl_name, screw_color)
+            scene.set_mesh_dir(temp_dir)
+            xml = scene.to_xml()
+
+            # Render three views: three-quarter, top-down, front
+            views_single = {
+                "three-quarter": {"azimuth": 135, "elevation": -30},
+                "top": {"azimuth": 90, "elevation": -90},
+                "front": {"azimuth": 90, "elevation": 0},
+            }
+            with Renderer3D(xml, WIDTH, HEIGHT) as r:
+                rendered = r.render_views(views_single)
+
+            # Take the three-quarter view as the main cell
+            img_3q = rendered[0][0]
+            cells.append((img_3q, f"{des} {ht_label}"))
+
+    try:
+        result = grid(
+            "Fastener Catalog — ISO metric screws",
+            [(screw_color.label, screw_color.rgb_int)],
+            cells,
+            cols=3,
+        )
+        return result
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 # ── Pipeline entry point ──
 
 
