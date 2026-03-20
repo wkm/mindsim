@@ -166,6 +166,139 @@ class TestHornScript:
         assert horn_script(servo) is None
 
 
+class TestConnectorScript:
+    """connector_script() vs connector_solid() roundtrip for all 5 types."""
+
+    @pytest.fixture(
+        params=[
+            "MOLEX_5264_3PIN",
+            "CSI_15PIN",
+            "XT30",
+            "JST_XH_3PIN",
+            "GPIO_2X20",
+        ]
+    )
+    def connector_spec(self, request):
+        import botcad.connectors as c
+
+        return getattr(c, request.param)
+
+    def test_volume_matches(self, connector_spec):
+        from botcad.connectors import connector_solid
+        from botcad.shapescript.emit_components import connector_script
+
+        direct = connector_solid(connector_spec)
+        ir_solid = _execute(connector_script(connector_spec))
+
+        direct_vol = abs(direct.volume)
+        ir_vol = abs(ir_solid.volume)
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"{connector_spec.label} connector volume mismatch: "
+            f"direct={direct_vol:.6e}, IR={ir_vol:.6e}"
+        )
+
+    def test_has_native_ops(self, connector_spec):
+        """All connectors should use native Box/Cylinder ops, not just PrebuiltOp."""
+        from botcad.shapescript.emit_components import connector_script
+        from botcad.shapescript.ops import BoxOp
+
+        prog = connector_script(connector_spec)
+        op_types = {type(op) for op in prog.ops}
+        assert BoxOp in op_types, "Expected at least one BoxOp"
+        assert prog.output_ref is not None
+
+
+class TestReceptacleScript:
+    """receptacle_script() vs receptacle_solid() roundtrip for all 5 types."""
+
+    @pytest.fixture(
+        params=[
+            "MOLEX_5264_3PIN",
+            "CSI_15PIN",
+            "XT30",
+            "JST_XH_3PIN",
+            "GPIO_2X20",
+        ]
+    )
+    def connector_spec(self, request):
+        import botcad.connectors as c
+
+        return getattr(c, request.param)
+
+    def test_volume_matches(self, connector_spec):
+        from botcad.connectors import receptacle_solid
+        from botcad.shapescript.emit_components import receptacle_script
+
+        direct = receptacle_solid(connector_spec)
+        ir_solid = _execute(receptacle_script(connector_spec))
+
+        direct_vol = abs(direct.volume)
+        ir_vol = abs(ir_solid.volume)
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"{connector_spec.label} receptacle volume mismatch: "
+            f"direct={direct_vol:.6e}, IR={ir_vol:.6e}"
+        )
+
+    def test_has_native_ops(self, connector_spec):
+        from botcad.shapescript.emit_components import receptacle_script
+        from botcad.shapescript.ops import BoxOp, CutOp
+
+        prog = receptacle_script(connector_spec)
+        op_types = {type(op) for op in prog.ops}
+        assert BoxOp in op_types
+        assert CutOp in op_types  # cavity cut
+        assert prog.output_ref is not None
+
+
+class TestFastenerScript:
+    """fastener_script() vs fastener_solid() roundtrip."""
+
+    @pytest.fixture(
+        params=[
+            ("M2", "socket_head_cap", 0.006),
+            ("M3", "socket_head_cap", 0.010),
+            ("M2.5", "socket_head_cap", 0.008),
+            ("M2", "pan_head_phillips", 0.006),
+            ("M3", "pan_head_phillips", 0.010),
+        ],
+        ids=["M2_shc_6mm", "M3_shc_10mm", "M2.5_shc_8mm", "M2_php_6mm", "M3_php_10mm"],
+    )
+    def fastener_params(self, request):
+        from botcad.fasteners import HeadType, fastener_spec
+
+        designation, head_type_str, length = request.param
+        spec = fastener_spec(designation, HeadType(head_type_str))
+        return spec, length
+
+    def test_volume_matches(self, fastener_params):
+        from botcad.fasteners import fastener_solid
+        from botcad.shapescript.emit_components import fastener_script
+
+        spec, length = fastener_params
+        direct = fastener_solid(spec, length)
+        ir_solid = _execute(fastener_script(spec, length))
+
+        direct_vol = abs(direct.volume)
+        ir_vol = abs(ir_solid.volume)
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"{spec.designation} {spec.head_type} fastener volume mismatch: "
+            f"direct={direct_vol:.6e}, IR={ir_vol:.6e}"
+        )
+
+    def test_head_is_prebuilt(self, fastener_params):
+        """Fastener head should be PrebuiltOp (chamfer + recess)."""
+        from botcad.shapescript.emit_components import fastener_script
+        from botcad.shapescript.ops import CylinderOp, FuseOp, PrebuiltOp
+
+        spec, length = fastener_params
+        prog = fastener_script(spec, length)
+        op_types = {type(op) for op in prog.ops}
+        assert PrebuiltOp in op_types, "Head should be PrebuiltOp"
+        assert CylinderOp in op_types, "Shank should be native CylinderOp"
+        assert FuseOp in op_types, "Head + shank fused"
+        assert prog.output_ref is not None
+
+
 class TestServoScript:
     """servo_script() vs servo_solid() roundtrip."""
 
