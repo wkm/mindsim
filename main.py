@@ -643,11 +643,24 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
     wire_segs = cad.body_wire_segments.get(body_name)
     wire_segs_tuple = tuple(wire_segs) if wire_segs else None
 
-    from botcad.emit.cad import make_body_solid_with_steps
+    use_shapescript = os.environ.get("SHAPESCRIPT", "0") == "1"
 
     t0 = time.monotonic()
     print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
-    steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+
+    if use_shapescript:
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+        from botcad.shapescript.emit_body import emit_body_ir
+
+        prog = emit_body_ir(target, parent_joint, wire_segs_tuple)
+        result = OcctBackend().execute(prog)
+        steps = shapescript_to_cad_steps(prog, result)
+    else:
+        from botcad.emit.cad import make_body_solid_with_steps
+
+        steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+
     t1 = time.monotonic()
     print(f"[cad-steps]   {len(steps)} steps in {t1 - t0:.1f}s")
 
