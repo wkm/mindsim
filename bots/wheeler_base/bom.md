@@ -6,13 +6,13 @@
 
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
-| STS3215 | 2 | 45.4 x 24.8 x 37.9 | 55 | Joints: left_wheel, right_wheel |
+| STS3215 | 2 | 45.2 x 24.7 x 35.0 | 55 | Joints: left_wheel, right_wheel |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 114 | PLA/PETG frame |
-| **Total** | | | **336** | |
+| Structural (printed) | — | — | 116 | PLA/PETG frame |
+| **Total** | | | **338** | |
 
 ## Power Budget
 
@@ -26,8 +26,8 @@
 
 | Fastener | Head Type | Qty | Usage |
 |----------|-----------|-----|-------|
-| M2 | Socket Head Cap | 4 | 4x for OV5647 |
-| M2.5 | Socket Head Cap | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
+| M2 | Socket Head Cap | 20 | 8x per horn coupler (2 joints); 4x for OV5647 |
+| M2.5 | Socket Head Cap | 4 | 4x for RaspberryPiZero2W |
 | M3 | Socket Head Cap | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
 
 ## Connectors
@@ -43,6 +43,6 @@
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 17.5 | 0.0 |
+| servo_bus | uart_half_duplex | 17.6 | 0.0 |
 | camera_csi | csi | 0.0 | 0.0 |
 | power | power | 10.2 | 0.0 |

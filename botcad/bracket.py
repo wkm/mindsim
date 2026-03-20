@@ -466,7 +466,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
 
     # --- Connector passage (shaped cutout for plug + cable to pass through) ---
     if servo.connector_pos is not None:
-        wall_x = -outer_x / 2
+        wall_x = -(body_x + 2 * (tol + wall)) / 2
         cut, _housing = _connector_port(
             servo,
             spec,
