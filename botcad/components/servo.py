@@ -74,6 +74,20 @@ _CASE_SCREW_TOP_Z = +0.0160  # output face (body top, Z = +16mm)
 _CASE_SCREW_BOTTOM_Z = -0.0160  # bottom face (body bottom, Z = -16mm)
 _CASE_SCREW_DIA = 0.0025  # M2.5
 
+# Horn disc: 19.2mm diameter, 4x M2 holes at 90° on 14mm opposing pattern
+# (7mm bolt circle radius from shaft center at X=+12.5mm, Y=0)
+_HORN_DISC_DIAMETER = 0.0192
+_HORN_BOLT_RADIUS = 0.007  # 14mm / 2
+_HORN_HOLE_DIA = 0.0020  # M2
+_HORN_XY = (
+    (+0.0125 + 0.007, 0.0),  # +X from shaft
+    (+0.0125 - 0.007, 0.0),  # -X from shaft
+    (+0.0125, +0.007),  # +Y from shaft
+    (+0.0125, -0.007),  # -Y from shaft
+)
+_HORN_TOP_Z = +0.0160  # output face (body top)
+_HORN_BOTTOM_Z = -0.0160  # blind/rear face (body bottom)
+
 
 def STS3215(continuous: bool = False) -> ServoSpec:
     """Feetech STS3215 serial bus servo (C018, 12V 30kg-cm).
@@ -162,23 +176,23 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         ),
         horn_mounting_points=tuple(
             MountPoint(
-                f"out_{i + 1}",
-                pos=(x, y, _CASE_SCREW_TOP_Z),
-                diameter=_CASE_SCREW_DIA,
+                f"horn_out_{i + 1}",
+                pos=(x, y, _HORN_TOP_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, 1.0),
-                fastener_type="M2.5",
+                fastener_type="M2",
             )
-            for i, (x, y) in enumerate(_CASE_SCREW_XY)
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         rear_horn_mounting_points=tuple(
             MountPoint(
-                f"rear_{i + 1}",
-                pos=(x, y, _CASE_SCREW_BOTTOM_Z),
-                diameter=_CASE_SCREW_DIA,
+                f"horn_rear_{i + 1}",
+                pos=(x, y, _HORN_BOTTOM_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, -1.0),
-                fastener_type="M2.5",
+                fastener_type="M2",
             )
-            for i, (x, y) in enumerate(_CASE_SCREW_XY)
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
         connector_pos=(-0.0080, 0.0, -0.0160),
@@ -285,23 +299,23 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         ),
         horn_mounting_points=tuple(
             MountPoint(
-                f"out_{i + 1}",
-                pos=(x, y, _CASE_SCREW_TOP_Z),
-                diameter=_CASE_SCREW_DIA,
+                f"horn_out_{i + 1}",
+                pos=(x, y, _HORN_TOP_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, 1.0),
-                fastener_type="M2.5",
+                fastener_type="M2",
             )
-            for i, (x, y) in enumerate(_CASE_SCREW_XY)
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         rear_horn_mounting_points=tuple(
             MountPoint(
-                f"rear_{i + 1}",
-                pos=(x, y, _CASE_SCREW_BOTTOM_Z),
-                diameter=_CASE_SCREW_DIA,
+                f"horn_rear_{i + 1}",
+                pos=(x, y, _HORN_BOTTOM_Z),
+                diameter=_HORN_HOLE_DIA,
                 axis=(0.0, 0.0, -1.0),
-                fastener_type="M2.5",
+                fastener_type="M2",
             )
-            for i, (x, y) in enumerate(_CASE_SCREW_XY)
+            for i, (x, y) in enumerate(_HORN_XY)
         ),
         connector_pos=(-0.0080, 0.0, -0.0160),
     )
