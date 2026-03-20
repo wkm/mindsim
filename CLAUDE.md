@@ -18,6 +18,7 @@ make validate
 ## Principles
 
 - Heavily rely on subagents to get information and keep the primary context clean. Prefer plans for any changes which are substantial. Part of planning is the commit and testing strategy to validate changes. Validate a change yourself, and then as part of the final description of your work include a brief note on why you think the change is correct and how I can help validate it myself.
+- Use the internet to research things and don't just rely on your training data. We're working in a new, rapidly evolving area.
 - Simple is beautiful. Prefer composable modules.
 - The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 - **Derive from geometry, don't approximate.** When build123d/OCCT can compute a property (mass, COM, inertia, surface area) from actual CAD solid geometry, use it. The CAD solid is ground truth. Heuristic estimates are fallbacks, not the primary path.
