@@ -4,6 +4,7 @@ Design robots from real components, train them in simulation, build the physical
 
 ## Principles
 
+- Heavily rely on subagents to get information and keep the primary context clean. Prefer plans for any changes which are substantial. Part of planning is the commit and testing strategy to validate changes. Validate a change yourself, and then as part of the final description of your work include a brief note on why you think the change is correct and how I can help validate it myself.
 - Simple is beautiful
 - Composable modules
 - The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
