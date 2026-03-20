@@ -242,6 +242,17 @@ export function createEdgeComposer(renderer, scene, camera) {
     composer,
 
     render() {
+      // Hide non-mesh objects (grid, helpers, markers) for edge passes
+      const hidden = [];
+      scene.traverse(child => {
+        if (child.visible && (child.isGridHelper || child.isLineSegments ||
+            child.isLine || child.isSprite || child.isPoints ||
+            child.constructor.name === 'LineSegments2')) {
+          child.visible = false;
+          hidden.push(child);
+        }
+      });
+
       // 1. Render normals
       const origOverride = scene.overrideMaterial;
       const origBg = scene.background;
@@ -255,9 +266,10 @@ export function createEdgeComposer(renderer, scene, camera) {
       renderer.setRenderTarget(depthTarget);
       renderer.render(scene, camera);
 
-      // 3. Restore and composite
+      // 3. Restore visibility and composite
       scene.overrideMaterial = origOverride;
       scene.background = origBg;
+      for (const obj of hidden) obj.visible = true;
       renderer.setRenderTarget(null);
 
       edgePass.uniforms.tNormal.value = normalTarget.texture;
