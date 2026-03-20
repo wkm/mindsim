@@ -50,46 +50,48 @@
     #canvas-container { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 1; }
     canvas { display: block; }
 
-    /* ── Buttons (shadcn-style) ── */
+    /* ── Buttons (shadcn menubar style) ── */
     .btn {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 12px; border-radius: var(--radius-sm);
-      font-family: var(--font); font-size: 12px; font-weight: 500;
-      cursor: pointer; transition: all 0.1s;
+      height: 32px; padding: 0 12px; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: color 0.1s, background 0.1s;
       border: 1px solid var(--border); background: var(--card); color: var(--secondary-fg);
+      outline: none;
     }
     .btn:hover { background: var(--secondary); }
     .btn-ghost {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 10px; border-radius: var(--radius-sm);
-      font-family: var(--font); font-size: 12px; font-weight: 500;
-      cursor: pointer; transition: all 0.1s;
+      height: 32px; padding: 0 10px; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: color 0.1s, background 0.1s;
       border: none; background: transparent; color: var(--muted-fg);
+      outline: none;
     }
     .btn-ghost:hover { background: var(--secondary); color: var(--foreground); }
     .btn-ghost.active { background: rgba(19,124,189,0.12); color: var(--accent); }
-    .btn-sm { padding: 4px 8px; font-size: 11px; }
+    .btn-sm { height: 28px; padding: 0 8px; font-size: 12px; }
     .btn-primary {
       background: var(--primary); color: var(--primary-fg); border-color: var(--primary);
     }
     .btn-primary:hover { background: var(--accent); border-color: var(--accent); }
     .btn-group { display: inline-flex; gap: 1px; }
 
-    /* ── Navbar ── */
+    /* ── Navbar (shadcn navigation-menu style) ── */
     #top-bar {
-      position: absolute; top: 0; left: 0; right: 0; height: 44px;
-      display: flex; align-items: center; padding: 0 12px; gap: 8px;
+      position: absolute; top: 0; left: 0; right: 0; height: 40px;
+      display: flex; align-items: center; padding: 0 12px; gap: 4px;
       background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--border); z-index: 100;
     }
-    .nav-heading { font-size: 13px; font-weight: 600; color: var(--foreground); }
-    .nav-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+    .nav-heading { font-size: 13px; font-weight: 600; color: var(--foreground); letter-spacing: -0.01em; }
+    .nav-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
     #bot-name { cursor: pointer; }
     .nav-right { margin-left: auto; display: flex; gap: 2px; }
 
     /* ── Tree panel (left) ── */
     #tree-panel {
-      position: absolute; top: 44px; left: 0; bottom: 0; width: 280px;
+      position: absolute; top: 40px; left: 0; bottom: 0; width: 280px;
       background: rgba(255,255,255,0.94); border-right: 1px solid var(--border);
       z-index: 90; overflow-y: auto; padding: 12px;
       backdrop-filter: blur(8px); display: none;
@@ -116,7 +118,7 @@
 
     /* ── Side panel (right) ── */
     #side-panel {
-      position: absolute; top: 44px; right: 0; bottom: 0; width: 320px;
+      position: absolute; top: 40px; right: 0; bottom: 0; width: 320px;
       background: rgba(255,255,255,0.94); border-left: 1px solid var(--border);
       z-index: 90; overflow-y: auto; padding: 16px; backdrop-filter: blur(8px);
     }
@@ -185,23 +187,26 @@
     /* ── Component browser ── */
     #component-browser { display: none; position: absolute; inset: 0; z-index: 50; pointer-events: none; }
 
-    /* Dropdowns */
+    /* Dropdowns (shadcn menubar-content / menubar-item style) */
     .dropdown-menu {
       position: absolute; top: 100%; left: 0; z-index: 200;
-      min-width: 160px; padding: 4px;
-      background: var(--popover); border: 1px solid var(--border);
-      border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      min-width: 12rem; padding: 4px;
+      background: var(--popover); color: var(--popover-fg);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) - 2px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     }
     .dropdown-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 6px 10px; border-radius: calc(var(--radius-sm) - 1px);
-      font-size: 12px; color: var(--foreground); cursor: pointer;
+      position: relative; display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: calc(var(--radius-sm) - 2px);
+      font-size: 13px; color: var(--foreground); cursor: default;
       border: none; background: none; width: 100%; text-align: left;
-      font-family: var(--font);
+      font-family: var(--font); outline: none; user-select: none;
     }
-    .dropdown-item:hover { background: var(--secondary); }
+    .dropdown-item:hover, .dropdown-item:focus { background: var(--secondary); color: var(--foreground); }
     .dropdown-item.active { background: rgba(19,124,189,0.12); color: var(--accent); }
-    .dropdown-kbd { font-size: 10px; color: var(--gray3); font-family: var(--font-mono); }
+    .dropdown-kbd { margin-left: auto; font-size: 11px; letter-spacing: 0.05em; color: var(--muted-fg); font-family: var(--font-mono); }
+    .dropdown-sep { height: 1px; margin: 4px -4px; background: var(--border); }
 
     /* Layer checkboxes */
     .layer-controls { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
