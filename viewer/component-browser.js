@@ -1192,7 +1192,7 @@ class ComponentBrowser {
 
     // Wire close handlers (re-wire each time to keep it simple)
     const close = () => { modal.style.display = 'none'; };
-    document.getElementById('svg-modal-backdrop').onclick = close;
+    document.querySelector('#svg-modal .modal-backdrop').onclick = close;
     document.getElementById('svg-modal-close').onclick = close;
 
     document.getElementById('svg-modal-download').onclick = () => {

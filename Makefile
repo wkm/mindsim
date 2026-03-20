@@ -56,6 +56,12 @@ lint:
 web:
 	@echo "Starting Python API server on :8081..."
 	@uv run mjpython main.py web --port 8081 --no-open & echo $$! > /tmp/mindsim-api.pid
+	@echo "Waiting for API server..."
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+		curl -sf http://localhost:8081/api/bots >/dev/null 2>&1 && break; \
+		sleep 1; \
+	done
+	@echo "API ready. Starting Vite..."
 	@trap 'kill $$(cat /tmp/mindsim-api.pid) 2>/dev/null; rm -f /tmp/mindsim-api.pid' EXIT; \
 		pnpm exec vite --open /viewer/
 
