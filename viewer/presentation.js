@@ -7,6 +7,9 @@
  */
 
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 // ---------------------------------------------------------------------------
 // Blueprint.js palette (hex values matching CSS custom properties)
@@ -67,15 +70,12 @@ export function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
 // Edge rendering constants
 // ---------------------------------------------------------------------------
 export const EDGE_COLOR = BP.DARK_GRAY1;
-export const EDGE_OPACITY = 0.7;
+export const EDGE_OPACITY = 0.85;
+export const EDGE_WIDTH = 1.5;  // px (only effective with Line2/LineMaterial)
 export const EDGE_THRESHOLD_DEG = 28;
 
-// Shared edge material — immutable, reused across all viewers
-const _edgeMaterial = new THREE.LineBasicMaterial({
-  color: EDGE_COLOR,
-  transparent: true,
-  opacity: EDGE_OPACITY,
-});
+// Shared resolution vector for LineMaterial (updated by setEdgeResolution)
+const _edgeResolution = new THREE.Vector2(1280, 800);
 
 // ---------------------------------------------------------------------------
 // Default material parameters
@@ -162,8 +162,23 @@ export function createToolMaterial(color, opacity = 0.3) {
  */
 export function addEdges(geometry, parent, sourceMesh = null) {
   const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD_DEG);
-  const lines = new THREE.LineSegments(edges, _edgeMaterial);
+
+  // Convert EdgesGeometry to LineSegmentsGeometry for screen-space width
+  const posAttr = edges.getAttribute('position');
+  const lineGeom = new LineSegmentsGeometry();
+  lineGeom.setPositions(posAttr.array);
+
+  const lineMat = new LineMaterial({
+    color: EDGE_COLOR,
+    linewidth: EDGE_WIDTH,
+    transparent: true,
+    opacity: EDGE_OPACITY,
+    resolution: _edgeResolution,
+  });
+
+  const lines = new LineSegments2(lineGeom, lineMat);
   lines.raycast = () => {};
+  edges.dispose();
 
   if (sourceMesh) {
     lines.position.copy(sourceMesh.position);
@@ -172,6 +187,11 @@ export function addEdges(geometry, parent, sourceMesh = null) {
   }
 
   parent.add(lines);
+}
+
+/** Update edge resolution when viewport resizes. Call from resize handlers. */
+export function setEdgeResolution(width, height) {
+  _edgeResolution.set(width, height);
 }
 
 /**

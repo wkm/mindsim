@@ -14,7 +14,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
 import {
   BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
-  hexStr, tintColor, createMaterial, addMeshWithEdges,
+  hexStr, tintColor, createMaterial, addMeshWithEdges, setEdgeResolution,
 } from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
@@ -119,6 +119,7 @@ class ComponentBrowser {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
+    setEdgeResolution(vw, vh);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -459,7 +460,7 @@ class ComponentBrowser {
         this.camera.right = halfH * aspect;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
-        // Update Line2 material resolution
+        setEdgeResolution(w, h);
         if (this._contourLineMat) {
           this._contourLineMat.resolution.set(w, h);
         }
