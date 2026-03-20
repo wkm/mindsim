@@ -32,7 +32,21 @@ from botcad.geometry import rotate_vec, rotation_between
 from botcad.skeleton import BaseType, BodyShape
 
 if TYPE_CHECKING:
+    from botcad.component import MountPoint
     from botcad.skeleton import Body, Bot, Joint
+
+
+def _hw_key(mp: MountPoint) -> tuple[str, str]:
+    """Hardware mesh key: (designation, head_type)."""
+    ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
+    ht = getattr(mp, "head_type", "") or ""
+    return (ft, ht)
+
+
+def _hw_name(mp: MountPoint) -> str:
+    """Hardware mesh filename stem, e.g. 'hardware_M3_shc'."""
+    ft, ht = _hw_key(mp)
+    return f"hardware_{ft}_{ht or 'shc'}"
 
 
 def emit_mujoco(bot: Bot, output_dir: Path) -> None:
@@ -95,39 +109,42 @@ def _build_bot_xml(bot: Bot) -> str:
                 scale="1 1 1",
             )
 
-    # Hardware mesh assets (one per unique diameter)
-    seen_diameters: set[float] = set()
+    # Hardware mesh assets (one per unique designation+head_type)
+    seen_hw: set[tuple[str, str]] = set()
     for body in bot.all_bodies:
         for joint in body.joints:
             for ear in joint.servo.mounting_ears:
-                if ear.diameter not in seen_diameters:
-                    seen_diameters.add(ear.diameter)
+                k = _hw_key(ear)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{ear.diameter:.4f}_mesh",
-                        file=f"hardware_{ear.diameter:.4f}.stl",
+                        name=f"{_hw_name(ear)}_mesh",
+                        file=f"{_hw_name(ear)}.stl",
                         scale="1 1 1",
                     )
             for mp in joint.servo.horn_mounting_points:
-                if mp.diameter not in seen_diameters:
-                    seen_diameters.add(mp.diameter)
+                k = _hw_key(mp)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{mp.diameter:.4f}_mesh",
-                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        name=f"{_hw_name(mp)}_mesh",
+                        file=f"{_hw_name(mp)}.stl",
                         scale="1 1 1",
                     )
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                if mp.diameter not in seen_diameters:
-                    seen_diameters.add(mp.diameter)
+                k = _hw_key(mp)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{mp.diameter:.4f}_mesh",
-                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        name=f"{_hw_name(mp)}_mesh",
+                        file=f"{_hw_name(mp)}.stl",
                         scale="1 1 1",
                     )
 
@@ -523,7 +540,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"screw_{joint.name}_{ear.label}",
-                    f"hardware_{ear.diameter:.4f}_mesh",
+                    f"{_hw_name(ear)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -538,7 +555,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"horn_{joint.name}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -553,7 +570,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"rear_{joint.name}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -573,7 +590,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"mount_{body.name}_{mount.label}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(pos),
                     _z_to_axis_quat(mp_axis),
                 ),

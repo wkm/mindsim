@@ -20,8 +20,15 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for OV5647 |
-| M2.5 | 24 | 8x per horn coupler (3 joints) |
-| M3 | 18 | 6x per joint bracket (3 joints) |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for OV5647 |
+| M2.5 | Socket Head Cap | 24 | 8x per horn coupler (3 joints) |
+| M3 | Socket Head Cap | 18 | 6x per joint bracket (3 joints) |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 3 |
+| csi_15pin | 1 |

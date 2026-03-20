@@ -97,6 +97,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
                 "uart_bus",
                 pos=(-0.0080, 0.0, -0.0163),
                 bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
             ),
         ),
         mounting_points=tuple(
@@ -215,6 +216,7 @@ def STS3250(continuous: bool = False) -> ServoSpec:
                 "uart_bus",
                 pos=(-0.0080, 0.0, -0.0163),
                 bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
             ),
         ),
         mounting_points=tuple(
@@ -359,6 +361,7 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
                 "uart_bus",
                 pos=(-0.0058, 0.0, -0.01125),
                 bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
             ),
         ),
         mounting_points=tuple(

@@ -23,11 +23,20 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for PiCamera2 |
-| M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
-| M3 | 36 | 6x per joint bracket (6 joints) |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for PiCamera2 |
+| M2.5 | Socket Head Cap | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 36 | 6x per joint bracket (6 joints) |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 6 |
+| csi_15pin | 1 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
 
 ## Wire Lengths
 

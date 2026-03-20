@@ -24,11 +24,20 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for OV5647 |
-| M2.5 | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
-| M3 | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for OV5647 |
+| M2.5 | Socket Head Cap | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 2 |
+| csi_15pin | 1 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
 
 ## Wire Lengths
 

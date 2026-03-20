@@ -118,67 +118,96 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
 
     lines.append(f"| **Total** | | | **~{total_power:.1f}** |")
 
-    # ── Fastener inventory ──────────────────────────────────────────
-    fasteners: dict[str, int] = {}  # "M3" -> count
+    # ── Fastener inventory (with head type) ─────────────────────────
+    # Key: (designation, head_type_label) -> count
+    fasteners: dict[tuple[str, str], int] = {}
+
+    def _fastener_key(mp) -> tuple[str, str]:
+        ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
+        ht = getattr(mp, "head_type", "") or ""
+        label = ht.replace("_", " ").title() if ht else "Socket Head Cap"
+        return (ft, label)
 
     for joint in joints:
         s = joint.servo
         for ear in s.mounting_ears:
-            ft = ear.fastener_type or f"M{ear.diameter * 1000:.0f}"
-            fasteners[ft] = fasteners.get(ft, 0) + 1
+            k = _fastener_key(ear)
+            fasteners[k] = fasteners.get(k, 0) + 1
         for hp in s.horn_mounting_points:
-            ft = hp.fastener_type or f"M{hp.diameter * 1000:.0f}"
-            fasteners[ft] = fasteners.get(ft, 0) + 1
+            k = _fastener_key(hp)
+            fasteners[k] = fasteners.get(k, 0) + 1
         for hp in s.rear_horn_mounting_points:
-            ft = hp.fastener_type or f"M{hp.diameter * 1000:.0f}"
-            fasteners[ft] = fasteners.get(ft, 0) + 1
+            k = _fastener_key(hp)
+            fasteners[k] = fasteners.get(k, 0) + 1
 
     for body in bodies:
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-                fasteners[ft] = fasteners.get(ft, 0) + 1
+                k = _fastener_key(mp)
+                fasteners[k] = fasteners.get(k, 0) + 1
 
     if fasteners:
         lines.append("\n## Fasteners\n")
-        lines.append("| Fastener | Qty | Usage |")
-        lines.append("|----------|-----|-------|")
+        lines.append("| Fastener | Head Type | Qty | Usage |")
+        lines.append("|----------|-----------|-----|-------|")
 
-        # Build usage descriptions per fastener type
-        usage: dict[str, list[str]] = {}
+        # Build usage descriptions per fastener key
+        usage: dict[tuple[str, str], list[str]] = {}
         for joint in joints:
             s = joint.servo
-            ear_types: dict[str, int] = {}
+            ear_types: dict[tuple[str, str], int] = {}
             for ear in s.mounting_ears:
-                ft = ear.fastener_type or f"M{ear.diameter * 1000:.0f}"
-                ear_types[ft] = ear_types.get(ft, 0) + 1
-            for ft, n in ear_types.items():
-                usage.setdefault(ft, []).append(
+                k = _fastener_key(ear)
+                ear_types[k] = ear_types.get(k, 0) + 1
+            for k, n in ear_types.items():
+                usage.setdefault(k, []).append(
                     f"{n}x per joint bracket ({len(joints)} joints)"
                 )
 
-            horn_types: dict[str, int] = {}
+            horn_types: dict[tuple[str, str], int] = {}
             for hp in list(s.horn_mounting_points) + list(s.rear_horn_mounting_points):
-                ft = hp.fastener_type or f"M{hp.diameter * 1000:.0f}"
-                horn_types[ft] = horn_types.get(ft, 0) + 1
-            for ft, n in horn_types.items():
-                usage.setdefault(ft, []).append(
+                k = _fastener_key(hp)
+                horn_types[k] = horn_types.get(k, 0) + 1
+            for k, n in horn_types.items():
+                usage.setdefault(k, []).append(
                     f"{n}x per horn coupler ({len(joints)} joints)"
                 )
             break  # all joints use the same servo type
 
         for body in bodies:
             for mount in body.mounts:
-                comp_types: dict[str, int] = {}
+                comp_types: dict[tuple[str, str], int] = {}
                 for mp in mount.component.mounting_points:
-                    ft = mp.fastener_type or f"M{mp.diameter * 1000:.0f}"
-                    comp_types[ft] = comp_types.get(ft, 0) + 1
-                for ft, n in comp_types.items():
-                    usage.setdefault(ft, []).append(f"{n}x for {mount.component.name}")
+                    k = _fastener_key(mp)
+                    comp_types[k] = comp_types.get(k, 0) + 1
+                for k, n in comp_types.items():
+                    usage.setdefault(k, []).append(f"{n}x for {mount.component.name}")
 
-        for ft in sorted(fasteners):
-            desc = "; ".join(dict.fromkeys(usage.get(ft, [])))  # deduplicate
-            lines.append(f"| {ft} | {fasteners[ft]} | {desc} |")
+        for k in sorted(fasteners):
+            ft, ht = k
+            desc = "; ".join(dict.fromkeys(usage.get(k, [])))  # deduplicate
+            lines.append(f"| {ft} | {ht} | {fasteners[k]} | {desc} |")
+
+    # ── Connector inventory ──────────────────────────────────────────
+    connectors: dict[str, int] = {}
+    for joint in joints:
+        for wp in joint.servo.wire_ports:
+            if wp.connector_type:
+                connectors[wp.connector_type] = connectors.get(wp.connector_type, 0) + 1
+    for body in bodies:
+        for mount in body.mounts:
+            for wp in mount.component.wire_ports:
+                if wp.connector_type:
+                    connectors[wp.connector_type] = (
+                        connectors.get(wp.connector_type, 0) + 1
+                    )
+
+    if connectors:
+        lines.append("\n## Connectors\n")
+        lines.append("| Connector | Qty |")
+        lines.append("|-----------|-----|")
+        for ct in sorted(connectors):
+            lines.append(f"| {ct} | {connectors[ct]} |")
 
     return lines
 
