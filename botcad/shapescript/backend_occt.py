@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 from botcad.shapescript.ops import (
     Align3,
@@ -58,6 +61,7 @@ class OcctBackend:
             Compound,
             Cylinder,
             Location,
+            Solid,
             Sphere,
             Unit,
             export_step,
@@ -84,8 +88,6 @@ class OcctBackend:
             which breaks .fillet()/.chamfer() that internally call
             self.__class__(new_shape). Converting to Solid avoids this.
             """
-            from build123d import Solid
-
             if type(part) is Solid:
                 return part
             return Solid(part.wrapped)
@@ -224,34 +226,6 @@ class OcctBackend:
                     raise ValueError(f"Unknown op: {op}")
 
         return result
-
-
-def _safe_cut(target, tool):
-    """Boolean cut using direct OCCT API with fuzzy tolerance.
-
-    Uses SetFuzzyValue + SetUseOBB to prevent infinite loops on
-    near-coincident geometry. See memory/feedback_occt_boolean_hangs.md.
-    """
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
-    from OCP.TopTools import TopTools_ListOfShape
-
-    target_list = TopTools_ListOfShape()
-    target_list.Append(target.wrapped)
-    tool_list = TopTools_ListOfShape()
-    tool_list.Append(tool.wrapped)
-
-    op = BRepAlgoAPI_Cut()
-    op.SetArguments(target_list)
-    op.SetTools(tool_list)
-    op.Build()
-
-    if not op.IsDone():
-        log.warning("Safe cut failed, falling back to target")
-        return target
-
-    from build123d import Solid
-
-    return Solid(op.Shape())
 
 
 def _resolve_tagged_edges(solid, tag_names, tag_registry, shapes):

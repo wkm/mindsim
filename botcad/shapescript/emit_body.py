@@ -37,7 +37,19 @@ def emit_body_ir(
     Returns:
         A ShapeScript whose output_ref is the final body solid.
     """
+    from build123d import Location
+
+    from botcad.bracket import (
+        BracketSpec,
+        bracket_envelope,
+        bracket_solid,
+        coupler_solid,
+        cradle_envelope,
+        cradle_solid,
+    )
     from botcad.component import BearingSpec, CameraSpec
+    from botcad.emit.cad import _child_clearance_volume, _ensure_solid, _wire_channel
+    from botcad.geometry import quat_to_euler, rotate_vec
     from botcad.skeleton import BodyShape, BracketStyle
 
     prog = ShapeScript()
@@ -46,8 +58,6 @@ def emit_body_ir(
     # ── 1. Base shell (cad.py:748-801) ──
 
     if body.custom_solid is not None:
-        from botcad.emit.cad import _ensure_solid
-
         shell = prog.prebuilt(_ensure_solid(body.custom_solid), tag="custom_solid")
 
     elif body.shape is BodyShape.CYLINDER:
@@ -129,15 +139,9 @@ def emit_body_ir(
 
     # ── 3. Union coupler (cad.py:827-843) ──
 
-    from botcad.bracket import BracketSpec, coupler_solid
-
     bracket_spec = BracketSpec()
     if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
-        from build123d import Location
-
-        from botcad.geometry import quat_to_euler, rotate_vec
-
         quat = parent_joint.solved_servo_quat
         rotated_offset = rotate_vec(quat, servo.shaft_offset)
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
@@ -153,20 +157,9 @@ def emit_body_ir(
 
     # ── 4. Bracket footprint cut + bracket union (cad.py:845-865) ──
 
-    from build123d import Location as _Location
-
-    from botcad.bracket import (
-        bracket_envelope,
-        bracket_solid,
-        cradle_envelope,
-        cradle_solid,
-    )
-
     for joint in body.joints:
         servo = joint.servo
         center = joint.solved_servo_center
-        from botcad.geometry import quat_to_euler
-
         euler = quat_to_euler(joint.solved_servo_quat)
 
         # Pre-locate factory shapes with .locate() to match the direct path.
@@ -175,22 +168,22 @@ def emit_body_ir(
         # (same as direct path), whereas LocateOp uses .moved() which compounds.
         if joint.bracket_style is BracketStyle.COUPLER:
             env_solid = cradle_envelope(servo, bracket_spec)
-            env_solid = env_solid.locate(_Location(center, euler))
+            env_solid = env_solid.locate(Location(center, euler))
             env_ref = prog.prebuilt(env_solid, tag=f"cradle_env_{joint.name}")
 
             crad_solid = cradle_solid(servo, bracket_spec)
-            crad_solid = crad_solid.locate(_Location(center, euler))
+            crad_solid = crad_solid.locate(Location(center, euler))
             crad_ref = prog.prebuilt(crad_solid, tag=f"cradle_{joint.name}")
 
             shell = prog.cut(shell, env_ref)
             shell = prog.fuse(shell, crad_ref)
         else:
             env_solid = bracket_envelope(servo, bracket_spec)
-            env_solid = env_solid.locate(_Location(center, euler))
+            env_solid = env_solid.locate(Location(center, euler))
             env_ref = prog.prebuilt(env_solid, tag=f"bracket_env_{joint.name}")
 
             brk_solid = bracket_solid(servo, bracket_spec)
-            brk_solid = brk_solid.locate(_Location(center, euler))
+            brk_solid = brk_solid.locate(Location(center, euler))
             brk_ref = prog.prebuilt(brk_solid, tag=f"bracket_{joint.name}")
 
             shell = prog.cut(shell, env_ref)
@@ -198,7 +191,6 @@ def emit_body_ir(
 
     # ── 5. Child clearance volumes (cad.py:867-873) ──
 
-    from botcad.emit.cad import _child_clearance_volume
 
     for joint in body.joints:
         if joint.child is not None:
@@ -209,7 +201,6 @@ def emit_body_ir(
 
     # ── 6. Wire channels (cad.py:875-881) ──
 
-    from botcad.emit.cad import _wire_channel
 
     if wire_segments:
         for seg, bus_type in wire_segments:
