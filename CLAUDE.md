@@ -2,11 +2,23 @@
 
 Design robots from real components, train them in simulation, build the physical thing.
 
+**Always use `uv` and `pnpm` and not `pip` and `npm`**
+
+``sh
+# 1. Make changes
+
+# 2. Typecheck + lint (fast)
+make lint
+
+# 3. General test suite
+make validate
+```
+
+
 ## Principles
 
 - Heavily rely on subagents to get information and keep the primary context clean. Prefer plans for any changes which are substantial. Part of planning is the commit and testing strategy to validate changes. Validate a change yourself, and then as part of the final description of your work include a brief note on why you think the change is correct and how I can help validate it myself.
-- Simple is beautiful
-- Composable modules
+- Simple is beautiful. Prefer composable modules.
 - The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 - **Derive from geometry, don't approximate.** When build123d/OCCT can compute a property (mass, COM, inertia, surface area) from actual CAD solid geometry, use it. The CAD solid is ground truth. Heuristic estimates are fallbacks, not the primary path.
 - **Sim fidelity matters.** Geometry, mass, and actuation should match physical reality. CAD geometry = sim geometry — MuJoCo references the same STLs you'd send to a slicer.
@@ -20,18 +32,7 @@ Design robots from real components, train them in simulation, build the physical
   The critical invariant: Place and Cut use identical transforms. No axis-sign-dependent logic, no extra shifts at cut time. If a clearance shape needs asymmetry (e.g. outboard-only tolerance), that asymmetry is designed into the cut solid in step 1, in local frame, where it can be seen and validated.
 - **`.moved()`, never `.locate()`.** build123d's `.locate()` mutates in place and returns `self`. On `@lru_cache`d solids (bracket, envelope, coupler, servo), this silently corrupts the cached object for all future callers. Always use `.moved()` which creates an independent copy. The CAD steps debug viewer (`?cadsteps=bot:body`) makes this kind of bug visible.
 - **Commit logs are a journal.** Explain _why_, not just _what_.
-
-## Quick Start
-
-```bash
-uv run mjpython main.py                    # Interactive TUI
-uv run mjpython main.py view [--bot NAME]  # MuJoCo viewer
-uv run mjpython main.py web [--bot NAME]   # Web viewer (3D, components, CAD steps)
-uv run mjpython main.py train [--bot NAME]
-uv run mjpython main.py scene              # Scene gen preview
-```
-
-`--bot NAME`: bot directory name (e.g., `wheeler_arm`). Shortcuts: `make`, `make view`, `make train`.
+- Work with the user on improvement. Emit logs from interactions that will help you understand what a user did and what happened when they report a bug. Don't commit these logs.
 
 ## Development
 

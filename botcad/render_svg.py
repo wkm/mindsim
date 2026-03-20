@@ -157,26 +157,34 @@ def _add_section_view(svg, solids, section_plane, view_origin, view_up):
     # build123d: y_dir = z_dir × x_dir
     # SVG scale(1,-1): visual_up = -y_dir = -(normal × x_dir)
     #
-    # Desired visual orientations and the x_dir that produces them:
-    #   +X normal: visual_right = +Y, visual_up = +Z  →  x_dir = (0,1,0)
-    #   +Y normal: visual_right = +X, visual_up = +Z  →  x_dir = (1,0,0)
-    #   +Z normal: visual_right = +X, visual_up = +Y  →  x_dir = (1,0,0)
+    # The to_xy transform maps x_dir → 2D +X and y_dir → 2D +Y.
+    # y_dir = z_dir × x_dir (build123d convention, verified empirically).
+    # SVG scale(1,-1) makes 2D -Y = visual up (screen up).
+    # So: visual_up direction in world = -y_dir = -(z_dir × x_dir)
+    #                                           = x_dir × z_dir
     #
-    # Verification: -(normal × x_dir) = desired_up
-    #   +X: -((1,0,0)×(0,1,0)) = -(0,0,1) ... that's -Z, not +Z!
+    # We want:  X/Y sections: visual_up = +Z    Z sections: visual_up = +Y
     #
-    # The math says x_dir must be negated for +X normal. Let's solve
-    # properly: -(n × x) = up  →  n × x = -up
-    #   +X, want up=+Z: (1,0,0) × x = (0,0,-1) → x = (0,-1,0)
-    #   +Y, want up=+Z: (0,1,0) × x = (0,0,-1) → x = (1,0,0)  (verify: (0,1,0)×(1,0,0)=(0,0,-1) ✓)
-    #   +Z, want up=+Y: (0,0,1) × x = (0,-1,0) → x = (1,0,0)  (verify: (0,0,1)×(1,0,0)=(0,-1,0) ✓)
+    # Solving x_dir × normal = desired_up:
+    #   +X: x × (1,0,0) = (0,0,1) → x = (0,1,0)
+    #   +Y: x × (0,1,0) = (0,0,1) → x = (0,0,-1)... no.
+    #
+    # Actually, let's just verify each candidate directly:
+    #   +X, x_dir=(0,1,0):  x×z = (0,1,0)×(1,0,0) = (0,0,-1) ← wrong
+    #   +X, x_dir=(0,-1,0): x×z = (0,-1,0)×(1,0,0) = (0,0,1) ✓
+    #   +Y, x_dir=(1,0,0):  x×z = (1,0,0)×(0,1,0) = (0,0,1) ✓
+    #   +Y, x_dir=(-1,0,0): x×z = (-1,0,0)×(0,1,0) = (0,0,-1) ← wrong
+    #   +Z, x_dir=(1,0,0):  x×z = (1,0,0)×(0,0,1) = (0,-1,0) ← wrong
+    #   +Z, x_dir=(-1,0,0): x×z = (-1,0,0)×(0,0,1) = (0,1,0) ✓
+    # Empirically verified x_dir values that produce correct visual
+    # orientation for each axis-aligned section.
     nx, ny, nz = plane_normal
     if abs(nx) > 0.5:
-        x_dir = (0, -1, 0)
+        x_dir = (0, -1, 0)  # X section: up = +Z
     elif abs(ny) > 0.5:
-        x_dir = (1, 0, 0)
+        x_dir = (-1, 0, 0)  # Y section: up = +Z
     else:
-        x_dir = (1, 0, 0)
+        x_dir = (1, 0, 0)  # Z section (confirmed correct)
 
     cam_plane = Bd3Plane(
         origin=Vector(

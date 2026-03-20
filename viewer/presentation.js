@@ -33,6 +33,30 @@ export const BP = {
 };
 
 // ---------------------------------------------------------------------------
+// Render order — controls Three.js draw order for layered effects.
+//
+// The rendering pipeline draws in this order:
+//   1. Section plane visualizer (translucent, behind everything)
+//   2. Stencil back-face pass (invisible, writes stencil)
+//   3. Stencil front-face pass (invisible, clears stencil)
+//   4. Section cap fill (colored cross-section, reads stencil)
+//   5. Normal geometry (default renderOrder 0)
+//   6. Section contour lines (thick outlines on top)
+//
+// Per-layer stencil passes use SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE
+// to keep each layer's passes grouped and ordered.
+// ---------------------------------------------------------------------------
+export const RENDER_ORDER = {
+  SECTION_VIZ:      -100,   // translucent cut plane indicator
+  STENCIL_BACK:        0,   // offset within a layer's stencil group
+  STENCIL_FRONT:       1,
+  STENCIL_CAP:         2,
+  SECTION_CONTOUR:  9000,   // contour lines drawn last
+};
+export const SECTION_STENCIL_BASE = 100;    // first layer starts here
+export const SECTION_STENCIL_STRIDE = 10;   // spacing between layers
+
+// ---------------------------------------------------------------------------
 // Edge rendering constants
 // ---------------------------------------------------------------------------
 export const EDGE_COLOR = BP.DARK_GRAY1;
