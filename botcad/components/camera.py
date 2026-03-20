@@ -20,7 +20,12 @@ def OV5647() -> CameraSpec:
         resolution=(2592, 1944),
         wire_ports=(
             # CSI ribbon cable at bottom edge (24mm height -> Y=-12mm)
-            WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type=BusType.CSI),
+            WirePort(
+                "csi",
+                pos=(0.0, -0.012, 0.0),
+                bus_type=BusType.CSI,
+                connector_type="csi_15pin",
+            ),
         ),
         mounting_points=(
             # 4x M2 mounting holes (21mm x 12.5mm pitch)
@@ -127,7 +132,14 @@ def PiCamera2() -> CameraSpec:
         mass=0.003,
         fov_deg=62.2,
         resolution=(3280, 2464),
-        wire_ports=(WirePort("csi", pos=(0.0, -0.012, 0.0), bus_type=BusType.CSI),),
+        wire_ports=(
+            WirePort(
+                "csi",
+                pos=(0.0, -0.012, 0.0),
+                bus_type=BusType.CSI,
+                connector_type="csi_15pin",
+            ),
+        ),
         mounting_points=(
             # 4x M2 mounting holes (21mm x 12.5mm pitch)
             MountPoint(

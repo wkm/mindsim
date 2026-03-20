@@ -71,7 +71,7 @@ export class JointMode {
       this.sliders.push({ jointIdx: j, qposAddr, rangeMin, rangeMax, sliderId, color, name });
     }
 
-    html += '<div style="margin-top:16px;"><button class="btn" id="joint-reset-btn">Reset All</button></div>';
+    html += '<div style="margin-top:16px;"><button class="btn btn-sm" id="joint-reset-btn">Reset All</button></div>';
     panel.innerHTML = html;
 
     for (const s of this.sliders) {

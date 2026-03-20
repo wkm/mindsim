@@ -109,8 +109,8 @@ export class IKMode {
     html += '<div id="ik-joint-readout"></div>';
 
     html += `<div style="margin-top:16px;display:flex;gap:8px;">
-      <button class="btn" id="ik-reset-btn">Reset Pose</button>
-      <button class="btn" id="ik-clear-btn">Clear Selection</button>
+      <button class="btn btn-sm" id="ik-reset-btn">Reset Pose</button>
+      <button class="btn btn-sm" id="ik-clear-btn">Clear Selection</button>
     </div>`;
 
     panel.innerHTML = html;

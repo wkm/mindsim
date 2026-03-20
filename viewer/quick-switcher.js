@@ -44,18 +44,18 @@ function refilter(query) {
 
 function render() {
   if (!filtered.length) {
-    results.innerHTML = '<div class="qs-empty">No results</div>';
+    results.innerHTML = '<li class="dropdown-item disabled"><span class="text">No results</span></li>';
     return;
   }
 
   results.innerHTML = filtered.map((item, i) => `
-    <div class="qs-item${i === activeIdx ? ' qs-active' : ''}" data-url="${item.url}">
-      <span class="qs-item-name">${item.name}</span>
-      <span class="qs-item-category">${item.category}</span>
-    </div>
+    <li><button class="dropdown-item${i === activeIdx ? ' active' : ''}" data-url="${item.url}">
+      <span class="text">${item.name}</span>
+      <span class="dropdown-kbd">${item.category}</span>
+    </button></li>
   `).join('');
 
-  const active = results.querySelector('.qs-active');
+  const active = results.querySelector('.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
@@ -104,7 +104,7 @@ input.addEventListener('keydown', (e) => {
 
 // Delegated click handler on results container
 results.addEventListener('click', (e) => {
-  const item = e.target.closest('.qs-item');
+  const item = e.target.closest('.dropdown-item');
   if (item) navigate(item.dataset.url);
 });
 

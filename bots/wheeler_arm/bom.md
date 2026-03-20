@@ -11,8 +11,8 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 227 | PLA/PETG frame |
-| **Total** | | | **669** | |
+| Structural (printed) | — | — | 234 | PLA/PETG frame |
+| **Total** | | | **676** | |
 
 ## Power Budget
 
@@ -24,16 +24,25 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for OV5647 |
-| M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
-| M3 | 48 | 6x per joint bracket (6 joints); 6x for Pololu 90x10mm Wheel |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for OV5647 |
+| M2.5 | Socket Head Cap | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 48 | 6x per joint bracket (6 joints); 6x for Pololu 90x10mm Wheel |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 12 |
+| csi_15pin | 1 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
 
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
 | servo_bus | uart_half_duplex | 54.8 | 0.0 |
-| camera_csi | csi | 56.1 | 10.9 |
+| camera_csi | csi | 56.3 | 10.9 |
 | power | power | 8.5 | 0.0 |

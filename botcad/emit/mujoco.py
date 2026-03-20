@@ -28,6 +28,8 @@ from botcad.colors import (
 )
 from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
+from botcad.fasteners import fastener_key as _hw_key
+from botcad.fasteners import fastener_stl_stem as _hw_name
 from botcad.geometry import rotate_vec, rotation_between
 from botcad.skeleton import BaseType, BodyShape
 
@@ -95,39 +97,42 @@ def _build_bot_xml(bot: Bot) -> str:
                 scale="1 1 1",
             )
 
-    # Hardware mesh assets (one per unique diameter)
-    seen_diameters: set[float] = set()
+    # Hardware mesh assets (one per unique designation+head_type)
+    seen_hw: set[tuple[str, str]] = set()
     for body in bot.all_bodies:
         for joint in body.joints:
             for ear in joint.servo.mounting_ears:
-                if ear.diameter not in seen_diameters:
-                    seen_diameters.add(ear.diameter)
+                k = _hw_key(ear)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{ear.diameter:.4f}_mesh",
-                        file=f"hardware_{ear.diameter:.4f}.stl",
+                        name=f"{_hw_name(ear)}_mesh",
+                        file=f"{_hw_name(ear)}.stl",
                         scale="1 1 1",
                     )
             for mp in joint.servo.horn_mounting_points:
-                if mp.diameter not in seen_diameters:
-                    seen_diameters.add(mp.diameter)
+                k = _hw_key(mp)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{mp.diameter:.4f}_mesh",
-                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        name=f"{_hw_name(mp)}_mesh",
+                        file=f"{_hw_name(mp)}.stl",
                         scale="1 1 1",
                     )
         for mount in body.mounts:
             for mp in mount.component.mounting_points:
-                if mp.diameter not in seen_diameters:
-                    seen_diameters.add(mp.diameter)
+                k = _hw_key(mp)
+                if k not in seen_hw:
+                    seen_hw.add(k)
                     SubElement(
                         asset,
                         "mesh",
-                        name=f"hardware_{mp.diameter:.4f}_mesh",
-                        file=f"hardware_{mp.diameter:.4f}.stl",
+                        name=f"{_hw_name(mp)}_mesh",
+                        file=f"{_hw_name(mp)}.stl",
                         scale="1 1 1",
                     )
 
@@ -523,7 +528,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"screw_{joint.name}_{ear.label}",
-                    f"hardware_{ear.diameter:.4f}_mesh",
+                    f"{_hw_name(ear)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -538,7 +543,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"horn_{joint.name}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -553,7 +558,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"rear_{joint.name}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
                     _z_to_axis_quat(world_axis),
                 ),
@@ -573,7 +578,7 @@ def _emit_mounting_hardware(
                 "geom",
                 **_screw_attribs(
                     f"mount_{body.name}_{mount.label}_{mp.label}",
-                    f"hardware_{mp.diameter:.4f}_mesh",
+                    f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(pos),
                     _z_to_axis_quat(mp_axis),
                 ),
@@ -591,15 +596,15 @@ def _emit_camera(parent_el: Element, body: Body) -> None:
         if isinstance(mount.component, CameraSpec):
             cam = mount.component
             pos = mount.resolved_pos
-            # Camera looks forward (+Y in MuJoCo convention)
-            # Rotate 180° around Y to flip the image right-side up
+            # MuJoCo cameras look along local -Z.  Rotate +90° around X
+            # so -Z maps to +Y (forward) and +Y maps to +Z (up).
             SubElement(
                 parent_el,
                 "camera",
                 name=f"{mount.label}_cam",
                 fovy=f"{cam.fov_deg:.1f}",
                 pos=_fmt_vec3(pos),
-                euler=f"0 {math.pi} 0",
+                euler=f"{math.pi / 2} 0 0",
             )
             return
 

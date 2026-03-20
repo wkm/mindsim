@@ -11,8 +11,8 @@
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 96 | PLA/PETG frame |
-| **Total** | | | **318** | |
+| Structural (printed) | — | — | 114 | PLA/PETG frame |
+| **Total** | | | **336** | |
 
 ## Power Budget
 
@@ -24,11 +24,20 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for OV5647 |
-| M2.5 | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
-| M3 | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for OV5647 |
+| M2.5 | Socket Head Cap | 20 | 8x per horn coupler (2 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 4 |
+| csi_15pin | 1 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
 
 ## Wire Lengths
 

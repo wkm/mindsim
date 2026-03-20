@@ -16,8 +16,8 @@ Outputs:
     botcad/components/test_*.png        — component & bracket 3D tear sheets
     botcad/components/drawing_*.svg     — component & bracket 2D section drawings
     botcad/components/test_rom_*.png    — subassembly ROM validation filmstrips
-    bots/*/test_*.png                   — per-bot validation renders
-    bots/*/test_*.pdf                   — per-bot assembly instruction PDFs
+    bots/*/test_overview.png            — per-bot 4-view overview
+    bots/*/test_sweep.png               — per-bot joint ROM filmstrip
     bots/*/drawings/*.svg               — per-bot joint section drawings
     bots/*/*.step                       — per-bot STEP assemblies
 """
@@ -87,6 +87,52 @@ def regen_component_renders() -> None:
     out_path = out_dir / "test_fastener_showcase.png"
     save_png(img, out_path)
     print(f"  fastener showcase: {out_path}")
+
+    # Fastener + connector showcase on STS3215 (has WirePort with connector)
+    from botcad.components.servo import STS3215
+
+    sts3215 = STS3215()
+    img = render_fastener_showcase(sts3215, "STS3215")
+    out_path = out_dir / "test_fastener_connector_sts3215.png"
+    save_png(img, out_path)
+    print(f"  fastener+connector showcase: {out_path}")
+
+    # Fastener catalog — every screw variant rendered solo
+    from botcad.emit.component_renders import render_fastener_catalog
+
+    img = render_fastener_catalog()
+    out_path = out_dir / "test_fastener_catalog.png"
+    save_png(img, out_path)
+    print(f"  fastener catalog: {out_path}")
+
+    # Fastener detail — ghost body + screws only, 4 views
+    from botcad.emit.component_renders import render_fastener_detail
+
+    img = render_fastener_detail(fastener_prism, "TestFastenerPrism")
+    out_path = out_dir / "test_fastener_detail.png"
+    save_png(img, out_path)
+    print(f"  fastener detail: {out_path}")
+
+    img = render_fastener_detail(sts3215, "STS3215")
+    out_path = out_dir / "test_fastener_detail_sts3215.png"
+    save_png(img, out_path)
+    print(f"  fastener detail: {out_path}")
+
+    # Connector catalog — every connector type plug + receptacle
+    from botcad.emit.component_renders import render_connector_catalog
+
+    img = render_connector_catalog()
+    out_path = out_dir / "test_connector_catalog.png"
+    save_png(img, out_path)
+    print(f"  connector catalog: {out_path}")
+
+    # Connector detail — ghost body + connectors + cables, 4 views
+    from botcad.emit.component_renders import render_connector_detail
+
+    img = render_connector_detail(sts3215, "STS3215")
+    out_path = out_dir / "test_connector_detail_sts3215.png"
+    save_png(img, out_path)
+    print(f"  connector detail: {out_path}")
 
     # Bracket tear sheets (3D renders) — for each servo that uses brackets
     # NOTE: bracket/cradle/coupler geometry is designed around the STS form

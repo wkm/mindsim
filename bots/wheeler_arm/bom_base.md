@@ -10,8 +10,8 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 98 | PLA/PETG frame |
-| **Total** | | | **372** | |
+| Structural (printed) | — | — | 109 | PLA/PETG frame |
+| **Total** | | | **383** | |
 
 ## Power Budget
 
@@ -23,7 +23,15 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2.5 | 28 | 8x per horn coupler (3 joints); 4x for RaspberryPiZero2W |
-| M3 | 30 | 6x per joint bracket (3 joints); 6x for Pololu 90x10mm Wheel |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2.5 | Socket Head Cap | 28 | 8x per horn coupler (3 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 30 | 6x per joint bracket (3 joints); 6x for Pololu 90x10mm Wheel |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 6 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |

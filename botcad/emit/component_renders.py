@@ -252,6 +252,102 @@ def _render_scene(scene: SceneBuilder, temp_dir: Path, title: str) -> Image.Imag
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# ── Shared helpers for scene builders ──
+
+
+def _add_screws_to_scene(
+    scene: SceneBuilder,
+    component: Component,
+    temp_dir: Path,
+    exported_screws: dict[tuple[str, str], str],
+) -> None:
+    """Export and place screw meshes at each mount point."""
+    from build123d import export_stl
+
+    from botcad.colors import COLOR_METAL_BRASS
+    from botcad.emit.cad import screw_solid
+    from botcad.fasteners import fastener_key
+
+    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
+
+    for i, mp in enumerate(component.mounting_points):
+        key = fastener_key(mp)
+        if key not in exported_screws:
+            stl_name = f"screw_{key[0]}_{key[1] or 'shc'}.stl"
+            export_stl(screw_solid(key[0], key[1]), str(temp_dir / stl_name))
+            exported_screws[key] = stl_name
+
+        scene.add_mesh(
+            f"screw_{i}",
+            exported_screws[key],
+            screw_color,
+            pos=mp.pos,
+            quat=_axis_quat(mp.axis),
+        )
+
+
+def _add_connectors_to_scene(
+    scene: SceneBuilder,
+    component: Component,
+    temp_dir: Path,
+    exported_connectors: dict[str, str],
+    pos_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    cable_len: float = 0.015,
+) -> None:
+    """Export and place connector meshes + cable stubs at each wire port."""
+    from build123d import export_stl
+
+    from botcad.connectors import connector_solid, connector_spec
+
+    connector_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "connector (orange)")
+    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
+
+    for i, wp in enumerate(component.wire_ports):
+        if not wp.connector_type:
+            continue
+        try:
+            cspec = connector_spec(wp.connector_type)
+        except KeyError:
+            continue
+
+        # Export connector housing STL (once per type)
+        if wp.connector_type not in exported_connectors:
+            c_solid = connector_solid(cspec)
+            c_stl = f"connector_{wp.connector_type}.stl"
+            export_stl(c_solid, str(temp_dir / c_stl))
+            exported_connectors[wp.connector_type] = c_stl
+
+        conn_pos = (
+            wp.pos[0] + pos_offset[0],
+            wp.pos[1] + pos_offset[1],
+            wp.pos[2] + pos_offset[2],
+        )
+        scene.add_mesh(
+            f"connector_{i}",
+            exported_connectors[wp.connector_type],
+            connector_color,
+            pos=conn_pos,
+        )
+
+        # Cable stub — cylinder along wire_exit_direction
+        cable_r = max(cspec.body_dimensions) * 0.2
+        ex, ey, ez = cspec.wire_exit_direction
+        ox, oy, oz = cspec.wire_exit_offset
+        cable_mid = (
+            conn_pos[0] + ox + ex * cable_len / 2,
+            conn_pos[1] + oy + ey * cable_len / 2,
+            conn_pos[2] + oz + ez * cable_len / 2,
+        )
+        scene.annotate_cylinder(
+            f"cable_{i}",
+            pos=cable_mid,
+            radius=cable_r,
+            half_height=cable_len / 2,
+            color=cable_color,
+            quat=_axis_quat((ex, ey, ez)),
+        )
+
+
 # ── Scene builders ──
 
 
@@ -368,7 +464,7 @@ def build_fastener_showcase_scene(component: Component) -> tuple[SceneBuilder, P
     """
     from build123d import export_stl
 
-    from botcad.emit.cad import make_component_solid, screw_solid
+    from botcad.emit.cad import make_component_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_"))
     solid = make_component_solid(component)
@@ -377,25 +473,11 @@ def build_fastener_showcase_scene(component: Component) -> tuple[SceneBuilder, P
     scene = SceneBuilder(model_name="fastener_showcase", width=WIDTH, height=HEIGHT)
     scene.add_mesh("comp", "component.stl", _body_render_color(component))
 
-    # Export and place a screw mesh at each mount point
-    from botcad.colors import COLOR_METAL_BRASS
+    exported_screws: dict[tuple[str, str], str] = {}
+    _add_screws_to_scene(scene, component, temp_dir, exported_screws)
 
-    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
-    exported_diameters: dict[float, str] = {}
-
-    for i, mp in enumerate(component.mounting_points):
-        if mp.diameter not in exported_diameters:
-            stl_name = f"screw_{mp.diameter:.4f}.stl"
-            export_stl(screw_solid(mp.diameter), str(temp_dir / stl_name))
-            exported_diameters[mp.diameter] = stl_name
-
-        scene.add_mesh(
-            f"screw_{i}",
-            exported_diameters[mp.diameter],
-            screw_color,
-            pos=mp.pos,
-            quat=_axis_quat(mp.axis),
-        )
+    exported_connectors: dict[str, str] = {}
+    _add_connectors_to_scene(scene, component, temp_dir, exported_connectors)
 
     _add_axis_annotations(scene, component.dimensions)
 
@@ -476,6 +558,239 @@ def render_fastener_showcase(component: Component, name: str) -> Image.Image:
     scene, temp_dir = build_fastener_showcase_scene(component)
     title = f"Fastener Showcase — {name} — {_dims_str(component.dimensions)}"
     return _render_scene(scene, temp_dir, title)
+
+
+def _render_scene_4view(scene: SceneBuilder, temp_dir: Path, title: str) -> Image.Image:
+    """Render 4 views (front, right, top, three-quarter), composite into a 2x2 grid."""
+    from botcad.emit.render3d import VIEWS_4
+
+    try:
+        scene.set_mesh_dir(temp_dir)
+        xml = scene.to_xml()
+        with Renderer3D(xml, WIDTH, HEIGHT) as r:
+            views = r.render_views(VIEWS_4)
+        return grid(title, scene.legends, views, cols=2)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def build_fastener_detail_scene(component: Component) -> tuple[SceneBuilder, Path]:
+    """Build scene showing only the fasteners against a ghost body.
+
+    The component body is rendered translucent so fastener head detail
+    (hex recesses, Phillips crosses) is clearly visible.
+    """
+    from build123d import export_stl
+
+    from botcad.emit.cad import make_component_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_detail_"))
+    solid = make_component_solid(component)
+    export_stl(solid, str(temp_dir / "component.stl"))
+
+    scene = SceneBuilder(model_name="fastener_detail", width=WIDTH, height=HEIGHT)
+
+    # Ghost body — translucent so screws are visible
+    ghost_color = Color(0.6, 0.65, 0.7, 0.15, "body (ghost)")
+    scene.add_mesh("comp", "component.stl", ghost_color)
+
+    exported_screws: dict[tuple[str, str], str] = {}
+    _add_screws_to_scene(scene, component, temp_dir, exported_screws)
+
+    return scene, temp_dir
+
+
+def render_fastener_detail(component: Component, name: str) -> Image.Image:
+    """Render fastener detail: ghost body + brass screws from 4 views."""
+    scene, temp_dir = build_fastener_detail_scene(component)
+    n = len(component.mounting_points)
+    title = f"Fastener Detail — {name} — {n} fastener{'s' if n != 1 else ''}"
+    return _render_scene_4view(scene, temp_dir, title)
+
+
+def build_connector_detail_scene(component: Component) -> tuple[SceneBuilder, Path]:
+    """Build scene showing only connectors + cable stubs against a ghost body."""
+    from build123d import export_stl
+
+    from botcad.emit.cad import make_component_solid
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_connector_detail_"))
+    solid = make_component_solid(component)
+    export_stl(solid, str(temp_dir / "component.stl"))
+
+    scene = SceneBuilder(model_name="connector_detail", width=WIDTH, height=HEIGHT)
+    ghost_color = Color(0.6, 0.65, 0.7, 0.15, "body (ghost)")
+    scene.add_mesh("comp", "component.stl", ghost_color)
+
+    exported_connectors: dict[str, str] = {}
+    _add_connectors_to_scene(scene, component, temp_dir, exported_connectors)
+
+    return scene, temp_dir
+
+
+def render_connector_detail(component: Component, name: str) -> Image.Image:
+    """Render connector detail: ghost body + orange connectors + black cables from 4 views."""
+    scene, temp_dir = build_connector_detail_scene(component)
+    n = sum(1 for wp in component.wire_ports if wp.connector_type)
+    title = f"Connector Detail — {name} — {n} connector{'s' if n != 1 else ''}"
+    return _render_scene_4view(scene, temp_dir, title)
+
+
+def render_fastener_catalog() -> Image.Image:
+    """Render every fastener in the catalog as individual close-ups in a grid.
+
+    Each cell shows one fastener (designation × head type) from a
+    three-quarter view. No component body — just the screw itself
+    so head geometry detail is clearly visible.
+    """
+    from build123d import export_stl
+
+    from botcad.colors import COLOR_METAL_BRASS
+    from botcad.fasteners import HeadType, fastener_solid, fastener_spec
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_fastener_catalog_"))
+    screw_color = Color(*COLOR_METAL_BRASS.rgb, 1.0, "screw (brass)")
+
+    designations = ["M2", "M2.5", "M3"]
+    head_types = [
+        (HeadType.SOCKET_HEAD_CAP, "Socket Head Cap"),
+        (HeadType.PAN_HEAD_PHILLIPS, "Pan Head Phillips"),
+    ]
+
+    cells: list[tuple[Image.Image, str]] = []
+
+    for ht_enum, ht_label in head_types:
+        for des in designations:
+            spec = fastener_spec(des, ht_enum)
+            solid = fastener_solid(spec, 0.006)  # 6mm shank for visibility
+            stl_name = f"fastener_{des}_{ht_enum.value}.stl"
+            export_stl(solid, str(temp_dir / stl_name))
+
+            scene = SceneBuilder(
+                model_name=f"fastener_{des}_{ht_enum.value}",
+                width=WIDTH,
+                height=HEIGHT,
+            )
+            scene.add_mesh("screw", stl_name, screw_color)
+            scene.set_mesh_dir(temp_dir)
+            xml = scene.to_xml()
+
+            # Render three views: three-quarter, top-down, front
+            views_single = {
+                "three-quarter": {"azimuth": 135, "elevation": -30},
+                "top": {"azimuth": 90, "elevation": -90},
+                "front": {"azimuth": 90, "elevation": 0},
+            }
+            with Renderer3D(xml, WIDTH, HEIGHT) as r:
+                rendered = r.render_views(views_single)
+
+            # Take the three-quarter view as the main cell
+            img_3q = rendered[0][0]
+            cells.append((img_3q, f"{des} {ht_label}"))
+
+    try:
+        result = grid(
+            "Fastener Catalog — ISO metric screws",
+            [(screw_color.label, screw_color.rgb_int)],
+            cells,
+            cols=3,
+        )
+        return result
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def render_connector_catalog() -> Image.Image:
+    """Render every connector as a mating pair — plug approaching receptacle.
+
+    Each cell shows one connector type with plug and receptacle in a single
+    scene, separated along the mating axis so the insertion mechanism is
+    visible. Both parts at the same scale.
+    """
+    from build123d import Location, export_stl
+
+    from botcad.connectors import (
+        ConnectorType,
+        connector_solid,
+        connector_spec,
+        receptacle_solid,
+    )
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="botcad_connector_catalog_"))
+
+    plug_color = Color(*COLOR_WIRE_PORT.rgb, 1.0, "plug (orange)")
+    receptacle_color = Color(0.75, 0.75, 0.78, 1.0, "receptacle (silver)")
+    cable_color = Color(0.15, 0.15, 0.15, 1.0, "cable (black)")
+
+    cells: list[tuple[Image.Image, str]] = []
+
+    for ct in ConnectorType:
+        cspec = connector_spec(ct.value)
+        mx, my, mz = cspec.mating_direction
+        bx, by, bz = cspec.body_dimensions
+
+        # Separation gap along mating axis — enough to see both parts
+        gap = max(bx, by, bz) * 1.5
+
+        # Plug offset: pulled back along mating direction
+        plug_offset = (-mx * gap, -my * gap, -mz * gap)
+
+        # Export plug (moved away from receptacle along mating axis)
+        plug_s = connector_solid(cspec).moved(Location(plug_offset))
+        plug_stl = f"pair_plug_{ct.value}.stl"
+        export_stl(plug_s, str(temp_dir / plug_stl))
+
+        # Export receptacle at origin
+        rcpt_s = receptacle_solid(cspec)
+        rcpt_stl = f"pair_rcpt_{ct.value}.stl"
+        export_stl(rcpt_s, str(temp_dir / rcpt_stl))
+
+        scene = SceneBuilder(model_name=f"pair_{ct.value}", width=WIDTH, height=HEIGHT)
+        scene.add_mesh("plug", plug_stl, plug_color)
+        scene.add_mesh("receptacle", rcpt_stl, receptacle_color)
+
+        # Cable stub on the plug
+        cable_r = max(bx, by, bz) * 0.2
+        cable_len = 0.012
+        ex, ey, ez = cspec.wire_exit_direction
+        ox, oy, oz = cspec.wire_exit_offset
+        cable_mid = (
+            plug_offset[0] + ox + ex * cable_len / 2,
+            plug_offset[1] + oy + ey * cable_len / 2,
+            plug_offset[2] + oz + ez * cable_len / 2,
+        )
+        scene.annotate_cylinder(
+            "cable",
+            pos=cable_mid,
+            radius=cable_r,
+            half_height=cable_len / 2,
+            color=cable_color,
+            quat=_axis_quat((ex, ey, ez)),
+        )
+
+        scene.set_mesh_dir(temp_dir)
+        xml = scene.to_xml()
+        with Renderer3D(xml, WIDTH, HEIGHT) as r:
+            rendered = r.render_views(
+                {"three-quarter": {"azimuth": 135, "elevation": -30}}
+            )
+        cells.append((rendered[0][0], cspec.label))
+
+    try:
+        # Single column so each pair gets a wide cell
+        result = grid(
+            "Connector Catalog — plug + receptacle mating pairs",
+            [
+                (plug_color.label, plug_color.rgb_int),
+                (receptacle_color.label, receptacle_color.rgb_int),
+                (cable_color.label, cable_color.rgb_int),
+            ],
+            cells,
+            cols=1,
+        )
+        return result
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # ── Pipeline entry point ──

@@ -71,7 +71,7 @@ export async function initBotViewer(botName) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(renderer.domElement);
   updateCanvasLayout();
 
@@ -376,7 +376,7 @@ export async function initBotViewer(botName) {
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
 
-    document.querySelectorAll('.mode-tab').forEach(tab => {
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
       tab.classList.toggle('active', tab.dataset.mode === modeName);
     });
   }
@@ -403,7 +403,7 @@ export async function initBotViewer(botName) {
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
 
-    document.querySelectorAll('.mode-tab').forEach(tab => {
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
       tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 

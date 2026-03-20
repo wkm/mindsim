@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -454,6 +455,30 @@ def _build_component_registry() -> dict:
     return registry
 
 
+def _component_layers(comp) -> list[str]:
+    """Return the list of available STL layer IDs for a component."""
+    from botcad.component import ServoSpec
+
+    if isinstance(comp, ServoSpec):
+        from botcad.bracket import horn_disc_params
+
+        layers = [
+            "servo",
+            "bracket",
+            "cradle",
+            "coupler",
+            "bracket_envelope",
+            "cradle_envelope",
+        ]
+        if horn_disc_params(comp) is not None:
+            layers.insert(1, "horn")
+    else:
+        layers = ["body"]
+    if comp.mounting_points:
+        layers.append("fasteners")
+    return layers
+
+
 def _component_to_json(comp, category: str) -> dict:
     """Serialize a Component instance to JSON-safe dict."""
     from botcad.component import ServoSpec
@@ -465,6 +490,7 @@ def _component_to_json(comp, category: str) -> dict:
         "mass_g": round(comp.mass * 1000, 1),
         "is_servo": isinstance(comp, ServoSpec),
         "color": list(comp.color),
+        "layers": _component_layers(comp),
     }
     if isinstance(comp, ServoSpec):
         import math
@@ -477,6 +503,25 @@ def _component_to_json(comp, category: str) -> dict:
             "gear_ratio": comp.gear_ratio,
             "continuous": comp.continuous,
         }
+    # Discover available 2D technical drawings
+    if isinstance(comp, ServoSpec):
+        safe = comp.name.lower()
+        drawing_types = ["pocket", "coupler", "cradle", "coupler_assembly"]
+        drawings = []
+        for dt in drawing_types:
+            svg_path = Path("botcad/components") / f"drawing_{dt}_{safe}.svg"
+            if svg_path.exists():
+                drawings.append(
+                    {
+                        "type": dt,
+                        "label": dt.replace("_", " ").title(),
+                        "url": f"/{svg_path}",
+                    }
+                )
+        info["drawings"] = drawings
+    else:
+        info["drawings"] = []
+
     info["mounting_points"] = [
         {
             "label": mp.label,
@@ -497,6 +542,31 @@ def _component_to_json(comp, category: str) -> dict:
     return info
 
 
+# Layer colors — mirrors client-side LAYER_META.colorHex
+_LAYER_COLORS: dict[str, tuple[int, int, int]] = {
+    "servo": (24, 32, 38),
+    "horn": (232, 232, 232),
+    "bracket": (206, 217, 224),
+    "cradle": (206, 217, 224),
+    "coupler": (245, 86, 86),
+    "bracket_envelope": (245, 86, 86),
+    "cradle_envelope": (245, 86, 86),
+    "fasteners": (212, 168, 67),
+}
+
+
+def _layer_color(comp, layer_id: str) -> tuple[int, int, int]:
+    """Return RGB color for a component layer."""
+    if layer_id in _LAYER_COLORS:
+        return _LAYER_COLORS[layer_id]
+    r, g, b = comp.color
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+# Solid object cache: (component_name, part_name) → Solid
+_solid_cache: dict[tuple[str, str], object] = {}
+_solid_cache_lock = threading.Lock()
+
 # STL generation cache: (component_name, part_name) → bytes
 _stl_cache: dict[tuple[str, str], bytes] = {}
 _stl_cache_lock = threading.Lock()
@@ -504,6 +574,86 @@ _stl_cache_lock = threading.Lock()
 # Cached JSON responses (built once, served on every request)
 _catalog_json: bytes | None = None
 _bots_json: bytes | None = None
+
+# CAD steps cache: (bot_name, body_name) → list[CadStep]
+_cad_steps_cache: dict[tuple[str, str], list] = {}
+_cad_steps_lock = threading.Lock()
+
+# Bot object cache: bot_name → (bot, cad_model)
+_bot_cache: dict[str, tuple] = {}
+_bot_cache_lock = threading.Lock()
+
+
+def _load_bot(bot_name: str):
+    """Lazily load and solve a bot, returning (bot, cad_model). Thread-safe."""
+
+    with _bot_cache_lock:
+        if bot_name in _bot_cache:
+            return _bot_cache[bot_name]
+
+    import importlib.util
+
+    design_py = Path("bots") / bot_name / "design.py"
+    if not design_py.exists():
+        raise FileNotFoundError(f"No design.py for bot {bot_name}")
+
+    t0 = time.monotonic()
+    print(f"[cad-steps] Loading bot {bot_name}...")
+
+    spec = importlib.util.spec_from_file_location("design", design_py)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    bot = mod.build()
+    bot.solve()
+    t1 = time.monotonic()
+    print(f"[cad-steps]   build + solve: {t1 - t0:.1f}s")
+
+    from botcad.emit.cad import build_cad
+
+    cad = build_cad(bot)
+    t2 = time.monotonic()
+    print(f"[cad-steps]   build_cad: {t2 - t1:.1f}s")
+    print(f"[cad-steps]   total: {t2 - t0:.1f}s ({len(bot.all_bodies)} bodies)")
+
+    with _bot_cache_lock:
+        _bot_cache[bot_name] = (bot, cad)
+    return bot, cad
+
+
+def _get_cad_steps(bot_name: str, body_name: str) -> list:
+    """Get cached CAD steps for a body, computing on first access."""
+
+    cache_key = (bot_name, body_name)
+    with _cad_steps_lock:
+        if cache_key in _cad_steps_cache:
+            return _cad_steps_cache[cache_key]
+
+    bot, cad = _load_bot(bot_name)
+
+    # Find the body
+    target = None
+    for body in bot.all_bodies:
+        if body.name == body_name:
+            target = body
+            break
+    if target is None:
+        raise KeyError(f"Body '{body_name}' not found in bot '{bot_name}'")
+
+    parent_joint = cad.parent_joint_map.get(body_name)
+    wire_segs = cad.body_wire_segments.get(body_name)
+    wire_segs_tuple = tuple(wire_segs) if wire_segs else None
+
+    from botcad.emit.cad import make_body_solid_with_steps
+
+    t0 = time.monotonic()
+    print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
+    steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+    t1 = time.monotonic()
+    print(f"[cad-steps]   {len(steps)} steps in {t1 - t0:.1f}s")
+
+    with _cad_steps_lock:
+        _cad_steps_cache[cache_key] = steps
+    return steps
 
 
 def _solid_to_stl_bytes(solid) -> bytes:
@@ -517,18 +667,19 @@ def _solid_to_stl_bytes(solid) -> bytes:
         return Path(tmp.name).read_bytes()
 
 
-def _generate_stl_bytes(comp, part: str) -> bytes | None:
-    """Generate STL bytes for a component part. Returns None if not applicable.
+def _generate_solid(comp, part: str):
+    """Generate a build123d Solid for a component part. Returns None if not applicable.
 
-    Thread-safe: uses _stl_cache_lock to prevent duplicate generation.
+    Thread-safe with caching so solids are built once and reused for both
+    STL export and SVG rendering.
     """
     from botcad.component import ServoSpec
     from botcad.emit.cad import make_component_solid
 
     cache_key = (comp.name, part)
-    with _stl_cache_lock:
-        if cache_key in _stl_cache:
-            return _stl_cache[cache_key]
+    with _solid_cache_lock:
+        if cache_key in _solid_cache:
+            return _solid_cache[cache_key]
 
     solid = None
     if part == "body":
@@ -549,6 +700,21 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
             solid = bracket_solid(comp, spec)
         elif part == "servo":
             solid = servo_solid(comp)
+        elif part == "horn":
+            from botcad.bracket import horn_disc_params
+            from botcad.emit.cad import _horn_solid
+
+            params = horn_disc_params(comp)
+            if params is not None:
+                from build123d import Location
+
+                horn = _horn_solid(comp)
+                if horn is not None:
+                    solid = horn.locate(
+                        Location(
+                            (params.center_xy[0], params.center_xy[1], params.center_z)
+                        )
+                    )
         elif part == "cradle":
             solid = cradle_solid(comp, spec)
         elif part == "coupler":
@@ -558,6 +724,21 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
         elif part == "cradle_envelope":
             solid = cradle_envelope(comp, spec)
 
+    if solid is not None:
+        with _solid_cache_lock:
+            _solid_cache[cache_key] = solid
+
+    return solid
+
+
+def _generate_stl_bytes(comp, part: str) -> bytes | None:
+    """Generate STL bytes for a component part. Returns None if not applicable."""
+    cache_key = (comp.name, part)
+    with _stl_cache_lock:
+        if cache_key in _stl_cache:
+            return _stl_cache[cache_key]
+
+    solid = _generate_solid(comp, part)
     if solid is None:
         return None
 
@@ -584,6 +765,15 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=self.project_root, **kwargs)
 
+    def end_headers(self):
+        # Disable all caching — localhost dev server, always serve fresh
+        self.send_header(
+            "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"
+        )
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def _send_json(self, payload: bytes):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -603,29 +793,132 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        # Decode percent-encoded path segments (e.g. spaces in component names)
+        from urllib.parse import unquote
+
+        path = unquote(self.path)
+
         # API routes
-        if self.path == "/api/bots":
+        if path == "/api/bots":
             self._handle_bots_list()
             return
 
-        if self.path == "/api/components":
+        if path == "/api/components":
             self._handle_component_catalog()
             return
 
         # /api/components/<name>/fasteners
-        m = re.match(r"^/api/components/([^/]+)/fasteners$", self.path)
+        m = re.match(r"^/api/components/([^/]+)/fasteners$", path)
         if m:
             self._handle_component_fasteners(m.group(1))
             return
 
+        # /api/bots/<bot>/body/<body>/cad-steps
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps$", path)
+        if m:
+            self._handle_cad_steps_meta(m.group(1), m.group(2))
+            return
+
+        # /api/bots/<bot>/body/<body>/cad-steps/<idx>/stl
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/stl$", path)
+        if m:
+            self._handle_cad_step_stl(m.group(1), m.group(2), int(m.group(3)))
+            return
+
+        # /api/bots/<bot>/body/<body>/cad-steps/<idx>/tool-stl
+        m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/tool-stl$", path)
+        if m:
+            self._handle_cad_step_tool_stl(m.group(1), m.group(2), int(m.group(3)))
+            return
+
         # /api/components/<name>/stl/<part>
-        m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", self.path)
+        m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", path)
         if m:
             self._handle_component_stl(m.group(1), m.group(2))
             return
 
         # Fall through to static file serving
         super().do_GET()
+
+    def do_POST(self):
+        from urllib.parse import unquote
+
+        path = unquote(self.path)
+
+        m = re.match(r"^/api/components/([^/]+)/render-svg$", path)
+        if m:
+            self._handle_render_svg(m.group(1))
+            return
+
+        self.send_error(404)
+
+    def _handle_render_svg(self, name: str):
+        """Render a high-quality 2D SVG projection/section of a component."""
+        if name not in self.component_registry:
+            self.send_error(404, f"Unknown component: {name}")
+            return
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(content_length))
+
+        view_dir = body["view_dir"]
+        view_up = body.get("view_up", [0, 0, 1])
+        layers = body.get("layers", [])
+        section_params = body.get("section")
+
+        _factory, comp, _category = self.component_registry[name]
+
+        # Build solids for requested layers
+        solids = []
+        for layer_id in layers:
+            solid = _generate_solid(comp, layer_id)
+            if solid is None:
+                continue
+            rgb = _layer_color(comp, layer_id)
+            solids.append((layer_id, solid, rgb))
+
+        if not solids:
+            self.send_error(400, "No valid layers to render")
+            return
+
+        # Camera origin: far along view direction, looking toward world origin
+        origin = tuple(d * 10 for d in view_dir)
+
+        # Section plane
+        section_plane = None
+        if section_params:
+            from build123d import Plane, Vector
+
+            axis_idx = {"x": 0, "y": 1, "z": 2}[section_params["axis"]]
+            normal = [0.0, 0.0, 0.0]
+            normal[axis_idx] = 1.0
+            plane_origin = [0.0, 0.0, 0.0]
+            plane_origin[axis_idx] = section_params["position"]
+            section_plane = Plane(
+                origin=Vector(*plane_origin),
+                z_dir=Vector(*normal),
+            )
+
+        try:
+            from botcad.render_svg import render_component_svg
+
+            svg = render_component_svg(
+                solids,
+                origin,
+                tuple(view_up),
+                section_plane,
+                annotate=body.get("annotate"),
+            )
+        except Exception as e:
+            self.send_error(500, f"SVG render failed: {e}")
+            return
+
+        svg_bytes = svg.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(svg_bytes)))
+        self.end_headers()
+        self.wfile.write(svg_bytes)
 
     def _handle_bots_list(self):
         global _bots_json
@@ -712,6 +1005,82 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
         self._send_json(json.dumps({"fasteners": fasteners}).encode())
 
+    def _handle_cad_steps_meta(self, bot_name: str, body_name: str):
+        """Return JSON metadata for all CAD construction steps of a body."""
+        try:
+            steps = _get_cad_steps(bot_name, body_name)
+        except FileNotFoundError as e:
+            self.send_error(404, str(e))
+            return
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"CAD step generation failed: {e}")
+            return
+
+        payload = json.dumps(
+            {
+                "bot": bot_name,
+                "body": body_name,
+                "steps": [
+                    {
+                        "index": i,
+                        "label": s.label,
+                        "op": s.op,
+                        "has_tool": s.tool is not None,
+                    }
+                    for i, s in enumerate(steps)
+                ],
+            }
+        ).encode()
+        self._send_json(payload)
+
+    def _handle_cad_step_stl(self, bot_name: str, body_name: str, step_idx: int):
+        self._serve_cad_step_solid(bot_name, body_name, step_idx, attr="solid")
+
+    def _handle_cad_step_tool_stl(self, bot_name: str, body_name: str, step_idx: int):
+        self._serve_cad_step_solid(bot_name, body_name, step_idx, attr="tool")
+
+    def _serve_cad_step_solid(
+        self, bot_name: str, body_name: str, step_idx: int, attr: str
+    ):
+        """Serve STL bytes for a CadStep's solid or tool attribute."""
+        cache_key = (f"cadstep_{attr}_{bot_name}_{body_name}", str(step_idx))
+        with _stl_cache_lock:
+            cached = _stl_cache.get(cache_key)
+        if cached:
+            self._send_binary(cached, f"{body_name}_step{step_idx}_{attr}.stl")
+            return
+
+        try:
+            steps = _get_cad_steps(bot_name, body_name)
+        except (FileNotFoundError, KeyError) as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"CAD step generation failed: {e}")
+            return
+
+        if step_idx < 0 or step_idx >= len(steps):
+            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
+            return
+
+        solid = getattr(steps[step_idx], attr, None)
+        if solid is None:
+            self.send_error(404, f"Step {step_idx} has no {attr}")
+            return
+
+        try:
+            stl_bytes = _solid_to_stl_bytes(solid)
+        except Exception as e:
+            self.send_error(500, f"STL export failed for step {step_idx} {attr}: {e}")
+            return
+
+        with _stl_cache_lock:
+            _stl_cache[cache_key] = stl_bytes
+        self._send_binary(stl_bytes, f"{body_name}_step{step_idx}_{attr}.stl")
+
     def log_message(self, format, *args):
         # Quieter logging — skip successful static file requests
         if len(args) >= 2 and str(args[1]) == "200":
@@ -719,7 +1088,7 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         super().log_message(format, *args)
 
 
-def _run_web_viewer(bot_name: str | None, port: int = 8080):
+def _run_web_viewer(bot_name: str | None, port: int = 8080, no_open: bool = False):
     """Launch a local HTTP server and open the 3D viewer in the browser."""
     project_root = Path(__file__).parent
 
@@ -766,7 +1135,8 @@ def _run_web_viewer(bot_name: str | None, port: int = 8080):
 
     print(f"Viewer at {url}")
     print("Press Ctrl+C to stop.")
-    webbrowser.open(url)
+    if not no_open:
+        webbrowser.open(url)
 
     # ThreadingHTTPServer so STL generation doesn't block other requests
     server = http.server.ThreadingHTTPServer(("", port), ViewerHTTPHandler)
@@ -832,6 +1202,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_web.add_argument(
         "--port", type=int, default=8080, help="HTTP server port (default: 8080)"
+    )
+    p_web.add_argument(
+        "--no-open", action="store_true", help="Don't open browser (API-only mode)"
     )
 
     # scene
@@ -1006,7 +1379,7 @@ def main():
         _run_tui()
 
     elif args.command == "web":
-        _run_web_viewer(args.bot, args.port)
+        _run_web_viewer(args.bot, args.port, getattr(args, "no_open", False))
 
     elif args.command == "scene":
         from sim.scene_preview import run_scene_preview

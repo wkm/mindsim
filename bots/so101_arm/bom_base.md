@@ -9,8 +9,8 @@
 | STS3215 | 1 | 45.4 x 24.8 x 37.9 | 55 | Joints: shoulder_pan |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| Structural (printed) | — | — | 44 | PLA/PETG frame |
-| **Total** | | | **164** | |
+| Structural (printed) | — | — | 41 | PLA/PETG frame |
+| **Total** | | | **161** | |
 
 ## Power Budget
 
@@ -22,7 +22,15 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2.5 | 12 | 8x per horn coupler (1 joints); 4x for RaspberryPiZero2W |
-| M3 | 6 | 6x per joint bracket (1 joints) |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2.5 | Socket Head Cap | 12 | 8x per horn coupler (1 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 6 | 6x per joint bracket (1 joints) |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 2 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
