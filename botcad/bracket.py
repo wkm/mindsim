@@ -55,6 +55,131 @@ def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
     return shell
 
 
+def _connector_port(
+    servo: ServoSpec,
+    spec: BracketSpec,
+    wall_center: tuple[float, float, float],
+    exit_axis: tuple[float, float, float],
+):
+    """Build connector-shaped cut and housing solids for a bracket wall.
+
+    Instead of a rectangular cable slot, creates a receptacle-shaped passage
+    through the bracket wall: the plug can pass through, and guide walls
+    on the outside help align the mating connector.
+
+    Returns (cut_solid, housing_solid) positioned in servo-local frame,
+    or (None, None) if no connector info is available.
+
+    - cut_solid: subtract from bracket shell (passage through wall)
+    - housing_solid: union onto bracket shell (receptacle on outside face)
+    """
+    from build123d import Align, Box, Location
+
+    # Find the connector spec from the servo's wire ports
+    for wp in servo.wire_ports:
+        if wp.connector_type:
+            try:
+                from botcad.connectors import (
+                    connector_spec,
+                    receptacle_solid,
+                )
+
+                cspec = connector_spec(wp.connector_type)
+            except KeyError:
+                return None, None
+            break
+    else:
+        return None, None
+
+    tol = spec.tolerance
+    wall = spec.wall
+    bx, by, bz = cspec.body_dimensions
+    cx, cy, cz = servo.connector_pos or (0, 0, 0)
+    ax, ay, az = exit_axis
+
+    # Passage depth — must go fully through the bracket wall
+    passage_depth = wall + tol + 0.004
+
+    # --- Cut solid: connector envelope + clearance, extruded through wall ---
+    # Use bounding box of plug + tolerance for a clean passage
+    cut_w = max(bx, by) + 2 * tol + 0.001  # clearance around plug
+    cut_h = max(min(bx, by), bz) + 2 * tol + 0.001
+
+    if abs(ax) > 0.5:
+        # Passage through X wall
+        cut = Box(
+            passage_depth,
+            cut_w,
+            cut_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (wall_center[0], cy, cz)
+    elif abs(az) > 0.5:
+        # Passage through Z wall
+        cut = Box(
+            cut_w,
+            cut_h,
+            passage_depth,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (cx, cy, wall_center[2])
+    else:
+        # Passage through Y wall
+        cut = Box(
+            cut_w,
+            passage_depth,
+            cut_h,
+            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        )
+        cut_pos = (cx, wall_center[1], cz)
+
+    cut = cut.locate(Location(cut_pos))
+
+    # --- Housing solid: receptacle on the outside face ---
+    rcpt = receptacle_solid(cspec)
+
+    # Receptacle is built centered at origin in connector-local frame.
+    # Rotate so its mating direction faces inward (opposite to exit_axis),
+    # then position on the outside face of the bracket wall.
+
+    mx, my, mz = cspec.mating_direction
+    # The receptacle's mating face should face inward (-exit_axis).
+    # The receptacle is designed with mating along its mating_direction.
+    # We need to rotate from mating_direction to -exit_axis.
+
+    # For the common case (mating +Z, exit -X): rotate 90° around Y
+    # Use a general approach based on the exit axis
+    if abs(ax) > 0.5:
+        # Exit through ±X: rotate receptacle so mating face points in ±X
+        angle = -90.0 if ax < 0 else 90.0
+        euler = (0, angle, 0)
+    elif abs(az) > 0.5:
+        # Exit through ±Z: rotate receptacle appropriately
+        angle = 180.0 if az < 0 else 0.0
+        euler = (angle, 0, 0)
+    else:
+        # Exit through ±Y
+        angle = 90.0 if ay < 0 else -90.0
+        euler = (angle, 0, 0)
+
+    # Position: offset outward from wall center by half receptacle depth
+    rcpt_bx, rcpt_by, rcpt_bz = cspec.body_dimensions
+    rcpt_depth = rcpt_bz * 0.7 + 0.0008 * 2  # matches receptacle_solid sizing
+    outward_offset = rcpt_depth / 2 + 0.0005  # small gap for clean union
+
+    housing_pos = (
+        wall_center[0] + ax * outward_offset
+        if abs(ax) > 0.5
+        else (cx if abs(az) > 0.5 else cx),
+        cy if abs(ay) < 0.5 else wall_center[1] + ay * outward_offset,
+        cz if abs(az) < 0.5 else wall_center[2] + az * outward_offset,
+    )
+
+    housing = rcpt.moved(Location(housing_pos, euler))
+
+    return cut, housing
+
+
 def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:
     """Derive cable slot width and height from the servo's connector spec.
 
@@ -332,23 +457,33 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     for ear in servo.mounting_ears:
         shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Cable exit slot ---
-    # Derive slot size from connector spec if available, else use BracketSpec defaults
+    # --- Connector port (replaces rectangular cable slot) ---
     if servo.connector_pos is not None:
-        cx, cy, cz = servo.connector_pos
-        slot_w, slot_h = _cable_slot_dims(servo, spec)
-        # Slot goes from connector position through the bracket wall on -X face
-        slot_depth = wall + tol + 0.002  # through the wall
-        slot = Box(
-            slot_depth,
-            slot_w,
-            slot_h,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        wall_x = -outer_x / 2
+        cut, housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(wall_x, 0, 0),
+            exit_axis=(-1.0, 0.0, 0.0),
         )
-        # Position: at the -X wall, centered on connector Y, at connector Z
-        slot_x = -outer_x / 2 + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((slot_x, cy, cz)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+            if housing is not None:
+                shell = _as_solid(shell.fuse(housing))
+        else:
+            # Fallback to rectangular slot if no connector info
+            cx, cy, cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_depth,
+                slot_w,
+                slot_h,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_x = wall_x + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((slot_x, cy, cz)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
@@ -681,20 +816,31 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
         hole = hole.locate(Location((ear.pos[0], ear.pos[1], outer_cz)))
         shell = shell - hole
 
-    # --- Cable exit slot (-Z face) ---
+    # --- Connector port (-Z face) ---
     if servo.connector_pos is not None:
-        _cx, cy, _cz = servo.connector_pos
-        slot_w, slot_h = _cable_slot_dims(servo, spec)
-        slot_depth = wall + tol + 0.002
-        slot = Box(
-            slot_w,
-            slot_h,
-            slot_depth,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        cut, housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(0, 0, outer_bot_z),
+            exit_axis=(0.0, 0.0, -1.0),
         )
-        slot_z = outer_bot_z + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((0, cy, slot_z)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+            if housing is not None:
+                shell = _as_solid(shell.fuse(housing))
+        else:
+            _cx, cy, _cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_w,
+                slot_h,
+                slot_depth,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_z = outer_bot_z + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((0, cy, slot_z)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
@@ -823,20 +969,31 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
             continue
         shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Cable exit slot (connector is at -X end) ---
+    # --- Connector port (connector is at -X end) ---
     if servo.connector_pos is not None:
-        _cx, cy, cz = servo.connector_pos
-        slot_w, slot_h = _cable_slot_dims(servo, spec)
-        slot_depth = wall + tol + 0.002
-        slot = Box(
-            slot_depth,
-            slot_w,
-            slot_h,
-            align=(Align.CENTER, Align.CENTER, Align.CENTER),
+        cut, housing = _connector_port(
+            servo,
+            spec,
+            wall_center=(cradle_min_x, 0, 0),
+            exit_axis=(-1.0, 0.0, 0.0),
         )
-        slot_x = cradle_min_x + slot_depth / 2 - 0.001
-        slot = slot.locate(Location((slot_x, cy, cz)))
-        shell = shell - slot
+        if cut is not None:
+            shell = shell - cut
+            if housing is not None:
+                shell = _as_solid(shell.fuse(housing))
+        else:
+            _cx, cy, cz = servo.connector_pos
+            slot_w, slot_h = _cable_slot_dims(servo, spec)
+            slot_depth = wall + tol + 0.002
+            slot = Box(
+                slot_depth,
+                slot_w,
+                slot_h,
+                align=(Align.CENTER, Align.CENTER, Align.CENTER),
+            )
+            slot_x = cradle_min_x + slot_depth / 2 - 0.001
+            slot = slot.locate(Location((slot_x, cy, cz)))
+            shell = shell - slot
 
     return _as_solid(shell)
 
