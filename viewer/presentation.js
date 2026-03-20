@@ -3,13 +3,17 @@
  *
  * Single source of truth for how geometry is rendered: materials,
  * edge outlines, color tinting, and Blueprint palette constants.
- * All viewer modes import from here instead of hardcoding material params.
+ *
+ * Edge rendering uses post-processing normal+depth edge detection
+ * (the same technique used by Fusion 360, OnShape, etc.) instead of
+ * geometric edge extraction. This correctly handles silhouettes,
+ * fillets, and arbitrary smooth geometry.
  */
 
 import * as THREE from 'three';
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 // ---------------------------------------------------------------------------
 // Blueprint.js palette (hex values matching CSS custom properties)
@@ -37,27 +41,16 @@ export const BP = {
 
 // ---------------------------------------------------------------------------
 // Render order — controls Three.js draw order for layered effects.
-//
-// The rendering pipeline draws in this order:
-//   1. Section plane visualizer (translucent, behind everything)
-//   2. Stencil back-face pass (invisible, writes stencil)
-//   3. Stencil front-face pass (invisible, clears stencil)
-//   4. Section cap fill (colored cross-section, reads stencil)
-//   5. Normal geometry (default renderOrder 0)
-//   6. Section contour lines (thick outlines on top)
-//
-// Per-layer stencil passes use SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE
-// to keep each layer's passes grouped and ordered.
 // ---------------------------------------------------------------------------
 export const RENDER_ORDER = {
-  SECTION_VIZ:      -100,   // translucent cut plane indicator
-  STENCIL_BACK:        0,   // offset within a layer's stencil group
+  SECTION_VIZ:      -100,
+  STENCIL_BACK:        0,
   STENCIL_FRONT:       1,
   STENCIL_CAP:         2,
-  SECTION_CONTOUR:  9000,   // contour lines drawn last
+  SECTION_CONTOUR:  9000,
 };
-export const SECTION_STENCIL_BASE = 100;    // first layer starts here
-export const SECTION_STENCIL_STRIDE = 10;   // spacing between layers
+export const SECTION_STENCIL_BASE = 100;
+export const SECTION_STENCIL_STRIDE = 10;
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -71,11 +64,7 @@ export function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
 // ---------------------------------------------------------------------------
 export const EDGE_COLOR = BP.DARK_GRAY1;
 export const EDGE_OPACITY = 0.85;
-export const EDGE_WIDTH = 1.5;  // px (only effective with Line2/LineMaterial)
-export const EDGE_THRESHOLD_DEG = 28;
-
-// Shared resolution vector for LineMaterial (updated by setEdgeResolution)
-const _edgeResolution = new THREE.Vector2(1280, 800);
+export const EDGE_THICKNESS = 1.0;  // edge line thickness (shader parameter)
 
 // ---------------------------------------------------------------------------
 // Default material parameters
@@ -92,11 +81,6 @@ const DEFAULT_METALNESS = 0.1;
  *
  * Blends `tintFraction` of the entity color onto a light base,
  * producing a pastel/technical-drawing look where edges remain visible.
- *
- * @param {THREE.Color|number} entityColor — the "true" color of the part
- * @param {number} tintFraction — how much entity color to mix in (0–1, default 0.2)
- * @param {number} baseHex — base body color to tint onto (default: LIGHT_GRAY5)
- * @returns {THREE.Color}
  */
 export function tintColor(entityColor, tintFraction = 0.5, baseHex = BP.LIGHT_GRAY5) {
   const base = new THREE.Color(baseHex);
@@ -107,26 +91,15 @@ export function tintColor(entityColor, tintFraction = 0.5, baseHex = BP.LIGHT_GR
 }
 
 // ---------------------------------------------------------------------------
-// Material + edge creation
+// Material creation
 // ---------------------------------------------------------------------------
 
-/**
- * Create a MeshPhysicalMaterial with project-standard defaults.
- *
- * @param {THREE.Color|number} color
- * @param {Object} [opts]
- * @param {boolean} [opts.transparent]
- * @param {number}  [opts.opacity]
- * @param {boolean} [opts.wireframe]
- * @returns {THREE.MeshPhysicalMaterial}
- */
 export function createMaterial(color, opts = {}) {
   const params = {
     color,
     roughness: DEFAULT_ROUGHNESS,
     metalness: DEFAULT_METALNESS,
   };
-
   if (opts.transparent) {
     params.transparent = true;
     params.opacity = opts.opacity ?? 0.3;
@@ -135,73 +108,16 @@ export function createMaterial(color, opts = {}) {
   if (opts.wireframe) {
     params.wireframe = true;
   }
-
   return new THREE.MeshPhysicalMaterial(params);
 }
 
-/**
- * Create a transparent tool/overlay material (for section cuts, boolean tools).
- *
- * @param {THREE.Color|number} color
- * @param {number} [opacity=0.3]
- * @returns {THREE.MeshPhysicalMaterial}
- */
 export function createToolMaterial(color, opacity = 0.3) {
   return createMaterial(color, { transparent: true, opacity });
 }
 
 /**
- * Add edge outlines to a mesh's parent group.
- *
- * Uses the shared edge material and threshold. Edges are non-interactive
- * (raycast disabled) so they don't interfere with picking.
- *
- * @param {THREE.BufferGeometry} geometry
- * @param {THREE.Group|THREE.Object3D} parent — group to add edges to
- * @param {THREE.Mesh} [sourceMesh] — if provided, copies position/quaternion/scale
- */
-export function addEdges(geometry, parent, sourceMesh = null) {
-  const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD_DEG);
-
-  // Convert EdgesGeometry to LineSegmentsGeometry for screen-space width
-  const posAttr = edges.getAttribute('position');
-  const lineGeom = new LineSegmentsGeometry();
-  lineGeom.setPositions(posAttr.array);
-
-  const lineMat = new LineMaterial({
-    color: EDGE_COLOR,
-    linewidth: EDGE_WIDTH,
-    transparent: true,
-    opacity: EDGE_OPACITY,
-    resolution: _edgeResolution,
-  });
-
-  const lines = new LineSegments2(lineGeom, lineMat);
-  lines.raycast = () => {};
-  edges.dispose();
-
-  if (sourceMesh) {
-    lines.position.copy(sourceMesh.position);
-    lines.quaternion.copy(sourceMesh.quaternion);
-    lines.scale.copy(sourceMesh.scale);
-  }
-
-  parent.add(lines);
-}
-
-/** Update edge resolution when viewport resizes. Call from resize handlers. */
-export function setEdgeResolution(width, height) {
-  _edgeResolution.set(width, height);
-}
-
-/**
- * Create a mesh with material and edge outlines in one call.
- *
- * @param {THREE.BufferGeometry} geometry
- * @param {THREE.Color|number} color
- * @param {THREE.Group} group — parent group to add mesh + edges to
- * @param {Object} [opts] — passed to createMaterial
- * @returns {THREE.Mesh}
+ * Create a mesh with material. Edge rendering is handled by the
+ * post-processing pipeline, not per-mesh geometry.
  */
 export function addMeshWithEdges(geometry, color, group, opts = {}) {
   const material = createMaterial(color, opts);
@@ -209,11 +125,152 @@ export function addMeshWithEdges(geometry, color, group, opts = {}) {
   mesh.castShadow = !opts.wireframe;
   mesh.receiveShadow = !opts.wireframe;
   group.add(mesh);
-
-  // Edge outlines — skip for wireframe/transparent
-  if (!opts.wireframe && !opts.transparent) {
-    addEdges(geometry, group);
-  }
-
   return mesh;
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing edge detection (normal + depth)
+//
+// Technique: render scene normals and depth to a texture, then apply a
+// screen-space edge detection kernel (Roberts cross) that finds
+// discontinuities. This catches feature edges, silhouettes, creases,
+// and any geometry boundary — the same approach used by Fusion 360,
+// OnShape, and other CAD web viewers.
+// ---------------------------------------------------------------------------
+
+/** Edge detection shader — operates on normal+depth render target. */
+const EdgeDetectShader = {
+  uniforms: {
+    tDiffuse:  { value: null },     // color pass
+    tNormal:   { value: null },     // normal pass
+    tDepth:    { value: null },     // depth pass
+    resolution: { value: new THREE.Vector2() },
+    edgeColor: { value: new THREE.Color(EDGE_COLOR) },
+    edgeOpacity: { value: EDGE_OPACITY },
+    normalThreshold: { value: 0.3 },
+    depthThreshold: { value: 0.002 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tNormal;
+    uniform sampler2D tDepth;
+    uniform vec2 resolution;
+    uniform vec3 edgeColor;
+    uniform float edgeOpacity;
+    uniform float normalThreshold;
+    uniform float depthThreshold;
+
+    varying vec2 vUv;
+
+    void main() {
+      vec2 texel = 1.0 / resolution;
+
+      // Sample normals in a 2x2 neighborhood (Roberts cross)
+      vec3 n00 = texture2D(tNormal, vUv).rgb;
+      vec3 n10 = texture2D(tNormal, vUv + vec2(texel.x, 0.0)).rgb;
+      vec3 n01 = texture2D(tNormal, vUv + vec2(0.0, texel.y)).rgb;
+      vec3 n11 = texture2D(tNormal, vUv + vec2(texel.x, texel.y)).rgb;
+
+      // Roberts cross on normals
+      float normalEdge = length(n00 - n11) + length(n10 - n01);
+
+      // Sample depth
+      float d00 = texture2D(tDepth, vUv).r;
+      float d10 = texture2D(tDepth, vUv + vec2(texel.x, 0.0)).r;
+      float d01 = texture2D(tDepth, vUv + vec2(0.0, texel.y)).r;
+      float d11 = texture2D(tDepth, vUv + vec2(texel.x, texel.y)).r;
+
+      // Roberts cross on depth
+      float depthEdge = abs(d00 - d11) + abs(d10 - d01);
+
+      // Combine edge signals
+      float edge = 0.0;
+      if (normalEdge > normalThreshold) edge = 1.0;
+      if (depthEdge > depthThreshold) edge = 1.0;
+
+      // Composite edge on top of color
+      vec4 color = texture2D(tDiffuse, vUv);
+      vec3 result = mix(color.rgb, edgeColor, edge * edgeOpacity);
+      gl_FragColor = vec4(result, color.a);
+    }
+  `,
+};
+
+/**
+ * Create a post-processing edge detection pipeline.
+ *
+ * @param {THREE.WebGLRenderer} renderer
+ * @param {THREE.Scene} scene
+ * @param {THREE.Camera} camera
+ * @returns {{ composer: EffectComposer, resize: (w,h) => void, render: () => void }}
+ */
+export function createEdgeComposer(renderer, scene, camera) {
+  const size = renderer.getSize(new THREE.Vector2());
+
+  // Normal render target
+  const normalTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.FloatType,
+  });
+  const normalMaterial = new THREE.MeshNormalMaterial();
+
+  // Depth render target
+  const depthTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.FloatType,
+  });
+  const depthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.BasicDepthPacking,
+  });
+
+  // Composer: color pass + edge detection pass
+  const composer = new EffectComposer(renderer);
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+
+  const edgePass = new ShaderPass(EdgeDetectShader);
+  edgePass.uniforms.resolution.value.copy(size);
+  edgePass.uniforms.edgeColor.value.set(EDGE_COLOR);
+  composer.addPass(edgePass);
+
+  return {
+    composer,
+
+    render() {
+      // 1. Render normals
+      const origOverride = scene.overrideMaterial;
+      const origBg = scene.background;
+      scene.overrideMaterial = normalMaterial;
+      scene.background = null;
+      renderer.setRenderTarget(normalTarget);
+      renderer.render(scene, camera);
+
+      // 2. Render depth
+      scene.overrideMaterial = depthMaterial;
+      renderer.setRenderTarget(depthTarget);
+      renderer.render(scene, camera);
+
+      // 3. Restore and composite
+      scene.overrideMaterial = origOverride;
+      scene.background = origBg;
+      renderer.setRenderTarget(null);
+
+      edgePass.uniforms.tNormal.value = normalTarget.texture;
+      edgePass.uniforms.tDepth.value = depthTarget.texture;
+
+      composer.render();
+    },
+
+    resize(w, h) {
+      normalTarget.setSize(w, h);
+      depthTarget.setSize(w, h);
+      composer.setSize(w, h);
+      edgePass.uniforms.resolution.value.set(w, h);
+    },
+  };
 }

@@ -14,7 +14,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
 import {
   BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
-  hexStr, tintColor, createMaterial, addMeshWithEdges, setEdgeResolution,
+  hexStr, tintColor, createMaterial, addMeshWithEdges, createEdgeComposer,
 } from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
@@ -119,7 +119,6 @@ class ComponentBrowser {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
-    setEdgeResolution(vw, vh);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -150,6 +149,9 @@ class ComponentBrowser {
       this.scene.add(g);
       this.layerGroups[id] = g;
     }
+
+    // Post-processing edge detection (normal + depth, like Fusion 360)
+    this._edgeComposer = createEdgeComposer(this.renderer, this.scene, this.camera);
 
     window.addEventListener('resize', () => this._updateLayout());
   }
@@ -460,7 +462,7 @@ class ComponentBrowser {
         this.camera.right = halfH * aspect;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
-        setEdgeResolution(w, h);
+        this._edgeComposer.resize(w, h);
         if (this._contourLineMat) {
           this._contourLineMat.resolution.set(w, h);
         }
@@ -1295,7 +1297,7 @@ class ComponentBrowser {
   _animate() {
     const loop = () => {
       this.controls.update();
-      this.renderer.render(this.scene, this.camera);
+      this._edgeComposer.render();
       this._updateAxisGizmo();
       if (this.measureTool.measurements.length > 0 || this.measureTool._firstPoint) {
         this.measureTool.update();
