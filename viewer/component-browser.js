@@ -1081,7 +1081,8 @@ class ComponentBrowser {
     const body = document.getElementById('svg-modal-body');
 
     title.textContent = `${componentName} — ${viewLabel} view`;
-    body.innerHTML = svgText;
+    // Strip explicit width/height so SVG scales to fill the modal via CSS
+    body.innerHTML = svgText.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
 
     // Store for download
     this._lastSvgText = svgText;

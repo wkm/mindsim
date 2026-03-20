@@ -94,6 +94,9 @@ def render_component_svg(
         svg.write(tmp.name)
         content = Path(tmp.name).read_text()
 
+    # Add bounding-box dimension lines
+    content = _inject_dimensions(content)
+
     if annotate:
         content = _inject_annotations(content, annotate)
 
@@ -147,6 +150,160 @@ def _add_section_view(svg, solids, section_plane):
             svg.add_shape(face, layer=f"{layer_id}_fill")
             for edge in face.edges():
                 svg.add_shape(edge, layer=layer_id)
+
+
+def _inject_dimensions(svg_content: str) -> str:
+    """Add overall bounding-box dimension lines to the SVG.
+
+    Parses the viewBox to determine geometry extents, then adds
+    horizontal (width) and vertical (height) dimension lines with
+    extension lines, arrowheads, and labels in mm.
+
+    The geometry lives inside a scale(1,-1) group, so the viewBox
+    y-range maps to flipped geometry coordinates. The dimension lines
+    are placed outside the transform group in normal SVG space.
+    """
+    vb_match = re.search(r'viewBox="([^ ]+) ([^ ]+) ([^ ]+) ([^ "]+)"', svg_content)
+    if not vb_match:
+        return svg_content
+
+    vb_x = float(vb_match.group(1))
+    vb_y = float(vb_match.group(2))
+    vb_w = float(vb_match.group(3))
+    vb_h = float(vb_match.group(4))
+
+    # Geometry bounds (viewBox = tight around geometry with no margin)
+    geo_left = vb_x
+    geo_right = vb_x + vb_w
+    geo_top = vb_y  # min Y (top of SVG)
+    geo_bottom = vb_y + vb_h  # max Y (bottom of SVG)
+
+    # Convert to mm for labels (geometry coords are in meters)
+    width_mm = vb_w * 1000
+    height_mm = vb_h * 1000
+
+    # Skip tiny dimensions (< 0.1mm)
+    if width_mm < 0.1 or height_mm < 0.1:
+        return svg_content
+
+    # Dimension line styling
+    dim_gap = vb_w * 0.06  # gap between geometry and dimension line
+    ext_overshoot = dim_gap * 0.3
+    arrow_size = vb_w * 0.025
+    font_size = vb_w * 0.04
+    stroke_w = vb_w * 0.004
+    thin_w = stroke_w * 0.6
+
+    # Expand viewBox to make room for dimensions
+    expand_right = dim_gap * 3
+    expand_bottom = dim_gap * 3
+    new_vb_w = vb_w + expand_right
+    new_vb_h = vb_h + expand_bottom
+
+    svg_content = svg_content.replace(
+        vb_match.group(0),
+        f'viewBox="{vb_x} {vb_y} {new_vb_w} {new_vb_h}"',
+    )
+    new_w_mm = new_vb_w * SVG_SCALE
+    new_h_mm = new_vb_h * SVG_SCALE
+    svg_content = re.sub(
+        r'width="[^"]*"', f'width="{new_w_mm:.1f}mm"', svg_content, count=1
+    )
+    svg_content = re.sub(
+        r'height="[^"]*"', f'height="{new_h_mm:.1f}mm"', svg_content, count=1
+    )
+
+    lines = []
+
+    # --- Horizontal dimension (width) along bottom ---
+    dim_y = geo_bottom + dim_gap
+    # Extension lines (vertical, from geometry edge down to dimension line)
+    lines.append(
+        _svg_line(
+            geo_left,
+            geo_bottom + dim_gap * 0.15,
+            geo_left,
+            dim_y + ext_overshoot,
+            thin_w,
+        )
+    )
+    lines.append(
+        _svg_line(
+            geo_right,
+            geo_bottom + dim_gap * 0.15,
+            geo_right,
+            dim_y + ext_overshoot,
+            thin_w,
+        )
+    )
+    # Dimension line
+    lines.append(_svg_line(geo_left, dim_y, geo_right, dim_y, stroke_w))
+    # Arrowheads
+    lines.append(_svg_arrow(geo_left, dim_y, 1, 0, arrow_size))
+    lines.append(_svg_arrow(geo_right, dim_y, -1, 0, arrow_size))
+    # Label
+    label_w = f"{width_mm:.1f}"
+    mid_x = (geo_left + geo_right) / 2
+    lines.append(
+        f'<text x="{mid_x}" y="{dim_y - font_size * 0.4}" '
+        f'font-family="{ANNOT_FONT}" font-size="{font_size}" '
+        f'fill="{ANNOT_COLOR}" text-anchor="middle">{label_w}</text>'
+    )
+
+    # --- Vertical dimension (height) along right side ---
+    dim_x = geo_right + dim_gap
+    # Extension lines (horizontal, from geometry edge right to dimension line)
+    lines.append(
+        _svg_line(
+            geo_right + dim_gap * 0.15, geo_top, dim_x + ext_overshoot, geo_top, thin_w
+        )
+    )
+    lines.append(
+        _svg_line(
+            geo_right + dim_gap * 0.15,
+            geo_bottom,
+            dim_x + ext_overshoot,
+            geo_bottom,
+            thin_w,
+        )
+    )
+    # Dimension line
+    lines.append(_svg_line(dim_x, geo_top, dim_x, geo_bottom, stroke_w))
+    # Arrowheads
+    lines.append(_svg_arrow(dim_x, geo_top, 0, 1, arrow_size))
+    lines.append(_svg_arrow(dim_x, geo_bottom, 0, -1, arrow_size))
+    # Label (rotated 90°)
+    label_h = f"{height_mm:.1f}"
+    mid_y = (geo_top + geo_bottom) / 2
+    lines.append(
+        f'<text x="{dim_x + font_size * 0.8}" y="{mid_y}" '
+        f'font-family="{ANNOT_FONT}" font-size="{font_size}" '
+        f'fill="{ANNOT_COLOR}" text-anchor="middle" '
+        f'transform="rotate(-90, {dim_x + font_size * 0.8}, {mid_y})">'
+        f"{label_h}</text>"
+    )
+
+    dim_block = "\n  <!-- Dimensions -->\n  " + "\n  ".join(lines) + "\n"
+    svg_content = svg_content.replace("</svg>", dim_block + "</svg>")
+
+    return svg_content
+
+
+def _svg_line(x1, y1, x2, y2, stroke_width):
+    return (
+        f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+        f'stroke="{ANNOT_COLOR}" stroke-width="{stroke_width}"/>'
+    )
+
+
+def _svg_arrow(x, y, dx, dy, size):
+    """SVG arrowhead polygon pointing in direction (dx, dy)."""
+    px, py = -dy, dx  # perpendicular
+    w = 0.4
+    tip = f"{x},{y}"
+    left = f"{x - dx * size + px * size * w},{y - dy * size + py * size * w}"
+    right = f"{x - dx * size - px * size * w},{y - dy * size - py * size * w}"
+    return f'<polygon points="{tip} {left} {right}" fill="{ANNOT_COLOR}"/>'
 
 
 def _inject_annotations(svg_content: str, meta: dict) -> str:
