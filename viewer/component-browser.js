@@ -8,8 +8,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
-import { tintColor, createMaterial, addMeshWithEdges } from './presentation.js';
+import { BP, tintColor, createMaterial, addMeshWithEdges } from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +65,7 @@ class ComponentBrowser {
     // Section plane state
     this.sectionEnabled = false;
     this.sectionAxis = 'z';       // 'x', 'y', or 'z'
+    this.sectionFlipped = false;
     this.sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
     this.sectionFraction = 0.5;   // slider position (0–1 along bbox)
   }
@@ -101,7 +105,7 @@ class ComponentBrowser {
     this.camera.position.set(0.06, -0.06, 0.05);
     this.camera.up.set(0, 0, 1);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(vw, vh);
     this.renderer.shadowMap.enabled = true;
@@ -210,6 +214,15 @@ class ComponentBrowser {
     if (slider) {
       slider.addEventListener('input', () => {
         this.sectionFraction = parseFloat(slider.value) / 100;
+        this._updateSectionPlane();
+      });
+    }
+
+    const flipBtn = toolbar.querySelector('#section-flip');
+    if (flipBtn) {
+      flipBtn.addEventListener('click', () => {
+        this.sectionFlipped = !this.sectionFlipped;
+        flipBtn.classList.toggle('active', this.sectionFlipped);
         this._updateSectionPlane();
       });
     }
@@ -330,6 +343,10 @@ class ComponentBrowser {
         this.camera.right = halfH * aspect;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
+        // Update Line2 material resolution
+        if (this._contourLineMat) {
+          this._contourLineMat.resolution.set(w, h);
+        }
       }
     });
   }
@@ -586,8 +603,11 @@ class ComponentBrowser {
     this.measureTool.clearAll();
     if (this.sectionEnabled) {
       this.sectionEnabled = false;
+      this.sectionFlipped = false;
       const sectionBtn = document.querySelector('#section-toggle');
       if (sectionBtn) sectionBtn.classList.remove('active');
+      const flipBtn = document.querySelector('#section-flip');
+      if (flipBtn) flipBtn.classList.remove('active');
       const controls = document.querySelector('#section-controls');
       if (controls) controls.style.display = 'none';
       this._removeSectionViz();
@@ -706,26 +726,36 @@ class ComponentBrowser {
       const axisMax = [max.x, max.y, max.z][axisIdx];
       const pos = axisMin + (axisMax - axisMin) * this.sectionFraction;
 
-      // Plane normal points in -axis direction (clips geometry on the + side)
+      // Plane normal: default clips geometry on the + side; flip reverses
+      const sign = this.sectionFlipped ? 1 : -1;
       const normal = new THREE.Vector3();
-      normal.setComponent(axisIdx, -1);
+      normal.setComponent(axisIdx, sign);
       this.sectionPlane.normal.copy(normal);
-      this.sectionPlane.constant = pos;
+      this.sectionPlane.constant = pos * -sign;
 
       this._updateSectionViz(box, axisIdx, pos);
     } else {
       this._removeSectionViz();
     }
 
-    // Apply clipping planes to all mesh materials in layer groups
+    // Apply clipping planes to all meshes AND edge lines in layer groups
     for (const id of ALL_LAYER_IDS) {
       this.layerGroups[id].traverse(child => {
-        if (child.isMesh && child.material) {
+        if (child.material) {
+          // Clone shared edge material on first clip so we don't
+          // mutate the global instance used by non-clipped viewers
+          if (child.isLineSegments && !child.material._clippable) {
+            child.material = child.material.clone();
+            child.material._clippable = true;
+          }
           child.material.clippingPlanes = clips;
           child.material.clipShadows = true;
         }
       });
     }
+
+    // Rebuild stencil-based section caps
+    this._rebuildSectionCaps(clips);
   }
 
   _updateSectionViz(box, axisIdx, pos) {
@@ -773,6 +803,196 @@ class ComponentBrowser {
   _removeSectionViz() {
     if (this._sectionViz) {
       this._sectionViz.visible = false;
+    }
+    this._clearSectionCaps();
+  }
+
+  /**
+   * Stencil-based section caps: fills the cross-section interior with
+   * a solid color so the cut looks like a real cross-section, not a
+   * hollow shell.
+   *
+   * Technique:
+   * 1. For each visible mesh, create two invisible stencil helpers:
+   *    - Back-face pass: increments stencil where clipped back faces are visible
+   *    - Front-face pass: decrements stencil where clipped front faces are visible
+   * 2. A cap plane at the section position renders only where stencil != 0
+   *    (i.e., inside the geometry cross-section).
+   */
+  _rebuildSectionCaps(clips) {
+    this._clearSectionCaps();
+    if (!clips.length) return;
+
+    this._capGroup = new THREE.Group();
+    this._capGroup.name = 'section-caps';
+    this.scene.add(this._capGroup);
+
+    // Collect all visible meshes
+    const meshes = [];
+    for (const id of ALL_LAYER_IDS) {
+      const group = this.layerGroups[id];
+      if (!group.visible) continue;
+      group.traverse(child => {
+        if (child.isMesh && child.geometry) {
+          meshes.push(child);
+        }
+      });
+    }
+
+    // Create stencil helpers for each mesh
+    for (const mesh of meshes) {
+      // Back-face pass — increment stencil
+      const backMat = new THREE.MeshBasicMaterial({
+        colorWrite: false,
+        depthWrite: false,
+        side: THREE.BackSide,
+        clippingPlanes: clips,
+        stencilWrite: true,
+        stencilFunc: THREE.AlwaysStencilFunc,
+        stencilFail: THREE.KeepStencilOp,
+        stencilZFail: THREE.KeepStencilOp,
+        stencilZPass: THREE.IncrementWrapStencilOp,
+      });
+      const backMesh = new THREE.Mesh(mesh.geometry, backMat);
+      backMesh.position.copy(mesh.position);
+      backMesh.quaternion.copy(mesh.quaternion);
+      backMesh.scale.copy(mesh.scale);
+      backMesh.renderOrder = -2;
+      backMesh.raycast = () => {};
+      this._capGroup.add(backMesh);
+
+      // Front-face pass — decrement stencil
+      const frontMat = new THREE.MeshBasicMaterial({
+        colorWrite: false,
+        depthWrite: false,
+        side: THREE.FrontSide,
+        clippingPlanes: clips,
+        stencilWrite: true,
+        stencilFunc: THREE.AlwaysStencilFunc,
+        stencilFail: THREE.KeepStencilOp,
+        stencilZFail: THREE.KeepStencilOp,
+        stencilZPass: THREE.DecrementWrapStencilOp,
+      });
+      const frontMesh = new THREE.Mesh(mesh.geometry, frontMat);
+      frontMesh.position.copy(mesh.position);
+      frontMesh.quaternion.copy(mesh.quaternion);
+      frontMesh.scale.copy(mesh.scale);
+      frontMesh.renderOrder = -1;
+      frontMesh.raycast = () => {};
+      this._capGroup.add(frontMesh);
+    }
+
+    // Cap plane — renders only where stencil != 0 (cross-section interior)
+    // stencilWrite must be true for Three.js to enable the stencil test;
+    // all ops are KEEP so it doesn't modify the stencil buffer.
+    const box = this._getVisibleBBox();
+    const capSize = box
+      ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
+      : 0.2;
+    const capGeom = new THREE.PlaneGeometry(capSize, capSize);
+    const capMat = new THREE.MeshBasicMaterial({
+      color: BP.GRAY5,    // cross-section fill
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      stencilWrite: true,
+      stencilFunc: THREE.NotEqualStencilFunc,
+      stencilRef: 0,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.KeepStencilOp,
+    });
+    const capPlane = new THREE.Mesh(capGeom, capMat);
+    capPlane.raycast = () => {};
+    capPlane.renderOrder = 1;
+
+    // Position and orient to match the section plane
+    if (this._sectionViz) {
+      capPlane.position.copy(this._sectionViz.position);
+      capPlane.rotation.copy(this._sectionViz.rotation);
+    }
+
+    this._capGroup.add(capPlane);
+
+    // Compute cross-section contour lines (mesh-plane intersection)
+    const contourSegments = [];
+    const plane = this.sectionPlane;
+    for (const mesh of meshes) {
+      this._computeMeshPlaneContour(mesh, plane, contourSegments);
+    }
+
+    if (contourSegments.length > 0) {
+      const lineGeom = new LineSegmentsGeometry();
+      lineGeom.setPositions(contourSegments);
+      const lineMat = new LineMaterial({
+        color: BP.DARK_GRAY3,
+        linewidth: 3,        // px (screen-space, via Line2)
+        resolution: new THREE.Vector2(
+          this.renderer.domElement.width,
+          this.renderer.domElement.height,
+        ),
+        clippingPlanes: clips,
+      });
+      const contourLines = new LineSegments2(lineGeom, lineMat);
+      contourLines.renderOrder = 2;
+      contourLines.raycast = () => {};
+      this._capGroup.add(contourLines);
+      this._contourLineMat = lineMat;  // keep ref for resolution updates
+    }
+  }
+
+  /** Compute line segments where a mesh intersects a plane. */
+  _computeMeshPlaneContour(mesh, plane, out) {
+    const geom = mesh.geometry;
+    const posAttr = geom.getAttribute('position');
+    if (!posAttr) return;
+
+    const index = geom.index;
+    const matrix = mesh.matrixWorld;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+
+    const triCount = index ? index.count / 3 : posAttr.count / 3;
+
+    for (let i = 0; i < triCount; i++) {
+      const i0 = index ? index.getX(i * 3) : i * 3;
+      const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
+      const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
+
+      a.fromBufferAttribute(posAttr, i0).applyMatrix4(matrix);
+      b.fromBufferAttribute(posAttr, i1).applyMatrix4(matrix);
+      c.fromBufferAttribute(posAttr, i2).applyMatrix4(matrix);
+
+      const da = plane.distanceToPoint(a);
+      const db = plane.distanceToPoint(b);
+      const dc = plane.distanceToPoint(c);
+
+      // Find edge crossings (sign changes)
+      const crossings = [];
+      if (da * db < 0) crossings.push(this._planeEdgeIntersect(a, b, da, db));
+      if (db * dc < 0) crossings.push(this._planeEdgeIntersect(b, c, db, dc));
+      if (dc * da < 0) crossings.push(this._planeEdgeIntersect(c, a, dc, da));
+
+      if (crossings.length === 2) {
+        out.push(
+          crossings[0].x, crossings[0].y, crossings[0].z,
+          crossings[1].x, crossings[1].y, crossings[1].z,
+        );
+      }
+    }
+  }
+
+  _planeEdgeIntersect(p1, p2, d1, d2) {
+    const t = d1 / (d1 - d2);
+    return new THREE.Vector3().lerpVectors(p1, p2, t);
+  }
+
+  _clearSectionCaps() {
+    if (this._capGroup) {
+      this._capGroup.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+      this.scene.remove(this._capGroup);
+      this._capGroup = null;
     }
   }
 
