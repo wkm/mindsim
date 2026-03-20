@@ -4,31 +4,99 @@
   <title>MindSim Viewer</title>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@blueprintjs/icons@5/lib/css/blueprint-icons.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@blueprintjs/core@5/lib/css/blueprint.css">
   <style>
-    /* ── App-level overrides ── */
+    /* ── Design tokens (Blueprint palette + shadcn structure) ── */
+    :root {
+      --font: 'Input Sans Narrow', 'Input Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-mono: 'Input Mono Narrow', 'Input Mono', ui-monospace, monospace;
+      --radius: 0.5rem;
+      --radius-sm: 0.375rem;
+      /* Blueprint palette mapped to shadcn roles */
+      --background: #F5F8FA;
+      --foreground: #182026;
+      --muted: #CED9E0;
+      --muted-fg: #5C7080;
+      --border: #CED9E0;
+      --input: #CED9E0;
+      --ring: #137CBD;
+      --primary: #137CBD;
+      --primary-fg: #fff;
+      --secondary: #E1E8ED;
+      --secondary-fg: #394B59;
+      --accent: #0E5A8A;
+      --accent-fg: #fff;
+      --destructive: #DB3737;
+      --card: #fff;
+      --card-fg: #182026;
+      --popover: #fff;
+      --popover-fg: #182026;
+      /* Extended palette */
+      --blue1: #0E5A8A; --blue3: #137CBD; --blue4: #2B95D6;
+      --green3: #0F9960; --green4: #15B371;
+      --red3: #DB3737; --red4: #F55656;
+      --gold3: #D99E0B;
+      --gray1: #5C7080; --gray3: #8A9BA8; --gray5: #BFCCD6;
+      --dark1: #182026; --dark3: #293742; --dark5: #394B59;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
+      font-family: var(--font); font-size: 13px; color: var(--foreground);
+      background: var(--background);
       overflow: hidden; position: fixed; width: 100%; height: 100%;
       touch-action: none; user-select: none;
-      background: var(--bp-light-gray5, #F5F8FA);
+      -webkit-font-smoothing: antialiased;
     }
     #canvas-container { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 1; }
     canvas { display: block; }
 
-    /* ── Navbar ── */
-    #top-bar.bp5-navbar {
-      position: absolute; z-index: 100;
-      backdrop-filter: blur(8px); background: rgba(255,255,255,0.92);
+    /* ── Buttons (shadcn-style) ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.1s;
+      border: 1px solid var(--border); background: var(--card); color: var(--secondary-fg);
     }
+    .btn:hover { background: var(--secondary); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: var(--radius-sm);
+      font-family: var(--font); font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all 0.1s;
+      border: none; background: transparent; color: var(--muted-fg);
+    }
+    .btn-ghost:hover { background: var(--secondary); color: var(--foreground); }
+    .btn-ghost.active { background: rgba(19,124,189,0.12); color: var(--accent); }
+    .btn-sm { padding: 4px 8px; font-size: 11px; }
+    .btn-primary {
+      background: var(--primary); color: var(--primary-fg); border-color: var(--primary);
+    }
+    .btn-primary:hover { background: var(--accent); border-color: var(--accent); }
+    .btn-group { display: inline-flex; gap: 1px; }
+
+    /* ── Navbar ── */
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 44px;
+      display: flex; align-items: center; padding: 0 12px; gap: 8px;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border); z-index: 100;
+    }
+    .nav-heading { font-size: 13px; font-weight: 600; color: var(--foreground); }
+    .nav-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
     #bot-name { cursor: pointer; }
+    .nav-right { margin-left: auto; display: flex; gap: 2px; }
 
     /* ── Tree panel (left) ── */
     #tree-panel {
-      position: absolute; top: 50px; left: 0; bottom: 0; width: 280px;
-      background: rgba(255,255,255,0.94); border-right: 1px solid #ced9e0;
+      position: absolute; top: 44px; left: 0; bottom: 0; width: 280px;
+      background: rgba(255,255,255,0.94); border-right: 1px solid var(--border);
       z-index: 90; overflow-y: auto; padding: 12px;
       backdrop-filter: blur(8px); display: none;
+    }
+    #tree-panel h2 {
+      font-size: 11px; font-weight: 600; color: var(--accent);
+      margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;
     }
 
     /* Tree node styles */
@@ -36,126 +104,79 @@
     .tree-node-header {
       display: flex; align-items: center; gap: 4px;
       padding: 3px 4px; border-radius: 4px; cursor: pointer;
-      font-size: 12px; color: #394b59;
-      transition: background 0.1s;
+      font-size: 12px; color: var(--dark5); transition: background 0.1s;
     }
     .tree-node-header:hover { background: rgba(206,217,224,0.5); }
-    .tree-node.focused > .tree-node-header {
-      background: rgba(19,124,189,0.15); color: #0e5a8a;
-    }
-    .tree-chevron {
-      width: 14px; text-align: center; font-size: 8px; color: #8a9ba8;
-      flex-shrink: 0; cursor: pointer;
-    }
-    .tree-chevron:hover { color: #5c7080; }
+    .tree-node.focused > .tree-node-header { background: rgba(19,124,189,0.15); color: var(--accent); }
+    .tree-chevron { width: 14px; text-align: center; font-size: 8px; color: var(--gray3); flex-shrink: 0; cursor: pointer; }
+    .tree-chevron:hover { color: var(--gray1); }
     .tree-node-icon { font-size: 10px; flex-shrink: 0; }
     .tree-node-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tree-node-children { padding-left: 14px; }
 
     /* ── Side panel (right) ── */
     #side-panel {
-      position: absolute; top: 50px; right: 0; bottom: 0; width: 320px;
-      background: rgba(255,255,255,0.94); border-left: 1px solid #ced9e0;
-      z-index: 90; overflow-y: auto; padding: 16px;
-      backdrop-filter: blur(8px);
+      position: absolute; top: 44px; right: 0; bottom: 0; width: 320px;
+      background: rgba(255,255,255,0.94); border-left: 1px solid var(--border);
+      z-index: 90; overflow-y: auto; padding: 16px; backdrop-filter: blur(8px);
     }
-    #side-panel h2 { font-size: 13px; font-weight: 600; color: #0e5a8a; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-    #side-panel h3 { font-size: 12px; font-weight: 600; color: #5c7080; margin: 12px 0 6px; }
+    #side-panel h2 { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    #side-panel h3 { font-size: 11px; font-weight: 600; color: var(--muted-fg); margin: 12px 0 6px; }
 
     /* ── Property grid ── */
     .prop-grid { margin-bottom: 8px; }
-    .prop-row {
-      display: flex; justify-content: space-between; font-size: 12px;
-      padding: 3px 0; border-bottom: 1px solid rgba(206,217,224,0.4);
-    }
-    .prop-label { color: #5c7080; }
-    .prop-value { color: #394b59; font-family: monospace; font-size: 11px; }
+    .prop-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid rgba(206,217,224,0.4); }
+    .prop-label { color: var(--gray1); }
+    .prop-value { color: var(--dark5); font-family: var(--font-mono); font-size: 11px; }
 
     /* Property badges */
-    .prop-badge {
-      display: inline-block; font-size: 10px; font-weight: 600;
-      padding: 2px 8px; border-radius: 3px; margin-bottom: 12px;
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .body-badge { background: rgba(19,124,189,0.12); color: #0e5a8a; }
+    .prop-badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-sm); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .body-badge { background: rgba(19,124,189,0.12); color: var(--blue1); }
     .joint-badge { background: rgba(15,153,96,0.12); color: #0a6640; }
     .camera-badge { background: rgba(113,87,217,0.12); color: #7157d9; }
     .battery-badge { background: rgba(217,158,11,0.12); color: #bf8c0a; }
     .wheel-badge { background: rgba(0,179,164,0.12); color: #008075; }
-    .component-badge { background: rgba(92,112,128,0.12); color: #5c7080; }
+    .component-badge { background: rgba(92,112,128,0.12); color: var(--gray1); }
     .servo-badge { background: rgba(15,153,96,0.12); color: #0a6640; }
 
-    /* Property chips (clickable links to other nodes) */
-    .prop-chip {
-      display: inline-block; font-size: 11px; padding: 4px 10px;
-      border-radius: 4px; margin: 2px 4px 2px 0;
-      background: rgba(206,217,224,0.3); border: 1px solid #ced9e0;
-      transition: all 0.15s;
-    }
-    .prop-chip:hover { background: rgba(206,217,224,0.6); border-color: #bfccd6; }
-    .body-chip { color: #0e5a8a; }
-    .joint-chip { color: #0a6640; }
-    .camera-chip { color: #7157d9; }
-    .battery-chip { color: #bf8c0a; }
-    .wheel-chip { color: #008075; }
-    .component-chip { color: #5c7080; }
+    /* Property chips */
+    .prop-chip { display: inline-block; font-size: 11px; padding: 4px 10px; border-radius: var(--radius-sm); margin: 2px 4px 2px 0; background: rgba(206,217,224,0.3); border: 1px solid var(--border); transition: all 0.15s; }
+    .prop-chip:hover { background: rgba(206,217,224,0.6); border-color: var(--gray5); }
+    .body-chip { color: var(--blue1); } .joint-chip { color: #0a6640; }
+    .camera-chip { color: #7157d9; } .battery-chip { color: #bf8c0a; }
+    .wheel-chip { color: #008075; } .component-chip { color: var(--gray1); }
 
     /* ── Controls ── */
     .slider-group { margin-bottom: 8px; }
-    .slider-label {
-      display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px;
-    }
-    .slider-label .name { color: #394b59; }
-    .slider-label .value { color: #137cbd; font-family: monospace; }
-    input[type="range"] {
-      width: 100%; height: 4px; -webkit-appearance: none; appearance: none;
-      background: #ced9e0; border-radius: 2px; outline: none;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 14px; height: 14px;
-      border-radius: 50%; background: #137cbd; cursor: pointer;
-    }
+    .slider-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; }
+    .slider-label .name { color: var(--dark5); }
+    .slider-label .value { color: var(--primary); font-family: var(--font-mono); }
+    input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: var(--muted); border-radius: 2px; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--primary); cursor: pointer; }
+    #section-slider { accent-color: var(--primary); cursor: pointer; }
 
-    /* Assembly step info */
-    .step-info {
-      background: rgba(206,217,224,0.3); border-radius: 6px;
-      padding: 10px; margin-bottom: 8px;
-    }
-    .step-info .step-title { font-size: 13px; font-weight: 600; color: #182026; }
-    .step-info .step-desc { font-size: 12px; color: #5c7080; margin-top: 4px; }
-
-    /* IK info */
-    .ik-info { font-size: 12px; color: #5c7080; line-height: 1.6; }
-    .ik-info .highlight { color: #0f9960; }
-    .ik-info .anchor { color: #137cbd; }
-    .ik-info .target { color: #db3737; }
+    /* Assembly / IK info */
+    .step-info { background: rgba(206,217,224,0.3); border-radius: var(--radius); padding: 10px; margin-bottom: 8px; }
+    .step-info .step-title { font-size: 13px; font-weight: 600; color: var(--foreground); }
+    .step-info .step-desc { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
+    .ik-info { font-size: 12px; color: var(--muted-fg); line-height: 1.6; }
+    .ik-info .highlight { color: var(--green3); }
+    .ik-info .anchor { color: var(--primary); }
+    .ik-info .target { color: var(--destructive); }
 
     /* ── Loading overlay ── */
-    #loading {
-      position: absolute; inset: 0; background: #f5f8fa;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 1000;
-    }
-    #loading p { margin-top: 16px; font-size: 14px; color: #5c7080; }
-
-    /* Joint axis colors */
+    #loading { position: absolute; inset: 0; background: var(--background); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+    .spinner { width: 32px; height: 32px; border: 2px solid var(--muted); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { margin-top: 16px; font-size: 13px; color: var(--muted-fg); }
     .joint-color { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
 
     /* ── Landing page ── */
-    #landing {
-      position: absolute; inset: 0; z-index: 500;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: #1a1a2e;
-    }
+    #landing { position: absolute; inset: 0; z-index: 500; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1a1a2e; }
     #landing h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px; }
     #landing p { font-size: 14px; color: #888; margin-bottom: 40px; }
     .landing-cards { display: flex; gap: 24px; }
-    .landing-card {
-      width: 220px; padding: 32px 24px; border-radius: 12px;
-      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-      text-align: center; cursor: pointer; transition: all 0.2s;
-      text-decoration: none; color: inherit;
-    }
+    .landing-card { width: 220px; padding: 32px 24px; border-radius: var(--radius); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); text-align: center; cursor: pointer; transition: all 0.2s; text-decoration: none; color: inherit; }
     .landing-card:hover { background: rgba(80,80,200,0.15); border-color: #6666cc; transform: translateY(-2px); }
     .landing-card .card-icon { font-size: 36px; margin-bottom: 12px; }
     .landing-card .card-title { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; }
@@ -164,61 +185,48 @@
     /* ── Component browser ── */
     #component-browser { display: none; position: absolute; inset: 0; z-index: 50; pointer-events: none; }
 
-    /* View dropdown */
-    #view-dropdown { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px; }
+    /* Dropdowns */
+    .dropdown-menu {
+      position: absolute; top: 100%; left: 0; z-index: 200;
+      min-width: 160px; padding: 4px;
+      background: var(--popover); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .dropdown-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; border-radius: calc(var(--radius-sm) - 1px);
+      font-size: 12px; color: var(--foreground); cursor: pointer;
+      border: none; background: none; width: 100%; text-align: left;
+      font-family: var(--font);
+    }
+    .dropdown-item:hover { background: var(--secondary); }
+    .dropdown-item.active { background: rgba(19,124,189,0.12); color: var(--accent); }
+    .dropdown-kbd { font-size: 10px; color: var(--gray3); font-family: var(--font-mono); }
 
     /* Layer checkboxes */
     .layer-controls { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
-    .layer-toggle {
-      display: flex; align-items: center; gap: 8px; padding: 5px 0;
-      cursor: pointer; font-size: 12px; color: #394b59;
-    }
-    .layer-toggle input[type="checkbox"] {
-      width: 14px; height: 14px; accent-color: #137cbd; cursor: pointer;
-    }
-    .layer-swatch {
-      display: inline-block; width: 10px; height: 10px; border-radius: 2px;
-      border: 1px solid #ced9e0; flex-shrink: 0;
-    }
+    .layer-toggle { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; font-size: 12px; color: var(--dark5); }
+    .layer-toggle input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--primary); cursor: pointer; }
+    .layer-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid var(--border); flex-shrink: 0; }
     .layer-label { flex: 1; }
-
-    /* Hoverable mounting point / wire port items */
-    .highlight-item {
-      padding: 2px 4px; border-radius: 3px; cursor: pointer;
-      transition: background 0.1s, color 0.1s;
-    }
-    .highlight-item:hover { background: rgba(206,217,224,0.5); color: #182026; }
-
-    #section-slider { accent-color: #137cbd; cursor: pointer; }
+    .highlight-item { padding: 2px 4px; border-radius: 3px; cursor: pointer; transition: background 0.1s, color 0.1s; }
+    .highlight-item:hover { background: rgba(206,217,224,0.5); color: var(--foreground); }
 
     /* ── SVG render modal ── */
-    #svg-modal { position: fixed; inset: 0; z-index: 3000; }
-    #svg-modal .bp5-overlay-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
-    #svg-modal .bp5-dialog { width: 90vw; height: 85vh; display: flex; flex-direction: column; }
-    #svg-modal .bp5-dialog-body {
-      flex: 1; overflow: hidden; display: flex; align-items: center;
-      justify-content: center; padding: 24px;
-    }
-    #svg-modal .bp5-dialog-body svg { width: 100%; height: 100%; }
+    #svg-modal { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+    .modal-dialog { position: relative; width: 90vw; height: 85vh; background: var(--card); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden; }
+    .modal-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+    .modal-header h5 { font-size: 13px; font-weight: 600; color: var(--foreground); }
+    .modal-body { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .modal-body svg { width: 100%; height: 100%; }
 
-    /* ── Quick Switcher (Ctrl+K) ── */
-    #quick-switcher-overlay {
-      position: fixed; inset: 0; z-index: 2000;
-      background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);
-    }
-    #quick-switcher {
-      position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
-      width: 480px; max-height: 60vh;
-      overflow: hidden; display: flex; flex-direction: column;
-    }
-    #qs-input {
-      width: 100%; padding: 14px 18px; border: none; outline: none;
-      font-size: 15px; font-family: inherit; color: #182026;
-      border-bottom: 1px solid #ced9e0;
-      background: transparent;
-    }
-    #qs-input::placeholder { color: #8a9ba8; }
-    #qs-results { overflow-y: auto; max-height: calc(60vh - 50px); }
+    /* ── Quick Switcher ── */
+    #quick-switcher-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.4); backdrop-filter: blur(2px); }
+    #quick-switcher { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: 480px; max-height: 60vh; background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; }
+    #qs-input { width: 100%; padding: 14px 18px; border: none; outline: none; font-size: 14px; font-family: var(--font); color: var(--foreground); border-bottom: 1px solid var(--border); background: transparent; }
+    #qs-input::placeholder { color: var(--gray3); }
+    #qs-results { overflow-y: auto; max-height: calc(60vh - 50px); padding: 4px; }
   </style>
 </head>
 <body>
@@ -240,103 +248,80 @@
     </div>
   </div>
 
-  <!-- Loading overlay (bot viewer) -->
+  <!-- Loading overlay -->
   <div id="loading" style="display:none">
-    <div class="bp5-spinner">
-      <div class="bp5-spinner-animation">
-        <svg width="50" viewBox="0 0 100 100">
-          <path class="bp5-spinner-track" d="M 50,50 m 0,-45 a 45,45 0 1 1 0,90 a 45,45 0 1 1 0,-90"></path>
-          <path class="bp5-spinner-head" d="M 50,50 m 0,-45 a 45,45 0 1 1 0,90 a 45,45 0 1 1 0,-90" pathLength="280" stroke-dasharray="280 280" stroke-dashoffset="210"></path>
-        </svg>
-      </div>
-    </div>
+    <div class="spinner"></div>
     <p id="loading-text">Loading MuJoCo WASM...</p>
   </div>
 
   <div id="canvas-container"></div>
 
-  <!-- Top bar (shared by bot viewer and component browser) -->
-  <nav id="top-bar" class="bp5-navbar" style="display:none">
-    <div class="bp5-navbar-group bp5-align-left">
-      <span class="bp5-navbar-heading">MindSim</span>
-      <span class="bp5-navbar-divider"></span>
-      <button class="bp5-button bp5-minimal" id="bot-name"></button>
-      <!-- Component browser: View dropdown + tools -->
-      <span class="bp5-navbar-divider" id="cb-nav-divider" style="display:none"></span>
-      <div class="bp5-button-group" id="cb-view-group" style="display:none">
-        <div class="bp5-popover2-target" style="position:relative">
-          <button class="bp5-button bp5-minimal bp5-small" id="view-dropdown-btn">
-            <span class="bp5-icon bp5-icon-eye-open"></span> View <span class="bp5-icon bp5-icon-caret-down" style="margin-left:2px"></span>
-          </button>
-          <ul class="bp5-menu bp5-elevation-2" id="view-dropdown" style="display:none; position:absolute; top:100%; left:0; z-index:200; min-width:160px">
-            <!-- Populated by JS -->
-          </ul>
-        </div>
-      </div>
-      <div class="bp5-button-group" id="cb-tools-group" style="display:none">
-        <button class="bp5-button bp5-minimal bp5-small" id="measure-toggle" title="Measure distance (M)">
-          <span class="bp5-icon bp5-icon-measurement"></span> Measure
-        </button>
-        <button class="bp5-button bp5-minimal bp5-small" id="measure-clear" title="Clear measurements">Clear</button>
-        <span class="bp5-navbar-divider"></span>
-        <button class="bp5-button bp5-minimal bp5-small" id="section-toggle" title="Section cut (S)">
-          <span class="bp5-icon bp5-icon-cut"></span> Section
-        </button>
-        <span id="section-controls" style="display:none; align-items:center; gap:2px">
-          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="x">X</button>
-          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="y">Y</button>
-          <button class="bp5-button bp5-small bp5-active" data-section-axis="z">Z</button>
-          <input id="section-slider" type="range" min="0" max="100" value="50" style="width:80px">
-          <button class="bp5-button bp5-small bp5-minimal" id="section-flip" title="Flip">&#8645;</button>
-        </span>
-        <span class="bp5-navbar-divider"></span>
-        <button class="bp5-button bp5-minimal bp5-small bp5-intent-primary" id="render-svg" title="Render SVG">
-          <span class="bp5-icon bp5-icon-export"></span> Render SVG
-        </button>
+  <!-- Top bar -->
+  <nav id="top-bar" style="display:none">
+    <span class="nav-heading">MindSim</span>
+    <span class="nav-sep"></span>
+    <button class="btn-ghost" id="bot-name"></button>
+    <!-- Component browser: View dropdown + tools -->
+    <span class="nav-sep" id="cb-nav-divider" style="display:none"></span>
+    <div id="cb-view-group" style="display:none; position:relative">
+      <button class="btn-ghost btn-sm" id="view-dropdown-btn">View &#9662;</button>
+      <div class="dropdown-menu" id="view-dropdown" style="display:none">
+        <!-- Populated by JS -->
       </div>
     </div>
-    <div class="bp5-navbar-group bp5-align-right" id="mode-tabs">
-      <button class="bp5-button bp5-minimal bp5-active" data-mode="explore">Explore</button>
-      <button class="bp5-button bp5-minimal" data-mode="joint">Joints</button>
-      <button class="bp5-button bp5-minimal" data-mode="assembly">Assembly</button>
-      <button class="bp5-button bp5-minimal" data-mode="ik">IK</button>
+    <div class="btn-group" id="cb-tools-group" style="display:none">
+      <button class="btn-ghost btn-sm" id="measure-toggle" title="Measure distance (M)">Measure</button>
+      <button class="btn-ghost btn-sm" id="measure-clear" title="Clear measurements">Clear</button>
+      <span class="nav-sep"></span>
+      <button class="btn-ghost btn-sm" id="section-toggle" title="Section cut (S)">Section</button>
+      <span id="section-controls" style="display:none; align-items:center; gap:2px">
+        <button class="btn-ghost btn-sm" data-section-axis="x">X</button>
+        <button class="btn-ghost btn-sm" data-section-axis="y">Y</button>
+        <button class="btn-ghost btn-sm active" data-section-axis="z">Z</button>
+        <input id="section-slider" type="range" min="0" max="100" value="50" style="width:80px">
+        <button class="btn-ghost btn-sm" id="section-flip" title="Flip">&#8645;</button>
+      </span>
+      <span class="nav-sep"></span>
+      <button class="btn btn-sm btn-primary" id="render-svg" title="Render SVG">Render SVG</button>
+    </div>
+    <div class="nav-right" id="mode-tabs">
+      <button class="btn-ghost active" data-mode="explore">Explore</button>
+      <button class="btn-ghost" data-mode="joint">Joints</button>
+      <button class="btn-ghost" data-mode="assembly">Assembly</button>
+      <button class="btn-ghost" data-mode="ik">IK</button>
     </div>
   </nav>
 
   <div id="tree-panel">
-    <h2 class="bp5-heading">Components</h2>
+    <h2>Components</h2>
     <div id="tree-content"></div>
   </div>
 
-  <div id="side-panel" style="display:none">
-    <!-- Populated by mode JS -->
-  </div>
+  <div id="side-panel" style="display:none"></div>
 
-  <!-- Component browser layout -->
   <div id="component-browser">
     <svg id="axis-gizmo" width="100" height="100" style="display:none; position:absolute; top:56px; right:332px; z-index:85; pointer-events:none; overflow:visible"></svg>
   </div>
 
   <!-- SVG Render Modal -->
   <div id="svg-modal" style="display:none">
-    <div class="bp5-overlay-backdrop"></div>
-    <div class="bp5-dialog">
-      <div class="bp5-dialog-header">
-        <h5 class="bp5-heading" id="svg-modal-title"></h5>
-        <button class="bp5-button bp5-minimal" id="svg-modal-download" title="Download SVG">
-          <span class="bp5-icon bp5-icon-download"></span> Download
-        </button>
-        <button class="bp5-dialog-close-button bp5-button bp5-minimal bp5-icon-cross" id="svg-modal-close"></button>
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h5 id="svg-modal-title"></h5>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" id="svg-modal-download">Download</button>
+        <button class="btn-ghost btn-sm" id="svg-modal-close">&times;</button>
       </div>
-      <div class="bp5-dialog-body" id="svg-modal-body"></div>
+      <div class="modal-body" id="svg-modal-body"></div>
     </div>
   </div>
 
   <!-- Quick Switcher -->
   <div id="quick-switcher-overlay" style="display:none">
-    <div id="quick-switcher" class="bp5-card bp5-elevation-4">
-      <input id="qs-input" class="bp5-input bp5-large bp5-fill" type="text" placeholder="Search bots and components..." autocomplete="off" spellcheck="false">
-      <div id="qs-results" class="bp5-menu"></div>
+    <div id="quick-switcher">
+      <input id="qs-input" type="text" placeholder="Search bots and components..." autocomplete="off" spellcheck="false">
+      <div id="qs-results"></div>
     </div>
   </div>
 

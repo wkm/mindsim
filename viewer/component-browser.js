@@ -165,9 +165,9 @@ class ComponentBrowser {
       dropdown.innerHTML = '';
       for (const [key, preset] of Object.entries(VIEW_PRESETS)) {
         const li = document.createElement('li');
-        li.innerHTML = `<button class="bp5-menu-item" data-view="${key}">
-          <span class="bp5-text">${preset.label}</span>
-          <span class="bp5-menu-item-label">${preset.key}</span>
+        li.innerHTML = `<button class="dropdown-item" data-view="${key}">
+          <span class="text">${preset.label}</span>
+          <span class="dropdown-kbd">${preset.key}</span>
         </button>`;
         li.querySelector('button').addEventListener('click', () => {
           this._setViewPreset(key);
@@ -202,7 +202,7 @@ class ComponentBrowser {
           this.measureTool.disable();
           this.controls.enabled = true;
         }
-        measureBtn.classList.toggle('bp5-active', active);
+        measureBtn.classList.toggle('active', active);
       });
     }
 
@@ -223,7 +223,7 @@ class ComponentBrowser {
     if (sectionToggle) {
       sectionToggle.addEventListener('click', () => {
         this.sectionEnabled = !this.sectionEnabled;
-        sectionToggle.classList.toggle('bp5-active', this.sectionEnabled);
+        sectionToggle.classList.toggle('active', this.sectionEnabled);
         const controls = document.getElementById('section-controls');
         if (controls) controls.style.display = this.sectionEnabled ? 'flex' : 'none';
         this._updateSectionPlane();
@@ -236,7 +236,7 @@ class ComponentBrowser {
         btn.addEventListener('click', () => {
           this.sectionAxis = axis;
           document.querySelectorAll('[data-section-axis]').forEach(b =>
-            b.classList.toggle('bp5-active', b.dataset.sectionAxis === axis));
+            b.classList.toggle('active', b.dataset.sectionAxis === axis));
           this._updateSectionPlane();
         });
       }
@@ -254,7 +254,7 @@ class ComponentBrowser {
     if (flipBtn) {
       flipBtn.addEventListener('click', () => {
         this.sectionFlipped = !this.sectionFlipped;
-        flipBtn.classList.toggle('bp5-active', this.sectionFlipped);
+        flipBtn.classList.toggle('active', this.sectionFlipped);
         this._updateSectionPlane();
       });
     }
@@ -366,7 +366,7 @@ class ComponentBrowser {
     const dropdown = document.getElementById('view-dropdown');
     if (dropdown) {
       dropdown.querySelectorAll('[data-view]').forEach(btn => {
-        btn.classList.toggle('bp5-active', btn.dataset.view === this.activePreset);
+        btn.classList.toggle('active', btn.dataset.view === this.activePreset);
       });
     }
     // Update dropdown button label
@@ -374,7 +374,7 @@ class ComponentBrowser {
     if (dropdownBtn && this.activePreset) {
       const preset = VIEW_PRESETS[this.activePreset];
       if (preset) {
-        dropdownBtn.innerHTML = `<span class="bp5-icon bp5-icon-eye-open"></span> ${preset.label} <span class="bp5-icon bp5-icon-caret-down" style="margin-left:2px"></span>`;
+        dropdownBtn.textContent = `${preset.label} \u25BE`;
       }
     }
   }
@@ -886,9 +886,9 @@ class ComponentBrowser {
     this.sectionEnabled = false;
     this.sectionFlipped = false;
     const sectionBtn = document.querySelector('#section-toggle');
-    if (sectionBtn) sectionBtn.classList.remove('bp5-active');
+    if (sectionBtn) sectionBtn.classList.remove('active');
     const flipBtn = document.querySelector('#section-flip');
-    if (flipBtn) flipBtn.classList.remove('bp5-active');
+    if (flipBtn) flipBtn.classList.remove('active');
     const controls = document.querySelector('#section-controls');
     if (controls) controls.style.display = 'none';
     this._removeSectionViz();

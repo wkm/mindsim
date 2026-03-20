@@ -152,9 +152,9 @@ export class AssemblyMode {
     html += '<div id="asm-step-info" class="step-info"></div>';
 
     html += `<div style="display:flex;gap:8px;margin-top:12px;">
-      <button class="bp5-button bp5-small" id="asm-prev-btn">\u2190 Prev</button>
-      <button class="bp5-button bp5-small" id="asm-next-btn">Next \u2192</button>
-      <button class="bp5-button bp5-small" id="asm-show-all-btn">Show All</button>
+      <button class="btn btn-sm" id="asm-prev-btn">\u2190 Prev</button>
+      <button class="btn btn-sm" id="asm-next-btn">Next \u2192</button>
+      <button class="btn btn-sm" id="asm-show-all-btn">Show All</button>
     </div>`;
 
     panel.innerHTML = html;

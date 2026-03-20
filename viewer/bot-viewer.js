@@ -376,8 +376,8 @@ export async function initBotViewer(botName) {
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
 
-    document.querySelectorAll('#mode-tabs .bp5-button').forEach(tab => {
-      tab.classList.toggle('bp5-active', tab.dataset.mode === modeName);
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === modeName);
     });
   }
 
@@ -403,7 +403,7 @@ export async function initBotViewer(botName) {
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
 
-    document.querySelectorAll('#mode-tabs .bp5-button').forEach(tab => {
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
       tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 

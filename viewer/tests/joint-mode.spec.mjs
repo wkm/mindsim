@@ -21,7 +21,7 @@ async function sliderValueText(page, slider) {
 test.describe('Joint mode', () => {
   test.beforeEach(async ({ page }) => {
     await waitForViewer(page);
-    await page.click('#mode-tabs .bp5-button[data-mode="joint"]');
+    await page.click('#mode-tabs .btn-ghost[data-mode="joint"]');
     await page.waitForTimeout(300);
   });
 

@@ -21,7 +21,7 @@ const ROBOT_CLICK_POSITIONS = [
 test.describe('IK mode', () => {
   test.beforeEach(async ({ page }) => {
     await waitForViewer(page);
-    await page.click('#mode-tabs .bp5-button[data-mode="ik"]');
+    await page.click('#mode-tabs .btn-ghost[data-mode="ik"]');
     await page.waitForTimeout(500);
   });
 

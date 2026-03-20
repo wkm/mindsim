@@ -32,7 +32,7 @@ test.describe('Viewer initialization', () => {
 
   test('four mode tabs are present', async ({ page }) => {
     await waitForViewer(page);
-    const tabs = page.locator('#mode-tabs .bp5-button');
+    const tabs = page.locator('#mode-tabs .btn-ghost');
     await expect(tabs).toHaveCount(4);
   });
 });

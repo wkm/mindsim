@@ -8,7 +8,7 @@ import { test, waitForViewer } from './fixtures.mjs';
 test.describe('Assembly mode', () => {
   test.beforeEach(async ({ page }) => {
     await waitForViewer(page);
-    await page.click('#mode-tabs .bp5-button[data-mode="assembly"]');
+    await page.click('#mode-tabs .btn-ghost[data-mode="assembly"]');
     await page.waitForTimeout(500);
   });
 
