@@ -282,6 +282,7 @@
     }
     #view-toolbar button:hover { background: rgba(206,217,224,0.5); color: var(--bp-dark-gray1); }
     #view-toolbar button.active { background: var(--bp-blue3); color: #fff; }
+    .toolbar-sep { width: 1px; height: 20px; background: var(--bp-light-gray1); flex-shrink: 0; }
 
     /* ── Quick Switcher (Ctrl+K) ── */
     #quick-switcher-overlay {
@@ -375,6 +376,9 @@
       <button data-view="side">Side</button>
       <button data-view="top">Top</button>
       <button data-view="iso" class="active">Iso</button>
+      <span class="toolbar-sep"></span>
+      <button id="measure-toggle" title="Measure distance (click two points)">Measure</button>
+      <button id="measure-clear" title="Clear all measurements">Clear</button>
     </div>
   </div>
 

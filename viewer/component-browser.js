@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { clearGroup, orientToAxis } from './utils.js';
 import { tintColor, createMaterial, addMeshWithEdges } from './presentation.js';
+import { MeasureTool } from './measure-tool.js';
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -107,6 +108,9 @@ class ComponentBrowser {
     this.controls.enableRotate = true;
     this.controls.update();
 
+    // Measurement tool
+    this.measureTool = new MeasureTool(this.camera, this.scene, container);
+
     // Lighting
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -144,6 +148,31 @@ class ComponentBrowser {
       if (btn) {
         btn.addEventListener('click', () => this._setViewPreset(key));
       }
+    }
+
+    // Measure tool toggle
+    const measureBtn = toolbar.querySelector('#measure-toggle');
+    if (measureBtn) {
+      measureBtn.addEventListener('click', () => {
+        const active = !this.measureTool.enabled;
+        if (active) {
+          this.measureTool.enable();
+          // Disable orbit when measuring
+          this.controls.enabled = false;
+        } else {
+          this.measureTool.disable();
+          this.controls.enabled = true;
+        }
+        measureBtn.classList.toggle('active', active);
+      });
+    }
+
+    // Clear measurements
+    const clearBtn = toolbar.querySelector('#measure-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.measureTool.clearAll();
+      });
     }
   }
 
@@ -514,7 +543,8 @@ class ComponentBrowser {
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
-    // Clear all layers
+    // Clear measurements and layers
+    this.measureTool.clearAll();
     for (const id of ALL_LAYER_IDS) {
       clearGroup(this.layerGroups[id]);
       this.layerGroups[id].visible = false;
@@ -620,6 +650,9 @@ class ComponentBrowser {
     const loop = () => {
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
+      if (this.measureTool.measurements.length > 0 || this.measureTool._firstPoint) {
+        this.measureTool.update();
+      }
       requestAnimationFrame(loop);
     };
     loop();
