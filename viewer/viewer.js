@@ -46,9 +46,12 @@ if (cadstepsParam) {
   document.getElementById('top-bar').style.display = '';
   document.getElementById('side-panel').style.display = '';
   document.getElementById('component-browser').style.display = 'block';
-  document.getElementById('view-toolbar').style.display = 'flex';
   document.getElementById('axis-gizmo').style.display = '';
   document.getElementById('bot-name').textContent = 'Components';
+  // Show component browser navbar elements
+  document.getElementById('cb-nav-divider').style.display = '';
+  document.getElementById('cb-view-group').style.display = '';
+  document.getElementById('cb-tools-group').style.display = '';
   import('./component-browser.js').then(m => m.initComponentBrowser(componentParam));
 
 } else {

@@ -163,12 +163,9 @@
 
     /* ── Component browser ── */
     #component-browser { display: none; position: absolute; inset: 0; z-index: 50; pointer-events: none; }
-    #component-sidebar {
-      position: absolute; top: 50px; left: 0; bottom: 0; width: 220px;
-      background: rgba(255,255,255,0.94); border-right: 1px solid #ced9e0;
-      z-index: 91; overflow-y: auto;
-      backdrop-filter: blur(8px); pointer-events: auto;
-    }
+
+    /* View dropdown */
+    #view-dropdown { box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px; }
 
     /* Layer checkboxes */
     .layer-controls { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
@@ -192,17 +189,6 @@
     }
     .highlight-item:hover { background: rgba(206,217,224,0.5); color: #182026; }
 
-    /* ── View toolbar ── */
-    #view-toolbar {
-      display: none; position: absolute; top: 58px; z-index: 85;
-      left: 228px;
-      background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
-      border: 1px solid #ced9e0; border-radius: 6px;
-      padding: 2px; gap: 1px;
-      align-items: center; pointer-events: auto;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    }
-    #view-toolbar .bp5-button-group { margin: 0; }
     #section-slider { accent-color: #137cbd; cursor: pointer; }
 
     /* ── SVG render modal ── */
@@ -275,6 +261,39 @@
       <span class="bp5-navbar-heading">MindSim</span>
       <span class="bp5-navbar-divider"></span>
       <button class="bp5-button bp5-minimal" id="bot-name"></button>
+      <!-- Component browser: View dropdown + tools -->
+      <span class="bp5-navbar-divider" id="cb-nav-divider" style="display:none"></span>
+      <div class="bp5-button-group" id="cb-view-group" style="display:none">
+        <div class="bp5-popover2-target" style="position:relative">
+          <button class="bp5-button bp5-minimal bp5-small" id="view-dropdown-btn">
+            <span class="bp5-icon bp5-icon-eye-open"></span> View <span class="bp5-icon bp5-icon-caret-down" style="margin-left:2px"></span>
+          </button>
+          <ul class="bp5-menu bp5-elevation-2" id="view-dropdown" style="display:none; position:absolute; top:100%; left:0; z-index:200; min-width:160px">
+            <!-- Populated by JS -->
+          </ul>
+        </div>
+      </div>
+      <div class="bp5-button-group" id="cb-tools-group" style="display:none">
+        <button class="bp5-button bp5-minimal bp5-small" id="measure-toggle" title="Measure distance (M)">
+          <span class="bp5-icon bp5-icon-measurement"></span> Measure
+        </button>
+        <button class="bp5-button bp5-minimal bp5-small" id="measure-clear" title="Clear measurements">Clear</button>
+        <span class="bp5-navbar-divider"></span>
+        <button class="bp5-button bp5-minimal bp5-small" id="section-toggle" title="Section cut (S)">
+          <span class="bp5-icon bp5-icon-cut"></span> Section
+        </button>
+        <span id="section-controls" style="display:none; align-items:center; gap:2px">
+          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="x">X</button>
+          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="y">Y</button>
+          <button class="bp5-button bp5-small bp5-active" data-section-axis="z">Z</button>
+          <input id="section-slider" type="range" min="0" max="100" value="50" style="width:80px">
+          <button class="bp5-button bp5-small bp5-minimal" id="section-flip" title="Flip">&#8645;</button>
+        </span>
+        <span class="bp5-navbar-divider"></span>
+        <button class="bp5-button bp5-minimal bp5-small bp5-intent-primary" id="render-svg" title="Render SVG">
+          <span class="bp5-icon bp5-icon-export"></span> Render SVG
+        </button>
+      </div>
     </div>
     <div class="bp5-navbar-group bp5-align-right" id="mode-tabs">
       <button class="bp5-button bp5-minimal bp5-active" data-mode="explore">Explore</button>
@@ -295,43 +314,7 @@
 
   <!-- Component browser layout -->
   <div id="component-browser">
-    <div id="component-sidebar"></div>
     <svg id="axis-gizmo" width="100" height="100" style="display:none; position:absolute; top:56px; right:332px; z-index:85; pointer-events:none; overflow:visible"></svg>
-    <div id="view-toolbar">
-      <div class="bp5-button-group">
-        <button class="bp5-button bp5-small bp5-minimal" data-view="front" title="Front view (1)">Front</button>
-        <button class="bp5-button bp5-small bp5-minimal" data-view="back" title="Back view (2)">Back</button>
-        <button class="bp5-button bp5-small bp5-minimal" data-view="side" title="Right view (3)">Right</button>
-        <button class="bp5-button bp5-small bp5-minimal" data-view="side-left" title="Left view (4)">Left</button>
-        <button class="bp5-button bp5-small bp5-minimal" data-view="top" title="Top view (5)">Top</button>
-        <button class="bp5-button bp5-small bp5-minimal" data-view="bottom" title="Bottom view (6)">Bottom</button>
-        <button class="bp5-button bp5-small bp5-active" data-view="iso" title="Isometric view (0)">Iso</button>
-      </div>
-      <span class="bp5-navbar-divider"></span>
-      <div class="bp5-button-group">
-        <button class="bp5-button bp5-small bp5-minimal" id="measure-toggle" title="Measure distance (M)">
-          <span class="bp5-icon bp5-icon-measurement"></span> Measure
-        </button>
-        <button class="bp5-button bp5-small bp5-minimal" id="measure-clear" title="Clear all measurements">Clear</button>
-      </div>
-      <span class="bp5-navbar-divider"></span>
-      <div class="bp5-button-group">
-        <button class="bp5-button bp5-small bp5-minimal" id="section-toggle" title="Toggle section cut plane (S)">
-          <span class="bp5-icon bp5-icon-cut"></span> Section
-        </button>
-        <span id="section-controls" style="display:none; align-items:center; gap:2px">
-          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="x">X</button>
-          <button class="bp5-button bp5-small bp5-minimal" data-section-axis="y">Y</button>
-          <button class="bp5-button bp5-small bp5-active" data-section-axis="z">Z</button>
-          <input id="section-slider" type="range" min="0" max="100" value="50" style="width:100px">
-          <button class="bp5-button bp5-small bp5-minimal" id="section-flip" title="Flip cut direction">&#8645;</button>
-        </span>
-      </div>
-      <span class="bp5-navbar-divider"></span>
-      <button class="bp5-button bp5-small bp5-minimal bp5-intent-primary" id="render-svg" title="Export high-quality 2D SVG">
-        <span class="bp5-icon bp5-icon-export"></span> Render SVG
-      </button>
-    </div>
   </div>
 
   <!-- SVG Render Modal -->

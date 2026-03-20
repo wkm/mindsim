@@ -21,20 +21,20 @@ import { MeasureTool } from './measure-tool.js';
 // ---------------------------------------------------------------------------
 // Layout constants
 // ---------------------------------------------------------------------------
-const SIDEBAR_WIDTH = 220;
+const SIDEBAR_WIDTH = 0;
 const SIDE_PANEL_WIDTH = 320;
 
 // ---------------------------------------------------------------------------
 // View presets — camera direction (from center) and up vector
 // ---------------------------------------------------------------------------
 const VIEW_PRESETS = {
-  front:  { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '1' },
-  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: '2' },
-  side:   { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '3' },
-  'side-left': { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '4' },
-  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '5' },
-  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '6' },
-  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '0' },
+  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso',    key: '1' },
+  front:  { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '2' },
+  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: '3' },
+  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '4' },
+  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '5' },
+  right:  { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '6' },
+  left:   { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left',   key: '7' },
 };
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,6 @@ class ComponentBrowser {
     this._setupViewToolbar();
     this._setupAxisGizmo();
     await this._fetchCatalog();
-    this._buildSidebar();
     this._buildSidePanel();
     this._animate();
   }
@@ -159,18 +158,39 @@ class ComponentBrowser {
   // -----------------------------------------------------------------------
 
   _setupViewToolbar() {
-    const toolbar = document.getElementById('view-toolbar');
-    if (!toolbar) return;
-
-    for (const [key, preset] of Object.entries(VIEW_PRESETS)) {
-      const btn = toolbar.querySelector(`[data-view="${key}"]`);
-      if (btn) {
-        btn.addEventListener('click', () => this._setViewPreset(key));
+    // Populate view dropdown from VIEW_PRESETS
+    const dropdown = document.getElementById('view-dropdown');
+    const dropdownBtn = document.getElementById('view-dropdown-btn');
+    if (dropdown) {
+      dropdown.innerHTML = '';
+      for (const [key, preset] of Object.entries(VIEW_PRESETS)) {
+        const li = document.createElement('li');
+        li.innerHTML = `<button class="bp5-menu-item" data-view="${key}">
+          <span class="bp5-text">${preset.label}</span>
+          <span class="bp5-menu-item-label">${preset.key}</span>
+        </button>`;
+        li.querySelector('button').addEventListener('click', () => {
+          this._setViewPreset(key);
+          dropdown.style.display = 'none';
+        });
+        dropdown.appendChild(li);
+      }
+      // Toggle dropdown
+      if (dropdownBtn) {
+        dropdownBtn.addEventListener('click', () => {
+          dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
+        });
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+          if (!dropdownBtn.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+          }
+        });
       }
     }
 
     // Measure tool toggle
-    const measureBtn = toolbar.querySelector('#measure-toggle');
+    const measureBtn = document.getElementById('measure-toggle');
     if (measureBtn) {
       measureBtn.addEventListener('click', () => {
         const active = !this.measureTool.enabled;
@@ -186,45 +206,43 @@ class ComponentBrowser {
       });
     }
 
-    // Clear measurements
-    const clearBtn = toolbar.querySelector('#measure-clear');
+    const clearBtn = document.getElementById('measure-clear');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
         this.measureTool.clearAll();
       });
     }
 
-    // Render SVG button
-    const renderBtn = toolbar.querySelector('#render-svg');
+    const renderBtn = document.getElementById('render-svg');
     if (renderBtn) {
       renderBtn.addEventListener('click', () => this._requestSVGRender());
     }
 
     // Section plane controls
-    const sectionToggle = toolbar.querySelector('#section-toggle');
+    const sectionToggle = document.getElementById('section-toggle');
     if (sectionToggle) {
       sectionToggle.addEventListener('click', () => {
         this.sectionEnabled = !this.sectionEnabled;
         sectionToggle.classList.toggle('bp5-active', this.sectionEnabled);
-        const controls = toolbar.querySelector('#section-controls');
+        const controls = document.getElementById('section-controls');
         if (controls) controls.style.display = this.sectionEnabled ? 'flex' : 'none';
         this._updateSectionPlane();
       });
     }
 
     for (const axis of ['x', 'y', 'z']) {
-      const btn = toolbar.querySelector(`[data-section-axis="${axis}"]`);
+      const btn = document.querySelector(`[data-section-axis="${axis}"]`);
       if (btn) {
         btn.addEventListener('click', () => {
           this.sectionAxis = axis;
-          toolbar.querySelectorAll('[data-section-axis]').forEach(b =>
+          document.querySelectorAll('[data-section-axis]').forEach(b =>
             b.classList.toggle('bp5-active', b.dataset.sectionAxis === axis));
           this._updateSectionPlane();
         });
       }
     }
 
-    const slider = toolbar.querySelector('#section-slider');
+    const slider = document.getElementById('section-slider');
     if (slider) {
       slider.addEventListener('input', () => {
         this.sectionFraction = parseFloat(slider.value) / 100;
@@ -232,7 +250,7 @@ class ComponentBrowser {
       });
     }
 
-    const flipBtn = toolbar.querySelector('#section-flip');
+    const flipBtn = document.getElementById('section-flip');
     if (flipBtn) {
       flipBtn.addEventListener('click', () => {
         this.sectionFlipped = !this.sectionFlipped;
@@ -243,8 +261,8 @@ class ComponentBrowser {
 
     // Keyboard shortcuts: 1-6 = views, 0 = iso, M = measure, S = section
     const keyMap = {
-      '1': 'front', '2': 'back', '3': 'side', '4': 'side-left',
-      '5': 'top', '6': 'bottom', '0': 'iso',
+      '1': 'iso', '2': 'front', '3': 'back', '4': 'top',
+      '5': 'bottom', '6': 'right', '7': 'left',
     };
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -345,11 +363,20 @@ class ComponentBrowser {
   }
 
   _updatePresetButtons() {
-    const toolbar = document.getElementById('view-toolbar');
-    if (!toolbar) return;
-    toolbar.querySelectorAll('[data-view]').forEach(btn => {
-      btn.classList.toggle('bp5-active', btn.dataset.view === this.activePreset);
-    });
+    const dropdown = document.getElementById('view-dropdown');
+    if (dropdown) {
+      dropdown.querySelectorAll('[data-view]').forEach(btn => {
+        btn.classList.toggle('bp5-active', btn.dataset.view === this.activePreset);
+      });
+    }
+    // Update dropdown button label
+    const dropdownBtn = document.getElementById('view-dropdown-btn');
+    if (dropdownBtn && this.activePreset) {
+      const preset = VIEW_PRESETS[this.activePreset];
+      if (preset) {
+        dropdownBtn.innerHTML = `<span class="bp5-icon bp5-icon-eye-open"></span> ${preset.label} <span class="bp5-icon bp5-icon-caret-down" style="margin-left:2px"></span>`;
+      }
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -455,40 +482,6 @@ class ComponentBrowser {
       document.getElementById('side-panel').innerHTML =
         `<p style="color:#ff6666; font-size:13px">Failed to load components: ${err.message}</p>`;
     }
-  }
-
-  _buildSidebar() {
-    const sidebar = document.getElementById('component-sidebar');
-    sidebar.innerHTML = '';
-
-    const groups = {};
-    for (const comp of this.components) {
-      const cat = comp.category;
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(comp);
-    }
-
-    const menu = document.createElement('ul');
-    menu.className = 'bp5-menu';
-
-    for (const [category, comps] of Object.entries(groups)) {
-      const header = document.createElement('li');
-      header.className = 'bp5-menu-header';
-      header.innerHTML = `<h6 class="bp5-heading">${category}</h6>`;
-      menu.appendChild(header);
-
-      for (const comp of comps) {
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.className = 'bp5-menu-item';
-        btn.innerHTML = `<span class="bp5-text">${comp.name}</span><span class="bp5-menu-item-label">${comp.dimensions_mm.map(d => d.toFixed(1)).join(' x ')} mm</span>`;
-        btn.addEventListener('click', () => this.loadComponent(comp.name));
-        btn.dataset.name = comp.name;
-        li.appendChild(btn);
-        menu.appendChild(li);
-      }
-    }
-    sidebar.appendChild(menu);
   }
 
   // -----------------------------------------------------------------------
@@ -692,11 +685,6 @@ class ComponentBrowser {
     if (!comp) return;
 
     this.currentComponent = comp;
-
-    // Update sidebar selection
-    document.querySelectorAll('#component-sidebar .bp5-menu-item').forEach(el => {
-      el.classList.toggle('bp5-active', el.dataset.name === name);
-    });
 
     // Update top bar
     document.getElementById('bot-name').textContent = name;
