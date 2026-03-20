@@ -14,11 +14,11 @@ test.describe('Mode tabs', () => {
 
   for (const mode of MODES) {
     test(`${mode} tab activates and populates side panel`, async ({ page }) => {
-      await page.click(`.mode-tab[data-mode="${mode}"]`);
+      await page.click(`#mode-tabs .bp5-button[data-mode="${mode}"]`);
       await page.waitForTimeout(500);
 
-      const tab = page.locator(`.mode-tab[data-mode="${mode}"]`);
-      await expect(tab).toHaveClass(/active/);
+      const tab = page.locator(`#mode-tabs .bp5-button[data-mode="${mode}"]`);
+      await expect(tab).toHaveClass(/bp5-active/);
 
       const panel = page.locator('#side-panel');
       const html = await panel.innerHTML();
