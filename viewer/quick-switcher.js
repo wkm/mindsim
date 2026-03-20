@@ -44,18 +44,18 @@ function refilter(query) {
 
 function render() {
   if (!filtered.length) {
-    results.innerHTML = '<li class="bp5-menu-item bp5-disabled"><span class="bp5-text">No results</span></li>';
+    results.innerHTML = '<li class="dropdown-item disabled"><span class="text">No results</span></li>';
     return;
   }
 
   results.innerHTML = filtered.map((item, i) => `
-    <li><button class="bp5-menu-item${i === activeIdx ? ' bp5-active' : ''}" data-url="${item.url}">
-      <span class="bp5-text">${item.name}</span>
-      <span class="bp5-menu-item-label">${item.category}</span>
+    <li><button class="dropdown-item${i === activeIdx ? ' active' : ''}" data-url="${item.url}">
+      <span class="text">${item.name}</span>
+      <span class="dropdown-kbd">${item.category}</span>
     </button></li>
   `).join('');
 
-  const active = results.querySelector('.bp5-active');
+  const active = results.querySelector('.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
@@ -104,7 +104,7 @@ input.addEventListener('keydown', (e) => {
 
 // Delegated click handler on results container
 results.addEventListener('click', (e) => {
-  const item = e.target.closest('.bp5-menu-item');
+  const item = e.target.closest('.dropdown-item');
   if (item) navigate(item.dataset.url);
 });
 

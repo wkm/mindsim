@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint test-viewer viewer-cache
+.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint test-viewer viewer-cache web
 
 tui:
 	uv run mjpython main.py
@@ -53,14 +53,20 @@ lint:
 	uv run ruff check --fix .
 	uv run ruff format .
 
+web:
+	@echo "Starting Python API server on :8081..."
+	@uv run mjpython main.py web --port 8081 --no-open & echo $$! > /tmp/mindsim-api.pid
+	@echo "Waiting for API server..."
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+		curl -sf http://localhost:8081/api/bots >/dev/null 2>&1 && break; \
+		sleep 1; \
+	done
+	@echo "API ready. Starting Vite..."
+	@trap 'kill $$(cat /tmp/mindsim-api.pid) 2>/dev/null; rm -f /tmp/mindsim-api.pid' EXIT; \
+		pnpm exec vite --open /viewer/
+
 test-viewer:
 	pnpm exec playwright test --config viewer/tests/playwright.config.mjs
-
-viewer-cache:
-	@mkdir -p viewer/.cdn_cache
-	curl -sL "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" -o viewer/.cdn_cache/three.module.js
-	curl -sL "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/controls/OrbitControls.js" -o viewer/.cdn_cache/OrbitControls.js
-	curl -sL "https://cdn.jsdelivr.net/npm/mujoco-js@0.0.7/dist/mujoco_wasm.js" -o viewer/.cdn_cache/mujoco_wasm.js
 
 setup:
 	git config core.hooksPath .githooks

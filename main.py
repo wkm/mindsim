@@ -1088,7 +1088,7 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         super().log_message(format, *args)
 
 
-def _run_web_viewer(bot_name: str | None, port: int = 8080):
+def _run_web_viewer(bot_name: str | None, port: int = 8080, no_open: bool = False):
     """Launch a local HTTP server and open the 3D viewer in the browser."""
     project_root = Path(__file__).parent
 
@@ -1135,7 +1135,8 @@ def _run_web_viewer(bot_name: str | None, port: int = 8080):
 
     print(f"Viewer at {url}")
     print("Press Ctrl+C to stop.")
-    webbrowser.open(url)
+    if not no_open:
+        webbrowser.open(url)
 
     # ThreadingHTTPServer so STL generation doesn't block other requests
     server = http.server.ThreadingHTTPServer(("", port), ViewerHTTPHandler)
@@ -1201,6 +1202,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_web.add_argument(
         "--port", type=int, default=8080, help="HTTP server port (default: 8080)"
+    )
+    p_web.add_argument(
+        "--no-open", action="store_true", help="Don't open browser (API-only mode)"
     )
 
     # scene
@@ -1361,7 +1365,7 @@ def main():
         _run_tui()
 
     elif args.command == "web":
-        _run_web_viewer(args.bot, args.port)
+        _run_web_viewer(args.bot, args.port, getattr(args, "no_open", False))
 
     elif args.command == "scene":
         from sim.scene_preview import run_scene_preview
