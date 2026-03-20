@@ -8,8 +8,8 @@
 |------|-----|-----------------|----------|-------|
 | STS3215 | 3 | 45.4 x 24.8 x 37.9 | 55 | Joints: shoulder_pitch, elbow, wrist |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 129 | PLA/PETG frame |
-| **Total** | | | **297** | |
+| Structural (printed) | — | — | 128 | PLA/PETG frame |
+| **Total** | | | **296** | |
 
 ## Power Budget
 
@@ -20,8 +20,15 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for OV5647 |
-| M2.5 | 24 | 8x per horn coupler (3 joints) |
-| M3 | 18 | 6x per joint bracket (3 joints) |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 4 | 4x for OV5647 |
+| M2.5 | Socket Head Cap | 24 | 8x per horn coupler (3 joints) |
+| M3 | Socket Head Cap | 18 | 6x per joint bracket (3 joints) |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 6 |
+| csi_15pin | 1 |

@@ -23,7 +23,15 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2.5 | 28 | 8x per horn coupler (3 joints); 4x for RaspberryPiZero2W |
-| M3 | 30 | 6x per joint bracket (3 joints); 6x for Pololu 90x10mm Wheel |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2.5 | Socket Head Cap | 28 | 8x per horn coupler (3 joints); 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 30 | 6x per joint bracket (3 joints); 6x for Pololu 90x10mm Wheel |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 6 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
