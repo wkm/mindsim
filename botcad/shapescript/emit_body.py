@@ -147,11 +147,10 @@ def emit_body_ir(
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
 
-        # Use .locate() (not .moved()) to match direct path -- factory shapes
-        # have internal locations, and .locate() sets absolute position while
-        # .moved() compounds transforms. See memory/feedback_build123d_locate.md.
+        # Use .moved() to match direct path (cad.py:986) — .locate() mutates
+        # @lru_cache'd shapes in-place. See memory/feedback_build123d_locate.md.
         coupler = coupler_solid(servo, bracket_spec)
-        coupler = coupler.locate(Location(center, euler))
+        coupler = coupler.moved(Location(center, euler))
         coupler_ref = prog.prebuilt(coupler, tag="coupler")
         shell = prog.fuse(shell, coupler_ref)
 
@@ -162,28 +161,26 @@ def emit_body_ir(
         center = joint.solved_servo_center
         euler = quat_to_euler(joint.solved_servo_quat)
 
-        # Pre-locate factory shapes with .locate() to match the direct path.
-        # Factory shapes (bracket_envelope, bracket_solid, etc.) have non-identity
-        # internal locations from construction. .locate() sets absolute position
-        # (same as direct path), whereas LocateOp uses .moved() which compounds.
+        # Use .moved() to match direct path (cad.py:1008-1036) — .locate()
+        # mutates @lru_cache'd shapes. See memory/feedback_build123d_locate.md.
         if joint.bracket_style is BracketStyle.COUPLER:
             env_solid = cradle_envelope(servo, bracket_spec)
-            env_solid = env_solid.locate(Location(center, euler))
+            env_solid = env_solid.moved(Location(center, euler))
             env_ref = prog.prebuilt(env_solid, tag=f"cradle_env_{joint.name}")
 
             crad_solid = cradle_solid(servo, bracket_spec)
-            crad_solid = crad_solid.locate(Location(center, euler))
+            crad_solid = crad_solid.moved(Location(center, euler))
             crad_ref = prog.prebuilt(crad_solid, tag=f"cradle_{joint.name}")
 
             shell = prog.cut(shell, env_ref)
             shell = prog.fuse(shell, crad_ref)
         else:
             env_solid = bracket_envelope(servo, bracket_spec)
-            env_solid = env_solid.locate(Location(center, euler))
+            env_solid = env_solid.moved(Location(center, euler))
             env_ref = prog.prebuilt(env_solid, tag=f"bracket_env_{joint.name}")
 
             brk_solid = bracket_solid(servo, bracket_spec)
-            brk_solid = brk_solid.locate(Location(center, euler))
+            brk_solid = brk_solid.moved(Location(center, euler))
             brk_ref = prog.prebuilt(brk_solid, tag=f"bracket_{joint.name}")
 
             shell = prog.cut(shell, env_ref)

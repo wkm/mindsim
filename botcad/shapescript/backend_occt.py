@@ -69,6 +69,7 @@ class OcctBackend:
         )
 
         # Reuse battle-tested helpers -- do NOT reimplement
+        from botcad.cad_utils import as_solid as _as_solid
         from botcad.emit.cad import _bboxes_overlap, _bool_cut, _ensure_solid
 
         result = ExecutionResult()
@@ -127,7 +128,10 @@ class OcctBackend:
                 case FuseOp(ref=ref, target=t, tool=tl):
                     a = shapes[t.id]
                     b = shapes[tl.id]
-                    shapes[ref.id] = _ensure_solid(a + b)
+                    # Use _as_solid (not _ensure_solid) to preserve small
+                    # pieces like cradle solids that _ensure_solid's 1% sliver
+                    # filter would discard.
+                    shapes[ref.id] = _as_solid(a.fuse(b))
                     tags.propagate_boolean(ref, t, tl)
 
                 case CutOp(ref=ref, target=t, tool=tl):
