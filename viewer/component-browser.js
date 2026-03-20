@@ -182,7 +182,7 @@ class ComponentBrowser {
           this.measureTool.disable();
           this.controls.enabled = true;
         }
-        measureBtn.classList.toggle('active', active);
+        measureBtn.classList.toggle('bp5-active', active);
       });
     }
 
@@ -205,7 +205,7 @@ class ComponentBrowser {
     if (sectionToggle) {
       sectionToggle.addEventListener('click', () => {
         this.sectionEnabled = !this.sectionEnabled;
-        sectionToggle.classList.toggle('active', this.sectionEnabled);
+        sectionToggle.classList.toggle('bp5-active', this.sectionEnabled);
         const controls = toolbar.querySelector('#section-controls');
         if (controls) controls.style.display = this.sectionEnabled ? 'flex' : 'none';
         this._updateSectionPlane();
@@ -218,7 +218,7 @@ class ComponentBrowser {
         btn.addEventListener('click', () => {
           this.sectionAxis = axis;
           toolbar.querySelectorAll('[data-section-axis]').forEach(b =>
-            b.classList.toggle('active', b.dataset.sectionAxis === axis));
+            b.classList.toggle('bp5-active', b.dataset.sectionAxis === axis));
           this._updateSectionPlane();
         });
       }
@@ -236,7 +236,7 @@ class ComponentBrowser {
     if (flipBtn) {
       flipBtn.addEventListener('click', () => {
         this.sectionFlipped = !this.sectionFlipped;
-        flipBtn.classList.toggle('active', this.sectionFlipped);
+        flipBtn.classList.toggle('bp5-active', this.sectionFlipped);
         this._updateSectionPlane();
       });
     }
@@ -294,7 +294,7 @@ class ComponentBrowser {
     const toolbar = document.getElementById('view-toolbar');
     if (!toolbar) return;
     toolbar.querySelectorAll('[data-view]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.view === this.activePreset);
+      btn.classList.toggle('bp5-active', btn.dataset.view === this.activePreset);
     });
   }
 
@@ -414,21 +414,27 @@ class ComponentBrowser {
       groups[cat].push(comp);
     }
 
+    const menu = document.createElement('ul');
+    menu.className = 'bp5-menu';
+
     for (const [category, comps] of Object.entries(groups)) {
-      const title = document.createElement('div');
-      title.className = 'sidebar-title';
-      title.textContent = category;
-      sidebar.appendChild(title);
+      const header = document.createElement('li');
+      header.className = 'bp5-menu-header';
+      header.innerHTML = `<h6 class="bp5-heading">${category}</h6>`;
+      menu.appendChild(header);
 
       for (const comp of comps) {
-        const btn = document.createElement('div');
-        btn.className = 'component-item';
-        btn.innerHTML = `${comp.name}<span class="item-category">${comp.dimensions_mm.map(d => d.toFixed(1)).join(' x ')} mm</span>`;
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'bp5-menu-item';
+        btn.innerHTML = `<span class="bp5-text">${comp.name}</span><span class="bp5-menu-item-label">${comp.dimensions_mm.map(d => d.toFixed(1)).join(' x ')} mm</span>`;
         btn.addEventListener('click', () => this.loadComponent(comp.name));
         btn.dataset.name = comp.name;
-        sidebar.appendChild(btn);
+        li.appendChild(btn);
+        menu.appendChild(li);
       }
     }
+    sidebar.appendChild(menu);
   }
 
   // -----------------------------------------------------------------------
@@ -634,8 +640,8 @@ class ComponentBrowser {
     this.currentComponent = comp;
 
     // Update sidebar selection
-    document.querySelectorAll('.component-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.name === name);
+    document.querySelectorAll('#component-sidebar .bp5-menu-item').forEach(el => {
+      el.classList.toggle('bp5-active', el.dataset.name === name);
     });
 
     // Update top bar
@@ -838,9 +844,9 @@ class ComponentBrowser {
     this.sectionEnabled = false;
     this.sectionFlipped = false;
     const sectionBtn = document.querySelector('#section-toggle');
-    if (sectionBtn) sectionBtn.classList.remove('active');
+    if (sectionBtn) sectionBtn.classList.remove('bp5-active');
     const flipBtn = document.querySelector('#section-flip');
-    if (flipBtn) flipBtn.classList.remove('active');
+    if (flipBtn) flipBtn.classList.remove('bp5-active');
     const controls = document.querySelector('#section-controls');
     if (controls) controls.style.display = 'none';
     this._removeSectionViz();
