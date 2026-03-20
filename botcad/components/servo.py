@@ -362,6 +362,7 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
                 pos=(-0.0058, 0.0, -0.01125),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
+                permanent=True,  # wire is molded into servo, not a removable plug
             ),
         ),
         mounting_points=tuple(

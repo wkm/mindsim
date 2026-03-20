@@ -55,6 +55,51 @@ def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
     return shell
 
 
+def _fuse_servo_connector(body, servo: ServoSpec):
+    """Fuse a connector receptacle onto the servo body at connector_pos.
+
+    The receptacle represents the built-in header where wires plug in.
+    Skipped for permanent (soldered/molded) wire connections — those
+    servos just have a wire exiting the body, no removable connector.
+    """
+    from build123d import Location
+
+    for wp in servo.wire_ports:
+        if wp.connector_type and not wp.permanent:
+            try:
+                from botcad.connectors import connector_spec, receptacle_solid
+
+                cspec = connector_spec(wp.connector_type)
+            except KeyError:
+                return body
+            break
+    else:
+        return body
+
+    rcpt = receptacle_solid(cspec)
+    cx, cy, cz = servo.connector_pos
+
+    # The receptacle's mating direction should face outward from the servo.
+    # For STS servos: connector is on the bottom face, mating direction is +Z
+    # (plug inserts upward). The receptacle should sit on the bottom face
+    # with its cavity facing downward (-Z) for the plug to insert from below.
+    mx, my, mz = cspec.mating_direction
+
+    # Rotate receptacle so its mating cavity faces outward (away from servo center)
+    # The connector_pos is on the servo surface; the receptacle protrudes outward.
+    if abs(mz) > 0.5:
+        # Mating along Z: connector on top or bottom face
+        # Flip 180° so cavity faces away from servo center
+        euler = (180, 0, 0) if cz < 0 else (0, 0, 0)
+    elif abs(mx) > 0.5:
+        euler = (0, -90 if cx < 0 else 90, 0)
+    else:
+        euler = (90 if cy < 0 else -90, 0, 0)
+
+    rcpt_placed = rcpt.moved(Location((cx, cy, cz), euler))
+    return _as_solid(body.fuse(rcpt_placed))
+
+
 def _connector_port(
     servo: ServoSpec,
     spec: BracketSpec,
@@ -457,10 +502,10 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     for ear in servo.mounting_ears:
         shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Connector port (replaces rectangular cable slot) ---
+    # --- Connector passage (shaped cutout for plug + cable to pass through) ---
     if servo.connector_pos is not None:
         wall_x = -outer_x / 2
-        cut, housing = _connector_port(
+        cut, _housing = _connector_port(
             servo,
             spec,
             wall_center=(wall_x, 0, 0),
@@ -468,8 +513,6 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         )
         if cut is not None:
             shell = shell - cut
-            if housing is not None:
-                shell = _as_solid(shell.fuse(housing))
         else:
             # Fallback to rectangular slot if no connector info
             cx, cy, cz = servo.connector_pos
@@ -645,6 +688,10 @@ def _sts_series_solid(servo: ServoSpec):
             h = h.locate(Location((ear.pos[0], ear.pos[1], f_z_bot)))
             body = _as_solid(body.cut(h))
 
+    # Connector receptacle on the servo body (where wires plug in)
+    if servo.connector_pos is not None:
+        body = _fuse_servo_connector(body, servo)
+
     return body
 
 
@@ -723,6 +770,10 @@ def _scs0009_solid(servo: ServoSpec):
             )
             hole = hole.locate(Location((mp.pos[0], mp.pos[1], ear_cz)))
             body = _as_solid(body.cut(hole))
+
+    # Connector receptacle on the servo body
+    if servo.connector_pos is not None:
+        body = _fuse_servo_connector(body, servo)
 
     return body
 
@@ -816,9 +867,9 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
         hole = hole.locate(Location((ear.pos[0], ear.pos[1], outer_cz)))
         shell = shell - hole
 
-    # --- Connector port (-Z face) ---
+    # --- Connector passage (-Z face) ---
     if servo.connector_pos is not None:
-        cut, housing = _connector_port(
+        cut, _housing = _connector_port(
             servo,
             spec,
             wall_center=(0, 0, outer_bot_z),
@@ -826,8 +877,6 @@ def _scs0009_bracket_solid(servo: ServoSpec, spec: BracketSpec):
         )
         if cut is not None:
             shell = shell - cut
-            if housing is not None:
-                shell = _as_solid(shell.fuse(housing))
         else:
             _cx, cy, _cz = servo.connector_pos
             slot_w, slot_h = _cable_slot_dims(servo, spec)
@@ -969,9 +1018,9 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
             continue
         shell = _cut_fastener_hole(shell, ear, ear_bottom_z, wall)
 
-    # --- Connector port (connector is at -X end) ---
+    # --- Connector passage (connector is at -X end) ---
     if servo.connector_pos is not None:
-        cut, housing = _connector_port(
+        cut, _housing = _connector_port(
             servo,
             spec,
             wall_center=(cradle_min_x, 0, 0),
@@ -979,8 +1028,6 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
         )
         if cut is not None:
             shell = shell - cut
-            if housing is not None:
-                shell = _as_solid(shell.fuse(housing))
         else:
             _cx, cy, cz = servo.connector_pos
             slot_w, slot_h = _cable_slot_dims(servo, spec)
