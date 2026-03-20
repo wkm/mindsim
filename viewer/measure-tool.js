@@ -10,16 +10,13 @@
  */
 
 import * as THREE from 'three';
-import { BP } from './presentation.js';
+import { BP, hexStr } from './presentation.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const SNAP_SCREEN_PX = 12;        // snap radius in screen pixels
 const ARROW_SIZE = 6;             // arrowhead size in SVG pixels
-/** Convert a numeric hex color to a CSS hex string. */
-function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
-
 const DIM_COLOR = hexStr(BP.BLUE1);
 const DIM_FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const EXTENSION_GAP = 4;          // gap between geometry and extension line start

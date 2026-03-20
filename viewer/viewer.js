@@ -47,6 +47,7 @@ if (cadstepsParam) {
   document.getElementById('side-panel').style.display = '';
   document.getElementById('component-browser').style.display = 'block';
   document.getElementById('view-toolbar').style.display = 'flex';
+  document.getElementById('axis-gizmo').style.display = '';
   document.getElementById('bot-name').textContent = 'Components';
   import('./component-browser.js').then(m => m.initComponentBrowser(componentParam));
 

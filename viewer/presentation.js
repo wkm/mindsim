@@ -57,6 +57,13 @@ export const SECTION_STENCIL_BASE = 100;    // first layer starts here
 export const SECTION_STENCIL_STRIDE = 10;   // spacing between layers
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+/** Convert a numeric hex color (e.g. 0xFF0000) to a CSS hex string ('#ff0000'). */
+export function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
+
+// ---------------------------------------------------------------------------
 // Edge rendering constants
 // ---------------------------------------------------------------------------
 export const EDGE_COLOR = BP.DARK_GRAY1;

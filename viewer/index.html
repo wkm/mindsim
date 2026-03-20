@@ -408,16 +408,20 @@
   <!-- Component browser layout -->
   <div id="component-browser">
     <div id="component-sidebar"></div>
+    <svg id="axis-gizmo" width="80" height="80" style="display:none; position:absolute; bottom:12px; left:228px; z-index:85; pointer-events:none; overflow:visible"></svg>
     <div id="view-toolbar">
-      <button data-view="front">Front</button>
-      <button data-view="side">Side</button>
-      <button data-view="top">Top</button>
-      <button data-view="iso" class="active">Iso</button>
+      <button data-view="front" title="Front view (1)">Front</button>
+      <button data-view="back" title="Back view (Ctrl+1)">Back</button>
+      <button data-view="side" title="Right view (3)">Right</button>
+      <button data-view="side-left" title="Left view (Ctrl+3)">Left</button>
+      <button data-view="top" title="Top view (7)">Top</button>
+      <button data-view="bottom" title="Bottom view (Ctrl+7)">Bottom</button>
+      <button data-view="iso" class="active" title="Isometric view (5)">Iso</button>
       <span class="toolbar-sep"></span>
-      <button id="measure-toggle" title="Measure distance (click two points)">Measure</button>
+      <button id="measure-toggle" title="Measure distance (M)">Measure</button>
       <button id="measure-clear" title="Clear all measurements">Clear</button>
       <span class="toolbar-sep"></span>
-      <button id="section-toggle" title="Toggle section cut plane">Section</button>
+      <button id="section-toggle" title="Toggle section cut plane (S)">Section</button>
       <span id="section-controls" style="display:none; align-items:center; gap:4px">
         <button data-section-axis="x" class="axis-btn">X</button>
         <button data-section-axis="y" class="axis-btn">Y</button>

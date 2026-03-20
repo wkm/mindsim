@@ -14,7 +14,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
 import {
   BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
-  tintColor, createMaterial, addMeshWithEdges,
+  hexStr, tintColor, createMaterial, addMeshWithEdges,
 } from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
@@ -28,10 +28,13 @@ const SIDE_PANEL_WIDTH = 320;
 // View presets — camera direction (from center) and up vector
 // ---------------------------------------------------------------------------
 const VIEW_PRESETS = {
-  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front' },
-  side:  { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Side' },
-  top:   { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top' },
-  iso:   { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso' },
+  front:  { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '1' },
+  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: 'Ctrl+1' },
+  side:   { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '3' },
+  'side-left': { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: 'Ctrl+3' },
+  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '7' },
+  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: 'Ctrl+7' },
+  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '5' },
 };
 
 // ---------------------------------------------------------------------------
@@ -77,6 +80,7 @@ class ComponentBrowser {
   async init() {
     this._setupThreeJS();
     this._setupViewToolbar();
+    this._setupAxisGizmo();
     await this._fetchCatalog();
     this._buildSidebar();
     this._buildSidePanel();
@@ -236,6 +240,43 @@ class ComponentBrowser {
         this._updateSectionPlane();
       });
     }
+
+    // Keyboard shortcuts (numpad convention: 1=Front, 3=Right, 7=Top, 5=Iso)
+    // Ctrl+key = opposite face (Back, Left, Bottom)
+    // M = toggle measure, S = toggle section
+    const keyMap = {
+      '1': 'front', '3': 'side', '7': 'top', '5': 'iso',
+    };
+    const ctrlKeyMap = {
+      '1': 'back', '3': 'side-left', '7': 'bottom',
+    };
+    document.addEventListener('keydown', (e) => {
+      // Don't capture when typing in inputs
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // View presets
+      if (ctrl && ctrlKeyMap[e.key]) {
+        e.preventDefault();
+        this._setViewPreset(ctrlKeyMap[e.key]);
+        return;
+      }
+      if (!ctrl && keyMap[e.key]) {
+        e.preventDefault();
+        this._setViewPreset(keyMap[e.key]);
+        return;
+      }
+
+      // Tool shortcuts
+      if (e.key === 'm' && !ctrl) {
+        e.preventDefault();
+        measureBtn?.click();
+      } else if (e.key === 's' && !ctrl) {
+        e.preventDefault();
+        sectionToggle?.click();
+      }
+    });
   }
 
   _setViewPreset(key) {
@@ -1133,6 +1174,65 @@ class ComponentBrowser {
   }
 
   // -----------------------------------------------------------------------
+  // Axis gizmo — shows X/Y/Z orientation in the corner
+  // -----------------------------------------------------------------------
+
+  _setupAxisGizmo() {
+    this._gizmoSvg = document.getElementById('axis-gizmo');
+    // Axis definitions: direction in world space, color, label
+    this._gizmoAxes = [
+      { dir: new THREE.Vector3(1, 0, 0), color: hexStr(BP.RED3),   label: '+X', neg: '-X' },
+      { dir: new THREE.Vector3(0, 1, 0), color: hexStr(BP.GREEN3), label: '+Y', neg: '-Y' },
+      { dir: new THREE.Vector3(0, 0, 1), color: hexStr(BP.BLUE4),  label: '+Z', neg: '-Z' },
+    ];
+  }
+
+  _updateAxisGizmo() {
+    const svg = this._gizmoSvg;
+    if (!svg) return;
+
+    const cx = 40, cy = 40;  // center of the 80×80 SVG
+    const len = 28;           // axis line length in px
+    svg.innerHTML = '';
+
+    this.camera.updateMatrixWorld();
+    const mat = this.camera.matrixWorld;
+
+    for (const axis of this._gizmoAxes) {
+      // Project world axis direction into screen space via camera matrix
+      const d = axis.dir.clone().transformDirection(mat.clone().invert());
+      // d.x = screen right, d.y = screen up, d.z = into screen
+      const sx = d.x * len;
+      const sy = -d.y * len;  // SVG Y is downward
+
+      // Draw axis line
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', cx);
+      line.setAttribute('y1', cy);
+      line.setAttribute('x2', cx + sx);
+      line.setAttribute('y2', cy + sy);
+      line.setAttribute('stroke', axis.color);
+      line.setAttribute('stroke-width', d.z > 0 ? '1.5' : '2.5');  // thinner when pointing away
+      line.setAttribute('stroke-linecap', 'round');
+      if (d.z > 0.3) line.setAttribute('opacity', '0.4');  // fade when behind
+      svg.appendChild(line);
+
+      // Label at the tip
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      const labelDist = len + 10;
+      text.setAttribute('x', cx + d.x * labelDist);
+      text.setAttribute('y', cy - d.y * labelDist);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'central');
+      text.setAttribute('fill', axis.color);
+      text.setAttribute('style', 'font: bold 10px system-ui, sans-serif');
+      if (d.z > 0.3) text.setAttribute('opacity', '0.4');
+      text.textContent = axis.label;
+      svg.appendChild(text);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Animation loop
   // -----------------------------------------------------------------------
 
@@ -1140,6 +1240,7 @@ class ComponentBrowser {
     const loop = () => {
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
+      this._updateAxisGizmo();
       if (this.measureTool.measurements.length > 0 || this.measureTool._firstPoint) {
         this.measureTool.update();
       }
