@@ -395,7 +395,7 @@ export class ComponentTree {
           const children = parent.querySelector(':scope > .tree-node-children');
           if (children) children.style.display = 'block';
           const chevron = parent.querySelector(':scope > .tree-node-header .tree-chevron');
-          if (chevron && chevron.style.visibility !== 'hidden') {
+          if (chevron) {
             chevron.classList.add('expanded');
           }
         }
@@ -622,11 +622,11 @@ export class ComponentTree {
     const header = document.createElement('div');
     header.className = 'tree-node-header';
 
-    // Chevron (SVG disclosure triangle)
-    const chevron = document.createElement('span');
-    chevron.className = 'tree-chevron';
-    chevron.innerHTML = CHEVRON_RIGHT;
+    // Chevron (SVG disclosure triangle) — only for collapsible nodes
     if (hasChildren) {
+      const chevron = document.createElement('span');
+      chevron.className = 'tree-chevron';
+      chevron.innerHTML = CHEVRON_RIGHT;
       chevron.classList.toggle('expanded', startExpanded);
       const toggleFn = (e) => {
         e.stopPropagation();
@@ -636,10 +636,8 @@ export class ComponentTree {
         chevron.classList.toggle('expanded', !expanded);
       };
       chevron.addEventListener('click', toggleFn);
-    } else {
-      chevron.style.visibility = 'hidden';
+      header.appendChild(chevron);
     }
-    header.appendChild(chevron);
 
     // Category color dot
     const dot = document.createElement('span');
