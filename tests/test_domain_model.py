@@ -233,7 +233,7 @@ class TestComponentCatalog:
         pi = RaspberryPiZero2W()
         for mp in pi.mounting_points:
             assert mp.axis == (0.0, 0.0, -1.0)
-            assert mp.fastener_type == "M2"
+            assert mp.fastener_type == "M2.5"
 
     def test_camera_mount_points(self):
         from botcad.components.camera import OV5647
