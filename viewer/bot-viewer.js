@@ -217,8 +217,6 @@ export async function initBotViewer(botName) {
     const meshCache = {};
 
     for (let g = 0; g < model.ngeom; g++) {
-      if (model.geom_group[g] >= 3) continue;
-
       const b = model.geom_bodyid[g];
       const type = model.geom_type[g];
       const size = [
