@@ -703,7 +703,9 @@ def _get_component_steps(comp_name: str, registry: dict) -> list:
     elif isinstance(comp, BearingSpec):
         script_fn = emit_components.bearing_script
     elif isinstance(comp, ServoSpec):
-        script_fn = emit_components.horn_script
+        from botcad.shapescript.emit_servo import servo_script
+
+        script_fn = servo_script
     else:
         # Fallback: try {category}_script
         fn = getattr(emit_components, f"{category}_script", None)
