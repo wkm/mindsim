@@ -1362,13 +1362,26 @@ export class Viewport3D {
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
       if (capGeom) {
         console.log(`[section] cap geometry: ${capGeom.getAttribute('position').count} vertices, ${capGeom.index ? capGeom.index.count / 3 : 0} triangles`);
-        // SIMPLE RED SOLID — no hatching, no clipping on the cap itself
+        // Red solid + wireframe overlay for debugging
         const capMat = new THREE.MeshBasicMaterial({
           color: 0xDB3737,
           side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.5,
         });
         const capMesh = new THREE.Mesh(capGeom, capMat);
         capMesh.raycast = () => {};
+
+        // Wireframe overlay to see triangulation
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          wireframe: true,
+          side: THREE.DoubleSide,
+        });
+        const wireMesh = new THREE.Mesh(capGeom, wireMat);
+        wireMesh.raycast = () => {};
+        wireMesh.userData._vpCap = true;
+        this._capGroup.add(wireMesh);
         capMesh.userData._vpCap = true;
         this._capGroup.add(capMesh);
       } else {
@@ -1554,6 +1567,7 @@ export class Viewport3D {
 
     // Sort by absolute area descending — largest is the outer boundary
     projected.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+    console.log(`[section] polygon areas: ${projected.map(p => `${p.polygon.length}v=${p.area.toExponential(3)}`).join(', ')}`);
     const outer = projected[0];
     const holes = projected.slice(1);
 
