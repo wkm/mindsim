@@ -877,7 +877,7 @@ export class Viewport3D {
    * so they rotate with the camera.
    */
   _buildCubeAxisArrows() {
-    const AXIS_LEN = 0.4;
+    const AXIS_LEN = 0.95;
     const AXIS_CFG = [
       { dir: [1, 0, 0], color: 0xDB3737, label: 'X' },
       { dir: [0, 1, 0], color: 0x0F9960, label: 'Y' },
@@ -896,8 +896,8 @@ export class Viewport3D {
       const lineMat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
       axisGroup.add(new THREE.Line(lineGeo, lineMat));
 
-      // Small cone arrowhead at tip
-      const coneGeo = new THREE.ConeGeometry(0.04, 0.1, 6);
+      // Cone arrowhead at tip
+      const coneGeo = new THREE.ConeGeometry(0.06, 0.15, 8);
       const coneMat = new THREE.MeshBasicMaterial({ color });
       const cone = new THREE.Mesh(coneGeo, coneMat);
       const tipPos = new THREE.Vector3(dir[0] * AXIS_LEN, dir[1] * AXIS_LEN, dir[2] * AXIS_LEN);
@@ -913,7 +913,7 @@ export class Viewport3D {
       }
       axisGroup.add(cone);
 
-      // Sprite label at the tip
+      // Sprite label just past the arrowhead tip
       const labelCanvas = document.createElement('canvas');
       labelCanvas.width = 64; labelCanvas.height = 64;
       const ctx = labelCanvas.getContext('2d');
@@ -926,13 +926,13 @@ export class Viewport3D {
       spriteTex.colorSpace = THREE.SRGBColorSpace;
       const spriteMat = new THREE.SpriteMaterial({ map: spriteTex, transparent: true, depthTest: false });
       const sprite = new THREE.Sprite(spriteMat);
-      const labelOffset = 0.18;
+      const labelOffset = 0.22;
       sprite.position.set(
         dir[0] * (AXIS_LEN + labelOffset),
         dir[1] * (AXIS_LEN + labelOffset),
         dir[2] * (AXIS_LEN + labelOffset),
       );
-      sprite.scale.set(0.22, 0.22, 1);
+      sprite.scale.set(0.28, 0.28, 1);
       axisGroup.add(sprite);
     }
 
@@ -1369,8 +1369,10 @@ export class Viewport3D {
       }
 
       const capGeom = new THREE.PlaneGeometry(capSize, capSize);
+      const hatchTex = this._createHatchTexture(capColor);
       const capMat = new THREE.MeshBasicMaterial({
-        color: capColor,
+        map: hatchTex,
+        transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
         stencilWrite: true,
@@ -1487,11 +1489,52 @@ export class Viewport3D {
     this._capGroup.add(mesh);
   }
 
+  /**
+   * Create a repeating diagonal-line hatch texture for section caps.
+   * @param {number|THREE.Color} color — hatch line color (hex number or THREE.Color)
+   * @param {number} [lineWidth=2] — stroke width of diagonal lines
+   * @param {number} [spacing=8] — pixel spacing between lines
+   * @returns {THREE.CanvasTexture}
+   */
+  _createHatchTexture(color, lineWidth = 2, spacing = 8) {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Transparent background
+    ctx.clearRect(0, 0, size, size);
+
+    // Convert color to CSS string
+    const c = (color instanceof THREE.Color) ? color : new THREE.Color(color);
+    const cssColor = '#' + c.getHexString();
+
+    // Diagonal lines
+    ctx.strokeStyle = cssColor;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    for (let i = -size; i < size * 2; i += spacing) {
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + size, size);
+    }
+    ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(20, 20);
+    return texture;
+  }
+
   _clearSectionCaps() {
     if (this._capGroup) {
       this._capGroup.traverse(child => {
         if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
       });
       this._scene.remove(this._capGroup);
       this._capGroup = null;
