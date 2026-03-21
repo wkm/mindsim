@@ -284,7 +284,6 @@ class CadStepsViewer {
 
   _setupViewport() {
     this.viewport = new Viewport3D(this.viewportEl, {
-      cameraType: 'perspective',
       grid: true,
     });
     this.meshGroup = this.viewport.addGroup('body');
