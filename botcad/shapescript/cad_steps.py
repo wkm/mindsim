@@ -29,6 +29,7 @@ def shapescript_to_cad_steps(
     from botcad.shapescript.ops import (
         BoxOp,
         CallOp,
+        CopyOp,
         CutOp,
         CylinderOp,
         FuseOp,
@@ -131,6 +132,7 @@ def format_op(op) -> str:
         BoxOp,
         CallOp,
         ChamferOp,
+        CopyOp,
         CutOp,
         CylinderOp,
         FilletAllEdgesOp,
