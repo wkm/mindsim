@@ -630,6 +630,9 @@ export class Viewport3D {
     const wireframe = new THREE.LineSegments(edges, lineMat);
     this._cubeMesh.add(wireframe);
 
+    // Axis arrows at the bottom-front-left corner of the cube
+    this._buildCubeAxisArrows();
+
     // Raycaster for click/hover detection
     this._cubeRaycaster = new THREE.Raycaster();
     this._cubeHoveredFace = -1;
@@ -865,6 +868,75 @@ export class Viewport3D {
     this._cubeCam.up.copy(this._cam.up);
     this._cubeCam.lookAt(0, 0, 0);
     this._cubeRen.render(this._cubeScene, this._cubeCam);
+  }
+
+  /**
+   * Build colored axis arrows (X=red, Y=green, Z=blue) anchored at the
+   * bottom-front-left corner of the orientation cube.  Each arrow is a
+   * short line + a sprite label at the tip, all added to the cube scene
+   * so they rotate with the camera.
+   */
+  _buildCubeAxisArrows() {
+    const AXIS_LEN = 0.4;
+    const AXIS_CFG = [
+      { dir: [1, 0, 0], color: 0xDB3737, label: 'X' },
+      { dir: [0, 1, 0], color: 0x0F9960, label: 'Y' },
+      { dir: [0, 0, 1], color: 0x2B95D6, label: 'Z' },
+    ];
+    // Anchor point: corner of the cube
+    const origin = new THREE.Vector3(-0.55, -0.55, -0.55);
+    const axisGroup = new THREE.Group();
+    axisGroup.position.copy(origin);
+
+    for (const { dir, color, label } of AXIS_CFG) {
+      // Line from origin to tip
+      const pts = new Float32Array([0, 0, 0, dir[0] * AXIS_LEN, dir[1] * AXIS_LEN, dir[2] * AXIS_LEN]);
+      const lineGeo = new THREE.BufferGeometry();
+      lineGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+      const lineMat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
+      axisGroup.add(new THREE.Line(lineGeo, lineMat));
+
+      // Small cone arrowhead at tip
+      const coneGeo = new THREE.ConeGeometry(0.04, 0.1, 6);
+      const coneMat = new THREE.MeshBasicMaterial({ color });
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      const tipPos = new THREE.Vector3(dir[0] * AXIS_LEN, dir[1] * AXIS_LEN, dir[2] * AXIS_LEN);
+      cone.position.copy(tipPos);
+      // Orient cone along axis direction
+      const up = new THREE.Vector3(0, 1, 0);
+      const axDir = new THREE.Vector3(...dir);
+      if (Math.abs(axDir.dot(up)) < 0.999) {
+        cone.quaternion.setFromUnitVectors(up, axDir);
+      } else {
+        // axis is along Y — rotate to match
+        if (axDir.y < 0) cone.rotation.z = Math.PI;
+      }
+      axisGroup.add(cone);
+
+      // Sprite label at the tip
+      const labelCanvas = document.createElement('canvas');
+      labelCanvas.width = 64; labelCanvas.height = 64;
+      const ctx = labelCanvas.getContext('2d');
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+      ctx.font = 'bold 42px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, 32, 32);
+      const spriteTex = new THREE.CanvasTexture(labelCanvas);
+      spriteTex.colorSpace = THREE.SRGBColorSpace;
+      const spriteMat = new THREE.SpriteMaterial({ map: spriteTex, transparent: true, depthTest: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      const labelOffset = 0.18;
+      sprite.position.set(
+        dir[0] * (AXIS_LEN + labelOffset),
+        dir[1] * (AXIS_LEN + labelOffset),
+        dir[2] * (AXIS_LEN + labelOffset),
+      );
+      sprite.scale.set(0.22, 0.22, 1);
+      axisGroup.add(sprite);
+    }
+
+    this._cubeScene.add(axisGroup);
   }
 
   // ── Vertical Tool Strip (left edge) ──
@@ -1216,8 +1288,16 @@ export class Viewport3D {
 
   _showSecViz(box, ai, pos) {
     if (!this._secViz) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0x2B95D6, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x2B95D6,
+        transparent: true,
+        opacity: 0.06,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: true,
+      });
       this._secViz = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      this._secViz.renderOrder = 9999; // render after all body geometry
       this._secViz.userData._vpSec = true; this._secViz.raycast = () => {}; this._scene.add(this._secViz);
     }
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
