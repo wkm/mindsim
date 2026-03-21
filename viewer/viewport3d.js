@@ -1355,11 +1355,13 @@ export class Viewport3D {
       layerIndex++;
 
       // Stencil helpers — increment on back faces, decrement on front faces.
-      // Where stencil > 0, we're inside the geometry (= cross-section interior).
+      // CRITICAL: stencil helpers must NOT be clipped — they render the full
+      // geometry so increment/decrement cancels correctly outside the body.
+      // Only the visible geometry and cap plane get clipped.
       for (const mesh of layerMeshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, clips,
+        this._addStencilHelper(mesh, THREE.BackSide, [],
           orderBase + RENDER_ORDER.STENCIL_BACK, THREE.IncrementWrapStencilOp);
-        this._addStencilHelper(mesh, THREE.FrontSide, clips,
+        this._addStencilHelper(mesh, THREE.FrontSide, [],
           orderBase + RENDER_ORDER.STENCIL_FRONT, THREE.DecrementWrapStencilOp);
       }
 
