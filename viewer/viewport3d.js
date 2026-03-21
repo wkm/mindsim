@@ -1279,6 +1279,12 @@ export class Viewport3D {
       if (ch.material && !ch.userData._vpSec && !ch.userData._vpCap) {
         if (ch.isLineSegments && !ch.material._vpClip) { ch.material = ch.material.clone(); ch.material._vpClip = true; }
         ch.material.clippingPlanes = clips; ch.material.clipShadows = true;
+        // Polygon offset on solid meshes to prevent z-fighting with contour lines
+        if (ch.isMesh && !ch.isLineSegments) {
+          ch.material.polygonOffset = true;
+          ch.material.polygonOffsetFactor = 1;
+          ch.material.polygonOffsetUnits = 1;
+        }
       }
     });
 
@@ -1372,9 +1378,9 @@ export class Viewport3D {
       const hatchTex = this._createHatchTexture(capColor);
       const capMat = new THREE.MeshBasicMaterial({
         map: hatchTex,
-        transparent: true,
+        transparent: false,
         side: THREE.DoubleSide,
-        depthWrite: false,
+        depthWrite: true,
         stencilWrite: true,
         stencilFunc: THREE.EqualStencilFunc,
         stencilRef: ref,
@@ -1503,14 +1509,15 @@ export class Viewport3D {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    // Transparent background
-    ctx.clearRect(0, 0, size, size);
+    // Opaque white background so the cap is solid, not see-through
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size, size);
 
     // Convert color to CSS string
     const c = (color instanceof THREE.Color) ? color : new THREE.Color(color);
     const cssColor = '#' + c.getHexString();
 
-    // Diagonal lines
+    // Diagonal hatch lines in the body color
     ctx.strokeStyle = cssColor;
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
