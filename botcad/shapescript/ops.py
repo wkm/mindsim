@@ -130,6 +130,25 @@ class FilletOp:
 
 
 @dataclass(frozen=True)
+class FilletAllEdgesOp:
+    """Fillet all edges on a shape with the given radius."""
+
+    ref: ShapeRef
+    target: ShapeRef
+    radius: float
+
+
+@dataclass(frozen=True)
+class FilletByAxisOp:
+    """Fillet edges aligned with a specific axis."""
+
+    ref: ShapeRef
+    target: ShapeRef
+    axis: str  # "x", "y", or "z"
+    radius: float
+
+
+@dataclass(frozen=True)
 class ChamferOp:
     ref: ShapeRef
     target: ShapeRef
@@ -184,7 +203,7 @@ class ExportSTEPOp:
 PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp]
 BooleanOp = Union[FuseOp, CutOp]
 TransformOp = LocateOp
-ModificationOp = Union[FilletOp, ChamferOp]
+ModificationOp = Union[FilletOp, FilletAllEdgesOp, FilletByAxisOp, ChamferOp]
 QueryOp = Union[
     QueryVolumeOp, QueryCentroidOp, QueryInertiaOp, QueryBBoxOp, QueryAreaOp
 ]

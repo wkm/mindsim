@@ -5,9 +5,9 @@ _horn_solid(), connector_solid(), receptacle_solid(), fastener_solid(),
 _make_wheel_solid(), _wire_channel(), and _child_clearance_volume()
 into ShapeScript IR programs or inline ops.
 
-For components that use fillets (battery cells) or edge-selection chamfers
-(fastener heads), those parts are injected as PrebuiltOp since ShapeScript
-doesn't yet support edge-selection-based modifications on primitives.
+Battery cells use FilletAllEdgesOp (native ShapeScript). Fastener heads
+still use PrebuiltOp due to edge-selection chamfers and RegularPolygon
+extrude that ShapeScript doesn't yet support.
 """
 
 from __future__ import annotations
@@ -79,31 +79,23 @@ def camera_script(spec: CameraSpec) -> ShapeScript:
 def battery_script(spec: BatterySpec) -> ShapeScript:
     """Translate battery_solid() to ShapeScript ops.
 
-    Battery cells use fillets which require edge selection — the filleted
-    cell body is injected as a PrebuiltOp. Label and cable exit are simple
-    box primitives.
+    All geometry uses native ShapeScript ops — no PrebuiltOps.
+    Label and cable exit are simple box primitives.
     """
-    from build123d import Align, Box, Location
-
-    from botcad.cad_utils import as_solid as _as_solid
-
     prog = ShapeScript()
     w, length, h = spec.dimensions
 
-    # 1. Main battery body (filleted cells — prebuilt)
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    # 1. Main battery body (filleted cells — native ops)
     if spec.cells_s == 2:
         cell_w = length / 2 - 0.001
-        cell = Box(w, cell_w, h, align=C)
-        cell = _as_solid(cell).fillet(0.003, cell.edges())
-        body_solid = cell.locate(Location((0, -length / 4, 0))).fuse(
-            cell.locate(Location((0, length / 4, 0)))
-        )
+        cell = prog.box(w, cell_w, h)
+        cell = prog.fillet_all(cell, 0.003)
+        cell_neg = prog.locate(cell, pos=(0, -length / 4, 0))
+        cell_pos = prog.locate(cell, pos=(0, length / 4, 0))
+        body = prog.fuse(cell_neg, cell_pos)
     else:
-        body_solid = Box(w, length, h, align=C)
-        body_solid = _as_solid(body_solid).fillet(0.003, body_solid.edges())
-
-    body = prog.prebuilt(body_solid, tag="battery_body")
+        body = prog.box(w, length, h, tag="battery_body")
+        body = prog.fillet_all(body, 0.003)
 
     # 2. Label (sits on top face)
     label_w = w * 0.7

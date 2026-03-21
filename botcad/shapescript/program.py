@@ -154,6 +154,22 @@ class ShapeScript:
         self.ops.append(FilletOp(ref=ref, target=target, tags=tags, radius=radius))
         return ref
 
+    def fillet_all(self, target: ShapeRef, radius: float) -> ShapeRef:
+        from botcad.shapescript.ops import FilletAllEdgesOp
+
+        ref = self._next_ref("fillet")
+        self.ops.append(FilletAllEdgesOp(ref=ref, target=target, radius=radius))
+        return ref
+
+    def fillet_by_axis(self, target: ShapeRef, axis: str, radius: float) -> ShapeRef:
+        from botcad.shapescript.ops import FilletByAxisOp
+
+        ref = self._next_ref("fillet")
+        self.ops.append(
+            FilletByAxisOp(ref=ref, target=target, axis=axis, radius=radius)
+        )
+        return ref
+
     def chamfer(self, target: ShapeRef, tags: tuple[str, ...], size: float) -> ShapeRef:
         ref = self._next_ref("cham")
         self.ops.append(ChamferOp(ref=ref, target=target, tags=tags, size=size))

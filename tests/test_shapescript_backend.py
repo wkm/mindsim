@@ -470,3 +470,38 @@ class TestCallOp:
         ref = prog.call("unit_box", tag="bracket")
         r = _exec(prog)
         assert "bracket" in r.tags.tags_on(ref)
+
+
+# -- FilletAllEdgesOp / FilletByAxisOp Tests --
+
+
+class TestFilletOps:
+    def test_fillet_all_reduces_volume(self):
+        """FilletAllEdgesOp removes corner material from a box."""
+        prog = ShapeScript()
+        b = prog.box(1, 1, 1)
+        f = prog.fillet_all(b, 0.05)
+        prog.query_volume(b)
+        prog.query_volume(f)
+        r = _exec(prog)
+        assert r.queries[1] < r.queries[0]  # fillet removes material
+
+    def test_fillet_by_axis_z(self):
+        """FilletByAxisOp on Z-aligned edges produces valid geometry."""
+        prog = ShapeScript()
+        b = prog.box(1, 1, 1)
+        f = prog.fillet_by_axis(b, "z", 0.05)
+        prog.query_volume(f)
+        r = _exec(prog)
+        assert r.queries[0] > 0
+
+    def test_fillet_by_axis_removes_less_than_fillet_all(self):
+        """Axis-filtered fillet removes less material than fillet-all."""
+        prog = ShapeScript()
+        b = prog.box(1, 1, 1)
+        fa = prog.fillet_all(b, 0.05)
+        fz = prog.fillet_by_axis(b, "z", 0.05)
+        prog.query_volume(fa)
+        prog.query_volume(fz)
+        r = _exec(prog)
+        assert r.queries[0] < r.queries[1]  # all < axis (more edges filleted)

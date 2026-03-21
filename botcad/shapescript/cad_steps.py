@@ -129,6 +129,8 @@ def format_op(op) -> str:
         ChamferOp,
         CutOp,
         CylinderOp,
+        FilletAllEdgesOp,
+        FilletByAxisOp,
         FilletOp,
         FuseOp,
         LocateOp,
@@ -186,6 +188,12 @@ def format_op(op) -> str:
 
         case FilletOp(target=t, tags=tags, radius=r):
             return prefix + f"Fillet({t.id}, tags={tags}, r={r:.4f})"
+
+        case FilletAllEdgesOp(target=t, radius=r):
+            return prefix + f"FilletAll({t.id}, r={r:.4f})"
+
+        case FilletByAxisOp(target=t, axis=ax, radius=r):
+            return prefix + f"FilletAxis({t.id}, axis={ax!r}, r={r:.4f})"
 
         case ChamferOp(target=t, tags=tags, size=sz):
             return prefix + f"Chamfer({t.id}, tags={tags}, size={sz:.4f})"

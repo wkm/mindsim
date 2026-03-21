@@ -1,8 +1,8 @@
 """ShapeScript emitters for servo_solid (STS-series and SCS0009).
 
-Filleted body sections are injected as PrebuiltOps (edge-selection fillets
-can't yet be expressed in ShapeScript). All other geometry — bosses, flanges,
-mounting holes, ears — uses native ShapeScript ops.
+All geometry uses native ShapeScript ops including FilletByAxisOp for
+Z-aligned edge fillets. Connector receptacles use CallOp sub-programs.
+No PrebuiltOps.
 """
 
 from __future__ import annotations
@@ -26,13 +26,9 @@ def servo_script(servo: ServoSpec) -> ShapeScript:
 def sts_series_script(servo: ServoSpec) -> ShapeScript:
     """STS-series servo body (STS3215, STS3250, etc.) as ShapeScript.
 
-    Filleted middle, top cap (with step), and bottom cap are prebuilt.
+    All geometry uses native ShapeScript ops — no PrebuiltOps.
     Shaft boss, flanges, rear boss, mounting holes, and connector are native ops.
     """
-    from build123d import Align, Axis, Box, Location, fillet
-
-    from botcad.cad_utils import as_solid as _as_solid
-
     prog = ShapeScript()
 
     # ── Exact geometry constants (from reference CAD) ──
@@ -46,30 +42,23 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
     z_mid_bot = z_mid_top - 0.0288
     z_cap_bot = z_mid_bot - 0.0012
 
-    # ── 1. Middle section (filleted → prebuilt) ──
+    # ── 1. Middle section (box + fillet Z edges) ──
     mid_h = z_mid_top - z_mid_bot
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    middle_solid = Box(body_x, body_y, mid_h, align=C)
-    middle_solid = middle_solid.locate(Location((0, 0, (z_mid_top + z_mid_bot) / 2)))
-    middle_solid = _as_solid(fillet(middle_solid.edges().filter_by(Axis.Z), r))
-    middle = prog.prebuilt(middle_solid, tag="sts_middle")
+    middle = prog.box(body_x, body_y, mid_h, tag="sts_middle")
+    middle = prog.locate(middle, pos=(0, 0, (z_mid_top + z_mid_bot) / 2))
+    middle = prog.fillet_by_axis(middle, "z", r)
 
-    # ── 2. Top cap (filleted box + filleted step → prebuilt) ──
+    # ── 2. Top cap (box + fillet Z edges + filleted step) ──
     top_h = z_top_surface - z_mid_top
-    top_solid = Box(
-        body_x, body_y, top_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
-    )
-    top_solid = top_solid.locate(Location((0, 0, z_mid_top)))
-    top_solid = _as_solid(fillet(top_solid.edges().filter_by(Axis.Z), r))
+    top_cap = prog.box(body_x, body_y, top_h, align=Align3(z="min"), tag="sts_top_cap")
+    top_cap = prog.locate(top_cap, pos=(0, 0, z_mid_top))
+    top_cap = prog.fillet_by_axis(top_cap, "z", r)
 
     step_h = 0.0017
-    step_solid = Box(
-        0.0200, 0.0200, step_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
-    )
-    step_solid = step_solid.locate(Location((0.0125, 0, z_top_surface)))
-    step_solid = _as_solid(fillet(step_solid.edges().filter_by(Axis.Z), 0.002))
-    top_solid = _as_solid(top_solid.fuse(step_solid))
-    top_cap = prog.prebuilt(top_solid, tag="sts_top_cap")
+    step = prog.box(0.0200, 0.0200, step_h, align=Align3(z="min"))
+    step = prog.locate(step, pos=(0.0125, 0, z_top_surface))
+    step = prog.fillet_by_axis(step, "z", 0.002)
+    top_cap = prog.fuse(top_cap, step)
 
     # Output shaft boss (native)
     sx, sy, _sz = servo.shaft_offset
@@ -78,14 +67,13 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
     boss = prog.locate(boss, pos=(sx, sy, z_top_surface + step_h))
     top_cap = prog.fuse(top_cap, boss)
 
-    # ── 3. Bottom cap (filleted → prebuilt) ──
+    # ── 3. Bottom cap (box + fillet Z edges) ──
     bot_h = z_mid_bot - z_cap_bot
-    bot_solid = Box(
-        body_x, body_y, bot_h, align=(Align.CENTER, Align.CENTER, Align.MAX)
+    bottom_cap = prog.box(
+        body_x, body_y, bot_h, align=Align3(z="max"), tag="sts_bot_cap"
     )
-    bot_solid = bot_solid.locate(Location((0, 0, z_mid_bot)))
-    bot_solid = _as_solid(fillet(bot_solid.edges().filter_by(Axis.Z), r))
-    bottom_cap = prog.prebuilt(bot_solid, tag="sts_bot_cap")
+    bottom_cap = prog.locate(bottom_cap, pos=(0, 0, z_mid_bot))
+    bottom_cap = prog.fillet_by_axis(bottom_cap, "z", r)
 
     # Mounting flanges (native)
     f_lx = 0.0404
@@ -133,24 +121,18 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
 def scs0009_script(servo: ServoSpec) -> ShapeScript:
     """SCS0009 micro servo body (SG90-style) as ShapeScript.
 
-    Main body (filleted) is prebuilt. Shaft boss, ears, mounting holes,
-    and connector are native ops.
+    All geometry uses native ShapeScript ops — no PrebuiltOps.
+    Shaft boss, ears, mounting holes, and connector are native ops.
     """
-    from build123d import Align, Axis, Box, fillet
-
-    from botcad.cad_utils import as_solid as _as_solid
-
     prog = ShapeScript()
 
     body_x, body_y, body_z = servo.effective_body_dims
     r = 0.0010
     z_top = body_z / 2
 
-    # ── 1. Main body (filleted → prebuilt) ──
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    body_solid = Box(body_x, body_y, body_z, align=C)
-    body_solid = _as_solid(fillet(body_solid.edges().filter_by(Axis.Z), r))
-    body = prog.prebuilt(body_solid, tag="scs_body")
+    # ── 1. Main body (box + fillet Z edges) ──
+    body = prog.box(body_x, body_y, body_z, tag="scs_body")
+    body = prog.fillet_by_axis(body, "z", r)
 
     # ── 2. Output shaft boss (native) ──
     sx, sy, _sz = servo.shaft_offset
@@ -201,14 +183,13 @@ def _group_ears_by_y_side(ears) -> dict[str, list]:
 
 
 def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
-    """Fuse connector receptacles onto the servo body via prebuilt solids.
+    """Fuse connector receptacles onto the servo body via CallOp sub-programs.
 
     Mirrors _fuse_servo_connector logic: each non-permanent wire port gets
-    a receptacle placed and fused.
+    a receptacle sub-program called and located at the wire port position.
     """
-    from build123d import Location
-
-    from botcad.connectors import connector_spec, receptacle_solid
+    from botcad.connectors import connector_spec
+    from botcad.shapescript.emit_components import receptacle_script
 
     for wp in servo.wire_ports:
         if not wp.connector_type or wp.permanent:
@@ -218,7 +199,11 @@ def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
         except KeyError:
             continue
 
-        rcpt = receptacle_solid(cspec)
+        # Register sub-program once per connector type
+        key = f"receptacle_{wp.connector_type}"
+        if key not in prog.sub_programs:
+            prog.sub_programs[key] = receptacle_script(cspec)
+
         cx, cy, cz = wp.pos
 
         mx, my, mz = cspec.mating_direction
@@ -230,8 +215,8 @@ def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
         else:
             euler = (90.0 if cy < 0 else -90.0, 0.0, 0.0)
 
-        rcpt_placed = rcpt.moved(Location((cx, cy, cz), euler))
-        connector = prog.prebuilt(rcpt_placed, tag="servo_connector")
+        connector = prog.call(key, tag="servo_connector")
+        connector = prog.locate(connector, pos=(cx, cy, cz), euler_deg=euler)
         body_ref = prog.fuse(body_ref, connector)
 
     return body_ref

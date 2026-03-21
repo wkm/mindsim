@@ -26,6 +26,8 @@ from botcad.shapescript.ops import (  # noqa: F401
     CylinderOp,
     ExportSTEPOp,
     ExportSTLOp,
+    FilletAllEdgesOp,
+    FilletByAxisOp,
     FilletOp,
     FuseOp,
     LocateOp,
@@ -181,6 +183,30 @@ class OcctBackend:
                             "Fillet: no edges resolved for tags %s, passing through",
                             ftags,
                         )
+                        shapes[ref.id] = s
+                    tags.propagate_transform(ref, t)
+
+                case FilletAllEdgesOp(ref=ref, target=t, radius=radius):
+                    s = shapes[t.id]
+                    try:
+                        shapes[ref.id] = s.fillet(radius, s.edges())
+                    except Exception:
+                        shapes[ref.id] = s  # fillet failed, pass through
+                    tags.propagate_transform(ref, t)
+
+                case FilletByAxisOp(ref=ref, target=t, axis=axis, radius=radius):
+                    from build123d import Vector
+
+                    s = shapes[t.id]
+                    axis_vec = {"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}[axis]
+                    edges = [
+                        e
+                        for e in s.edges()
+                        if abs(e.tangent_at(0).dot(Vector(*axis_vec))) > 0.9
+                    ]
+                    try:
+                        shapes[ref.id] = s.fillet(radius, edges) if edges else s
+                    except Exception:
                         shapes[ref.id] = s
                     tags.propagate_transform(ref, t)
 
