@@ -2,15 +2,22 @@
  * Viewport3D — reusable self-contained 3D viewport with overlay controls.
  *
  * Scene, camera, renderer, OrbitControls, standard lighting, post-processing
- * edge detection, view presets (keyboard 1-7), measure tool, and section plane.
+ * edge detection, view presets (keyboard 1-7), measure tool, and section plane
+ * with stencil-based caps and contour lines.
  *
- * Overlay: Shapr3D-style orientation cube (top-right) + vertical tool strip
+ * Overlay: polished orientation cube (top-right) + vertical tool strip
  * (left edge). All overlay elements created programmatically — no external CSS.
  */
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createEdgeComposer } from './presentation.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import {
+  BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
+  tintColor, createEdgeComposer,
+} from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
 
 const VIEW_PRESETS = {
@@ -42,24 +49,55 @@ const ICONS = {
 
 // ── Cube face mapping: face index → preset name ──
 // THREE.BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
-// We map them to view presets based on the outward normal direction.
 const CUBE_FACE_MAP = [
-  { preset: 'right',  label: 'RIGHT',  key: '4' },  // +X
-  { preset: 'left',   label: 'LEFT',   key: '7' },  // -X
-  { preset: 'back',   label: 'BACK',   key: '5' },  // +Y
-  { preset: 'front',  label: 'FRONT',  key: '2' },  // -Y
-  { preset: 'top',    label: 'TOP',    key: '3' },  // +Z
-  { preset: 'bottom', label: 'BOTTOM', key: '6' },  // -Z
+  { preset: 'right',  label: 'Right',  key: '4', normal: new THREE.Vector3(1, 0, 0) },   // +X
+  { preset: 'left',   label: 'Left',   key: '7', normal: new THREE.Vector3(-1, 0, 0) },  // -X
+  { preset: 'back',   label: 'Back',   key: '5', normal: new THREE.Vector3(0, 1, 0) },   // +Y
+  { preset: 'front',  label: 'Front',  key: '2', normal: new THREE.Vector3(0, -1, 0) },  // -Y
+  { preset: 'top',    label: 'Top',    key: '3', normal: new THREE.Vector3(0, 0, 1) },   // +Z
+  { preset: 'bottom', label: 'Bottom', key: '6', normal: new THREE.Vector3(0, 0, -1) },  // -Z
 ];
 
-// Blueprint palette grays for cube faces
+// Blueprint palette grays for cube faces — subtle gradient top-to-bottom
 const CUBE_FACE_COLORS = [
   '#D8DEE4', // +X right  — medium
   '#D8DEE4', // -X left   — medium
   '#D8DEE4', // +Y back   — medium
   '#D8DEE4', // -Y front  — medium
-  '#E8EDF0', // +Z top    — lighter
-  '#C5CDD4', // -Z bottom — darker
+  '#E8EDF0', // +Z top    — lightest
+  '#C5CDD4', // -Z bottom — darkest
+];
+
+// ── Edge/corner click zones for the orientation cube ──
+// Edges: average of two adjacent face normals → 45-degree view
+const CUBE_EDGES = [
+  // Top edges
+  { n: new THREE.Vector3(1, 0, 1).normalize(),  label: 'Right-Top' },
+  { n: new THREE.Vector3(-1, 0, 1).normalize(), label: 'Left-Top' },
+  { n: new THREE.Vector3(0, 1, 1).normalize(),  label: 'Back-Top' },
+  { n: new THREE.Vector3(0, -1, 1).normalize(), label: 'Front-Top' },
+  // Bottom edges
+  { n: new THREE.Vector3(1, 0, -1).normalize(),  label: 'Right-Bottom' },
+  { n: new THREE.Vector3(-1, 0, -1).normalize(), label: 'Left-Bottom' },
+  { n: new THREE.Vector3(0, 1, -1).normalize(),  label: 'Back-Bottom' },
+  { n: new THREE.Vector3(0, -1, -1).normalize(), label: 'Front-Bottom' },
+  // Horizontal edges
+  { n: new THREE.Vector3(1, -1, 0).normalize(),  label: 'Right-Front' },
+  { n: new THREE.Vector3(-1, -1, 0).normalize(), label: 'Left-Front' },
+  { n: new THREE.Vector3(1, 1, 0).normalize(),   label: 'Right-Back' },
+  { n: new THREE.Vector3(-1, 1, 0).normalize(),  label: 'Left-Back' },
+];
+
+// Corners: average of three adjacent face normals → isometric view
+const CUBE_CORNERS = [
+  { n: new THREE.Vector3(1, -1, 1).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(-1, -1, 1).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, 1).normalize(),    label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, 1).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(1, -1, -1).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(-1, -1, -1).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, -1).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, -1).normalize(),  label: 'Iso' },
 ];
 
 export class Viewport3D {
@@ -71,6 +109,7 @@ export class Viewport3D {
     this._animating = false;
     this._disposed = false;
     this._activeTool = null; // 'select' | 'measure' | 'section' | null
+    this._cameraType = options.cameraType || 'perspective';
     // Lerp
     this._lerpActive = false;
     this._lerpS = { pos: new THREE.Vector3(), tgt: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -82,12 +121,18 @@ export class Viewport3D {
     this._secFrac = 0.5;
     this._secPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
     this._secViz = null;
+    this._capGroup = null;
+    this._contourLineMat = null;
+    // Ghosting
+    this._ghostedMeshes = new Map(); // mesh → { opacity, transparent }
     // Follow mode
     this._followMode = false;
     this._followTarget = null;  // Vector3 — center of followed geometry
     this._followRadius = 0;     // bounding sphere radius for exit threshold
     this._followBadge = null;   // DOM element for "Following" indicator
     this._onFollowChange = null; // callback when follow mode changes
+    // Section cap callback — lets external code provide per-group cap colors
+    this._sectionCapColorFn = null;
 
     this._initScene(options);
     this._initOverlay();
@@ -107,6 +152,13 @@ export class Viewport3D {
   }
   getGroup(name) { return this._groups[name] || null; }
 
+  /**
+   * Set a callback that returns a cap color for a given group name.
+   * Signature: (groupName: string) => THREE.Color | number | null
+   * If null is returned, a default darker tint is used.
+   */
+  setSectionCapColorFn(fn) { this._sectionCapColorFn = fn; }
+
   frameOnGeometry(geometry) {
     geometry.computeBoundingBox();
     this.frameOnBox(geometry.boundingBox);
@@ -117,6 +169,9 @@ export class Viewport3D {
     const d = Math.max(size.x, size.y, size.z) * 2.5;
     const pos = new THREE.Vector3(center.x + d * 0.6, center.y - d * 0.6, center.z + d * 0.8);
     const up = new THREE.Vector3(0, 0, 1);
+    if (this._cameraType === 'orthographic') {
+      this._fitOrthoFrustum(box3);
+    }
     if (animate && this._animating) { this._startLerp(pos, center, up); }
     else { this._cam.position.copy(pos); this._cam.up.copy(up); this._ctrl.target.copy(center); this._ctrl.update(); }
   }
@@ -129,8 +184,35 @@ export class Viewport3D {
     // In follow mode, maintain focus on the followed target instead of bbox center
     const target = (this._followMode && this._followTarget) ? this._followTarget.clone() : c;
     const pos = target.clone().addScaledVector(p.dir, d);
+    if (this._cameraType === 'orthographic' && box) {
+      this._fitOrthoFrustum(box);
+    }
     if (this._animating) this._startLerp(pos, target, p.up.clone());
     else { this._cam.position.copy(pos); this._cam.up.copy(p.up); this._ctrl.target.copy(target); this._cam.lookAt(target); this._ctrl.update(); }
+  }
+
+  /**
+   * Set the camera to look from a given direction (used for edge/corner clicks).
+   * @param {THREE.Vector3} dir — normalized direction the camera looks FROM
+   * @param {THREE.Vector3} [up] — up vector (defaults to Z-up or Y-up for top/bottom)
+   */
+  setViewFromDirection(dir, up) {
+    const box = this._bbox();
+    const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
+    const sz = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
+    const d = Math.max(sz.x, sz.y, sz.z) * 2.5;
+    const target = (this._followMode && this._followTarget) ? this._followTarget.clone() : c;
+    const pos = target.clone().addScaledVector(dir, d);
+    // Pick a sensible up vector: Z-up unless we're looking straight along Z
+    if (!up) {
+      up = new THREE.Vector3(0, 0, 1);
+      if (Math.abs(dir.dot(up)) > 0.9) up = new THREE.Vector3(0, 1, 0);
+    }
+    if (this._cameraType === 'orthographic' && box) {
+      this._fitOrthoFrustum(box);
+    }
+    if (this._animating) this._startLerp(pos, target, up.clone());
+    else { this._cam.position.copy(pos); this._cam.up.copy(up); this._ctrl.target.copy(target); this._cam.lookAt(target); this._ctrl.update(); }
   }
 
   // ── Follow mode ──
@@ -182,6 +264,67 @@ export class Viewport3D {
     }
   }
 
+  // ── Ghosting ──
+
+  /**
+   * Ghost a mesh — save original material state and make very transparent.
+   * @param {THREE.Mesh} mesh
+   */
+  ghostMesh(mesh) {
+    if (!mesh || !mesh.material || this._ghostedMeshes.has(mesh)) return;
+    this._ghostedMeshes.set(mesh, {
+      opacity: mesh.material.opacity,
+      transparent: mesh.material.transparent,
+    });
+    mesh.material.opacity = 0.06;
+    mesh.material.transparent = true;
+  }
+
+  /**
+   * Restore a ghosted mesh to its original material state.
+   * @param {THREE.Mesh} mesh
+   */
+  unghostMesh(mesh) {
+    const saved = this._ghostedMeshes.get(mesh);
+    if (!saved) return;
+    mesh.material.opacity = saved.opacity;
+    mesh.material.transparent = saved.transparent;
+    this._ghostedMeshes.delete(mesh);
+  }
+
+  /**
+   * Unghost all currently ghosted meshes.
+   */
+  unghostAll() {
+    for (const [mesh, saved] of this._ghostedMeshes) {
+      if (mesh.material) {
+        mesh.material.opacity = saved.opacity;
+        mesh.material.transparent = saved.transparent;
+      }
+    }
+    this._ghostedMeshes.clear();
+  }
+
+  // ── Geometry disposal ──
+
+  /**
+   * Dispose all children of a group, cleaning up geometry and materials.
+   * @param {THREE.Group} group
+   */
+  clearGroup(group) {
+    while (group.children.length > 0) {
+      const child = group.children[0];
+      group.remove(child);
+      child.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+          else obj.material.dispose();
+        }
+      });
+    }
+  }
+
   enableMeasureTool()  {
     this._meas.enable(); this._ctrl.enabled = false;
     this._setActiveTool('measure');
@@ -203,15 +346,40 @@ export class Viewport3D {
     if (this._activeTool === 'section') this._setActiveTool(null);
     this._secPopover.style.display = 'none';
     if (this._secViz) this._secViz.visible = false;
+    this._clearSectionCaps();
     this._scene.traverse(ch => { if (ch.material) ch.material.clippingPlanes = []; });
+  }
+
+  /** Whether section plane is currently active. */
+  get sectionEnabled() { return this._secOn; }
+  /** The current section THREE.Plane (read-only). */
+  get sectionPlane() { return this._secPlane; }
+
+  /**
+   * Trigger a section plane rebuild (e.g. after layer visibility changes).
+   */
+  updateSection() {
+    if (this._secOn) this._applySection();
   }
 
   animate(cb) { this._animCb = cb || null; if (!this._animating) { this._animating = true; this._tick(); } }
   resize() {
     const w = this._container.clientWidth, h = this._container.clientHeight;
     if (!w || !h) return;
-    this._cam.aspect = w / h; this._cam.updateProjectionMatrix();
+    if (this._cameraType === 'orthographic') {
+      // Maintain vertical extent, adjust horizontal by aspect
+      const halfH = this._cam.top;
+      const aspect = w / h;
+      this._cam.left = -halfH * aspect;
+      this._cam.right = halfH * aspect;
+      this._cam.updateProjectionMatrix();
+    } else {
+      this._cam.aspect = w / h; this._cam.updateProjectionMatrix();
+    }
     this._ren.setSize(w, h); if (this._edgeC) this._edgeC.resize(w, h);
+    if (this._contourLineMat) {
+      this._contourLineMat.resolution.set(w, h);
+    }
   }
   dispose() {
     this._disposed = true;
@@ -221,6 +389,26 @@ export class Viewport3D {
     if (this._cubeRen) this._cubeRen.dispose();
     if (this._overlay) this._overlay.remove();
     if (this._cubeCanvas) this._cubeCanvas.remove();
+    this._clearSectionCaps();
+    this.unghostAll();
+  }
+
+  // ── Ortho frustum helpers ──
+
+  _fitOrthoFrustum(box) {
+    if (!box || this._cameraType !== 'orthographic') return;
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const pad = maxDim * 0.15;
+    const w = this._container.clientWidth || 1, h = this._container.clientHeight || 1;
+    const aspect = w / h;
+    const halfH = (maxDim / 2) + pad;
+    const halfW = halfH * aspect;
+    this._cam.left = -halfW;
+    this._cam.right = halfW;
+    this._cam.top = halfH;
+    this._cam.bottom = -halfH;
+    this._cam.updateProjectionMatrix();
   }
 
   // ── Scene init ──
@@ -228,9 +416,26 @@ export class Viewport3D {
     const c = this._container, w = c.clientWidth || 800, h = c.clientHeight || 600;
     this._scene = new THREE.Scene();
     this._scene.background = new THREE.Color(0xF5F8FA);
-    this._cam = new THREE.PerspectiveCamera(45, w / h, 0.0001, 10);
-    this._cam.position.set(0.08, -0.08, 0.1); this._cam.up.set(0, 0, 1);
-    this._ren = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, stencil: true });
+
+    if (this._cameraType === 'orthographic') {
+      const aspect = w / h;
+      const frustum = 0.06;
+      this._cam = new THREE.OrthographicCamera(
+        -frustum * aspect, frustum * aspect,
+        frustum, -frustum,
+        0.0001, 10,
+      );
+      this._cam.position.set(0.06, -0.06, 0.05);
+    } else {
+      this._cam = new THREE.PerspectiveCamera(45, w / h, 0.0001, 10);
+      this._cam.position.set(0.08, -0.08, 0.1);
+    }
+    this._cam.up.set(0, 0, 1);
+
+    // Stencil buffer required for section caps; logarithmic depth only for perspective
+    const rendererOpts = { antialias: true, stencil: true };
+    if (this._cameraType !== 'orthographic') rendererOpts.logarithmicDepthBuffer = true;
+    this._ren = new THREE.WebGLRenderer(rendererOpts);
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._ren.setSize(w, h); this._ren.shadowMap.enabled = true;
     this._ren.shadowMap.type = THREE.PCFShadowMap; this._ren.localClippingEnabled = true;
@@ -260,20 +465,26 @@ export class Viewport3D {
     this._initToolStrip();
   }
 
-  // ── Orientation Cube (top-right) ──
+  // ── Orientation Cube (top-right) — polished with beveled edges ──
   _initOrientationCube() {
-    const SIZE = 100;
+    const SIZE = 110;
     const PIXEL_RATIO = Math.min(window.devicePixelRatio, 2);
+
+    // Container with subtle shadow
+    const cubeContainer = document.createElement('div');
+    cubeContainer.style.cssText = `position:absolute;top:8px;right:8px;width:${SIZE}px;height:${SIZE}px;pointer-events:auto;border-radius:8px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.15));`;
+    this._overlay.appendChild(cubeContainer);
+    this._cubeContainer = cubeContainer;
 
     // Canvas element
     const canvas = document.createElement('canvas');
     canvas.width = SIZE * PIXEL_RATIO;
     canvas.height = SIZE * PIXEL_RATIO;
-    canvas.style.cssText = `position:absolute;top:8px;right:8px;width:${SIZE}px;height:${SIZE}px;pointer-events:auto;cursor:pointer;border-radius:6px;`;
-    this._overlay.appendChild(canvas);
+    canvas.style.cssText = `width:${SIZE}px;height:${SIZE}px;cursor:pointer;border-radius:8px;`;
+    cubeContainer.appendChild(canvas);
     this._cubeCanvas = canvas;
 
-    // Separate renderer
+    // Separate renderer with antialiasing
     this._cubeRen = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     this._cubeRen.setPixelRatio(PIXEL_RATIO);
     this._cubeRen.setSize(SIZE, SIZE);
@@ -284,41 +495,53 @@ export class Viewport3D {
     this._cubeCam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
     this._cubeCam.position.set(0, 0, 4);
 
-    // Lighting for cube
-    this._cubeScene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const cubeDir = new THREE.DirectionalLight(0xffffff, 0.6);
+    // Lighting for cube — multi-directional for gradient effect
+    this._cubeScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const cubeDir = new THREE.DirectionalLight(0xffffff, 0.7);
     cubeDir.position.set(2, 3, 4);
     this._cubeScene.add(cubeDir);
+    const cubeFill = new THREE.DirectionalLight(0xffffff, 0.25);
+    cubeFill.position.set(-2, -1, -2);
+    this._cubeScene.add(cubeFill);
 
-    // Create face materials with canvas textures
+    // Create face materials with canvas textures — cleaner labels
     const materials = CUBE_FACE_MAP.map((face, i) => {
       const texCanvas = document.createElement('canvas');
       texCanvas.width = 128; texCanvas.height = 128;
       const ctx = texCanvas.getContext('2d');
+      // Fill with face color
       ctx.fillStyle = CUBE_FACE_COLORS[i];
       ctx.fillRect(0, 0, 128, 128);
+      // Subtle inner border for bevel feel
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(3, 3, 122, 122);
+      // Crisp smaller text
       ctx.fillStyle = '#5C7080';
-      ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+      ctx.font = '500 18px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(face.label, 64, 64);
       const tex = new THREE.CanvasTexture(texCanvas);
       tex.colorSpace = THREE.SRGBColorSpace;
-      return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, metalness: 0 });
+      return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.65, metalness: 0.02 });
     });
 
-    // Store base textures for hover highlighting
+    // Store base textures for hover highlighting with smooth transition
     this._cubeFaceTextures = materials.map((_, i) => ({
       baseColor: CUBE_FACE_COLORS[i],
       label: CUBE_FACE_MAP[i].label,
+      brightness: 0, // 0 = base, 1 = hover highlight (lerped)
+      targetBrightness: 0,
     }));
 
-    const geo = new THREE.BoxGeometry(1, 1, 1);
+    // Use a slightly beveled box (rounded corners via segments)
+    const geo = this._createRoundedBoxGeometry(1, 1, 1, 0.08, 2);
     this._cubeMesh = new THREE.Mesh(geo, materials);
     this._cubeScene.add(this._cubeMesh);
 
-    // Edge wireframe
-    const edges = new THREE.EdgesGeometry(geo);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x394B59, linewidth: 1 });
+    // Soft edge wireframe
+    const edges = new THREE.EdgesGeometry(geo, 20);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x394B59, linewidth: 1, transparent: true, opacity: 0.4 });
     const wireframe = new THREE.LineSegments(edges, lineMat);
     this._cubeMesh.add(wireframe);
 
@@ -337,7 +560,43 @@ export class Viewport3D {
     canvas.addEventListener('click', (e) => this._onCubeClick(e));
   }
 
-  _getCubeFaceAtMouse(e) {
+  /**
+   * Create a rounded box geometry by subdividing faces.
+   * Simple approach: create a box and adjust vertex positions to soften edges.
+   */
+  _createRoundedBoxGeometry(w, h, d, radius, segments) {
+    // Use standard BoxGeometry with enough segments for rounding
+    const geo = new THREE.BoxGeometry(w, h, d, segments + 1, segments + 1, segments + 1);
+    const pos = geo.attributes.position;
+    const v = new THREE.Vector3();
+    const halfW = w / 2, halfH = h / 2, halfD = d / 2;
+
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      // Compute how far each component is from the interior box
+      const dx = Math.max(0, Math.abs(v.x) - (halfW - radius));
+      const dy = Math.max(0, Math.abs(v.y) - (halfH - radius));
+      const dz = Math.max(0, Math.abs(v.z) - (halfD - radius));
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > 0) {
+        const scale = radius / dist;
+        if (scale < 1) {
+          // Pull vertex inward to round the corner/edge
+          if (Math.abs(v.x) > halfW - radius)
+            v.x = Math.sign(v.x) * ((halfW - radius) + dx * scale);
+          if (Math.abs(v.y) > halfH - radius)
+            v.y = Math.sign(v.y) * ((halfH - radius) + dy * scale);
+          if (Math.abs(v.z) > halfD - radius)
+            v.z = Math.sign(v.z) * ((halfD - radius) + dz * scale);
+        }
+      }
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  _getCubeHitInfo(e) {
     const rect = this._cubeCanvas.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -345,23 +604,76 @@ export class Viewport3D {
     );
     this._cubeRaycaster.setFromCamera(mouse, this._cubeCam);
     const hits = this._cubeRaycaster.intersectObject(this._cubeMesh);
-    if (hits.length === 0) return -1;
-    // faceIndex is the triangle index; each cube face has 2 triangles
-    return Math.floor(hits[0].faceIndex / 2);
+    if (hits.length === 0) return { type: 'none', faceIndex: -1 };
+
+    const hit = hits[0];
+    const point = hit.point;
+
+    // Determine if the hit is on a face center, edge, or corner
+    // by checking how close the point is to the cube axes
+    const abs = new THREE.Vector3(Math.abs(point.x), Math.abs(point.y), Math.abs(point.z));
+    const sorted = [abs.x, abs.y, abs.z].sort((a, b) => b - a);
+
+    // Thresholds for edge/corner detection on the rounded cube
+    const edgeThreshold = 0.32;
+    const cornerThreshold = 0.32;
+
+    // How many axes are close to the surface (above threshold)?
+    const nearSurface = [abs.x, abs.y, abs.z].filter(v => v > edgeThreshold).length;
+
+    if (nearSurface >= 3) {
+      // Corner: all three axes are significant
+      const dir = new THREE.Vector3(
+        Math.sign(point.x), Math.sign(point.y), Math.sign(point.z)
+      ).normalize();
+      return { type: 'corner', dir };
+    } else if (nearSurface >= 2 && sorted[1] > cornerThreshold) {
+      // Edge: two axes are significant
+      const dir = new THREE.Vector3(
+        abs.x > edgeThreshold ? Math.sign(point.x) : 0,
+        abs.y > edgeThreshold ? Math.sign(point.y) : 0,
+        abs.z > edgeThreshold ? Math.sign(point.z) : 0,
+      ).normalize();
+      return { type: 'edge', dir };
+    } else {
+      // Face center
+      const fi = Math.floor(hit.faceIndex / ((this._cubeMesh.geometry.index ? this._cubeMesh.geometry.index.count / 3 : 1) / 6));
+      // Use a simpler approach: find the dominant axis
+      let maxAxis = 0;
+      if (abs.y > abs.x && abs.y > abs.z) maxAxis = 1;
+      if (abs.z > abs.x && abs.z > abs.y) maxAxis = 2;
+      const sign = [point.x, point.y, point.z][maxAxis] > 0 ? 1 : -1;
+      // Map to face index: +X=0, -X=1, +Y=2, -Y=3, +Z=4, -Z=5
+      const faceIndex = maxAxis * 2 + (sign > 0 ? 0 : 1);
+      return { type: 'face', faceIndex };
+    }
   }
 
   _onCubeHover(e) {
-    const fi = this._getCubeFaceAtMouse(e);
-    if (fi === this._cubeHoveredFace) return;
+    const info = this._getCubeHitInfo(e);
 
-    // Restore previous face
-    if (this._cubeHoveredFace >= 0) this._setCubeFaceHighlight(this._cubeHoveredFace, false);
-    this._cubeHoveredFace = fi;
-    if (fi >= 0) {
-      this._setCubeFaceHighlight(fi, true);
-      const face = CUBE_FACE_MAP[fi];
-      this._cubeTooltip.textContent = `${face.label.charAt(0) + face.label.slice(1).toLowerCase()} view (${face.key})`;
-      // Position tooltip to the left of the cube
+    // Restore all faces first
+    for (let i = 0; i < CUBE_FACE_MAP.length; i++) {
+      this._cubeFaceTextures[i].targetBrightness = 0;
+    }
+
+    let tooltipText = null;
+
+    if (info.type === 'face' && info.faceIndex >= 0 && info.faceIndex < CUBE_FACE_MAP.length) {
+      this._cubeFaceTextures[info.faceIndex].targetBrightness = 1;
+      const face = CUBE_FACE_MAP[info.faceIndex];
+      tooltipText = `${face.label} view (${face.key})`;
+    } else if (info.type === 'edge') {
+      tooltipText = 'Edge view';
+    } else if (info.type === 'corner') {
+      tooltipText = 'Corner view';
+    }
+
+    // Update hover brightness with smooth transition
+    this._updateCubeFaceBrightness();
+
+    if (tooltipText) {
+      this._cubeTooltip.textContent = tooltipText;
       const rect = this._cubeCanvas.getBoundingClientRect();
       const containerRect = this._container.getBoundingClientRect();
       this._cubeTooltip.style.display = '';
@@ -370,39 +682,88 @@ export class Viewport3D {
     } else {
       this._cubeTooltip.style.display = 'none';
     }
-    this._cubeCanvas.style.cursor = fi >= 0 ? 'pointer' : 'default';
+
+    this._cubeCanvas.style.cursor = info.type !== 'none' ? 'pointer' : 'default';
+    this._cubeHoverInfo = info;
   }
 
   _onCubeLeave() {
-    if (this._cubeHoveredFace >= 0) this._setCubeFaceHighlight(this._cubeHoveredFace, false);
-    this._cubeHoveredFace = -1;
+    for (let i = 0; i < CUBE_FACE_MAP.length; i++) {
+      this._cubeFaceTextures[i].targetBrightness = 0;
+    }
+    this._updateCubeFaceBrightness();
     this._cubeTooltip.style.display = 'none';
+    this._cubeHoverInfo = null;
   }
 
   _onCubeClick(e) {
-    const fi = this._getCubeFaceAtMouse(e);
-    if (fi < 0) return;
-    this.setViewPreset(CUBE_FACE_MAP[fi].preset);
+    const info = this._getCubeHitInfo(e);
+    if (info.type === 'face' && info.faceIndex >= 0 && info.faceIndex < CUBE_FACE_MAP.length) {
+      this.setViewPreset(CUBE_FACE_MAP[info.faceIndex].preset);
+    } else if (info.type === 'edge' || info.type === 'corner') {
+      this.setViewFromDirection(info.dir);
+    }
   }
 
-  _setCubeFaceHighlight(faceIdx, highlight) {
+  _updateCubeFaceBrightness() {
+    // Smoothly interpolate brightness toward target
+    const speed = 0.25;
+    let needsUpdate = false;
+
+    for (let i = 0; i < CUBE_FACE_MAP.length; i++) {
+      const ft = this._cubeFaceTextures[i];
+      const prev = ft.brightness;
+      ft.brightness += (ft.targetBrightness - ft.brightness) * speed;
+      // Snap when close
+      if (Math.abs(ft.brightness - ft.targetBrightness) < 0.01) {
+        ft.brightness = ft.targetBrightness;
+      }
+      if (ft.brightness !== prev) {
+        this._redrawCubeFace(i);
+        needsUpdate = true;
+      }
+    }
+    return needsUpdate;
+  }
+
+  _redrawCubeFace(faceIdx) {
     const info = this._cubeFaceTextures[faceIdx];
     const mat = this._cubeMesh.material[faceIdx];
     const texCanvas = mat.map.image;
     const ctx = texCanvas.getContext('2d');
-    ctx.fillStyle = highlight ? '#BCC7CF' : info.baseColor;
+    const t = info.brightness;
+
+    // Interpolate between base color and hover color
+    const baseR = parseInt(info.baseColor.slice(1, 3), 16);
+    const baseG = parseInt(info.baseColor.slice(3, 5), 16);
+    const baseB = parseInt(info.baseColor.slice(5, 7), 16);
+    const hoverR = 0xBC, hoverG = 0xC7, hoverB = 0xCF;
+    const r = Math.round(baseR + (hoverR - baseR) * t);
+    const g = Math.round(baseG + (hoverG - baseG) * t);
+    const b = Math.round(baseB + (hoverB - baseB) * t);
+
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(0, 0, 128, 128);
-    ctx.fillStyle = highlight ? '#182026' : '#5C7080';
-    ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+    // Subtle inner bevel
+    ctx.strokeStyle = `rgba(255,255,255,${0.25 + t * 0.15})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(3, 3, 122, 122);
+    // Text — darker on hover for better contrast
+    const textR = Math.round(0x5C + (0x18 - 0x5C) * t);
+    const textG = Math.round(0x70 + (0x20 - 0x70) * t);
+    const textB = Math.round(0x80 + (0x26 - 0x80) * t);
+    ctx.fillStyle = `rgb(${textR},${textG},${textB})`;
+    ctx.font = '500 18px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(info.label, 64, 64);
     mat.map.needsUpdate = true;
   }
 
   _syncOrientationCube() {
-    // Mirror main camera orientation onto cube camera.
-    // The cube camera looks at the origin from a fixed distance;
-    // we rotate the *cube mesh* to match the inverse of the camera direction.
+    // Smooth face brightness transitions
+    this._updateCubeFaceBrightness();
+
+    // Mirror main camera orientation onto cube camera
     const dir = new THREE.Vector3();
     this._cam.getWorldDirection(dir);
     const dist = 4;
@@ -520,9 +881,6 @@ export class Viewport3D {
       this._secPopover.style.top = `${sr.top - cr.top + sr.height / 2}px`;
       this._secPopover.style.transform = 'translateY(-50%)';
     };
-    // Update on every show
-    const origDisplay = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'display');
-    const panel = this._secPopover;
     this._updateSecPopoverPos = update;
   }
 
@@ -606,7 +964,7 @@ export class Viewport3D {
     if (t >= 1) this._lerpActive = false;
   }
 
-  // ── Section plane ──
+  // ── Section plane with stencil caps and contour lines ──
   _applySection() {
     const box = this._bbox();
     if (box) {
@@ -618,12 +976,16 @@ export class Viewport3D {
     }
     const clips = [this._secPlane];
     this._scene.traverse(ch => {
-      if (ch.material && !ch.userData._vpSec) {
+      if (ch.material && !ch.userData._vpSec && !ch.userData._vpCap) {
         if (ch.isLineSegments && !ch.material._vpClip) { ch.material = ch.material.clone(); ch.material._vpClip = true; }
         ch.material.clippingPlanes = clips; ch.material.clipShadows = true;
       }
     });
+
+    // Rebuild stencil caps and contour lines
+    this._rebuildSectionCaps(clips);
   }
+
   _showSecViz(box, ai, pos) {
     if (!this._secViz) {
       const mat = new THREE.MeshBasicMaterial({ color: 0x2B95D6, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
@@ -636,6 +998,197 @@ export class Viewport3D {
     this._secViz.rotation.set(0, 0, 0);
     if (ai === 0) this._secViz.rotation.y = Math.PI / 2;
     else if (ai === 1) this._secViz.rotation.x = Math.PI / 2;
+  }
+
+  /**
+   * Stencil-based section caps with contour lines.
+   *
+   * For each visible group, creates stencil helpers (back faces write,
+   * front faces clear) and a cap plane that renders only where the
+   * stencil reveals interior geometry. Contour lines mark the
+   * mesh-plane intersection.
+   */
+  _rebuildSectionCaps(clips) {
+    this._clearSectionCaps();
+    if (!clips.length) return;
+
+    this._capGroup = new THREE.Group();
+    this._capGroup.name = 'section-caps';
+    this._capGroup.userData._vpCap = true;
+    this._scene.add(this._capGroup);
+
+    const box = this._bbox();
+    const capSize = box
+      ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
+      : 0.2;
+
+    const allMeshes = [];
+    let layerIndex = 0;
+
+    for (const [groupName, group] of Object.entries(this._groups)) {
+      if (!group.visible) continue;
+
+      const layerMeshes = [];
+      group.traverse(child => {
+        if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
+          layerMeshes.push(child);
+        }
+      });
+      if (layerMeshes.length === 0) continue;
+
+      const ref = layerIndex + 1;
+      const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
+      layerIndex++;
+
+      // Stencil helpers
+      for (const mesh of layerMeshes) {
+        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
+          orderBase + RENDER_ORDER.STENCIL_BACK);
+        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
+          orderBase + RENDER_ORDER.STENCIL_FRONT);
+      }
+
+      // Cap color — use callback if provided, otherwise default darker tint
+      let capColor;
+      if (this._sectionCapColorFn) {
+        capColor = this._sectionCapColorFn(groupName);
+      }
+      if (capColor == null) {
+        // Default: derive from first mesh's material color at 60% tint
+        const firstMat = layerMeshes[0]?.material;
+        const baseColor = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
+        capColor = tintColor(baseColor, 0.6);
+      }
+
+      const capGeom = new THREE.PlaneGeometry(capSize, capSize);
+      const capMat = new THREE.MeshBasicMaterial({
+        color: capColor,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        stencilWrite: true,
+        stencilFunc: THREE.EqualStencilFunc,
+        stencilRef: ref,
+        stencilFail: THREE.KeepStencilOp,
+        stencilZFail: THREE.KeepStencilOp,
+        stencilZPass: THREE.ZeroStencilOp,
+      });
+      const capPlane = new THREE.Mesh(capGeom, capMat);
+      capPlane.raycast = () => {};
+      capPlane.renderOrder = orderBase + RENDER_ORDER.STENCIL_CAP;
+      capPlane.userData._vpCap = true;
+
+      if (this._secViz) {
+        capPlane.position.copy(this._secViz.position);
+        capPlane.rotation.copy(this._secViz.rotation);
+      }
+
+      this._capGroup.add(capPlane);
+      allMeshes.push(...layerMeshes);
+    }
+
+    // Section contour lines across all meshes
+    const contourSegments = [];
+    for (const mesh of allMeshes) {
+      this._computeMeshPlaneContour(mesh, this._secPlane, contourSegments);
+    }
+
+    if (contourSegments.length > 0) {
+      const lineGeom = new LineSegmentsGeometry();
+      lineGeom.setPositions(contourSegments);
+      const w = this._ren.domElement.width, h = this._ren.domElement.height;
+      const lineMat = new LineMaterial({
+        color: BP.DARK_GRAY3,
+        linewidth: 3,
+        resolution: new THREE.Vector2(w, h),
+        clippingPlanes: clips,
+      });
+      const contourLines = new LineSegments2(lineGeom, lineMat);
+      contourLines.renderOrder = RENDER_ORDER.SECTION_CONTOUR;
+      contourLines.raycast = () => {};
+      contourLines.userData._vpCap = true;
+      this._capGroup.add(contourLines);
+      this._contourLineMat = lineMat;
+    }
+  }
+
+  /** Compute line segments where a mesh intersects a plane. */
+  _computeMeshPlaneContour(mesh, plane, out) {
+    const geom = mesh.geometry;
+    const posAttr = geom.getAttribute('position');
+    if (!posAttr) return;
+
+    const index = geom.index;
+    const matrix = mesh.matrixWorld;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+
+    const triCount = index ? index.count / 3 : posAttr.count / 3;
+
+    for (let i = 0; i < triCount; i++) {
+      const i0 = index ? index.getX(i * 3) : i * 3;
+      const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
+      const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
+
+      a.fromBufferAttribute(posAttr, i0).applyMatrix4(matrix);
+      b.fromBufferAttribute(posAttr, i1).applyMatrix4(matrix);
+      c.fromBufferAttribute(posAttr, i2).applyMatrix4(matrix);
+
+      const da = plane.distanceToPoint(a);
+      const db = plane.distanceToPoint(b);
+      const dc = plane.distanceToPoint(c);
+
+      const crossings = [];
+      if (da * db < 0) crossings.push(this._planeEdgeIntersect(a, b, da, db));
+      if (db * dc < 0) crossings.push(this._planeEdgeIntersect(b, c, db, dc));
+      if (dc * da < 0) crossings.push(this._planeEdgeIntersect(c, a, dc, da));
+
+      if (crossings.length === 2) {
+        out.push(
+          crossings[0].x, crossings[0].y, crossings[0].z,
+          crossings[1].x, crossings[1].y, crossings[1].z,
+        );
+      }
+    }
+  }
+
+  _planeEdgeIntersect(p1, p2, d1, d2) {
+    const t = d1 / (d1 - d2);
+    return new THREE.Vector3().lerpVectors(p1, p2, t);
+  }
+
+  /** Create an invisible stencil helper mesh. */
+  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
+    const mat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      side,
+      clippingPlanes: clips,
+      stencilWrite: true,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilRef,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
+    mesh.position.copy(sourceMesh.position);
+    mesh.quaternion.copy(sourceMesh.quaternion);
+    mesh.scale.copy(sourceMesh.scale);
+    mesh.renderOrder = renderOrder;
+    mesh.raycast = () => {};
+    mesh.userData._vpCap = true;
+    this._capGroup.add(mesh);
+  }
+
+  _clearSectionCaps() {
+    if (this._capGroup) {
+      this._capGroup.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      });
+      this._scene.remove(this._capGroup);
+      this._capGroup = null;
+    }
+    this._contourLineMat = null;
   }
 
   // ── Render loop ──
