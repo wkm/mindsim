@@ -17,10 +17,10 @@ const componentParam = params.get('component');
 const cadstepsParam = params.get('cadsteps');
 
 if (cadstepsParam) {
-  // CAD steps debugger — hide landing, show side panel + canvas
+  // CAD steps debugger — hide landing, show top bar (side panel managed by cad-steps-mode)
   document.getElementById('landing').style.display = 'none';
   document.getElementById('top-bar').style.display = '';
-  document.getElementById('side-panel').style.display = '';
+  document.getElementById('side-panel').style.display = 'none';
   document.getElementById('mode-tabs').style.display = 'none';
   const cadBotName = cadstepsParam.split(':')[0];
   const botNameEl = document.getElementById('bot-name');

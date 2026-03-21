@@ -1,9 +1,10 @@
 /**
- * MindSim CAD Steps Viewer — step-by-step body solid construction debugger.
+ * MindSim CAD Steps Viewer — split-pane code debugger for ShapeScript.
  *
- * Shows each intermediate CAD boolean operation as a separate step,
- * with a slider to scrub through the construction sequence. Tool solids
- * (the shape being cut or unioned) are shown as transparent overlays.
+ * Left pane: 3D viewport showing body solid + tool overlay.
+ * Right pane: syntax-highlighted code editor showing all ShapeScript ops.
+ * Click a line to scrub. Current step highlighted with blue bar.
+ * Resizable panes with draggable divider.
  *
  * URL: ?cadsteps=<bot_name>:<body_name>
  */
@@ -13,20 +14,132 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { clearGroup } from './utils.js';
 
-const SIDE_PANEL_WIDTH = 320;
-
 // Edge rendering — matches bot-viewer.js and component-browser.js
 const EDGE_MATERIAL = new THREE.LineBasicMaterial({
   color: 0x000000, transparent: true, opacity: 0.6,
 });
 const EDGE_THRESHOLD = 28; // degrees — only sharp edges
 
-// Op type → color (for step list dots)
+// Op type → color (for tool overlay)
 const OP_COLORS = {
   create: 0x2B95D6,  // blue
   cut:    0xDB3737,  // red
   union:  0x0F9960,  // green
 };
+
+// ── Styles for the code editor pane ──
+const EDITOR_STYLES = `
+  .cs-layout {
+    position: absolute; top: 40px; bottom: 0; left: 0; right: 0;
+    display: flex; z-index: 1;
+  }
+  .cs-viewport {
+    flex: 0 0 60%; min-width: 200px; position: relative; overflow: hidden;
+  }
+  .cs-divider {
+    flex: 0 0 6px; background: var(--border); cursor: col-resize;
+    transition: background 0.15s; z-index: 10;
+  }
+  .cs-divider:hover, .cs-divider.dragging { background: var(--primary); }
+  .cs-editor-pane {
+    flex: 1 1 40%; min-width: 200px; display: flex; flex-direction: column;
+    background: #1C2127; overflow: hidden;
+  }
+
+  /* Toolbar row inside editor pane */
+  .cs-toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-bottom: 1px solid #30363D;
+    flex-shrink: 0;
+  }
+  .cs-toolbar .cs-step-count {
+    font-family: var(--font-mono); font-size: 12px; color: #ABB3BF;
+    white-space: nowrap;
+  }
+  .cs-toolbar input[type="range"] {
+    flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
+    background: #30363D; border-radius: 2px; outline: none;
+  }
+  .cs-toolbar input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--primary); cursor: pointer;
+  }
+  .cs-toolbar label {
+    font-size: 11px; color: #738694; cursor: pointer;
+    display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  }
+  .cs-toolbar input[type="checkbox"] {
+    width: 12px; height: 12px; accent-color: var(--primary); cursor: pointer;
+  }
+
+  /* Code block */
+  .cs-code-scroll {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+  }
+  .cs-code-scroll::-webkit-scrollbar { width: 8px; }
+  .cs-code-scroll::-webkit-scrollbar-track { background: #1C2127; }
+  .cs-code-scroll::-webkit-scrollbar-thumb { background: #30363D; border-radius: 4px; }
+  .cs-code-scroll::-webkit-scrollbar-thumb:hover { background: #3E4A55; }
+
+  .cs-code {
+    display: table; width: 100%; border-collapse: collapse;
+    font-family: 'Input Mono Narrow', 'SF Mono', 'Menlo', monospace;
+    font-size: 12px; line-height: 20px;
+  }
+  .cs-line {
+    display: table-row; cursor: pointer; transition: background 0.08s;
+  }
+  .cs-line:hover { background: rgba(255,255,255,0.04); }
+  .cs-line.cs-active {
+    background: rgba(43,149,214,0.12);
+  }
+  .cs-gutter {
+    display: table-cell; width: 44px; padding: 0 8px 0 0;
+    text-align: right; color: #3E4A55; user-select: none;
+    vertical-align: top; white-space: nowrap;
+  }
+  .cs-line.cs-active .cs-gutter { color: #738694; }
+  .cs-line-bar {
+    display: table-cell; width: 3px; padding: 0;
+    vertical-align: top;
+  }
+  .cs-line.cs-active .cs-line-bar { background: #2B95D6; }
+  .cs-line-content {
+    display: table-cell; padding: 0 12px 0 8px;
+    white-space: pre; color: #ABB3BF;
+    vertical-align: top;
+  }
+
+  /* Sub-program section */
+  .cs-line.cs-subprogram { background: rgba(255,255,255,0.015); }
+  .cs-line.cs-subprogram .cs-line-content { padding-left: 24px; }
+  .cs-line.cs-group-header .cs-line-content {
+    color: #738694; font-weight: 600; font-size: 11px;
+    padding-top: 6px;
+  }
+
+  /* Syntax coloring */
+  .ss-prim { color: #2B95D6; }      /* Box, Cylinder, Sphere */
+  .ss-cut { color: #DB3737; }       /* Cut */
+  .ss-fuse { color: #0F9960; }      /* Fuse */
+  .ss-loc { color: #D4A843; }       /* Locate */
+  .ss-call { color: #9179F2; }      /* Call */
+  .ss-pre { color: #738694; }       /* Prebuilt */
+  .ss-comment { color: #5C7080; font-style: italic; }
+  .ss-num { color: #C87619; }
+  .ss-ref { color: #8A9BA8; }
+
+  /* Hover parameter highlight */
+  .ss-param-hover { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  /* Body switcher dropdown in navbar */
+  .cs-body-select {
+    background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--foreground); font-family: var(--font); font-size: 12px;
+    padding: 2px 6px; height: 28px; cursor: pointer; outline: none;
+  }
+  .cs-body-select:hover { background: var(--secondary); }
+`;
 
 export async function initCadSteps(param) {
   const [botName, bodyName] = param.split(':');
@@ -51,45 +164,124 @@ class CadStepsViewer {
     this.meshGroup = new THREE.Group();   // result solid + its edges
     this.toolGroup = new THREE.Group();   // tool solid + its edges
     this.showTool = true;
+    this._leftBasis = 60; // percent
   }
 
   async init() {
-    // Show loading overlay — CAD step generation is slow on first hit
+    // Inject styles
+    const styleEl = document.createElement('style');
+    styleEl.textContent = EDITOR_STYLES;
+    document.head.appendChild(styleEl);
+
+    // Show loading overlay
     const loadingEl = document.getElementById('loading');
     const loadingText = document.getElementById('loading-text');
     loadingEl.style.display = '';
     loadingText.textContent = `Building CAD steps for ${this.bodyName}...`;
 
-    this._setupThreeJS();
+    // Hide the default side panel — we use our own layout
+    const sidePanel = document.getElementById('side-panel');
+    if (sidePanel) sidePanel.style.display = 'none';
+
     this.allBodies = [];
     await Promise.all([this._fetchSteps(), this._fetchBodies()]);
 
+    this._buildLayout();
+    this._setupThreeJS();
+    this._buildNavExtras();
+    this._buildEditorPane();
+
     loadingEl.style.display = 'none';
 
-    this._buildUI();
     this._animate();
     if (this.steps.length > 0) {
       await this._showStep(this.steps.length - 1);
     }
   }
 
-  _setupThreeJS() {
-    const container = document.getElementById('canvas-container');
-    container.style.right = SIDE_PANEL_WIDTH + 'px';
+  // ── Layout ──
 
+  _buildLayout() {
+    // Hide the default canvas container — we use our own viewport inside the split layout
+    const container = document.getElementById('canvas-container');
+    container.style.display = 'none';
+
+    this.layoutEl = document.createElement('div');
+    this.layoutEl.className = 'cs-layout';
+
+    // Left: 3D viewport
+    this.viewportEl = document.createElement('div');
+    this.viewportEl.className = 'cs-viewport';
+    this.viewportEl.style.flexBasis = this._leftBasis + '%';
+
+    // Divider
+    this.dividerEl = document.createElement('div');
+    this.dividerEl.className = 'cs-divider';
+    this._setupDividerDrag();
+
+    // Right: code editor pane
+    this.editorPaneEl = document.createElement('div');
+    this.editorPaneEl.className = 'cs-editor-pane';
+
+    this.layoutEl.appendChild(this.viewportEl);
+    this.layoutEl.appendChild(this.dividerEl);
+    this.layoutEl.appendChild(this.editorPaneEl);
+
+    document.body.appendChild(this.layoutEl);
+  }
+
+  _setupDividerDrag() {
+    let startX, startLeftBasis;
+    const onMouseDown = (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startLeftBasis = this._leftBasis;
+      this.dividerEl.classList.add('dragging');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    };
+    const onMouseMove = (e) => {
+      const dx = e.clientX - startX;
+      const totalW = this.layoutEl.clientWidth;
+      const newBasis = startLeftBasis + (dx / totalW) * 100;
+      this._leftBasis = Math.max(20, Math.min(80, newBasis));
+      this.viewportEl.style.flexBasis = this._leftBasis + '%';
+      this._resizeRenderer();
+    };
+    const onMouseUp = () => {
+      this.dividerEl.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    this.dividerEl.addEventListener('mousedown', onMouseDown);
+  }
+
+  _resizeRenderer() {
+    if (!this.renderer) return;
+    const w = this.viewportEl.clientWidth;
+    const h = this.viewportEl.clientHeight;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+  }
+
+  // ── Three.js ──
+
+  _setupThreeJS() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xF5F8FA);
 
-    const viewWidth = window.innerWidth - SIDE_PANEL_WIDTH;
-    this.camera = new THREE.PerspectiveCamera(45, viewWidth / window.innerHeight, 0.0001, 10);
+    const w = this.viewportEl.clientWidth;
+    const h = this.viewportEl.clientHeight;
+    this.camera = new THREE.PerspectiveCamera(45, w / h, 0.0001, 10);
     this.camera.position.set(0.08, 0.08, 0.1);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(viewWidth, window.innerHeight);
+    this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    container.appendChild(this.renderer.domElement);
+    this.viewportEl.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -114,74 +306,50 @@ class CadStepsViewer {
     this.scene.add(this.toolGroup);
 
     // Handle resize
-    window.addEventListener('resize', () => {
-      const w = window.innerWidth - SIDE_PANEL_WIDTH;
-      const h = window.innerHeight;
-      this.camera.aspect = w / h;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(w, h);
-    });
+    window.addEventListener('resize', () => this._resizeRenderer());
   }
 
-  async _fetchSteps() {
-    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.error('Failed to fetch CAD steps:', resp.status, await resp.text());
-      return;
-    }
-    const data = await resp.json();
-    this.steps = data.steps || [];
-  }
+  // ── Nav bar extras (body switcher) ──
 
-  async _fetchBodies() {
-    // Load viewer manifest to get list of all bodies for this bot
-    const url = `/bots/${this.botName}/viewer_manifest.json`;
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const manifest = await resp.json();
-        this.allBodies = (manifest.bodies || []).map(b => b.name);
+  _buildNavExtras() {
+    const topBar = document.getElementById('top-bar');
+    if (!topBar) return;
+
+    // Add body switcher to the nav bar if multiple bodies
+    if (this.allBodies.length > 1) {
+      const sep = document.createElement('span');
+      sep.className = 'nav-sep';
+      topBar.appendChild(sep);
+
+      const select = document.createElement('select');
+      select.className = 'cs-body-select';
+      for (const name of this.allBodies) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === this.bodyName) opt.selected = true;
+        select.appendChild(opt);
       }
-    } catch { /* manifest not available — no body switcher */ }
+      select.addEventListener('change', () => {
+        window.location.href = `?cadsteps=${encodeURIComponent(this.botName)}:${encodeURIComponent(select.value)}`;
+      });
+      topBar.appendChild(select);
+    }
   }
 
-  _buildUI() {
-    const panel = document.getElementById('side-panel');
-    panel.innerHTML = '';
+  // ── Editor pane ──
 
-    // Title
-    const title = document.createElement('h2');
-    title.textContent = 'CAD Steps';
-    panel.appendChild(title);
+  _buildEditorPane() {
+    this.editorPaneEl.innerHTML = '';
 
-    // Body name badge
-    const badge = document.createElement('div');
-    badge.className = 'prop-badge body-badge';
-    badge.textContent = `${this.botName} / ${this.bodyName}`;
-    panel.appendChild(badge);
+    // Toolbar: slider + step count + tool toggle
+    const toolbar = document.createElement('div');
+    toolbar.className = 'cs-toolbar';
 
-    // Step info box
-    this.stepInfoEl = document.createElement('div');
-    this.stepInfoEl.className = 'step-info';
-    this.stepInfoEl.innerHTML = '<div class="step-title">Loading...</div>';
-    panel.appendChild(this.stepInfoEl);
-
-    // Step slider
-    const sliderGroup = document.createElement('div');
-    sliderGroup.className = 'slider-group';
-
-    const sliderLabel = document.createElement('div');
-    sliderLabel.className = 'slider-label';
     this.stepCountEl = document.createElement('span');
-    this.stepCountEl.className = 'name';
-    this.stepCountEl.textContent = 'Step';
-    this.stepValueEl = document.createElement('span');
-    this.stepValueEl.className = 'value';
-    this.stepValueEl.textContent = '0';
-    sliderLabel.appendChild(this.stepCountEl);
-    sliderLabel.appendChild(this.stepValueEl);
-    sliderGroup.appendChild(sliderLabel);
+    this.stepCountEl.className = 'cs-step-count';
+    this.stepCountEl.textContent = `${this.steps.length} / ${this.steps.length}`;
+    toolbar.appendChild(this.stepCountEl);
 
     this.slider = document.createElement('input');
     this.slider.type = 'range';
@@ -189,142 +357,89 @@ class CadStepsViewer {
     this.slider.max = String(Math.max(0, this.steps.length - 1));
     this.slider.value = String(this.steps.length - 1);
     this.slider.addEventListener('input', () => this._onSliderChange());
-    sliderGroup.appendChild(this.slider);
-    panel.appendChild(sliderGroup);
+    toolbar.appendChild(this.slider);
 
-    // Prev / Next buttons
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display: flex; gap: 8px; margin-bottom: 12px;';
-
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'btn';
-    prevBtn.textContent = 'Prev';
-    prevBtn.addEventListener('click', () => {
-      if (this.currentStep > 0) {
-        this.slider.value = String(this.currentStep - 1);
-        this._onSliderChange();
-      }
-    });
-    btnRow.appendChild(prevBtn);
-
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'btn';
-    nextBtn.textContent = 'Next';
-    nextBtn.addEventListener('click', () => {
-      if (this.currentStep < this.steps.length - 1) {
-        this.slider.value = String(this.currentStep + 1);
-        this._onSliderChange();
-      }
-    });
-    btnRow.appendChild(nextBtn);
-    panel.appendChild(btnRow);
-
-    // Tool solid toggle (on by default)
-    const toolRow = document.createElement('div');
-    toolRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 16px;';
+    const toolLabel = document.createElement('label');
     const toolCb = document.createElement('input');
     toolCb.type = 'checkbox';
-    toolCb.id = 'tool-toggle';
     toolCb.checked = true;
     toolCb.addEventListener('change', (e) => {
       this.showTool = e.target.checked;
       this._updateToolMesh();
     });
-    const toolLbl = document.createElement('label');
-    toolLbl.htmlFor = 'tool-toggle';
-    toolLbl.style.cssText = 'font-size: 12px; color: var(--bp-gray1); cursor: pointer;';
-    toolLbl.textContent = 'Show tool solid (cut/union shape)';
-    toolRow.appendChild(toolCb);
-    toolRow.appendChild(toolLbl);
-    panel.appendChild(toolRow);
+    toolLabel.appendChild(toolCb);
+    toolLabel.appendChild(document.createTextNode('Tool'));
+    toolbar.appendChild(toolLabel);
 
-    // Other bodies in this bot
-    if (this.allBodies.length > 1) {
-      const bodiesTitle = document.createElement('h3');
-      bodiesTitle.textContent = 'Bodies';
-      panel.appendChild(bodiesTitle);
-      const bodiesDiv = document.createElement('div');
-      bodiesDiv.style.cssText = 'margin-bottom: 12px;';
-      for (const name of this.allBodies) {
-        const link = document.createElement('a');
-        link.className = 'prop-chip body-chip';
-        link.style.cssText = 'cursor: pointer; text-decoration: none;';
-        if (name === this.bodyName) {
-          link.style.background = 'rgba(19,124,189,0.15)';
-          link.style.borderColor = 'var(--bp-blue3)';
-        }
-        link.textContent = name;
-        link.href = `?cadsteps=${encodeURIComponent(this.botName)}:${encodeURIComponent(name)}`;
-        bodiesDiv.appendChild(link);
-      }
-      panel.appendChild(bodiesDiv);
-    }
+    this.editorPaneEl.appendChild(toolbar);
 
-    // Step list
-    const listTitle = document.createElement('h3');
-    listTitle.textContent = 'All Steps';
-    panel.appendChild(listTitle);
+    // Code scroll area
+    this.codeScrollEl = document.createElement('div');
+    this.codeScrollEl.className = 'cs-code-scroll';
 
-    this.stepListEl = document.createElement('div');
+    const codeTable = document.createElement('div');
+    codeTable.className = 'cs-code';
+    codeTable.style.padding = '4px 0';
+
+    this.lineEls = [];
     let currentGroup = null;
+
     for (const step of this.steps) {
-      // Insert group header when entering a new CallOp group
+      // Group header for CallOp sub-programs
       if (step.group && step.group !== currentGroup) {
-        const header = document.createElement('div');
-        header.style.cssText = `
-          font-size: 11px; padding: 4px 6px 2px; margin-top: 6px;
-          color: var(--bp-gray1); font-weight: 600; letter-spacing: 0.3px;
-          border-bottom: 1px solid var(--bp-light-gray1, #E1E8ED);
+        const headerLine = document.createElement('div');
+        headerLine.className = 'cs-line cs-group-header';
+        headerLine.innerHTML = `
+          <span class="cs-gutter"></span>
+          <span class="cs-line-bar"></span>
+          <span class="cs-line-content"># ${this._escapeHtml(step.group)}</span>
         `;
-        header.textContent = step.group;
-        this.stepListEl.appendChild(header);
+        codeTable.appendChild(headerLine);
       }
       currentGroup = step.group || null;
 
-      const row = document.createElement('div');
-      const indent = step.group ? 'padding-left: 16px;' : '';
-      row.style.cssText = `
-        font-size: 12px; padding: 4px 6px; border-radius: 4px; cursor: pointer;
-        margin-bottom: 2px; display: flex; align-items: center; gap: 6px;
-        transition: background 0.1s; ${indent}
-      `;
-      row.dataset.index = step.index;
-      if (step.group) row.classList.add('step-group-call');
+      const line = document.createElement('div');
+      line.className = 'cs-line';
+      if (step.group) line.classList.add('cs-subprogram');
+      line.dataset.index = step.index;
 
-      const dot = document.createElement('span');
-      const color = OP_COLORS[step.op] || 0x5C7080;
-      dot.style.cssText = `
-        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-        background: #${color.toString(16).padStart(6, '0')};
-      `;
-      row.appendChild(dot);
+      const scriptText = step.script || step.label;
+      const highlighted = this._highlightScript(scriptText);
 
-      const label = document.createElement('span');
-      // Show ShapeScript code line if available, otherwise fall back to label
-      label.textContent = step.script || step.label;
-      label.style.cssText = `
-        color: var(--bp-dark-gray5); white-space: nowrap; overflow: hidden;
-        text-overflow: ellipsis; font-family: 'Input Sans Narrow', 'SF Mono', monospace;
-        font-size: 11px;
+      line.innerHTML = `
+        <span class="cs-gutter">${step.index + 1}</span>
+        <span class="cs-line-bar"></span>
+        <span class="cs-line-content">${highlighted}</span>
       `;
-      row.appendChild(label);
 
-      row.addEventListener('click', () => {
+      line.addEventListener('click', () => {
         this.slider.value = String(step.index);
         this._onSliderChange();
       });
-      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(206,217,224,0.5)'; });
-      row.addEventListener('mouseleave', () => {
-        if (parseInt(row.dataset.index) !== this.currentStep) {
-          row.style.background = '';
-        }
+
+      // Parameter hover highlighting
+      const contentEl = line.querySelector('.cs-line-content');
+      contentEl.addEventListener('mouseover', (e) => {
+        const span = e.target.closest('.ss-param-target');
+        if (span) span.classList.add('ss-param-hover');
+      });
+      contentEl.addEventListener('mouseout', (e) => {
+        const span = e.target.closest('.ss-param-target');
+        if (span) span.classList.remove('ss-param-hover');
       });
 
-      this.stepListEl.appendChild(row);
+      codeTable.appendChild(line);
+      this.lineEls.push(line);
     }
-    panel.appendChild(this.stepListEl);
 
-    // Keyboard shortcuts
+    this.codeScrollEl.appendChild(codeTable);
+    this.editorPaneEl.appendChild(this.codeScrollEl);
+
+    // Keyboard shortcuts — prevent code pane from capturing arrow keys
+    this.editorPaneEl.addEventListener('keydown', (e) => {
+      if (e.key.startsWith('Arrow')) e.preventDefault();
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -342,6 +457,98 @@ class CadStepsViewer {
     });
   }
 
+  _escapeHtml(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  _highlightScript(script) {
+    let s = this._escapeHtml(script);
+
+    // Order matters: comments first, then keywords, then refs/numbers.
+    // We use a token-replace approach to avoid double-matching.
+    const tokens = [];
+    let tokenId = 0;
+    const placeholder = (cls, text) => {
+      const key = `\x00T${tokenId++}\x00`;
+      tokens.push({ key, html: `<span class="${cls}">${text}</span>` });
+      return key;
+    };
+
+    // Comments: # to end of string
+    s = s.replace(/(#[^\x00]*)$/gm, (m) => placeholder('ss-comment', m));
+
+    // Keywords — order: specific ops first
+    s = s.replace(/\b(Cut)\b/g, (m) => placeholder('ss-cut', m));
+    s = s.replace(/\b(Fuse)\b/g, (m) => placeholder('ss-fuse', m));
+    s = s.replace(/\b(Locate)\b/g, (m) => placeholder('ss-loc', m));
+    s = s.replace(/\b(Call)\b/g, (m) => placeholder('ss-call', m));
+    s = s.replace(/\b(Prebuilt)\b/g, (m) => placeholder('ss-pre', m));
+    s = s.replace(/\b(Box|Cylinder|Sphere)\b/g, (m) => placeholder('ss-prim', m));
+
+    // Parameter values (pos=(...), r=..., w=..., l=..., h=...) — wrap as hoverable targets
+    s = s.replace(/((?:pos|rot|r|w|l|h|d)=\([^)]*\)|(?:pos|rot|r|w|l|h|d)=[\d.\-]+)/g,
+      (m) => placeholder('ss-param-target', m));
+
+    // Numbers (remaining, not inside tokens)
+    s = s.replace(/\b(\d+\.?\d*)\b/g, (m) => placeholder('ss-num', m));
+
+    // Reference IDs (word_digits pattern)
+    s = s.replace(/\b(\w+_\d+)\b/g, (m) => placeholder('ss-ref', m));
+
+    // Replace placeholders with actual HTML
+    for (const { key, html } of tokens) {
+      s = s.replace(key, html);
+    }
+
+    return s;
+  }
+
+  // ── Scroll sync ──
+
+  _scrollToLine(idx) {
+    const lineEl = this.lineEls[idx];
+    if (!lineEl || !this.codeScrollEl) return;
+
+    const scrollTop = this.codeScrollEl.scrollTop;
+    const scrollH = this.codeScrollEl.clientHeight;
+    const lineTop = lineEl.offsetTop - this.codeScrollEl.offsetTop;
+    const lineH = lineEl.offsetHeight;
+
+    // Keep current line roughly centered, but only scroll if off-screen
+    if (lineTop < scrollTop + 40 || lineTop + lineH > scrollTop + scrollH - 40) {
+      this.codeScrollEl.scrollTo({
+        top: lineTop - scrollH / 3,
+        behavior: 'smooth',
+      });
+    }
+  }
+
+  // ── Data fetching ──
+
+  async _fetchSteps() {
+    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.error('Failed to fetch CAD steps:', resp.status, await resp.text());
+      return;
+    }
+    const data = await resp.json();
+    this.steps = data.steps || [];
+  }
+
+  async _fetchBodies() {
+    const url = `/bots/${this.botName}/viewer_manifest.json`;
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const manifest = await resp.json();
+        this.allBodies = (manifest.bodies || []).map(b => b.name);
+      }
+    } catch { /* manifest not available */ }
+  }
+
+  // ── Step navigation ──
+
   async _onSliderChange() {
     const idx = parseInt(this.slider.value);
     await this._showStep(idx);
@@ -352,42 +559,32 @@ class CadStepsViewer {
     this.currentStep = idx;
     const step = this.steps[idx];
 
-    // Update UI
-    this.stepValueEl.textContent = `${idx + 1} / ${this.steps.length}`;
-    const opLabel = step.op === 'cut' ? 'subtract' : step.op === 'union' ? 'add' : step.op;
-    const scriptLine = step.script
-      ? `<div class="step-script" style="font-family: 'Input Sans Narrow', 'SF Mono', monospace; font-size: 11px; color: var(--bp-dark-gray3); margin-top: 4px; padding: 4px 6px; background: var(--bp-dark-gray1, #1C2127); color: #ABB3BF; border-radius: 3px; overflow-x: auto; white-space: nowrap;">${step.script.replace(/</g, '&lt;')}</div>`
-      : '';
-    this.stepInfoEl.innerHTML = `
-      <div class="step-title">${step.label}</div>
-      <div class="step-desc">Step ${idx + 1} of ${this.steps.length} &mdash; <code>${opLabel}</code></div>
-      ${scriptLine}
-    `;
+    // Update toolbar
+    this.slider.value = String(idx);
+    this.stepCountEl.textContent = `${idx + 1} / ${this.steps.length}`;
 
-    // Highlight in step list
-    for (const row of this.stepListEl.children) {
-      const rowIdx = parseInt(row.dataset.index);
-      row.style.background = rowIdx === idx ? 'rgba(19,124,189,0.15)' : '';
+    // Highlight current line in code editor
+    for (let i = 0; i < this.lineEls.length; i++) {
+      this.lineEls[i].classList.toggle('cs-active', i === idx);
     }
+    this._scrollToLine(idx);
 
     // For steps with a tool, show the state BEFORE this operation so the
-    // tool overlay shows what's about to change. For step 0 (create) or steps
-    // without a tool, show the result of this step.
+    // tool overlay shows what's about to change.
     const hasPrev = idx > 0 && step.has_tool;
     const bodyIdx = hasPrev ? idx - 1 : idx;
     const geometry = await this._loadStepSTL(bodyIdx);
     if (!geometry) return;
 
-    // Remove old meshes (don't dispose cached STL geometries — just materials + edges)
+    // Remove old meshes
     while (this.meshGroup.children.length > 0) {
       const child = this.meshGroup.children[0];
       this.meshGroup.remove(child);
-      // Dispose edge geometries (generated per-step, not cached) and materials
       if (child.isLineSegments && child.geometry) child.geometry.dispose();
       if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
     }
 
-    // Body solid — neutral color so the tool overlay stands out
+    // Body solid
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xCED9E0,
       roughness: 0.5,
@@ -396,7 +593,7 @@ class CadStepsViewer {
     });
     this.meshGroup.add(new THREE.Mesh(geometry, material));
 
-    // Edge outlines (matching bot viewer style)
+    // Edge outlines
     const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
     const lines = new THREE.LineSegments(edges, EDGE_MATERIAL);
     lines.raycast = () => {};
@@ -405,7 +602,7 @@ class CadStepsViewer {
     // Tool solid overlay
     await this._updateToolMesh();
 
-    // Prefetch adjacent steps (body + tool STLs)
+    // Prefetch adjacent steps
     this._prefetch(idx - 1);
     this._prefetch(idx + 1);
 
@@ -425,7 +622,6 @@ class CadStepsViewer {
     const geometry = await this._loadSTL(this.toolStlCache, this.currentStep, 'tool-stl');
     if (!geometry) return;
 
-    // Color by op type: red for cut, green for union
     const isCut = step.op === 'cut';
     const toolColor = isCut ? 0xDB3737 : 0x0F9960;
     const material = new THREE.MeshPhysicalMaterial({
@@ -439,17 +635,17 @@ class CadStepsViewer {
     });
     this.toolGroup.add(new THREE.Mesh(geometry, material));
 
-    // Tool edges — matching tool color, lower opacity
     const toolEdgeMat = new THREE.LineBasicMaterial({
       color: toolColor, transparent: true, opacity: 0.4,
     });
     const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
-    const lines = new THREE.LineSegments(edges, toolEdgeMat);
-    lines.raycast = () => {};
-    this.toolGroup.add(lines);
+    const edgeLines = new THREE.LineSegments(edges, toolEdgeMat);
+    edgeLines.raycast = () => {};
+    this.toolGroup.add(edgeLines);
   }
 
-  /** Load an STL into a cache by step index and URL suffix. */
+  // ── STL loading ──
+
   async _loadSTL(cache, idx, suffix) {
     if (idx < 0 || idx >= this.steps.length) return null;
     if (cache[idx]) return cache[idx];
