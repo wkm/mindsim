@@ -38,7 +38,7 @@ from botcad.bracket import (
 from botcad.cad_utils import as_solid as _as_solid
 from botcad.component import BearingSpec, BusType, CameraSpec
 from botcad.geometry import quat_to_euler
-from botcad.skeleton import BodyShape, BracketStyle
+from botcad.skeleton import BodyKind, BodyShape, BracketStyle
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,6 @@ class CadModel:
 
     body_solids: dict[str, object]  # body_name → build123d Solid
     parent_joint_map: dict[str, Joint]  # body_name → parent Joint
-    world_positions: dict[str, tuple[float, float, float]]  # body_name → (x, y, z)
     rigid_groups: dict[str, list[Body]]  # group_name → [Body, ...]
     body_wire_segments: dict[str, list[tuple]]  # body_name → [(seg, bus_type), ...]
 
@@ -305,8 +304,9 @@ def build_cad(bot: Bot) -> CadModel:
         if joint.child is not None:
             parent_joint_map[joint.child.name] = joint
 
-    # Compute world-frame position for each body (rest pose, all joints at 0)
-    world_positions = _compute_world_positions(bot)
+    # World-frame positions are now computed during bot.solve() and stored
+    # on each Body as body.world_pos / body.world_quat.  No need to
+    # recompute here.
 
     # Group bodies into rigid parts (separated at servo joints)
     rigid_groups = _collect_rigid_groups(bot)
@@ -337,7 +337,6 @@ def build_cad(bot: Bot) -> CadModel:
     # Only build geometry for fabricated (structural) bodies.  Purchased parts
     # (servos, horns, components) have their own solid builders and are handled
     # separately in emit_cad().
-    from botcad.skeleton import BodyKind
 
     fabricated_bodies = [b for b in bot.all_bodies if b.kind == BodyKind.FABRICATED]
     n = len(fabricated_bodies)
@@ -399,7 +398,6 @@ def build_cad(bot: Bot) -> CadModel:
     return CadModel(
         body_solids=body_solids,
         parent_joint_map=parent_joint_map,
-        world_positions=world_positions,
         rigid_groups=rigid_groups,
         body_wire_segments=body_wire_segments,
     )
@@ -415,7 +413,6 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     meshes_dir.mkdir(parents=True, exist_ok=True)
 
     body_solids = cad.body_solids
-    world_positions = cad.world_positions
     rigid_groups = cad.rigid_groups
 
     # --- Per-body STLs (for MuJoCo sim) ---
@@ -515,7 +512,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     parts: list[AssemblyPart] = []
     for group_name, bodies in rigid_groups.items():
         group_root = bodies[0]
-        group_root_pos = world_positions[group_root.name]
+        group_root_pos = group_root.world_pos
 
         # Union all body solids in this rigid group
         group_solid = None
@@ -525,7 +522,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
                 continue
 
             # Offset relative to group root
-            body_pos = world_positions[body.name]
+            body_pos = body.world_pos
             rel = (
                 body_pos[0] - group_root_pos[0],
                 body_pos[1] - group_root_pos[1],
@@ -556,8 +553,14 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             )
 
     # --- Horn discs (purchased parts, not in body STLs) ---
+    # Use the purchased horn Body's world_pos/world_quat set during solve().
+
+    horn_bodies = {
+        b.name: b
+        for b in bot.all_bodies
+        if b.kind == BodyKind.PURCHASED and b.name.startswith("horn_")
+    }
     for body in bot.all_bodies:
-        body_world_pos = world_positions[body.name]
         for joint in body.joints:
             params = horn_disc_params(joint.servo)
             if params is None:
@@ -566,16 +569,15 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             if solid is None:
                 continue
 
+            horn_body = horn_bodies.get(f"horn_{joint.name}")
+            if horn_body is None:
+                continue
+
             # Orient disc Z-axis to joint axis
             solid = _orient_z_to_axis(solid, joint.axis)
 
-            # Joint world position + half-thickness offset along axis
-            jx = body_world_pos[0] + joint.pos[0]
-            jy = body_world_pos[1] + joint.pos[1]
-            jz = body_world_pos[2] + joint.pos[2]
-            ax, ay, az = joint.axis
-            offset = params.thickness / 2
-            pos = (jx + ax * offset, jy + ay * offset, jz + az * offset)
+            # Position from the purchased horn body's world transform
+            pos = horn_body.world_pos
 
             solid.color = Color(*COLOR_STRUCTURE_HORN_DISC.rgb)
             solid.label = f"{joint.name}_horn"
@@ -591,17 +593,22 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
 
     # --- Servo solids (purchased parts, shown seated in brackets) ---
     # servo_solid() is @lru_cache'd — same geometry returned for all STS3215s.
+    # Use purchased servo Body's world_pos/world_quat set during solve().
+    servo_bodies = {
+        b.name: b
+        for b in bot.all_bodies
+        if b.kind == BodyKind.PURCHASED and b.name.startswith("servo_")
+    }
     servo_count = 0
     for body in bot.all_bodies:
-        body_world = world_positions[body.name]
         for joint in body.joints:
             servo = joint.servo
-            center = joint.solved_servo_center
-            euler = quat_to_euler(joint.solved_servo_quat)
+            servo_body = servo_bodies.get(f"servo_{joint.name}")
+            if servo_body is None:
+                continue
+            euler = quat_to_euler(servo_body.world_quat)
 
-            solid = servo_solid(servo).moved(
-                Location(body_world) * Location(center, euler)
-            )
+            solid = servo_solid(servo).moved(Location(servo_body.world_pos, euler))
             solid = _as_solid(solid)
 
             solid.color = Color(*COLOR_STRUCTURE_DARK.rgb)
@@ -680,7 +687,6 @@ def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
 
     Only fabricated bodies are grouped — purchased parts have separate meshes.
     """
-    from botcad.skeleton import BodyKind
 
     groups: dict[str, list[Body]] = {}
     for body in bot.all_bodies:
