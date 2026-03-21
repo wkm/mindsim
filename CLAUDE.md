@@ -37,6 +37,12 @@ make validate
 
 ## Development
 
+## Workflow Preferences
+
+- **Subagent-centric**: Keep the main session clean and interactive. Delegate any non-trivial implementation, research, or multi-file changes to background subagents. The main session is for discussion, coordination, and quick answers.
+- **Commit after every change**: Always commit with a descriptive message after completing a unit of work.
+- **Parallel agents**: Launch multiple independent agents concurrently whenever possible.
+- **Build verification**: Agents should verify their changes before reporting completion.
 - **Run `make validate` after every major step** — lint + tests + render regeneration. Review render diffs before committing.
 - **Worktrees for experiments:** `make wt-new NAME=foo` → `exp/YYMMDD-foo` branch. Track in `EXPERIMENTS.md`.
 - **Bot changes require `NEW_BOT_CHECKLIST.md`.**
