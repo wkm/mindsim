@@ -1363,7 +1363,7 @@ export class Viewport3D {
         // Hide the section viz plane — caps show the cut position
         if (this._secViz) this._secViz.visible = false;
 
-        // Determine cap color from the first mesh's material or callback
+        // Cap color — darker than the body for clear contrast
         let capColor;
         if (this._sectionCapColorFn) {
           const firstGroupName = Object.keys(layerMeshes)[0];
@@ -1371,8 +1371,10 @@ export class Viewport3D {
         }
         if (capColor == null) {
           const firstMat = allMeshes[0]?.mesh?.material;
-          const baseColor = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
-          capColor = tintColor(baseColor, 0.6);
+          const baseHex = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
+          // Darken the body color (blend toward dark gray, not white)
+          const base = new THREE.Color(baseHex);
+          capColor = base.clone().lerp(new THREE.Color(0x394B59), 0.5);
         }
 
         const hatchTex = this._createHatchTexture(capColor);
