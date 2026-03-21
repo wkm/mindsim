@@ -3,7 +3,7 @@
  *
  * Scene, camera, renderer, OrbitControls, standard lighting, post-processing
  * edge detection, view presets (keyboard 1-7), measure tool, and section plane
- * with stencil-based caps and contour lines.
+ * with geometry-based caps and contour lines.
  *
  * Overlay: polished orientation cube (top-right) + vertical tool strip
  * (left edge). All overlay elements created programmatically — no external CSS.
@@ -15,7 +15,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import {
-  BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
+  BP, RENDER_ORDER,
   tintColor, createEdgeComposer,
 } from './presentation.js';
 import { MeasureTool } from './measure-tool.js';
@@ -494,8 +494,7 @@ export class Viewport3D {
     }
     this._cam.up.set(0, 0, 1);
 
-    // Stencil buffer required for section caps; logarithmic depth only for perspective
-    const rendererOpts = { antialias: true, stencil: true };
+    const rendererOpts = { antialias: true };
     if (this._cameraType !== 'orthographic') rendererOpts.logarithmicDepthBuffer = true;
     this._ren = new THREE.WebGLRenderer(rendererOpts);
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1263,7 +1262,7 @@ export class Viewport3D {
     if (t >= 1) this._lerpActive = false;
   }
 
-  // ── Section plane with stencil caps and contour lines ──
+  // ── Section plane with geometry caps and contour lines ──
   _applySection() {
     const box = this._bbox();
     if (box) {
@@ -1288,7 +1287,7 @@ export class Viewport3D {
       }
     });
 
-    // Rebuild stencil caps and contour lines
+    // Rebuild geometry caps and contour lines
     this._rebuildSectionCaps(clips);
   }
 
@@ -1315,12 +1314,11 @@ export class Viewport3D {
   }
 
   /**
-   * Stencil-based section caps with contour lines.
+   * Geometry-based section caps with contour lines.
    *
-   * For each visible group, creates stencil helpers (back faces write,
-   * front faces clear) and a cap plane that renders only where the
-   * stencil reveals interior geometry. Contour lines mark the
-   * mesh-plane intersection.
+   * For each visible group, computes the mesh-plane intersection contour,
+   * chains segments into closed polygons, triangulates them, and creates
+   * opaque cap meshes with hatch texture. No stencil buffer needed.
    */
   _rebuildSectionCaps(clips) {
     this._clearSectionCaps();
@@ -1331,84 +1329,66 @@ export class Viewport3D {
     this._capGroup.userData._vpCap = true;
     this._scene.add(this._capGroup);
 
-    const box = this._bbox();
-    const capSize = box
-      ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
-      : 0.2;
-
+    // Collect all visible meshes grouped by layer
     const allMeshes = [];
-    let layerIndex = 0;
+    const layerMeshes = {};
 
     for (const [groupName, group] of Object.entries(this._groups)) {
       if (!group.visible) continue;
-
-      const layerMeshes = [];
       group.traverse(child => {
         if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
-          layerMeshes.push(child);
+          allMeshes.push({ mesh: child, groupName });
+          if (!layerMeshes[groupName]) layerMeshes[groupName] = [];
+          layerMeshes[groupName].push(child);
         }
       });
-      if (layerMeshes.length === 0) continue;
+    }
 
-      const ref = layerIndex + 1;
-      const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
-      layerIndex++;
+    const plane = this._secPlane;
 
-      // Stencil helpers — Replace strategy (proven working):
-      // Back faces write ref where they pass depth test (exposed interior)
-      // Front faces write 0 where they pass (exterior, cancels back face)
-      // WITH clipping planes — clips front faces on the viewer side of the cut,
-      // leaving back faces exposed at the cross-section interior.
-      for (const mesh of layerMeshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
-          orderBase + RENDER_ORDER.STENCIL_BACK);
-        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
-          orderBase + RENDER_ORDER.STENCIL_FRONT);
+    for (const [groupName, meshes] of Object.entries(layerMeshes)) {
+      // 1. Compute contour segments for this layer
+      const segments = [];
+      for (const mesh of meshes) {
+        this._computeMeshPlaneContour(mesh, plane, segments);
       }
+      if (segments.length === 0) continue;
 
-      // Cap color — use callback if provided, otherwise default darker tint
+      // 2. Build closed polygons from segments
+      const polygons = this._chainSegments(segments);
+      if (polygons.length === 0) continue;
+
+      // 3. Triangulate polygons on the cutting plane
+      const capGeom = this._triangulateCapsOnPlane(polygons, plane);
+      if (!capGeom) continue;
+
+      // 4. Create cap mesh with hatch texture
       let capColor;
       if (this._sectionCapColorFn) {
         capColor = this._sectionCapColorFn(groupName);
       }
       if (capColor == null) {
-        // Default: derive from first mesh's material color at 60% tint
-        const firstMat = layerMeshes[0]?.material;
+        const firstMat = meshes[0]?.material;
         const baseColor = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
         capColor = tintColor(baseColor, 0.6);
       }
 
-      const capGeom = new THREE.PlaneGeometry(capSize, capSize);
       const hatchTex = this._createHatchTexture(capColor);
       const capMat = new THREE.MeshBasicMaterial({
         map: hatchTex,
-        transparent: false,
         side: THREE.DoubleSide,
-        depthWrite: true,
-        stencilWrite: true,
-        stencilFunc: THREE.EqualStencilFunc,
-        stencilRef: ref,
-        stencilFail: THREE.KeepStencilOp,
-        stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.ZeroStencilOp,
+        clippingPlanes: clips,
       });
-      const capPlane = new THREE.Mesh(capGeom, capMat);
-      capPlane.raycast = () => {};
-      capPlane.renderOrder = orderBase + RENDER_ORDER.STENCIL_CAP;
-      capPlane.userData._vpCap = true;
 
-      if (this._secViz) {
-        capPlane.position.copy(this._secViz.position);
-        capPlane.rotation.copy(this._secViz.rotation);
-      }
-
-      this._capGroup.add(capPlane);
-      allMeshes.push(...layerMeshes);
+      const capMesh = new THREE.Mesh(capGeom, capMat);
+      capMesh.raycast = () => {};
+      capMesh.userData._vpCap = true;
+      this._capGroup.add(capMesh);
     }
 
     // Section contour lines across all meshes
     const contourSegments = [];
-    for (const mesh of allMeshes) {
+    for (const { mesh } of allMeshes) {
       this._computeMeshPlaneContour(mesh, this._secPlane, contourSegments);
     }
 
@@ -1475,28 +1455,139 @@ export class Viewport3D {
     return new THREE.Vector3().lerpVectors(p1, p2, t);
   }
 
-  /** Create an invisible stencil helper mesh. */
-  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
-    const mat = new THREE.MeshBasicMaterial({
-      colorWrite: false,
-      depthWrite: false,
-      side,
-      clippingPlanes: clips,
-      stencilWrite: true,
-      stencilFunc: THREE.AlwaysStencilFunc,
-      stencilRef,
-      stencilFail: THREE.KeepStencilOp,
-      stencilZFail: THREE.KeepStencilOp,
-      stencilZPass: THREE.ReplaceStencilOp,
-    });
-    const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
-    mesh.position.copy(sourceMesh.position);
-    mesh.quaternion.copy(sourceMesh.quaternion);
-    mesh.scale.copy(sourceMesh.scale);
-    mesh.renderOrder = renderOrder;
-    mesh.raycast = () => {};
-    mesh.userData._vpCap = true;
-    this._capGroup.add(mesh);
+  /**
+   * Chain flat contour segments into closed polygons.
+   * @param {number[]} flatSegments — [x0,y0,z0, x1,y1,z1, ...] pairs of endpoints
+   * @returns {THREE.Vector3[][]} — array of closed polygon vertex loops
+   */
+  _chainSegments(flatSegments) {
+    const segs = [];
+    for (let i = 0; i < flatSegments.length; i += 6) {
+      segs.push([
+        new THREE.Vector3(flatSegments[i], flatSegments[i+1], flatSegments[i+2]),
+        new THREE.Vector3(flatSegments[i+3], flatSegments[i+4], flatSegments[i+5]),
+      ]);
+    }
+
+    const EPS = 1e-6;
+    const used = new Set();
+    const polygons = [];
+
+    for (let startIdx = 0; startIdx < segs.length; startIdx++) {
+      if (used.has(startIdx)) continue;
+
+      const chain = [segs[startIdx][0], segs[startIdx][1]];
+      used.add(startIdx);
+
+      // Extend the chain by finding segments that connect at the tail
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const tail = chain[chain.length - 1];
+
+        for (let i = 0; i < segs.length; i++) {
+          if (used.has(i)) continue;
+          const [a, b] = segs[i];
+
+          if (tail.distanceTo(a) < EPS) {
+            chain.push(b);
+            used.add(i);
+            changed = true;
+            break;
+          } else if (tail.distanceTo(b) < EPS) {
+            chain.push(a);
+            used.add(i);
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      // Check if closed (head meets tail)
+      if (chain.length >= 3 && chain[0].distanceTo(chain[chain.length - 1]) < EPS) {
+        chain.pop(); // remove duplicate closing point
+        polygons.push(chain);
+      }
+    }
+
+    return polygons;
+  }
+
+  /**
+   * Triangulate closed polygons that lie on a cutting plane.
+   * Projects to 2D, triangulates with earcut, maps back to 3D.
+   * @param {THREE.Vector3[][]} polygons
+   * @param {THREE.Plane} plane
+   * @returns {THREE.BufferGeometry|null}
+   */
+  _triangulateCapsOnPlane(polygons, plane) {
+    // Build a local 2D coordinate system on the plane
+    const normal = plane.normal.clone().normalize();
+
+    let tangent = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(normal.dot(tangent)) > 0.9) tangent = new THREE.Vector3(0, 1, 0);
+
+    const u = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+    const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+
+    // A point on the plane
+    const planePoint = normal.clone().multiplyScalar(-plane.constant);
+
+    const positions = [];
+    const indices = [];
+    let vertexOffset = 0;
+
+    for (const polygon of polygons) {
+      // Project 3D points to 2D
+      const flatPts = [];
+      for (const p of polygon) {
+        const rel = p.clone().sub(planePoint);
+        flatPts.push(rel.dot(u), rel.dot(v));
+      }
+
+      // Triangulate with earcut (Three.js bundles it)
+      let triIndices;
+      if (THREE.Earcut) {
+        triIndices = THREE.Earcut.triangulate(flatPts, [], 2);
+      } else {
+        // Fallback: fan triangulation (works for convex polygons)
+        triIndices = [];
+        for (let i = 1; i < polygon.length - 1; i++) {
+          triIndices.push(0, i, i + 1);
+        }
+      }
+
+      // Add 3D vertices
+      for (const p of polygon) {
+        positions.push(p.x, p.y, p.z);
+      }
+
+      // Add indices (offset by current vertex count)
+      for (const idx of triIndices) {
+        indices.push(idx + vertexOffset);
+      }
+
+      vertexOffset += polygon.length;
+    }
+
+    if (positions.length === 0) return null;
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    // Add UVs for hatch texture — project positions to plane-local 2D
+    const uvs = [];
+    for (let i = 0; i < positions.length; i += 3) {
+      const p = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
+      const rel = p.clone().sub(planePoint);
+      // Scale UVs so hatch pattern has consistent density
+      uvs.push(rel.dot(u) * 100, rel.dot(v) * 100);
+    }
+    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+    return geom;
   }
 
   /**
@@ -1567,12 +1658,8 @@ export class Viewport3D {
       }
     }
     if (this._animCb) this._animCb();
-    // When section plane is active, render directly (not via edge composer)
-    // because the stencil buffer for section caps only works on the screen
-    // framebuffer, not on the EffectComposer's internal render target.
-    if (this._secOn) {
-      this._ren.render(this._scene, this._cam);
-    } else if (this._edgeC) {
+    // Edge detection works with section caps (no stencil dependency)
+    if (this._edgeC) {
       this._edgeC.render();
     } else {
       this._ren.render(this._scene, this._cam);

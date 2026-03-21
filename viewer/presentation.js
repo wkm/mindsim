@@ -44,13 +44,8 @@ export const BP = {
 // ---------------------------------------------------------------------------
 export const RENDER_ORDER = {
   SECTION_VIZ:      -100,
-  STENCIL_BACK:        0,
-  STENCIL_FRONT:       1,
-  STENCIL_CAP:         2,
   SECTION_CONTOUR:  9000,
 };
-export const SECTION_STENCIL_BASE = 100;
-export const SECTION_STENCIL_STRIDE = 10;
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -232,13 +227,9 @@ export function createEdgeComposer(renderer, scene, camera) {
   });
 
   // Composer: color pass + edge detection pass
-  // Ensure the composer's render target has a stencil buffer — needed for section caps.
-  const composerTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
-    stencilBuffer: true,
-  });
-  const composer = new EffectComposer(renderer, composerTarget);
+  const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
-  renderPass.clearDepth = true;  // clear depth+stencil before each render
+  renderPass.clearDepth = true;
   composer.addPass(renderPass);
 
   const edgePass = new ShaderPass(EdgeDetectShader);
@@ -250,15 +241,14 @@ export function createEdgeComposer(renderer, scene, camera) {
     composer,
 
     render() {
-      // Hide non-mesh objects AND stencil/cap helpers for edge passes.
-      // Stencil helpers must not be overridden by normalMaterial/depthMaterial
-      // or they corrupt the stencil buffer needed for section caps.
+      // Hide non-mesh objects and the section viz plane for edge passes.
+      // Cap meshes are real geometry and participate in edge detection.
       const hidden = [];
       scene.traverse(child => {
         if (child.visible && (child.isGridHelper || child.isLineSegments ||
             child.isLine || child.isSprite || child.isPoints ||
             child.constructor.name === 'LineSegments2' ||
-            child.userData._vpCap || child.userData._vpSec)) {
+            child.userData._vpSec)) {
           child.visible = false;
           hidden.push(child);
         }
