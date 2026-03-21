@@ -35,6 +35,16 @@ from botcad.component import Component, ServoSpec, Vec3
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
 
 
+@dataclass(frozen=True)
+class ClearanceConstraint:
+    """Expected clearance between two bodies in the assembly."""
+
+    body_a: str  # body name
+    body_b: str  # body name
+    min_distance: float = 0.0  # meters — minimum acceptable gap
+    label: str = ""  # human-readable description
+
+
 class BodyShape(StrEnum):
     """Geometric shape of a rigid body."""
 
@@ -432,7 +442,9 @@ class Bot:
     wire_routes: list = field(default_factory=list)
 
     _assemblies: dict[str, Assembly] = field(default_factory=dict)
+    _clearance_constraints: list[ClearanceConstraint] = field(default_factory=list)
     _cad_model: object = field(default=None, init=False, repr=False)
+    clearance_results: list = field(default_factory=list)  # populated by build_cad()
 
     def assembly(self, name: str) -> Assembly:
         """Create or retrieve a named assembly."""
@@ -443,6 +455,62 @@ class Bot:
     def module(self, name: str) -> Assembly:
         """Backward-compatible alias for assembly()."""
         return self.assembly(name)
+
+    def clearance(
+        self,
+        body_a: str,
+        body_b: str,
+        min_distance: float = 0.0,
+        label: str = "",
+    ) -> None:
+        """Declare an expected clearance between two bodies."""
+        self._clearance_constraints.append(
+            ClearanceConstraint(
+                body_a=body_a,
+                body_b=body_b,
+                min_distance=min_distance,
+                label=label,
+            )
+        )
+
+    def _generate_implicit_constraints(self) -> None:
+        """Auto-generate clearance constraints from assembly structure.
+
+        Focuses on high-value constraints that catch real bugs:
+        - Child body must not intersect parent body at rest pose
+        - Wheel must not intersect its servo
+        """
+        existing = {(c.body_a, c.body_b) for c in self._clearance_constraints}
+        existing |= {(c.body_b, c.body_a) for c in self._clearance_constraints}
+
+        def _add(a: str, b: str, min_dist: float, label: str) -> None:
+            if (a, b) not in existing and (b, a) not in existing:
+                self._clearance_constraints.append(
+                    ClearanceConstraint(a, b, min_dist, label)
+                )
+                existing.add((a, b))
+
+        for body in self.all_bodies:
+            if body.kind != BodyKind.FABRICATED:
+                continue
+            for joint in body.joints:
+                # Child body must not intersect parent at rest pose
+                if joint.child:
+                    _add(
+                        joint.child.name,
+                        body.name,
+                        0.0,
+                        f"{joint.name} child-parent clearance",
+                    )
+                # Wheel must not intersect servo
+                if joint.child and joint.child.is_wheel_body:
+                    servo_name = f"servo_{joint.name}"
+                    _add(
+                        joint.child.name,
+                        servo_name,
+                        0.0005,
+                        f"{joint.name} wheel-servo clearance",
+                    )
 
     def body(
         self,
@@ -543,6 +611,9 @@ class Bot:
         from botcad.routing import solve_routing
 
         self.wire_routes = solve_routing(self)
+
+        # Auto-generate clearance constraints from assembly structure
+        self._generate_implicit_constraints()
 
     def _compute_world_transforms(self) -> None:
         """Walk kinematic tree and set world_pos/world_quat on each structural body.

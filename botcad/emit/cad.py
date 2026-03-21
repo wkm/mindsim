@@ -395,6 +395,33 @@ def build_cad(bot: Bot) -> CadModel:
     # The _component reference on each purchased body enables future IR emitters
     # to generate the appropriate script.  For now, shapescript stays None.
 
+    # --- Clearance validation ---
+    if bot._clearance_constraints:
+        import warnings
+
+        from botcad.clearance import validate_clearances
+
+        clearance_results = validate_clearances(bot, body_solids)
+        bot.clearance_results = clearance_results
+
+        violations = [r for r in clearance_results if not r.satisfied]
+        if violations:
+            for v in violations:
+                warnings.warn(
+                    f"Clearance violation: {v.body_a} \u2194 {v.body_b} "
+                    f"({v.label}): {v.distance * 1000:.1f}mm "
+                    f"(min {v.min_distance * 1000:.1f}mm)",
+                    stacklevel=2,
+                )
+
+        # Print summary
+        for r in clearance_results:
+            status = "\u2713" if r.satisfied else "\u2717"
+            print(
+                f"  {status} {r.body_a} \u2194 {r.body_b}: "
+                f"{r.distance * 1000:.2f}mm ({r.label})"
+            )
+
     return CadModel(
         body_solids=body_solids,
         parent_joint_map=parent_joint_map,

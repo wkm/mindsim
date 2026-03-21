@@ -149,6 +149,20 @@ def build() -> Bot:
     )
     right_rim.mount(PololuWheel90mm(), label="wheel")
 
+    # Clearance constraints — checked during build_cad()
+    bot.clearance(
+        "left_rim",
+        "servo_left_wheel",
+        min_distance=0.0005,
+        label="left wheel-servo gap",
+    )
+    bot.clearance(
+        "right_rim",
+        "servo_right_wheel",
+        min_distance=0.0005,
+        label="right wheel-servo gap",
+    )
+
     return bot
 
 
