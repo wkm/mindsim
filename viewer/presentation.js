@@ -242,13 +242,14 @@ export function createEdgeComposer(renderer, scene, camera) {
 
     render() {
       // Hide non-mesh objects and the section viz plane for edge passes.
-      // Cap meshes are real geometry and participate in edge detection.
+      // Hide non-mesh objects AND section cap geometry from edge passes.
+      // Cap triangles create false edges in the normal/depth detection.
       const hidden = [];
       scene.traverse(child => {
         if (child.visible && (child.isGridHelper || child.isLineSegments ||
             child.isLine || child.isSprite || child.isPoints ||
             child.constructor.name === 'LineSegments2' ||
-            child.userData._vpSec)) {
+            child.userData._vpSec || child.userData._vpCap)) {
           child.visible = false;
           hidden.push(child);
         }

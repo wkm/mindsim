@@ -1647,12 +1647,14 @@ export class Viewport3D {
     geom.setIndex(indices);
     geom.computeVertexNormals();
 
-    // Add UVs for hatch texture
+    // Add UVs for hatch texture — scale so pattern is visible at typical CAD sizes
+    // Geometry is in meters; we want ~10 hatch lines per cm = 1000 per meter
+    const UV_SCALE = 500;
     const uvs = [];
     for (let i = 0; i < positions.length; i += 3) {
       const p = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
       const rel = p.clone().sub(planePoint);
-      uvs.push(rel.dot(u) * 100, rel.dot(v) * 100);
+      uvs.push(rel.dot(u) * UV_SCALE, rel.dot(v) * UV_SCALE);
     }
     geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 
@@ -1680,23 +1682,22 @@ export class Viewport3D {
    * @param {number} [spacing=8] — pixel spacing between lines
    * @returns {THREE.CanvasTexture}
    */
-  _createHatchTexture(color, lineWidth = 2, spacing = 8) {
+  _createHatchTexture(color, lineWidth = 1.5, spacing = 6) {
     const size = 64;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    // Opaque white background so the cap is solid, not see-through
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, size, size);
-
-    // Convert color to CSS string
+    // Solid fill in the body color (darker tint)
     const c = (color instanceof THREE.Color) ? color : new THREE.Color(color);
     const cssColor = '#' + c.getHexString();
+    ctx.fillStyle = cssColor;
+    ctx.fillRect(0, 0, size, size);
 
-    // Diagonal hatch lines in the body color
-    ctx.strokeStyle = cssColor;
+    // Lighter diagonal hatch lines for contrast
+    const lighter = c.clone().lerp(new THREE.Color(0xffffff), 0.6);
+    ctx.strokeStyle = '#' + lighter.getHexString();
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     for (let i = -size; i < size * 2; i += spacing) {
@@ -1708,7 +1709,7 @@ export class Viewport3D {
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(20, 20);
+    texture.repeat.set(4, 4);
     return texture;
   }
 
