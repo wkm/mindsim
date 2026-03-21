@@ -1423,7 +1423,9 @@ def _make_wheel_solid(radius: float, width: float):
     for i in range(n_treads):
         angle = i * (360 / n_treads)
         tread = Box(tread_depth * 2, tire_w + 0.001, tread_w, align=C)
-        tread = tread.locate(Location((radius, 0, 0), (0, angle, 0)))
+        # Position at radius, then rotate around Z (wheel axle)
+        tread = tread.moved(Location((radius, 0, 0)))
+        tread = tread.moved(Location((0, 0, 0), (0, 0, angle)))
         tire = tire - tread
 
     # --- Rim ring (plastic, tire seats on this) ---
