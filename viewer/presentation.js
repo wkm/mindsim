@@ -232,8 +232,13 @@ export function createEdgeComposer(renderer, scene, camera) {
   });
 
   // Composer: color pass + edge detection pass
-  const composer = new EffectComposer(renderer);
+  // Ensure the composer's render target has a stencil buffer — needed for section caps.
+  const composerTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
+    stencilBuffer: true,
+  });
+  const composer = new EffectComposer(renderer, composerTarget);
   const renderPass = new RenderPass(scene, camera);
+  renderPass.clearDepth = true;  // clear depth+stencil before each render
   composer.addPass(renderPass);
 
   const edgePass = new ShaderPass(EdgeDetectShader);
@@ -245,12 +250,15 @@ export function createEdgeComposer(renderer, scene, camera) {
     composer,
 
     render() {
-      // Hide non-mesh objects (grid, helpers, markers) for edge passes
+      // Hide non-mesh objects AND stencil/cap helpers for edge passes.
+      // Stencil helpers must not be overridden by normalMaterial/depthMaterial
+      // or they corrupt the stencil buffer needed for section caps.
       const hidden = [];
       scene.traverse(child => {
         if (child.visible && (child.isGridHelper || child.isLineSegments ||
             child.isLine || child.isSprite || child.isPoints ||
-            child.constructor.name === 'LineSegments2')) {
+            child.constructor.name === 'LineSegments2' ||
+            child.userData._vpCap || child.userData._vpSec)) {
           child.visible = false;
           hidden.push(child);
         }
