@@ -292,6 +292,50 @@ def make_component_solid(component: Component):
     )
 
 
+def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
+    """Get or create the ShapeScript program for any body (fabricated or purchased)."""
+    from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+
+    if body.kind == BodyKind.FABRICATED:
+        from botcad.shapescript.emit_body import emit_body_ir
+
+        pj = parent_joint_map.get(body.name)
+        wire_segs = tuple(body_wire_segments.get(body.name, []))
+        return emit_body_ir(body, pj, wire_segs or None)
+
+    # Purchased body — route to the appropriate script emitter
+    comp = body._component
+    if comp is None:
+        return None
+
+    from botcad.shapescript import emit_components
+
+    if isinstance(comp, ServoSpec):
+        if body.name.startswith("horn_"):
+            return emit_components.horn_script(comp)
+        from botcad.shapescript.emit_servo import servo_script
+
+        return servo_script(comp)
+    elif isinstance(comp, CameraSpec):
+        return emit_components.camera_script(comp)
+    elif isinstance(comp, BatterySpec):
+        return emit_components.battery_script(comp)
+    elif isinstance(comp, BearingSpec):
+        return emit_components.bearing_script(comp)
+    elif comp.is_wheel:
+        return emit_components.wheel_component_script(comp)
+    else:
+        # Try category-based lookup
+        # Component category is derived from the module it came from
+        fn = getattr(emit_components, "compute_script", None)
+        if callable(fn):
+            try:
+                return fn(comp)
+            except Exception:
+                pass
+    return None
+
+
 def build_cad(bot: Bot) -> CadModel:
     """Build all body solids and refine mass/inertia from actual geometry.
 
@@ -328,53 +372,60 @@ def build_cad(bot: Bot) -> CadModel:
     if use_shapescript:
         from botcad.shapescript.backend_occt import OcctBackend
         from botcad.shapescript.cache import DiskCache
-        from botcad.shapescript.emit_body import emit_body_ir
 
         ir_backend = OcctBackend()
         cache = DiskCache()
         cache_hits = 0
 
-    # Only build geometry for fabricated (structural) bodies.  Purchased parts
-    # (servos, horns, components) have their own solid builders and are handled
-    # separately in emit_cad().
-
-    fabricated_bodies = [b for b in bot.all_bodies if b.kind == BodyKind.FABRICATED]
-    n = len(fabricated_bodies)
-    for i, body in enumerate(fabricated_bodies):
+    # Build geometry for ALL bodies — fabricated and purchased.
+    # Fabricated bodies use emit_body_ir (complex structural geometry).
+    # Purchased bodies use component-specific script emitters.
+    n = len(bot.all_bodies)
+    for i, body in enumerate(bot.all_bodies):
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
-        pj = parent_joint_map.get(body.name)
-        wire_segs = tuple(body_wire_segments.get(body.name, []))
 
         if use_shapescript:
-            prog = emit_body_ir(body, pj, wire_segs or None)
+            prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
+            if prog is None:
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (no script)")
+                continue
+
             body.shapescript = prog
             cached = cache.get(prog)
             if cached is not None:
-                # Cache hit — restore solid from BREP bytes + mass properties
                 solid = _solid_from_brep_bytes(cached["brep"])
-                _restore_mass_from_cache(body, cached)
+                if body.kind == BodyKind.FABRICATED:
+                    _restore_mass_from_cache(body, cached)
                 cache_hits += 1
                 dt = time.monotonic() - t0
                 print(f" {dt:.1f}s (cached)")
             else:
-                # Cache miss — execute and cache
                 result = ir_backend.execute(prog)
                 solid = result.shapes[prog.output_ref.id]
                 if solid is not None:
-                    _update_mass_from_solid(body, solid)
-                    cache.put(
-                        prog,
-                        {
-                            "brep": _solid_to_brep_bytes(solid),
-                            "mass": body.solved_mass,
-                            "com": body.solved_com,
-                            "inertia": body.solved_inertia,
-                        },
-                    )
+                    if body.kind == BodyKind.FABRICATED:
+                        _update_mass_from_solid(body, solid)
+                    cache_data = {"brep": _solid_to_brep_bytes(solid)}
+                    if body.kind == BodyKind.FABRICATED:
+                        cache_data.update(
+                            {
+                                "mass": body.solved_mass,
+                                "com": body.solved_com,
+                                "inertia": body.solved_inertia,
+                            }
+                        )
+                    cache.put(prog, cache_data)
                 dt = time.monotonic() - t0
                 print(f" {dt:.1f}s")
         else:
+            if body.kind != BodyKind.FABRICATED:
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (skip non-shapescript)")
+                continue
+            pj = parent_joint_map.get(body.name)
+            wire_segs = tuple(body_wire_segments.get(body.name, []))
             steps = _build_body_solid(body, pj, wire_segs or None)
             solid = steps[-1].solid if steps else None
             if solid is not None:
@@ -384,16 +435,12 @@ def build_cad(bot: Bot) -> CadModel:
 
         if solid is not None:
             body_solids[body.name] = solid
-            body.mesh_file = f"{body.name}.stl"
+            if not body.mesh_file:
+                body.mesh_file = f"{body.name}.stl"
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
     if use_shapescript:
         print(f"[build_cad] {cache_hits}/{n} cache hits")
-
-    # Purchased bodies don't yet have ShapeScript IR emitters — their geometry
-    # is built by servo_solid(), _horn_solid(), make_component_solid() etc.
-    # The _component reference on each purchased body enables future IR emitters
-    # to generate the appropriate script.  For now, shapescript stays None.
 
     # --- Clearance validation ---
     if bot._clearance_constraints:
