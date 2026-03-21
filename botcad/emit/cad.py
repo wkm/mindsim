@@ -598,7 +598,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=solid,
-                    module=None,
+                    assembly=None,
                     kind="servo",
                     label=f"servo_{joint.name}",
                 )
