@@ -1354,15 +1354,16 @@ export class Viewport3D {
       const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
       layerIndex++;
 
-      // Stencil helpers — increment on back faces, decrement on front faces.
-      // CRITICAL: stencil helpers must NOT be clipped — they render the full
-      // geometry so increment/decrement cancels correctly outside the body.
-      // Only the visible geometry and cap plane get clipped.
+      // Stencil helpers — Replace strategy (proven working):
+      // Back faces write ref where they pass depth test (exposed interior)
+      // Front faces write 0 where they pass (exterior, cancels back face)
+      // WITH clipping planes — clips front faces on the viewer side of the cut,
+      // leaving back faces exposed at the cross-section interior.
       for (const mesh of layerMeshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, [],
-          orderBase + RENDER_ORDER.STENCIL_BACK, THREE.IncrementWrapStencilOp);
-        this._addStencilHelper(mesh, THREE.FrontSide, [],
-          orderBase + RENDER_ORDER.STENCIL_FRONT, THREE.DecrementWrapStencilOp);
+        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
+          orderBase + RENDER_ORDER.STENCIL_BACK);
+        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
+          orderBase + RENDER_ORDER.STENCIL_FRONT);
       }
 
       // Cap color — use callback if provided, otherwise default darker tint
@@ -1385,11 +1386,11 @@ export class Viewport3D {
         side: THREE.DoubleSide,
         depthWrite: true,
         stencilWrite: true,
-        stencilFunc: THREE.NotEqualStencilFunc,
-        stencilRef: 0,
+        stencilFunc: THREE.EqualStencilFunc,
+        stencilRef: ref,
         stencilFail: THREE.KeepStencilOp,
         stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.ReplaceStencilOp,
+        stencilZPass: THREE.ZeroStencilOp,
       });
       const capPlane = new THREE.Mesh(capGeom, capMat);
       capPlane.raycast = () => {};
@@ -1475,7 +1476,7 @@ export class Viewport3D {
   }
 
   /** Create an invisible stencil helper mesh. */
-  _addStencilHelper(sourceMesh, side, clips, renderOrder, stencilOp) {
+  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
     const mat = new THREE.MeshBasicMaterial({
       colorWrite: false,
       depthWrite: false,
@@ -1483,10 +1484,10 @@ export class Viewport3D {
       clippingPlanes: clips,
       stencilWrite: true,
       stencilFunc: THREE.AlwaysStencilFunc,
-      stencilRef: 0,
+      stencilRef,
       stencilFail: THREE.KeepStencilOp,
       stencilZFail: THREE.KeepStencilOp,
-      stencilZPass: stencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
     });
     const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
     mesh.position.copy(sourceMesh.position);
