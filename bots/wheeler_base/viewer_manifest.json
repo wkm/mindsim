@@ -210,7 +210,7 @@
       "parent_body": "base",
       "joint": "left_wheel",
       "mesh": "horn_left_wheel.stl",
-      "shapescript_component": "STS3215"
+      "shapescript_component": "horn:STS3215"
     },
     {
       "id": "servo_right_wheel",
@@ -242,7 +242,7 @@
       "parent_body": "base",
       "joint": "right_wheel",
       "mesh": "horn_right_wheel.stl",
-      "shapescript_component": "STS3215"
+      "shapescript_component": "horn:STS3215"
     },
     {
       "id": "comp_base_battery",
