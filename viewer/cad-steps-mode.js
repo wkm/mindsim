@@ -175,7 +175,7 @@ class CadStepsViewer {
     this.stlCache = {};      // step index → BufferGeometry
     this.toolStlCache = {};  // step index → BufferGeometry (tool solid)
     this.showTool = true;
-    this.isolateMode = false;
+    this.showFinal = false;
     this._ghostGeometry = null;           // cached final-step geometry for ghost
     this._leftBasis = 60; // percent
     this._hasFramedHolistic = false;      // true once we've framed on the final body
@@ -353,31 +353,32 @@ class CadStepsViewer {
     this.slider.addEventListener('input', () => this._onSliderChange());
     toolbar.appendChild(this.slider);
 
+    // "Show tool" — for cut/fuse: before-body + tool overlay vs after-body
     const toolLabel = document.createElement('label');
     const toolCb = document.createElement('input');
     toolCb.type = 'checkbox';
     toolCb.checked = true;
-    toolCb.addEventListener('change', (e) => {
+    toolCb.addEventListener('change', async (e) => {
       this.showTool = e.target.checked;
-      this._updateToolMesh();
+      await this._showStep(this.currentStep);
     });
     toolLabel.appendChild(toolCb);
     toolLabel.appendChild(document.createTextNode('Tool'));
     toolbar.appendChild(toolLabel);
 
-    const isolateLabel = document.createElement('label');
-    const isolateCb = document.createElement('input');
-    isolateCb.type = 'checkbox';
-    isolateCb.id = 'isolate-toggle';
-    isolateCb.checked = false;
-    isolateCb.addEventListener('change', async (e) => {
-      this.isolateMode = e.target.checked;
+    // "Show final" — ghost of the completed body for spatial reference
+    const finalLabel = document.createElement('label');
+    const finalCb = document.createElement('input');
+    finalCb.type = 'checkbox';
+    finalCb.checked = false;
+    finalCb.addEventListener('change', async (e) => {
+      this.showFinal = e.target.checked;
       await this._rebuildGhost();
       await this._showStep(this.currentStep);
     });
-    isolateLabel.appendChild(isolateCb);
-    isolateLabel.appendChild(document.createTextNode('Isolate step'));
-    toolbar.appendChild(isolateLabel);
+    finalLabel.appendChild(finalCb);
+    finalLabel.appendChild(document.createTextNode('Final'));
+    toolbar.appendChild(finalLabel);
 
     this.editorPaneEl.appendChild(toolbar);
 
@@ -579,26 +580,32 @@ class CadStepsViewer {
     }
     this._scrollToLine(idx);
 
-    // Load current step's geometry
-    const geometry = await this._loadStepSTL(idx);
-    if (!geometry) return;
-
-    // Clear meshes (body + context groups)
-    const clearMeshGroup = (group) => {
-      while (group.children.length > 0) {
-        const child = group.children[0];
-        group.remove(child);
-        if (child.isLineSegments && child.geometry) child.geometry.dispose();
-        if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
+    // Clear all mesh groups
+    const clearMG = (g) => {
+      while (g.children.length > 0) {
+        const c = g.children[0]; g.remove(c);
+        if (c.isLineSegments && c.geometry) c.geometry.dispose();
+        if (c.material && c.material !== EDGE_MATERIAL) c.material.dispose();
       }
     };
-    clearMeshGroup(this.meshGroup);
-    clearMeshGroup(this.contextGroup);
+    clearMG(this.meshGroup);
+    clearMG(this.contextGroup);
 
-    // Determine if this step needs a body-context mesh.
-    // Cut/Fuse results ARE the cumulative body — no extra context needed.
-    // Create/Locate/Call produce a "side" shape — show the most recent
-    // body (last cut/fuse result) as translucent context.
+    const isBooleanStep = (step.op === 'cut' || step.op === 'union');
+
+    // For boolean steps with "Tool" ON: show before-body + tool overlay
+    // For boolean steps with "Tool" OFF: show after-body (result)
+    // For create/locate steps: always show this step's shape
+    let bodyIdx;
+    if (isBooleanStep && this.showTool && idx > 0) {
+      bodyIdx = idx - 1; // show before-body
+    } else {
+      bodyIdx = idx; // show result
+    }
+    const geometry = await this._loadStepSTL(bodyIdx);
+    if (!geometry) return;
+
+    // Body-so-far context for create/locate steps
     const needsContext = (step.op === 'create' || step.op === 'locate');
     if (needsContext) {
       const ctxIdx = this._findLastBodyStep(idx);
@@ -611,48 +618,38 @@ class CadStepsViewer {
           });
           this.contextGroup.add(new THREE.Mesh(ctxGeom, ctxMat));
           const ctxEdges = new THREE.EdgesGeometry(ctxGeom, EDGE_THRESHOLD);
-          const ctxLines = new THREE.LineSegments(ctxEdges,
-            new THREE.LineBasicMaterial({ color: 0x5C7080, transparent: true, opacity: 0.2 }));
-          ctxLines.raycast = () => {};
-          this.contextGroup.add(ctxLines);
+          this.contextGroup.add(new THREE.LineSegments(ctxEdges,
+            new THREE.LineBasicMaterial({ color: 0x5C7080, transparent: true, opacity: 0.2 })));
         }
       }
     }
-    this.contextGroup.visible = needsContext && !this.isolateMode;
+    this.contextGroup.visible = needsContext;
 
-    // Focus shape color based on op type
-    let bodyColor = 0xCED9E0;
-    if (step.op === 'create') {
-      bodyColor = 0x2B95D6;
-    } else if (step.op === 'locate') {
-      bodyColor = 0x9179F2;
-    }
-    const material = new THREE.MeshPhysicalMaterial({
-      color: bodyColor,
-      roughness: 0.5,
-      metalness: 0.1,
-      clearcoat: 0.1,
-    });
-    this.meshGroup.add(new THREE.Mesh(geometry, material));
+    // Focus shape color
+    let bodyColor = 0xCED9E0; // neutral for cut/fuse results
+    if (step.op === 'create') bodyColor = 0x2B95D6;
+    else if (step.op === 'locate') bodyColor = 0x9179F2;
 
-    // Edge outlines
+    this.meshGroup.add(new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({
+      color: bodyColor, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
+    })));
     const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
-    const lines = new THREE.LineSegments(edges, EDGE_MATERIAL);
-    lines.raycast = () => {};
-    this.meshGroup.add(lines);
+    const edgeLines = new THREE.LineSegments(edges, EDGE_MATERIAL);
+    edgeLines.raycast = () => {};
+    this.meshGroup.add(edgeLines);
 
-    // Tool solid overlay
+    // Tool overlay (only for boolean steps with Tool ON)
     await this._updateToolMesh();
 
-    // Ghost visibility tracks isolate mode
-    this.ghostGroup.visible = this.isolateMode;
+    // "Final" ghost
+    this.ghostGroup.visible = this.showFinal;
 
     // Prefetch adjacent steps
     this._prefetch(idx - 1);
     this._prefetch(idx + 1);
 
     // Smart camera: in isolate mode, frame on current step geometry
-    if (this.isolateMode) {
+    if (this.showFinal) {
       this.viewport.frameOnGeometry(geometry);
     }
   }
@@ -701,7 +698,7 @@ class CadStepsViewer {
   async _rebuildGhost() {
     clearGroup(this.ghostGroup);
 
-    if (!this.isolateMode || this.steps.length === 0) return;
+    if (!this.showFinal || this.steps.length === 0) return;
 
     // Load (or reuse cached) final step geometry
     if (!this._ghostGeometry) {
