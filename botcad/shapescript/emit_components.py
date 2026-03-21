@@ -137,10 +137,15 @@ def bearing_script(spec: BearingSpec) -> ShapeScript:
 
 
 def horn_script(servo: ServoSpec) -> ShapeScript | None:
-    """Translate _horn_solid() to ShapeScript: single cylinder from horn_disc_params().
+    """Build a horn disc with mounting holes and center bore.
+
+    The horn is a thin disc with:
+    - 4 M2 screw holes in a bolt circle (from servo.horn_mounting_points)
+    - A center bore for the servo spline shaft
 
     Returns None if the servo has no horn mounting points.
     """
+
     from botcad.bracket import horn_disc_params
 
     params = horn_disc_params(servo)
@@ -148,7 +153,28 @@ def horn_script(servo: ServoSpec) -> ShapeScript | None:
         return None
 
     prog = ShapeScript()
-    horn = prog.cylinder(params.radius, params.thickness)
+
+    # Base disc
+    horn = prog.cylinder(params.radius, params.thickness, tag="horn_disc")
+
+    # Center bore (spline shaft hole)
+    if servo.shaft_boss_radius > 0:
+        bore = prog.cylinder(servo.shaft_boss_radius, params.thickness + 0.001, tag="shaft_bore")
+        horn = prog.cut(horn, bore)
+
+    # Mounting screw holes
+    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    if servo.horn_mounting_points:
+        hole_r = servo.horn_mounting_points[0].diameter / 2
+        hole_proto = prog.cylinder(hole_r, params.thickness + 0.001, tag="horn_hole")
+        for i, mp in enumerate(servo.horn_mounting_points):
+            # Positions relative to shaft center (horn is centered on shaft)
+            hx = mp.pos[0] - sx
+            hy = mp.pos[1] - sy
+            hole = prog.instance(hole_proto, i)
+            hole = prog.locate(hole, pos=(hx, hy, 0))
+            horn = prog.cut(horn, hole)
+
     prog.output_ref = horn
     return prog
 

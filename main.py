@@ -686,6 +686,27 @@ def _get_component_steps(comp_name: str, registry: dict) -> list:
         if comp_name in _component_steps_cache:
             return _component_steps_cache[comp_name]
 
+    # Handle "horn:SERVO_NAME" prefix — horn script for a specific servo
+    if comp_name.startswith("horn:"):
+        servo_name = comp_name[5:]
+        if servo_name not in registry:
+            raise KeyError(f"Unknown servo for horn: {servo_name}")
+        _factory, comp, _cat = registry[servo_name]
+        from botcad.shapescript.emit_components import horn_script
+
+        prog = horn_script(comp)
+        if prog is None:
+            raise KeyError(f"No horn for servo: {servo_name}")
+
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+
+        result = OcctBackend().execute(prog)
+        steps = shapescript_to_cad_steps(prog, result)
+        with _component_steps_lock:
+            _component_steps_cache[comp_name] = steps
+        return steps
+
     if comp_name not in registry:
         raise KeyError(f"Unknown component: {comp_name}")
 

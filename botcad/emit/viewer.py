@@ -219,7 +219,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         "parent_body": body.name,
                         "joint": joint.name,
                         "mesh": f"horn_{joint.name}.stl",
-                        "shapescript_component": servo.name,
+                        "shapescript_component": f"horn:{servo.name}",
                     }
                 )
 

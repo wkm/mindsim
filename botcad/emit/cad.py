@@ -1497,18 +1497,31 @@ def _make_wheel_solid(radius: float, width: float):
 
 @lru_cache(maxsize=32)
 def _horn_solid(servo):
-    """Build a horn disc cylinder from servo specs."""
-    from build123d import Align, Cylinder
+    """Build a horn disc with mounting holes and center bore."""
+    from build123d import Align, Cylinder, Location
 
     params = horn_disc_params(servo)
     if params is None:
         return None
 
-    return Cylinder(
-        params.radius,
-        params.thickness,
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    )
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    horn = Cylinder(params.radius, params.thickness, align=C)
+
+    # Center bore for spline shaft
+    if servo.shaft_boss_radius > 0:
+        bore = Cylinder(servo.shaft_boss_radius, params.thickness + 0.001, align=C)
+        horn = horn - bore
+
+    # Mounting screw holes
+    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    for mp in servo.horn_mounting_points:
+        hx = mp.pos[0] - sx
+        hy = mp.pos[1] - sy
+        hole = Cylinder(mp.diameter / 2, params.thickness + 0.001, align=C)
+        hole = hole.moved(Location((hx, hy, 0)))
+        horn = horn - hole
+
+    return horn
 
 
 def _axis_to_quat(
