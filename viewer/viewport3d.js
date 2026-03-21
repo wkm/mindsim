@@ -179,7 +179,11 @@ export class Viewport3D {
     this._ren.shadowMap.type = THREE.PCFShadowMap; this._ren.localClippingEnabled = true;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
-    this._ctrl.enableDamping = true; this._ctrl.dampingFactor = 0.1; this._ctrl.update();
+    this._ctrl.enableDamping = true; this._ctrl.dampingFactor = 0.1;
+    // Trackpad: two-finger drag = rotate (not pan), pinch = zoom
+    this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this._ctrl.update();
     // Lighting
     this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const dir = new THREE.DirectionalLight(0xffffff, 1.6); dir.position.set(0.3, 0.5, 0.4); this._scene.add(dir);
