@@ -185,59 +185,69 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
 
     # --- Build parts list: every physical object that isn't a structural body ---
 
-    # 1. Servos and horns from all joints
+    # 1 & 2. Servos, horns, and mounted components from purchased bodies
+    from botcad.skeleton import BodyKind
+
     for body in bot.all_bodies:
-        for joint in body.joints:
-            servo = joint.servo
-            # Servo part
-            manifest["parts"].append(
-                {
-                    "id": f"servo_{joint.name}",
-                    "name": servo.name,
-                    "kind": "purchased",
-                    "category": "servo",
-                    "parent_body": body.name,
-                    "joint": joint.name,
-                    "mesh": f"servo_{servo.name}.stl",
-                    "pos": _round_vec(joint.solved_servo_center),
-                    "quat": _round_vec(joint.solved_servo_quat),
-                    "mass": round(servo.mass, 4),
-                    "shapescript_component": servo.name,
-                }
-            )
+        if body.kind != BodyKind.PURCHASED:
+            continue
 
-            # Horn disc part (all joints — wheels attach via horn too)
-            from botcad.bracket import horn_disc_params
-
-            if horn_disc_params(servo) is not None:
-                manifest["parts"].append(
-                    {
-                        "id": f"horn_{joint.name}",
-                        "name": "Horn disc",
-                        "kind": "purchased",
-                        "category": "horn",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"horn_{joint.name}.stl",
-                        "shapescript_component": f"horn:{servo.name}",
-                    }
-                )
-
-    # 2. Mounted components (battery, camera, Pi, etc.)
-    for body in bot.all_bodies:
-        for mount in body.mounts:
-            comp = mount.component
+        # Derive category and extra fields from body name / component
+        if body.name.startswith("servo_"):
+            joint_name = body.name[len("servo_") :]
+            comp = body._component
             part_entry = {
-                "id": f"comp_{body.name}_{mount.label}",
-                "name": comp.name,
+                "id": body.name,
+                "name": comp.name if comp else body.name,
                 "kind": "purchased",
-                "category": _component_specs(comp).get("component_type", "component"),
-                "parent_body": body.name,
-                "mount_label": mount.label,
-                "mesh": f"comp_{body.name}_{mount.label}.stl",
-                "pos": _round_vec(mount.resolved_pos),
-                "mass": round(comp.mass, 4),
-                "shapescript_component": comp.name,
+                "category": "servo",
+                "parent_body": body.parent_body_name,
+                "joint": joint_name,
+                "mesh": body.mesh_file,
+                "pos": _round_vec(body.world_pos),
+                "quat": _round_vec(body.world_quat),
+                "mass": round(comp.mass, 4) if comp else 0.0,
+                "shapescript_component": comp.name if comp else body.name,
+            }
+            manifest["parts"].append(part_entry)
+        elif body.name.startswith("horn_"):
+            joint_name = body.name[len("horn_") :]
+            comp = body._component
+            part_entry = {
+                "id": body.name,
+                "name": "Horn disc",
+                "kind": "purchased",
+                "category": "horn",
+                "parent_body": body.parent_body_name,
+                "joint": joint_name,
+                "mesh": body.mesh_file,
+                "shapescript_component": f"horn:{comp.name}" if comp else body.name,
+            }
+            manifest["parts"].append(part_entry)
+        elif body.name.startswith("comp_"):
+            comp = body._component
+            # Extract mount_label: body name is "comp_{parent}_{label}"
+            # parent_body_name is known, so strip "comp_{parent}_" prefix
+            prefix = f"comp_{body.parent_body_name}_"
+            mount_label = (
+                body.name[len(prefix) :] if body.name.startswith(prefix) else body.name
+            )
+            category = (
+                _component_specs(comp).get("component_type", "component")
+                if comp
+                else "component"
+            )
+            part_entry = {
+                "id": body.name,
+                "name": comp.name if comp else body.name,
+                "kind": "purchased",
+                "category": category,
+                "parent_body": body.parent_body_name,
+                "mount_label": mount_label,
+                "mesh": body.mesh_file,
+                "pos": _round_vec(body.world_pos),
+                "mass": round(comp.mass, 4) if comp else 0.0,
+                "shapescript_component": comp.name if comp else body.name,
             }
             manifest["parts"].append(part_entry)
 
