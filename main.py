@@ -939,25 +939,19 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         # /api/components/<name>/shapescript
         m = re.match(r"^/api/components/([^/]+)/shapescript$", path)
         if m:
-            from urllib.parse import unquote
-
-            self._handle_component_shapescript(unquote(m.group(1)))
+            self._handle_component_shapescript(m.group(1))
             return
 
         # /api/components/<name>/shapescript/<idx>/stl
         m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/stl$", path)
         if m:
-            self._handle_component_step_stl(
-                unquote(m.group(1)), int(m.group(2)), attr="solid"
-            )
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="solid")
             return
 
         # /api/components/<name>/shapescript/<idx>/tool-stl
         m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/tool-stl$", path)
         if m:
-            self._handle_component_step_stl(
-                unquote(m.group(1)), int(m.group(2)), attr="tool"
-            )
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="tool")
             return
 
         # /api/components/<name>/stl/<part>
