@@ -1518,97 +1518,106 @@ export class Viewport3D {
     // A point on the plane
     const planePoint = normal.clone().multiplyScalar(-plane.constant);
 
-    // Project all polygons to 2D and compute signed area to classify
-    // outer (positive area) vs holes (negative area)
+    // Project all polygons to 2D, deduplicate near-coincident vertices,
+    // compute signed area to classify outer vs holes
+    const DEDUP_EPS = 1e-7;
     const projected = polygons.map(polygon => {
       const pts2d = polygon.map(p => {
         const rel = p.clone().sub(planePoint);
         return [rel.dot(u), rel.dot(v)];
       });
+      // Remove near-duplicate consecutive vertices
+      const cleaned2d = [pts2d[0]];
+      const cleaned3d = [polygon[0]];
+      for (let i = 1; i < pts2d.length; i++) {
+        const prev = cleaned2d[cleaned2d.length - 1];
+        const dx = pts2d[i][0] - prev[0], dy = pts2d[i][1] - prev[1];
+        if (dx * dx + dy * dy > DEDUP_EPS * DEDUP_EPS) {
+          cleaned2d.push(pts2d[i]);
+          cleaned3d.push(polygon[i]);
+        }
+      }
+      if (cleaned2d.length < 3) return null;
+
       // Signed area (shoelace formula)
       let area = 0;
-      for (let i = 0; i < pts2d.length; i++) {
-        const j = (i + 1) % pts2d.length;
-        area += pts2d[i][0] * pts2d[j][1];
-        area -= pts2d[j][0] * pts2d[i][1];
+      for (let i = 0; i < cleaned2d.length; i++) {
+        const j = (i + 1) % cleaned2d.length;
+        area += cleaned2d[i][0] * cleaned2d[j][1];
+        area -= cleaned2d[j][0] * cleaned2d[i][1];
       }
       area /= 2;
-      return { polygon, pts2d, area };
-    });
+      return { polygon: cleaned3d, pts2d: cleaned2d, area };
+    }).filter(Boolean);
 
-    // Separate into outers (positive area) and holes (negative area)
-    // If all have the same sign, flip convention
-    const positives = projected.filter(p => p.area > 0);
-    const negatives = projected.filter(p => p.area < 0);
+    if (projected.length === 0) return null;
 
-    let outers, holes;
-    if (positives.length > 0 && negatives.length > 0) {
-      // Largest absolute area polygons are outers
-      outers = positives.length >= negatives.length ? positives : negatives;
-      holes = positives.length >= negatives.length ? negatives : positives;
-    } else {
-      // All same sign — sort by absolute area, largest is outer
-      const sorted = [...projected].sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
-      outers = [sorted[0]];
-      holes = sorted.slice(1);
+    // Sort by absolute area descending — largest is the outer boundary
+    projected.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+    const outer = projected[0];
+    const holes = projected.slice(1);
+
+    // Ensure outer polygon has positive winding (CCW)
+    // Earcut expects outer = CCW, holes = CW
+    if (outer.area < 0) {
+      outer.pts2d.reverse();
+      outer.polygon.reverse();
+      outer.area = -outer.area;
+    }
+    // Ensure holes have negative winding (CW)
+    for (const h of holes) {
+      if (h.area > 0) {
+        h.pts2d.reverse();
+        h.polygon.reverse();
+        h.area = -h.area;
+      }
     }
 
-    // For each outer, find which holes are inside it (point-in-polygon test on first vertex)
-    const positions = [];
-    const indices = [];
-    let vertexOffset = 0;
-
-    for (const outer of outers) {
-      // Find holes contained in this outer polygon
-      const myHoles = holes.filter(h => {
-        const testPt = h.pts2d[0];
-        return this._pointInPolygon2D(testPt, outer.pts2d);
-      });
-
-      // Build earcut input: outer vertices, then hole vertices
-      // holeIndices tells earcut where each hole starts
-      const flatCoords = [];
-      for (const [x, y] of outer.pts2d) {
+    // Build earcut input: outer vertices, then all hole vertices
+    const flatCoords = [];
+    for (const [x, y] of outer.pts2d) {
+      flatCoords.push(x, y);
+    }
+    const holeIndices = [];
+    for (const hole of holes) {
+      // Only include holes that are actually inside the outer polygon
+      if (!this._pointInPolygon2D(hole.pts2d[0], outer.pts2d)) continue;
+      holeIndices.push(flatCoords.length / 2);
+      for (const [x, y] of hole.pts2d) {
         flatCoords.push(x, y);
       }
-      const holeIndices = [];
-      for (const hole of myHoles) {
-        holeIndices.push(flatCoords.length / 2); // index of first hole vertex
-        for (const [x, y] of hole.pts2d) {
-          flatCoords.push(x, y);
-        }
-      }
+    }
 
-      // Triangulate with earcut (Three.js bundles it)
-      let triIndices;
-      if (THREE.Earcut) {
-        triIndices = THREE.Earcut.triangulate(flatCoords, holeIndices, 2);
-      } else {
-        triIndices = [];
-        for (let i = 1; i < outer.polygon.length - 1; i++) {
-          triIndices.push(0, i, i + 1);
-        }
-      }
+    console.log(`[section] earcut: ${outer.pts2d.length} outer verts, ${holeIndices.length} holes, ${flatCoords.length / 2} total verts`);
 
-      // Add 3D vertices: outer first, then holes
-      for (const p of outer.polygon) {
+    // Triangulate
+    let triIndices;
+    if (THREE.Earcut) {
+      triIndices = THREE.Earcut.triangulate(flatCoords, holeIndices, 2);
+    } else {
+      triIndices = [];
+      for (let i = 1; i < outer.polygon.length - 1; i++) {
+        triIndices.push(0, i, i + 1);
+      }
+    }
+
+    console.log(`[section] earcut produced ${triIndices.length / 3} triangles`);
+
+    // Build 3D vertex array: outer first, then holes (same order as flatCoords)
+    const positions = [];
+    for (const p of outer.polygon) {
+      positions.push(p.x, p.y, p.z);
+    }
+    for (const hole of holes) {
+      if (!this._pointInPolygon2D(hole.pts2d[0], outer.pts2d)) continue;
+      for (const p of hole.polygon) {
         positions.push(p.x, p.y, p.z);
       }
-      for (const hole of myHoles) {
-        for (const p of hole.polygon) {
-          positions.push(p.x, p.y, p.z);
-        }
-      }
+    }
 
-      // Add indices
-      for (const idx of triIndices) {
-        indices.push(idx + vertexOffset);
-      }
-
-      vertexOffset += outer.polygon.length;
-      for (const hole of myHoles) {
-        vertexOffset += hole.polygon.length;
-      }
+    const indices = [];
+    for (const idx of triIndices) {
+      indices.push(idx);
     }
 
     if (positions.length === 0) return null;
