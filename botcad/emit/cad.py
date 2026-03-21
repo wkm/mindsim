@@ -469,11 +469,12 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             for mp in mount.component.mounting_points:
                 _export_hardware(mp)
 
-    # --- Per-horn STLs ---
+    # --- Per-horn STLs (oriented to joint axis) ---
     for body in bot.all_bodies:
         for joint in body.joints:
             horn = _horn_solid(joint.servo)
             if horn:
+                horn = _orient_z_to_axis(horn, joint.axis)
                 export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
     # --- Per-wire STLs ---
