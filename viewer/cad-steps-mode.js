@@ -171,7 +171,10 @@ class CadStepsViewer {
     this.toolStlCache = {};  // step index → BufferGeometry (tool solid)
     this.meshGroup = new THREE.Group();   // result solid + its edges
     this.toolGroup = new THREE.Group();   // tool solid + its edges
+    this.ghostGroup = new THREE.Group();  // ghost of final body (isolate mode)
     this.showTool = true;
+    this.isolateMode = false;
+    this._ghostGeometry = null;           // cached final-step geometry for ghost
     this._leftBasis = 60; // percent
   }
 
@@ -315,6 +318,7 @@ class CadStepsViewer {
 
     this.scene.add(this.meshGroup);
     this.scene.add(this.toolGroup);
+    this.scene.add(this.ghostGroup);
 
     // Handle resize
     window.addEventListener('resize', () => this._resizeRenderer());
@@ -381,6 +385,20 @@ class CadStepsViewer {
     toolLabel.appendChild(toolCb);
     toolLabel.appendChild(document.createTextNode('Tool'));
     toolbar.appendChild(toolLabel);
+
+    const isolateLabel = document.createElement('label');
+    const isolateCb = document.createElement('input');
+    isolateCb.type = 'checkbox';
+    isolateCb.id = 'isolate-toggle';
+    isolateCb.checked = false;
+    isolateCb.addEventListener('change', (e) => {
+      this.isolateMode = e.target.checked;
+      this._rebuildGhost();
+      this._showStep(this.currentStep);
+    });
+    isolateLabel.appendChild(isolateCb);
+    isolateLabel.appendChild(document.createTextNode('Isolate step'));
+    toolbar.appendChild(isolateLabel);
 
     this.editorPaneEl.appendChild(toolbar);
 
@@ -582,9 +600,10 @@ class CadStepsViewer {
     }
     this._scrollToLine(idx);
 
-    // For steps with a tool, show the state BEFORE this operation so the
-    // tool overlay shows what's about to change.
-    const hasPrev = idx > 0 && step.has_tool;
+    // In holistic mode, for steps with a tool show the state BEFORE this
+    // operation so the tool overlay shows what's about to change.
+    // In isolate mode, always show the current step's result.
+    const hasPrev = !this.isolateMode && idx > 0 && step.has_tool;
     const bodyIdx = hasPrev ? idx - 1 : idx;
     const geometry = await this._loadStepSTL(bodyIdx);
     if (!geometry) return;
@@ -597,9 +616,13 @@ class CadStepsViewer {
       if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
     }
 
-    // Body solid
+    // Body solid — in isolate mode, create ops get blue tint
+    let bodyColor = 0xCED9E0;
+    if (this.isolateMode && step.op === 'create') {
+      bodyColor = 0x2B95D6;
+    }
     const material = new THREE.MeshPhysicalMaterial({
-      color: 0xCED9E0,
+      color: bodyColor,
       roughness: 0.5,
       metalness: 0.1,
       clearcoat: 0.1,
@@ -614,6 +637,9 @@ class CadStepsViewer {
 
     // Tool solid overlay
     await this._updateToolMesh();
+
+    // Ghost visibility tracks isolate mode
+    this.ghostGroup.visible = this.isolateMode;
 
     // Prefetch adjacent steps
     this._prefetch(idx - 1);
@@ -655,6 +681,40 @@ class CadStepsViewer {
     const edgeLines = new THREE.LineSegments(edges, toolEdgeMat);
     edgeLines.raycast = () => {};
     this.toolGroup.add(edgeLines);
+  }
+
+  async _rebuildGhost() {
+    clearGroup(this.ghostGroup);
+
+    if (!this.isolateMode || this.steps.length === 0) return;
+
+    // Load (or reuse cached) final step geometry
+    if (!this._ghostGeometry) {
+      const finalIdx = this.steps.length - 1;
+      this._ghostGeometry = await this._loadStepSTL(finalIdx);
+    }
+    if (!this._ghostGeometry) return;
+
+    // Ghost solid — very transparent, no depth write
+    const ghostMat = new THREE.MeshPhysicalMaterial({
+      color: 0xCED9E0,
+      transparent: true,
+      opacity: 0.06,
+      roughness: 1.0,
+      depthWrite: false,
+    });
+    this.ghostGroup.add(new THREE.Mesh(this._ghostGeometry, ghostMat));
+
+    // Ghost edges
+    const ghostEdgeMat = new THREE.LineBasicMaterial({
+      color: 0x5C7080,
+      transparent: true,
+      opacity: 0.15,
+    });
+    const edges = new THREE.EdgesGeometry(this._ghostGeometry, EDGE_THRESHOLD);
+    const edgeLines = new THREE.LineSegments(edges, ghostEdgeMat);
+    edgeLines.raycast = () => {};
+    this.ghostGroup.add(edgeLines);
   }
 
   // ── STL loading ──
