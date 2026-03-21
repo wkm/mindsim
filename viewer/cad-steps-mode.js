@@ -174,7 +174,8 @@ class CadStepsViewer {
     this.stlLoader = new STLLoader();
     this.stlCache = {};      // step index → BufferGeometry
     this.toolStlCache = {};  // step index → BufferGeometry (tool solid)
-    this.showTool = true;
+    this.viewMode = 'outcome';  // 'outcome' | 'inputs'
+    this.showContext = true;     // body-so-far overlay
     this.showFinal = false;
     this._ghostGeometry = null;           // cached final-step geometry for ghost
     this._leftBasis = 60; // percent
@@ -353,20 +354,50 @@ class CadStepsViewer {
     this.slider.addEventListener('input', () => this._onSliderChange());
     toolbar.appendChild(this.slider);
 
-    // "Show tool" — for cut/fuse: before-body + tool overlay vs after-body
-    const toolLabel = document.createElement('label');
-    const toolCb = document.createElement('input');
-    toolCb.type = 'checkbox';
-    toolCb.checked = true;
-    toolCb.addEventListener('change', async (e) => {
-      this.showTool = e.target.checked;
+    // Segmented control: Outcome | Inputs
+    const modeGroup = document.createElement('div');
+    modeGroup.style.cssText = 'display:flex; border:1px solid #30363D; border-radius:4px; overflow:hidden; flex-shrink:0;';
+
+    const segBtnBase = 'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
+    const segActive = 'background:#30363D; color:#E8EDF0;';
+    const segInactive = 'background:transparent; color:#738694;';
+
+    this._outcomeBtn = document.createElement('button');
+    this._outcomeBtn.textContent = 'Outcome';
+    this._outcomeBtn.style.cssText = segBtnBase + segActive;
+    this._outcomeBtn.addEventListener('click', async () => {
+      this.viewMode = 'outcome';
+      this._updateModeButtons();
       await this._showStep(this.currentStep);
     });
-    toolLabel.appendChild(toolCb);
-    toolLabel.appendChild(document.createTextNode('Tool'));
-    toolbar.appendChild(toolLabel);
 
-    // "Show final" — ghost of the completed body for spatial reference
+    this._inputsBtn = document.createElement('button');
+    this._inputsBtn.textContent = 'Inputs';
+    this._inputsBtn.style.cssText = segBtnBase + segInactive;
+    this._inputsBtn.addEventListener('click', async () => {
+      this.viewMode = 'inputs';
+      this._updateModeButtons();
+      await this._showStep(this.currentStep);
+    });
+
+    modeGroup.appendChild(this._outcomeBtn);
+    modeGroup.appendChild(this._inputsBtn);
+    toolbar.appendChild(modeGroup);
+
+    // "Context" checkbox — body-so-far overlay (on by default)
+    const contextLabel = document.createElement('label');
+    const contextCb = document.createElement('input');
+    contextCb.type = 'checkbox';
+    contextCb.checked = true;
+    contextCb.addEventListener('change', async (e) => {
+      this.showContext = e.target.checked;
+      await this._showStep(this.currentStep);
+    });
+    contextLabel.appendChild(contextCb);
+    contextLabel.appendChild(document.createTextNode('Context'));
+    toolbar.appendChild(contextLabel);
+
+    // "Final" checkbox — ghost of the completed body (off by default)
     const finalLabel = document.createElement('label');
     const finalCb = document.createElement('input');
     finalCb.type = 'checkbox';
@@ -449,7 +480,7 @@ class CadStepsViewer {
       if (e.key.startsWith('Arrow')) e.preventDefault();
     });
 
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', async (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
         if (this.currentStep > 0) {
@@ -462,12 +493,29 @@ class CadStepsViewer {
           this.slider.value = String(this.currentStep + 1);
           this._onSliderChange();
         }
+      } else if (e.key === 'f' && !e.ctrlKey && !e.metaKey) {
+        // Toggle follow mode and immediately frame on current step
+        e.preventDefault();
+        const entering = !this.viewport.isFollowMode();
+        this.viewport.setFollowMode(entering);
+        if (entering) {
+          const geom = await this._loadStepSTL(this.currentStep);
+          if (geom) this.viewport.frameIfFollowing(geom);
+        }
       }
     });
   }
 
   _escapeHtml(text) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  _updateModeButtons() {
+    const segBtnBase = 'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
+    const segActive = 'background:#30363D; color:#E8EDF0;';
+    const segInactive = 'background:transparent; color:#738694;';
+    this._outcomeBtn.style.cssText = segBtnBase + (this.viewMode === 'outcome' ? segActive : segInactive);
+    this._inputsBtn.style.cssText = segBtnBase + (this.viewMode === 'inputs' ? segActive : segInactive);
   }
 
   _highlightScript(script) {
@@ -580,7 +628,7 @@ class CadStepsViewer {
     }
     this._scrollToLine(idx);
 
-    // Clear all mesh groups
+    // Clear mesh groups
     const clearMG = (g) => {
       while (g.children.length > 0) {
         const c = g.children[0]; g.remove(c);
@@ -590,23 +638,59 @@ class CadStepsViewer {
     };
     clearMG(this.meshGroup);
     clearMG(this.contextGroup);
+    clearGroup(this.toolGroup);
 
     const isBooleanStep = (step.op === 'cut' || step.op === 'union');
 
-    // For boolean steps with "Tool" ON: show before-body + tool overlay
-    // For boolean steps with "Tool" OFF: show after-body (result)
-    // For create/locate steps: always show this step's shape
-    let bodyIdx;
-    if (isBooleanStep && this.showTool && idx > 0) {
-      bodyIdx = idx - 1; // show before-body
-    } else {
-      bodyIdx = idx; // show result
-    }
-    const geometry = await this._loadStepSTL(bodyIdx);
-    if (!geometry) return;
+    const addTransparentMesh = (group, geom, color, opacity) => {
+      const mat = new THREE.MeshPhysicalMaterial({
+        color, transparent: true, opacity, roughness: 0.8, depthWrite: false, side: THREE.DoubleSide,
+      });
+      group.add(new THREE.Mesh(geom, mat));
+      const edgeMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: opacity + 0.05 });
+      const edges = new THREE.EdgesGeometry(geom, EDGE_THRESHOLD);
+      const lines = new THREE.LineSegments(edges, edgeMat);
+      lines.raycast = () => {};
+      group.add(lines);
+    };
 
-    // Body-so-far context for create/locate steps
-    const needsContext = (step.op === 'create' || step.op === 'locate');
+    const addOpaqueMesh = (group, geom, color) => {
+      group.add(new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
+        color, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
+      })));
+      const edges = new THREE.EdgesGeometry(geom, EDGE_THRESHOLD);
+      const lines = new THREE.LineSegments(edges, EDGE_MATERIAL);
+      lines.raycast = () => {};
+      group.add(lines);
+    };
+
+    if (this.viewMode === 'inputs' && isBooleanStep && idx > 0) {
+      // Inputs mode for cut/fuse: target (before-body) + tool overlay
+      const targetGeom = await this._loadStepSTL(idx - 1);
+      if (targetGeom) addTransparentMesh(this.meshGroup, targetGeom, 0xCED9E0, 0.35);
+      const toolGeom = await this._loadSTL(this.toolStlCache, idx, 'tool-stl');
+      const toolColor = step.op === 'cut' ? 0xDB3737 : 0x0F9960;
+      if (toolGeom) addTransparentMesh(this.meshGroup, toolGeom, toolColor, 0.35);
+
+    } else if (this.viewMode === 'inputs' && step.op === 'locate') {
+      // Inputs mode for locate: pre-move faint gray + result purple
+      const preGeom = await this._loadSTL(this.toolStlCache, idx, 'tool-stl');
+      if (preGeom) addTransparentMesh(this.meshGroup, preGeom, 0x738694, 0.3);
+      const resultGeom = await this._loadStepSTL(idx);
+      if (resultGeom) addOpaqueMesh(this.meshGroup, resultGeom, 0x9179F2);
+
+    } else {
+      // Outcome mode (or inputs on create/call/prebuilt — same thing)
+      const geom = await this._loadStepSTL(idx);
+      if (!geom) return;
+      let color = 0xCED9E0; // neutral gray for cut/fuse
+      if (step.op === 'create') color = 0x2B95D6;
+      else if (step.op === 'locate') color = 0x9179F2;
+      addOpaqueMesh(this.meshGroup, geom, color);
+    }
+
+    // Context overlay: body-so-far for create/locate steps (not for cut/fuse where body IS the result)
+    const needsContext = this.showContext && (step.op === 'create' || step.op === 'locate');
     if (needsContext) {
       const ctxIdx = this._findLastBodyStep(idx);
       if (ctxIdx >= 0) {
@@ -625,33 +709,16 @@ class CadStepsViewer {
     }
     this.contextGroup.visible = needsContext;
 
-    // Focus shape color
-    let bodyColor = 0xCED9E0; // neutral for cut/fuse results
-    if (step.op === 'create') bodyColor = 0x2B95D6;
-    else if (step.op === 'locate') bodyColor = 0x9179F2;
-
-    this.meshGroup.add(new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({
-      color: bodyColor, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
-    })));
-    const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
-    const edgeLines = new THREE.LineSegments(edges, EDGE_MATERIAL);
-    edgeLines.raycast = () => {};
-    this.meshGroup.add(edgeLines);
-
-    // Tool overlay (only for boolean steps with Tool ON)
-    await this._updateToolMesh();
-
     // "Final" ghost
     this.ghostGroup.visible = this.showFinal;
+
+    // Follow mode: auto-frame on current step geometry
+    const frameGeom = await this._loadStepSTL(idx);
+    if (frameGeom) this.viewport.frameIfFollowing(frameGeom);
 
     // Prefetch adjacent steps
     this._prefetch(idx - 1);
     this._prefetch(idx + 1);
-
-    // Smart camera: in isolate mode, frame on current step geometry
-    if (this.showFinal) {
-      this.viewport.frameOnGeometry(geometry);
-    }
   }
 
   /** Find the most recent cut/fuse step before `idx` — that's the body-so-far. */
@@ -661,38 +728,6 @@ class CadStepsViewer {
       if (op === 'cut' || op === 'union') return i;
     }
     return -1;
-  }
-
-  async _updateToolMesh() {
-    clearGroup(this.toolGroup);
-
-    const step = this.steps[this.currentStep];
-    if (!this.showTool || !step || !step.has_tool) return;
-
-    const geometry = await this._loadSTL(this.toolStlCache, this.currentStep, 'tool-stl');
-    if (!geometry) return;
-
-    const toolColor = step.op === 'cut' ? 0xDB3737
-      : step.op === 'locate' ? 0x9179F2
-      : 0x0F9960; // union/default = green
-    const material = new THREE.MeshPhysicalMaterial({
-      color: toolColor,
-      transparent: true,
-      opacity: 0.35,
-      roughness: 0.8,
-      metalness: 0.0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    this.toolGroup.add(new THREE.Mesh(geometry, material));
-
-    const toolEdgeMat = new THREE.LineBasicMaterial({
-      color: toolColor, transparent: true, opacity: 0.4,
-    });
-    const edges = new THREE.EdgesGeometry(geometry, EDGE_THRESHOLD);
-    const edgeLines = new THREE.LineSegments(edges, toolEdgeMat);
-    edgeLines.raycast = () => {};
-    this.toolGroup.add(edgeLines);
   }
 
   async _rebuildGhost() {

@@ -82,6 +82,12 @@ export class Viewport3D {
     this._secFrac = 0.5;
     this._secPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
     this._secViz = null;
+    // Follow mode
+    this._followMode = false;
+    this._followTarget = null;  // Vector3 — center of followed geometry
+    this._followRadius = 0;     // bounding sphere radius for exit threshold
+    this._followBadge = null;   // DOM element for "Following" indicator
+    this._onFollowChange = null; // callback when follow mode changes
 
     this._initScene(options);
     this._initOverlay();
@@ -120,9 +126,60 @@ export class Viewport3D {
     const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
     const sz = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
     const d = Math.max(sz.x, sz.y, sz.z) * 2.5;
-    const pos = c.clone().addScaledVector(p.dir, d);
-    if (this._animating) this._startLerp(pos, c, p.up.clone());
-    else { this._cam.position.copy(pos); this._cam.up.copy(p.up); this._ctrl.target.copy(c); this._cam.lookAt(c); this._ctrl.update(); }
+    // In follow mode, maintain focus on the followed target instead of bbox center
+    const target = (this._followMode && this._followTarget) ? this._followTarget.clone() : c;
+    const pos = target.clone().addScaledVector(p.dir, d);
+    if (this._animating) this._startLerp(pos, target, p.up.clone());
+    else { this._cam.position.copy(pos); this._cam.up.copy(p.up); this._ctrl.target.copy(target); this._cam.lookAt(target); this._ctrl.update(); }
+  }
+
+  // ── Follow mode ──
+
+  setFollowMode(enabled) {
+    this._followMode = enabled;
+    if (!enabled) {
+      this._followTarget = null;
+      this._followRadius = 0;
+    }
+    this._updateFollowBadge();
+    if (this._onFollowChange) this._onFollowChange(enabled);
+  }
+
+  isFollowMode() { return this._followMode; }
+
+  onFollowChange(cb) { this._onFollowChange = cb; }
+
+  /**
+   * Called by the step debugger when the step changes while in follow mode.
+   * Smoothly frames on the given geometry and updates the follow target.
+   */
+  frameIfFollowing(geometry) {
+    if (!this._followMode || !geometry) return;
+    this.frameOnGeometry(geometry);
+    // Update follow target/radius for drift detection
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    this._followTarget = new THREE.Vector3();
+    box.getCenter(this._followTarget);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    this._followRadius = Math.max(size.x, size.y, size.z) * 0.5;
+  }
+
+  _updateFollowBadge() {
+    if (this._followMode) {
+      if (!this._followBadge) {
+        this._followBadge = document.createElement('div');
+        this._followBadge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(145,121,242,0.8);color:white;font:500 11px system-ui,-apple-system,sans-serif;padding:2px 10px;border-radius:10px;pointer-events:none;z-index:60;transition:opacity 0.2s;';
+        this._followBadge.textContent = 'Following';
+        this._overlay.appendChild(this._followBadge);
+      }
+      this._followBadge.style.opacity = '1';
+      this._followBadge.style.display = '';
+    } else if (this._followBadge) {
+      this._followBadge.style.opacity = '0';
+      setTimeout(() => { if (this._followBadge && !this._followMode) this._followBadge.style.display = 'none'; }, 200);
+    }
   }
 
   enableMeasureTool()  {
@@ -495,6 +552,7 @@ export class Viewport3D {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       if (e.ctrlKey || e.metaKey) return;
       if (KEY_TO_PRESET[e.key]) { e.preventDefault(); this.setViewPreset(KEY_TO_PRESET[e.key]); }
+      else if (e.key === 'f') { e.preventDefault(); this.setFollowMode(!this._followMode); }
       else if (e.key === 'm') { e.preventDefault(); this._measBtn.click(); }
       else if (e.key === 's') { e.preventDefault(); this._secBtn.click(); }
       else if (e.key === 'Escape') {
@@ -585,6 +643,14 @@ export class Viewport3D {
     if (this._disposed) return;
     requestAnimationFrame(() => this._tick());
     this._tickLerp(); this._ctrl.update();
+    // Follow mode drift detection — exit if user pans/zooms significantly
+    if (this._followMode && this._followTarget && !this._lerpActive) {
+      const drift = this._ctrl.target.distanceTo(this._followTarget);
+      const threshold = this._followRadius > 0 ? this._followRadius * 0.2 : 0.001;
+      if (drift > threshold) {
+        this.setFollowMode(false);
+      }
+    }
     if (this._animCb) this._animCb();
     if (this._edgeC) this._edgeC.render(); else this._ren.render(this._scene, this._cam);
     if (this._meas.enabled || this._meas.measurements.length > 0) this._meas.update();
