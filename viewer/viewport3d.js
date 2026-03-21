@@ -1687,8 +1687,9 @@ export class Viewport3D {
    * @param {number} [spacing=8] — pixel spacing between lines
    * @returns {THREE.CanvasTexture}
    */
-  _createHatchTexture(color, lineWidth = 1.5, spacing = 6) {
-    const size = 64;
+  _createHatchTexture(color, lineWidth = 1.5, spacing = 8) {
+    // Tile size must be a multiple of spacing for seamless tiling
+    const size = spacing * 8; // e.g., 64 for spacing=8
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -1700,13 +1701,23 @@ export class Viewport3D {
     ctx.fillStyle = cssColor;
     ctx.fillRect(0, 0, size, size);
 
-    // DEBUG: bright red hatch lines to verify they render
-    ctx.strokeStyle = '#FF0000';
+    // Diagonal hatch lines — lighter for contrast against the dark fill
+    const lighter = c.clone().lerp(new THREE.Color(0xffffff), 0.65);
+    ctx.strokeStyle = '#' + lighter.getHexString();
     ctx.lineWidth = lineWidth;
+
+    // Draw 45-degree lines that tile seamlessly.
+    // For a 45-degree line, a line entering at (0, y) exits at (size, y+size).
+    // To tile: draw lines at offsets 0, spacing, 2*spacing, ...
+    // Each line wraps around the tile boundaries.
     ctx.beginPath();
-    for (let i = -size; i < size * 2; i += spacing) {
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i + size, size);
+    for (let offset = 0; offset < size; offset += spacing) {
+      // Line from bottom-left to top-right, offset by `offset`
+      ctx.moveTo(offset, 0);
+      ctx.lineTo(offset + size, size);
+      // Wrap: the portion that exits the right side re-enters from the left
+      ctx.moveTo(offset - size, 0);
+      ctx.lineTo(offset, size);
     }
     ctx.stroke();
 
@@ -1741,7 +1752,7 @@ export class Viewport3D {
     // → 1 / (N * linesPerTile) = 8 * worldPerPx
     // → N = 1 / (8 * worldPerPx * linesPerTile)
     const SCREEN_SPACING = 8; // pixels between hatch lines on screen
-    const LINES_PER_TILE = 64 / 6; // ~10.7 lines per 64px tile (spacing=6)
+    const LINES_PER_TILE = 8; // 8 lines per tile (spacing=8, size=64)
     const repeat = 1 / (SCREEN_SPACING * worldPerPx * LINES_PER_TILE);
 
     for (const tex of this._hatchTextures) {
