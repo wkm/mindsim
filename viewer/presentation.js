@@ -213,15 +213,18 @@ const EdgeDetectShader = {
  */
 export function createEdgeComposer(renderer, scene, camera) {
   const size = renderer.getSize(new THREE.Vector2());
+  const dpr = renderer.getPixelRatio();
+  const fullW = Math.round(size.x * dpr);
+  const fullH = Math.round(size.y * dpr);
 
-  // Normal render target
-  const normalTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+  // Normal render target — at full device resolution for crisp edges
+  const normalTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
     type: THREE.FloatType,
   });
   const normalMaterial = new THREE.MeshNormalMaterial();
 
-  // Depth render target
-  const depthTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+  // Depth render target — at full device resolution
+  const depthTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
     type: THREE.FloatType,
   });
   const depthMaterial = new THREE.MeshDepthMaterial({
@@ -234,7 +237,7 @@ export function createEdgeComposer(renderer, scene, camera) {
   composer.addPass(renderPass);
 
   const edgePass = new ShaderPass(EdgeDetectShader);
-  edgePass.uniforms.resolution.value.copy(size);
+  edgePass.uniforms.resolution.value.set(fullW, fullH);
   edgePass.uniforms.edgeColor.value.set(EDGE_COLOR);
   composer.addPass(edgePass);
 
@@ -279,10 +282,13 @@ export function createEdgeComposer(renderer, scene, camera) {
     },
 
     resize(w, h) {
-      normalTarget.setSize(w, h);
-      depthTarget.setSize(w, h);
+      const pr = renderer.getPixelRatio();
+      const pw = Math.round(w * pr);
+      const ph = Math.round(h * pr);
+      normalTarget.setSize(pw, ph);
+      depthTarget.setSize(pw, ph);
       composer.setSize(w, h);
-      edgePass.uniforms.resolution.value.set(w, h);
+      edgePass.uniforms.resolution.value.set(pw, ph);
     },
   };
 }

@@ -114,7 +114,7 @@ export class Viewport3D {
     this._animating = false;
     this._disposed = false;
     this._activeTool = null; // 'select' | 'measure' | 'section' | null
-    this._cameraType = options.cameraType || 'perspective';
+    this._cameraType = options.cameraType || 'orthographic';
     // Lerp
     this._lerpActive = false;
     this._lerpS = { pos: new THREE.Vector3(), tgt: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -512,7 +512,8 @@ export class Viewport3D {
     this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const dir = new THREE.DirectionalLight(0xffffff, 1.6); dir.position.set(0.3, 0.5, 0.4); this._scene.add(dir);
     const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-0.3, -0.2, -0.4); this._scene.add(fill);
-    if (opts.grid) { const g = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0); g.rotation.x = Math.PI / 2; this._scene.add(g); }
+    this._gridHelper = null;
+    if (opts.grid) { this._gridHelper = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0); this._gridHelper.rotation.x = Math.PI / 2; this._scene.add(this._gridHelper); }
     if (opts.edges) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     this._meas = new MeasureTool(this._cam, this._scene, c);
   }
@@ -567,15 +568,16 @@ export class Viewport3D {
     this._cubeScene.add(cubeFill);
 
     // Per-face canvas rotation to ensure text reads correctly from each viewing direction.
-    // THREE.BoxGeometry UV layout means we must compensate for face orientation:
-    //   +X (right): no rotation needed
-    //   -X (left):  no rotation needed
-    //   +Y (back):  no rotation needed
-    //   -Y (front): no rotation needed
-    //   +Z (top):   no rotation needed (text reads correctly from above with Y-away)
-    //   -Z (bottom): rotate 180° so text reads correctly from below
+    // THREE.BoxGeometry UV layout in our Z-up coordinate system requires compensation:
     // Rotation values in radians applied via ctx.rotate around canvas center.
-    const CUBE_FACE_ROTATION = [0, 0, 0, 0, 0, Math.PI];
+    const CUBE_FACE_ROTATION = [
+      -Math.PI / 2,  // +X (Right): UV text appears rotated 90° CW, counter-rotate
+      Math.PI / 2,   // -X (Left):  UV text appears rotated 90° CCW, rotate CW
+      Math.PI,        // +Y (Back):  UV text appears upside down, rotate 180°
+      0,              // -Y (Front): text reads correctly
+      0,              // +Z (Top):   text reads correctly from above
+      Math.PI,        // -Z (Bottom): text appears upside down, rotate 180°
+    ];
 
     // Create face materials with canvas textures — cleaner labels
     const materials = CUBE_FACE_MAP.map((face, i) => {
@@ -1043,7 +1045,7 @@ export class Viewport3D {
     });
     edgeRow.appendChild(this._edgeCb);
     const edgeLabel = document.createElement('span');
-    edgeLabel.textContent = 'Edges';
+    edgeLabel.textContent = 'Edge detection';
     edgeLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
     edgeRow.appendChild(edgeLabel);
     this._settingsPopover.appendChild(edgeRow);
@@ -1053,10 +1055,8 @@ export class Viewport3D {
     gridRow.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
     this._gridCb = document.createElement('input');
     this._gridCb.type = 'checkbox';
-    // Find existing grid in scene
-    this._gridHelper = null;
-    this._scene.traverse(ch => { if (ch.isGridHelper) this._gridHelper = ch; });
-    this._gridCb.checked = !!this._gridHelper;
+    // Grid reference is set during _initScene if opts.grid was true
+    this._gridCb.checked = !!(this._gridHelper && this._gridHelper.visible);
     this._gridCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
     this._gridCb.addEventListener('change', () => {
       if (this._gridCb.checked) {
