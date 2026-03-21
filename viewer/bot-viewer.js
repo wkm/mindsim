@@ -9,12 +9,12 @@
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
 import { ExploreMode } from './explore-mode.js';
 import { FocusController } from './focus-controller.js';
+import { Viewport3D } from './viewport3d.js';
 import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -37,62 +37,39 @@ export async function initBotViewer(botName) {
   let _namesArray = null;
   const _textDecoder = new TextDecoder('utf-8');
 
-  // Three.js
+  // Three.js — delegated to Viewport3D
   const container = document.getElementById('canvas-container');
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xF5F8FA);
 
   function getTreePanelWidth() {
     const treePanel = document.getElementById('tree-panel');
     return (treePanel && treePanel.style.display !== 'none') ? TREE_PANEL_WIDTH : 0;
   }
 
-  function getCanvasWidth() {
-    return window.innerWidth - SIDE_PANEL_WIDTH - getTreePanelWidth();
-  }
+  // Position container between tree panel and side panel
+  container.style.left = getTreePanelWidth() + 'px';
+  container.style.right = SIDE_PANEL_WIDTH + 'px';
 
-  /** Update renderer + camera to fit the visible canvas area between panels. */
-  function updateCanvasLayout() {
-    const left = getTreePanelWidth();
-    const w = getCanvasWidth();
-    const h = window.innerHeight;
-    container.style.left = left + 'px';
-    container.style.right = SIDE_PANEL_WIDTH + 'px';
-    renderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-  }
+  const viewport = new Viewport3D(container, {
+    cameraType: 'perspective',
+    grid: true,
+  });
+  const scene = viewport.scene;
+  const camera = viewport.camera;
+  const renderer = viewport.renderer;
+  const controls = viewport.controls;
 
-  const camera = new THREE.PerspectiveCamera(
-    45, getCanvasWidth() / window.innerHeight, 0.01, 10
-  );
+  // Bot-viewer starts at a specific camera position
   camera.position.set(0.4, 0.45, 0.55);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  container.appendChild(renderer.domElement);
-  updateCanvasLayout();
-
-  const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.2, 0);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.1;
   controls.update();
 
-  // Lighting — bright enough to read geometry clearly
-  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
-  dirLight.position.set(2, 4, 3);
-  dirLight.castShadow = true;
-  scene.add(dirLight);
-  const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
-  fillLight.position.set(-2, 1, -2);
-  scene.add(fillLight);
-
-  // Ground grid
-  scene.add(new THREE.GridHelper(2, 40, 0xBFCCD6, 0xCED9E0));
+  /** Update container bounds and let Viewport3D handle resize. */
+  function updateCanvasLayout() {
+    const left = getTreePanelWidth();
+    container.style.left = left + 'px';
+    container.style.right = SIDE_PANEL_WIDTH + 'px';
+    viewport.resize();
+  }
 
   // ---------------------------------------------------------------------------
   // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
@@ -391,7 +368,7 @@ export async function initBotViewer(botName) {
     const manifest = await fetchManifest();
 
     const ctx = {
-      mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls,
+      mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls, viewport,
       syncTransforms, getPosition, getQuaternion, toMujocoPos, getMujocoName,
       botName,
     };
@@ -414,14 +391,10 @@ export async function initBotViewer(botName) {
     switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
-    function animate() {
-      controls.update();
+    viewport.animate(() => {
       initialFocus.update();  // drive initial camera animation
       if (currentMode && currentMode.update) currentMode.update();
-      renderer.render(scene, camera);
-      requestAnimationFrame(animate);
-    }
-    animate();
+    });
 
     window.addEventListener('resize', () => updateCanvasLayout());
 
