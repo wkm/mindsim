@@ -368,10 +368,10 @@ class CadStepsViewer {
     isolateCb.type = 'checkbox';
     isolateCb.id = 'isolate-toggle';
     isolateCb.checked = false;
-    isolateCb.addEventListener('change', (e) => {
+    isolateCb.addEventListener('change', async (e) => {
       this.isolateMode = e.target.checked;
-      this._rebuildGhost();
-      this._showStep(this.currentStep);
+      await this._rebuildGhost();
+      await this._showStep(this.currentStep);
     });
     isolateLabel.appendChild(isolateCb);
     isolateLabel.appendChild(document.createTextNode('Isolate step'));
