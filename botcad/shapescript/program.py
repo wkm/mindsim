@@ -175,6 +175,41 @@ class ShapeScript:
         self.ops.append(ChamferOp(ref=ref, target=target, tags=tags, size=size))
         return ref
 
+    # ── Patterns ──
+
+    def radial_array(
+        self,
+        shape: ShapeRef,
+        count: int,
+        axis: str = "z",
+        tag: str | None = None,
+    ) -> ShapeRef:
+        """Clone a shape N times in a radial pattern around an axis.
+
+        The shape is assumed to be already positioned at the desired radius.
+        Each clone is rotated by 360/count degrees around the specified axis.
+        All clones are fused into a single shape.
+
+        Usage:
+            tread = prog.box(0.002, 0.0015, 0.011)
+            tread = prog.locate(tread, pos=(radius, 0, 0))
+            all_treads = prog.radial_array(tread, 60, axis="z", tag="treads")
+            tire = prog.cut(tire, all_treads)
+        """
+        step = 360.0 / count
+        result = shape  # clone 0 is the original (already at angle=0)
+        for i in range(1, count):
+            angle = i * step
+            if axis == "z":
+                euler = (0.0, 0.0, angle)
+            elif axis == "y":
+                euler = (0.0, angle, 0.0)
+            else:
+                euler = (angle, 0.0, 0.0)
+            clone = self.locate(shape, euler_deg=euler)
+            result = self.fuse(result, clone)
+        return result
+
     # ── Queries ──
 
     def query_volume(self, target: ShapeRef) -> None:

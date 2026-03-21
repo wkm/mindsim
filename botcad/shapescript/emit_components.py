@@ -499,18 +499,9 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
     n_treads = 60
     tread_w = 0.0015
     tread_depth = 0.0008
-    all_treads = None
-    for i in range(n_treads):
-        angle = i * (360 / n_treads)
-        # Radial depth (X) × circumferential width (Y) × axle span (Z)
-        tread = prog.box(tread_depth * 2, tread_w, tire_w + 0.001)
-        # Position at radius, then rotate around Z (wheel axle)
-        tread = prog.locate(tread, pos=(radius, 0, 0))
-        tread = prog.locate(tread, euler_deg=(0, 0, angle))
-        if all_treads is None:
-            all_treads = tread
-        else:
-            all_treads = prog.fuse(all_treads, tread)
+    tread = prog.box(tread_depth * 2, tread_w, tire_w + 0.001)
+    tread = prog.locate(tread, pos=(radius, 0, 0))
+    all_treads = prog.radial_array(tread, n_treads, axis="z", tag="treads")
     tire = prog.cut(tire, all_treads)
 
     # --- Rim ring ---
