@@ -1352,41 +1352,35 @@ export class Viewport3D {
     for (const { mesh } of allMeshes) {
       this._computeMeshPlaneContour(mesh, plane, allSegments);
     }
-    console.log(`[section] ${allMeshes.length} meshes, ${allSegments.length / 6} contour segments`);
 
     // Chain into closed polygons
     const polygons = this._chainSegments(allSegments);
-    console.log(`[section] ${polygons.length} closed polygons, vertex counts: ${polygons.map(p => p.length).join(', ')}`);
 
-    // Triangulate
+    // Triangulate and create hatched cap meshes
     if (polygons.length > 0) {
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
       if (capGeom) {
-        console.log(`[section] cap geometry: ${capGeom.getAttribute('position').count} vertices, ${capGeom.index ? capGeom.index.count / 3 : 0} triangles`);
-        // Red solid + wireframe overlay for debugging
+        // Determine cap color from the first mesh's material or callback
+        let capColor;
+        if (this._sectionCapColorFn) {
+          const firstGroupName = Object.keys(layerMeshes)[0];
+          capColor = this._sectionCapColorFn(firstGroupName);
+        }
+        if (capColor == null) {
+          const firstMat = allMeshes[0]?.mesh?.material;
+          const baseColor = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
+          capColor = tintColor(baseColor, 0.6);
+        }
+
+        const hatchTex = this._createHatchTexture(capColor);
         const capMat = new THREE.MeshBasicMaterial({
-          color: 0xDB3737,
+          map: hatchTex,
           side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.5,
         });
         const capMesh = new THREE.Mesh(capGeom, capMat);
         capMesh.raycast = () => {};
-
-        // Wireframe overlay to see triangulation
-        const wireMat = new THREE.MeshBasicMaterial({
-          color: 0x000000,
-          wireframe: true,
-          side: THREE.DoubleSide,
-        });
-        const wireMesh = new THREE.Mesh(capGeom, wireMat);
-        wireMesh.raycast = () => {};
-        wireMesh.userData._vpCap = true;
-        this._capGroup.add(wireMesh);
         capMesh.userData._vpCap = true;
         this._capGroup.add(capMesh);
-      } else {
-        console.warn('[section] triangulation returned null');
       }
     }
 
@@ -1568,7 +1562,6 @@ export class Viewport3D {
 
     // Sort by absolute area descending
     projected.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
-    console.log(`[section] polygon areas: ${projected.map(p => `${p.polygon.length}v=${p.area.toExponential(3)}`).join(', ')}`);
 
     // Build containment tree: each polygon is either a top-level outer,
     // a hole inside an outer, or an island inside a hole.
@@ -1589,7 +1582,6 @@ export class Viewport3D {
     const outers = roles.filter(r => r.isOuter);
     const allHoles = roles.filter(r => !r.isOuter);
 
-    console.log(`[section] containment: ${outers.length} outers, ${allHoles.length} holes`);
 
     // Triangulate each outer with its holes
     const positions = [];
