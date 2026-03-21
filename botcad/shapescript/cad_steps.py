@@ -42,6 +42,11 @@ def shapescript_to_cad_steps(
     steps: list[CadStep] = []
     shapes = result.shapes
 
+    tag_by_ref = {}
+    for op in prog.ops:
+        if hasattr(op, "ref") and hasattr(op, "tag") and getattr(op, "tag", None):
+            tag_by_ref[op.ref.id] = op.tag
+
     for op in prog.ops:
         # Query/export ops have no ref — skip them early
         if not hasattr(op, "ref"):
@@ -88,7 +93,7 @@ def shapescript_to_cad_steps(
             # Booleans — cut/union steps with tool
             case CutOp(ref=ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
-                tool_tag = _find_tag_for_ref(prog, tl)
+                tool_tag = tag_by_ref.get(tl.id)
                 label = "Cut" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
                     CadStep(label=label, solid=solid, op="cut", tool=tool_solid, script=script_line)
@@ -96,7 +101,7 @@ def shapescript_to_cad_steps(
 
             case FuseOp(ref=ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
-                tool_tag = _find_tag_for_ref(prog, tl)
+                tool_tag = tag_by_ref.get(tl.id)
                 label = "Union" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
                     CadStep(label=label, solid=solid, op="union", tool=tool_solid, script=script_line)
@@ -105,7 +110,7 @@ def shapescript_to_cad_steps(
             # Transforms — show as their own step (purple in the viewer)
             case LocateOp(ref=ref, target=t):
                 tool_solid = shapes.get(t.id)  # the pre-move shape
-                locate_tag = _find_tag_for_ref(prog, t)
+                locate_tag = tag_by_ref.get(t.id)
                 label = "Locate" + (f" {locate_tag}" if locate_tag else "")
                 steps.append(
                     CadStep(label=label, solid=solid, op="locate", tool=tool_solid, script=script_line)
@@ -121,14 +126,6 @@ def shapescript_to_cad_steps(
                     steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
     return steps
-
-
-def _find_tag_for_ref(prog: ShapeScript, ref) -> str | None:
-    """Find the tag associated with a ShapeRef by scanning the program ops."""
-    for op in prog.ops:
-        if hasattr(op, "ref") and op.ref == ref:
-            return getattr(op, "tag", None)
-    return None
 
 
 def format_op(op) -> str:

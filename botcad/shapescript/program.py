@@ -12,10 +12,13 @@ from botcad.shapescript.ops import (
     BoxOp,
     CallOp,
     ChamferOp,
+    CopyOp,
     CutOp,
     CylinderOp,
     ExportSTEPOp,
     ExportSTLOp,
+    FilletAllEdgesOp,
+    FilletByAxisOp,
     FilletOp,
     FuseOp,
     LocateOp,
@@ -25,6 +28,7 @@ from botcad.shapescript.ops import (
     QueryCentroidOp,
     QueryInertiaOp,
     QueryVolumeOp,
+    RadialArrayOp,
     ShapeOp,
     ShapeRef,
     SphereOp,
@@ -125,11 +129,16 @@ class ShapeScript:
 
     def copy(self, source: ShapeRef, tag: str | None = None) -> ShapeRef:
         """Create an independent copy of an existing shape."""
-        from botcad.shapescript.ops import CopyOp
 
         ref = self._next_ref("copy")
         self.ops.append(CopyOp(ref=ref, source=source, tag=tag))
         return ref
+
+    def instance(self, proto: ShapeRef, index: int, tag: str | None = None) -> ShapeRef:
+        """Return proto for first use (index=0), a copy for subsequent uses."""
+        if index == 0:
+            return proto
+        return self.copy(proto, tag=tag)
 
     # ── Booleans ──
 
@@ -165,15 +174,11 @@ class ShapeScript:
         return ref
 
     def fillet_all(self, target: ShapeRef, radius: float) -> ShapeRef:
-        from botcad.shapescript.ops import FilletAllEdgesOp
-
         ref = self._next_ref("fillet")
         self.ops.append(FilletAllEdgesOp(ref=ref, target=target, radius=radius))
         return ref
 
     def fillet_by_axis(self, target: ShapeRef, axis: str, radius: float) -> ShapeRef:
-        from botcad.shapescript.ops import FilletByAxisOp
-
         ref = self._next_ref("fillet")
         self.ops.append(
             FilletByAxisOp(ref=ref, target=target, axis=axis, radius=radius)
@@ -206,7 +211,6 @@ class ShapeScript:
             all_treads = prog.radial_array(tread, 60, axis="z", tag="treads")
             tire = prog.cut(tire, all_treads)
         """
-        from botcad.shapescript.ops import RadialArrayOp
 
         ref = self._next_ref("array")
         self.ops.append(

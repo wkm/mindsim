@@ -45,7 +45,7 @@ def camera_script(spec: CameraSpec) -> ShapeScript:
             spec.mounting_points[0].diameter / 2, pcb_thick + 0.001, tag="mounting_hole"
         )
         for i, mp in enumerate(spec.mounting_points):
-            hole = hole_proto if i == 0 else prog.copy(hole_proto)
+            hole = prog.instance(hole_proto, i)
             hole = prog.locate(hole, pos=mp.pos)
             pcb = prog.cut(pcb, hole)
 
@@ -188,7 +188,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         pin_proto = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z, tag="pin_blade")
         for i in range(3):
             px = -pitch + i * pitch
-            pin = pin_proto if i == 0 else prog.copy(pin_proto)
+            pin = prog.instance(pin_proto, i)
             pin = prog.locate(pin, pos=(px, 0, bz / 2))
             body = prog.fuse(body, pin)
 
@@ -196,7 +196,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         chan_proto = prog.cylinder(0.0005, by * 0.3, tag="wire_entry")
         for i in range(3):
             px = -pitch + i * pitch
-            chan = chan_proto if i == 0 else prog.copy(chan_proto)
+            chan = prog.instance(chan_proto, i)
             chan = prog.locate(chan, pos=(px, 0, -bz / 2))
             body = prog.cut(body, chan)
 
@@ -216,7 +216,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         ridge_proto = prog.box(0.0003, by * 0.2, bz * 0.15, tag="contact_ridge")
         for i in range(7):
             rx = -bx * 0.38 + i * bx * 0.76 / 6
-            ridge = ridge_proto if i == 0 else prog.copy(ridge_proto)
+            ridge = prog.instance(ridge_proto, i)
             ridge = prog.locate(ridge, pos=(rx, -by * 0.1, -bz * 0.15))
             body = prog.fuse(body, ridge)
 
@@ -240,14 +240,15 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
 
         # Grip ridges on sides
         ridge_proto = prog.box(bx * 0.8, by * 0.06, 0.0005, tag="grip_ridge")
-        first_use = True
+        ridge_idx = 0
         for i in range(3):
             gz = -bz * 0.3 + i * bz * 0.3
-            ridge = ridge_proto if first_use else prog.copy(ridge_proto)
-            first_use = False
+            ridge = prog.instance(ridge_proto, ridge_idx)
+            ridge_idx += 1
             ridge = prog.locate(ridge, pos=(0, by / 2, gz))
             body = prog.fuse(body, ridge)
-            ridge2 = prog.copy(ridge_proto)
+            ridge2 = prog.instance(ridge_proto, ridge_idx)
+            ridge_idx += 1
             ridge2 = prog.locate(ridge2, pos=(0, -by / 2, gz))
             body = prog.fuse(body, ridge2)
 
@@ -271,7 +272,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         pin_proto = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z, tag="pin_blade")
         for i in range(3):
             px = -pitch + i * pitch
-            pin = pin_proto if i == 0 else prog.copy(pin_proto)
+            pin = prog.instance(pin_proto, i)
             pin = prog.locate(pin, pos=(px, 0, bz / 2))
             body = prog.fuse(body, pin)
 
@@ -281,7 +282,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         )
         for i in range(3):
             px = -pitch + i * pitch
-            bump = bump_proto if i == 0 else prog.copy(bump_proto)
+            bump = prog.instance(bump_proto, i)
             bump = prog.locate(bump, pos=(px, 0, -bz / 2))
             body = prog.fuse(body, bump)
 
@@ -297,12 +298,12 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
             0.0004, bz * 0.5, align=Align3(z="max"), tag="socket_hole"
         )
         holes = None
-        first_use = True
+        hole_idx = 0
         for row_y in [-0.00127, 0.00127]:
             for i in range(20):
                 px = -pitch * 9.5 + i * pitch
-                hole = hole_proto if first_use else prog.copy(hole_proto)
-                first_use = False
+                hole = prog.instance(hole_proto, hole_idx)
+                hole_idx += 1
                 hole = prog.locate(hole, pos=(px, row_y, -bz / 2))
                 if holes is None:
                     holes = hole
@@ -388,7 +389,7 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
         pin_proto = prog.cylinder(0.0003, pin_h, align=Align3(z="max"), tag="solder_pin")
         for i in range(min(n_pins, 6)):
             px = -bx / 2 + bx * (i + 0.5) / min(n_pins, 6)
-            pin = pin_proto if i == 0 else prog.copy(pin_proto)
+            pin = prog.instance(pin_proto, i)
             pin = prog.locate(pin, pos=(px, 0, -rz / 2))
             body = prog.fuse(body, pin)
 
@@ -537,7 +538,7 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
         r_bcd = 0.00635 if (i % 3 == 0) else 0.00955
         mx = r_bcd * math.cos(angle_rad)
         my = r_bcd * math.sin(angle_rad)
-        hole = m3_hole_proto if i == 0 else prog.copy(m3_hole_proto)
+        hole = prog.instance(m3_hole_proto, i)
         hole = prog.locate(hole, pos=(mx, my, 0))
         hub = prog.cut(hub, hole)
 
@@ -571,11 +572,11 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
         cx = mid_r * math.cos(angle_rad)
         cy = mid_r * math.sin(angle_rad)
 
-        spoke = spoke_proto if i == 0 else prog.copy(spoke_proto)
+        spoke = prog.instance(spoke_proto, i)
         spoke = prog.locate(spoke, pos=(cx, cy, 0), euler_deg=(0, 0, angle_deg))
 
         # --- M2 accessory slot in spoke ---
-        slot = slot_proto if i == 0 else prog.copy(slot_proto)
+        slot = prog.instance(slot_proto, i)
 
         # Place slot at radial midpoint, then rotate to spoke angle
         slot = prog.locate(slot, pos=(slot_mid, 0, 0))
@@ -797,7 +798,7 @@ def compute_script(comp) -> ShapeScript:
         ("hole_tl", (-0.029, 0.0115, 0)),
         ("hole_tr", (0.029, 0.0115, 0)),
     ]):
-        hole = hole_proto if i == 0 else prog.copy(hole_proto)
+        hole = prog.instance(hole_proto, i)
         hole = prog.locate(hole, pos=pos)
         pcb = prog.cut(pcb, hole)
 

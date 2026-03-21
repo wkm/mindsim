@@ -60,6 +60,8 @@ class OcctBackend:
     """Executes ShapeScript ops against build123d/OCCT."""
 
     def execute(self, program: ShapeScript) -> ExecutionResult:
+        import copy
+
         from build123d import (
             Align,
             Box,
@@ -142,8 +144,6 @@ class OcctBackend:
 
                 case CopyOp(ref=ref, source=src, tag=tag):
                     # copy.copy() creates an independent clone of the OCCT solid
-                    import copy
-
                     s = shapes[src.id]
                     shapes[ref.id] = copy.copy(s)
                     if tag:
@@ -151,11 +151,9 @@ class OcctBackend:
                     tags.propagate_transform(ref, src)
 
                 case RadialArrayOp(ref=ref, source=src, count=n, axis=axis, tag=tag):
-                    import copy as _copy
-
                     s = shapes[src.id]
                     step = 360.0 / n
-                    arr = s  # clone 0 = original at angle 0
+                    clones = [s]  # include original at angle 0
                     for i in range(1, n):
                         angle = i * step
                         if axis == "z":
@@ -164,10 +162,13 @@ class OcctBackend:
                             euler = (0, angle, 0)
                         else:
                             euler = (angle, 0, 0)
-                        clone = _copy.copy(s)
-                        clone = clone.moved(Location((0, 0, 0), euler))
-                        arr = _as_solid(arr.fuse(clone))
-                    shapes[ref.id] = arr
+                        clone = copy.copy(s)
+                        clones.append(clone.moved(Location((0, 0, 0), euler)))
+                    # Batch fuse all clones in one OCCT operation
+                    if len(clones) == 1:
+                        shapes[ref.id] = clones[0]
+                    else:
+                        shapes[ref.id] = _as_solid(clones[0].fuse(*clones[1:]))
                     if tag:
                         tags.declare(tag, ref)
 
