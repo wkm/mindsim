@@ -1567,7 +1567,16 @@ export class Viewport3D {
       }
     }
     if (this._animCb) this._animCb();
-    if (this._edgeC) this._edgeC.render(); else this._ren.render(this._scene, this._cam);
+    // When section plane is active, render directly (not via edge composer)
+    // because the stencil buffer for section caps only works on the screen
+    // framebuffer, not on the EffectComposer's internal render target.
+    if (this._secOn) {
+      this._ren.render(this._scene, this._cam);
+    } else if (this._edgeC) {
+      this._edgeC.render();
+    } else {
+      this._ren.render(this._scene, this._cam);
+    }
     if (this._meas.enabled || this._meas.measurements.length > 0) this._meas.update();
     // Sync orientation cube
     this._syncOrientationCube();
