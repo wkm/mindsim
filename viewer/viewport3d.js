@@ -1360,6 +1360,9 @@ export class Viewport3D {
     if (polygons.length > 0) {
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
       if (capGeom) {
+        // Hide the section viz plane — caps show the cut position
+        if (this._secViz) this._secViz.visible = false;
+
         // Determine cap color from the first mesh's material or callback
         let capColor;
         if (this._sectionCapColorFn) {
@@ -1376,6 +1379,9 @@ export class Viewport3D {
         const capMat = new THREE.MeshBasicMaterial({
           map: hatchTex,
           side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
         });
         const capMesh = new THREE.Mesh(capGeom, capMat);
         capMesh.raycast = () => {};
