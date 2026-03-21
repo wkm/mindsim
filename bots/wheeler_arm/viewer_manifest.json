@@ -411,6 +411,16 @@
       "shapescript_component": "STS3215"
     },
     {
+      "id": "horn_left_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "horn_left_wheel.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
       "id": "servo_right_wheel",
       "name": "STS3215",
       "kind": "purchased",
@@ -431,6 +441,16 @@
       ],
       "mass": 0.055,
       "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_right_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "horn_right_wheel.stl",
+      "shapescript_component": "horn:STS3215"
     },
     {
       "id": "servo_shoulder_yaw",
@@ -462,103 +482,7 @@
       "parent_body": "base",
       "joint": "shoulder_yaw",
       "mesh": "horn_shoulder_yaw.stl",
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "servo_shoulder_pitch",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "turntable",
-      "joint": "shoulder_pitch",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.0325
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_shoulder_pitch",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "turntable",
-      "joint": "shoulder_pitch",
-      "mesh": "horn_shoulder_pitch.stl",
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "servo_elbow",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "upper_arm",
-      "joint": "elbow",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.1325
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_elbow",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "upper_arm",
-      "joint": "elbow",
-      "mesh": "horn_elbow.stl",
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "servo_wrist",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "forearm",
-      "joint": "wrist",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.0125,
-        0.0,
-        0.084
-      ],
-      "quat": [
-        1.0,
-        0.0,
-        0.0,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_wrist",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "forearm",
-      "joint": "wrist",
-      "mesh": "horn_wrist.stl",
-      "shapescript_component": "STS3215"
+      "shapescript_component": "horn:STS3215"
     },
     {
       "id": "comp_base_pi",
@@ -601,7 +525,7 @@
       "mount_label": "wheel",
       "mesh": "comp_left_rim_wheel.stl",
       "pos": [
-        0.0,
+        -0.07,
         0.0,
         0.0
       ],
@@ -617,12 +541,108 @@
       "mount_label": "wheel",
       "mesh": "comp_right_rim_wheel.stl",
       "pos": [
-        0.0,
+        0.07,
         0.0,
         0.0
       ],
       "mass": 0.022,
       "shapescript_component": "Pololu 90x10mm Wheel"
+    },
+    {
+      "id": "servo_shoulder_pitch",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.016,
+        0.0,
+        0.0725
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_shoulder_pitch",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "horn_shoulder_pitch.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_elbow",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.016,
+        0.0,
+        0.1925
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_elbow",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "horn_elbow.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_wrist",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.0125,
+        0.0,
+        0.264
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_wrist",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "horn_wrist.stl",
+      "shapescript_component": "horn:STS3215"
     },
     {
       "id": "comp_hand_camera",
@@ -635,7 +655,7 @@
       "pos": [
         0.0,
         0.008,
-        0.0
+        0.28
       ],
       "mass": 0.003,
       "shapescript_component": "OV5647"
