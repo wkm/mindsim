@@ -546,8 +546,6 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     for body in bot.all_bodies:
         body_world_pos = world_positions[body.name]
         for joint in body.joints:
-            if joint.servo.continuous:
-                continue
             params = horn_disc_params(joint.servo)
             if params is None:
                 continue

@@ -206,23 +206,22 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 }
             )
 
-            # Horn disc part (non-continuous joints only)
-            if not servo.continuous:
-                from botcad.bracket import horn_disc_params
+            # Horn disc part (all joints — wheels attach via horn too)
+            from botcad.bracket import horn_disc_params
 
-                if horn_disc_params(servo) is not None:
-                    manifest["parts"].append(
-                        {
-                            "id": f"horn_{joint.name}",
-                            "name": "Horn disc",
-                            "kind": "purchased",
-                            "category": "horn",
-                            "parent_body": body.name,
-                            "joint": joint.name,
-                            "mesh": f"horn_{joint.name}.stl",
-                            "shapescript_component": servo.name,
-                        }
-                    )
+            if horn_disc_params(servo) is not None:
+                manifest["parts"].append(
+                    {
+                        "id": f"horn_{joint.name}",
+                        "name": "Horn disc",
+                        "kind": "purchased",
+                        "category": "horn",
+                        "parent_body": body.name,
+                        "joint": joint.name,
+                        "mesh": f"horn_{joint.name}.stl",
+                        "shapescript_component": servo.name,
+                    }
+                )
 
     # 2. Mounted components (battery, camera, Pi, etc.)
     for body in bot.all_bodies:
