@@ -15,6 +15,8 @@
     <mesh name="hardware_M3_shc_mesh" file="hardware_M3_shc.stl" scale="1 1 1"/>
     <mesh name="hardware_M2_shc_mesh" file="hardware_M2_shc.stl" scale="1 1 1"/>
     <mesh name="hardware_M2.5_shc_mesh" file="hardware_M2.5_shc.stl" scale="1 1 1"/>
+    <mesh name="horn_left_wheel_mesh" file="horn_left_wheel.stl" scale="1 1 1"/>
+    <mesh name="horn_right_wheel_mesh" file="horn_right_wheel.stl" scale="1 1 1"/>
     <mesh name="wire_servo_bus_base_0_mesh" file="wire_servo_bus_base_0.stl" scale="1 1 1"/>
     <mesh name="wire_servo_bus_base_1_mesh" file="wire_servo_bus_base_1.stl" scale="1 1 1"/>
     <mesh name="wire_servo_bus_base_2_mesh" file="wire_servo_bus_base_2.stl" scale="1 1 1"/>
@@ -85,6 +87,7 @@
       <body name="left_rim" pos="-0.073000 0.000000 0.000000">
         <inertial pos="-0.000000 0.000000 -0.000000" mass="0.042513" fullinertia="4.249061e-05 2.891092e-05 4.357587e-05 -1.873344e-22 3.105449e-21 1.293483e-21"/>
         <joint name="left_wheel" type="hinge" pos="0.008000 -0.000000 -0.000000" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>
+        <geom name="left_wheel_horn_disc" type="mesh" mesh="horn_left_wheel_mesh" pos="-0.001000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="left_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
         <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 -0.707107 0.000000"/>
         <geom name="mount_left_rim_wheel_m1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.000000 0.000000 0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
@@ -97,6 +100,7 @@
       <body name="right_rim" pos="0.073000 0.000000 0.000000">
         <inertial pos="0.000000 0.000000 -0.000000" mass="0.042513" fullinertia="4.249061e-05 2.891092e-05 4.357587e-05 -2.107546e-22 -3.114633e-21 -1.904663e-21"/>
         <joint name="right_wheel" type="hinge" pos="-0.008000 -0.000000 -0.000000" axis="1.000000 0.000000 0.000000" damping="0.0100"/>
+        <geom name="right_wheel_horn_disc" type="mesh" mesh="horn_right_wheel_mesh" pos="0.001000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="right_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
         <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 0.707107 0.000000"/>
         <geom name="mount_right_rim_wheel_m1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.000000 0.000000 -0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>

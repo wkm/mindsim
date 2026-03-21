@@ -203,6 +203,16 @@
       "shapescript_component": "STS3215"
     },
     {
+      "id": "horn_left_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "horn_left_wheel.stl",
+      "shapescript_component": "STS3215"
+    },
+    {
       "id": "servo_right_wheel",
       "name": "STS3215",
       "kind": "purchased",
@@ -222,6 +232,16 @@
         0.0
       ],
       "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_right_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "horn_right_wheel.stl",
       "shapescript_component": "STS3215"
     },
     {
