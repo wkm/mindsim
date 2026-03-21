@@ -23,6 +23,8 @@ train:
 
 test:
 	uv run pytest tests/ -v
+	@echo "Running viewer JS tests..."
+	@node viewer/tests/test-section-caps.js
 
 smoketest:
 	uv run mjpython main.py smoketest
