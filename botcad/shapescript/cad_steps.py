@@ -35,6 +35,7 @@ def shapescript_to_cad_steps(
         FuseOp,
         LocateOp,
         PrebuiltOp,
+        RadialArrayOp,
         SphereOp,
     )
 
@@ -111,7 +112,13 @@ def shapescript_to_cad_steps(
                 )
 
             case _:
-                pass
+                # Catch-all for any other shape-producing op (Fillet, Chamfer, etc.)
+                if hasattr(op, "ref"):
+                    label = type(op).__name__
+                    tag = getattr(op, "tag", None)
+                    if tag:
+                        label += f" ({tag})"
+                    steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
     return steps
 
