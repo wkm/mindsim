@@ -476,14 +476,17 @@ class Bot:
     def _generate_implicit_constraints(self) -> None:
         """Auto-generate clearance constraints from assembly structure.
 
-        Focuses on high-value constraints that catch real bugs:
-        - Child body must not intersect parent body at rest pose
-        - Wheel must not intersect its servo
+        Default rule: NO two bodies should intersect (min_distance=0).
+        For each joint, all bodies in the joint neighborhood are checked
+        against each other: parent body, child body, servo, horn.
+        Mounted components are checked against their parent body.
         """
         existing = {(c.body_a, c.body_b) for c in self._clearance_constraints}
         existing |= {(c.body_b, c.body_a) for c in self._clearance_constraints}
 
         def _add(a: str, b: str, min_dist: float, label: str) -> None:
+            if a == b:
+                return
             if (a, b) not in existing and (b, a) not in existing:
                 self._clearance_constraints.append(
                     ClearanceConstraint(a, b, min_dist, label)
@@ -494,22 +497,39 @@ class Bot:
             if body.kind != BodyKind.FABRICATED:
                 continue
             for joint in body.joints:
-                # Child body must not intersect parent at rest pose
+                # Collect all bodies at this joint
+                joint_bodies = []
+                joint_bodies.append((body.name, "parent"))
                 if joint.child:
+                    joint_bodies.append((joint.child.name, "child"))
+                servo_name = f"servo_{joint.name}"
+                if any(b.name == servo_name for b in self.all_bodies):
+                    joint_bodies.append((servo_name, "servo"))
+                horn_name = f"horn_{joint.name}"
+                if any(b.name == horn_name for b in self.all_bodies):
+                    joint_bodies.append((horn_name, "horn"))
+
+                # Check all pairs — no two should intersect
+                for ia in range(len(joint_bodies)):
+                    for ib in range(ia + 1, len(joint_bodies)):
+                        name_a, role_a = joint_bodies[ia]
+                        name_b, role_b = joint_bodies[ib]
+                        _add(
+                            name_a,
+                            name_b,
+                            0.0,
+                            f"{joint.name} {role_a}-{role_b} clearance",
+                        )
+
+            # Mounted components must not intersect parent body
+            for mount in body.mounts:
+                comp_name = f"comp_{body.name}_{mount.label}"
+                if any(b.name == comp_name for b in self.all_bodies):
                     _add(
-                        joint.child.name,
+                        comp_name,
                         body.name,
                         0.0,
-                        f"{joint.name} child-parent clearance",
-                    )
-                # Wheel must not intersect servo
-                if joint.child and joint.child.is_wheel_body:
-                    servo_name = f"servo_{joint.name}"
-                    _add(
-                        joint.child.name,
-                        servo_name,
-                        0.0005,
-                        f"{joint.name} wheel-servo clearance",
+                        f"{mount.label} mount clearance",
                     )
 
     def body(
