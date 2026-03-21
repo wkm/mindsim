@@ -523,9 +523,132 @@ class Bot:
         self._validate_bracket_rom()
         solve_packing(self)
 
+        # After packing has positioned servos and components, compute
+        # world-frame transforms for structural bodies and create
+        # purchased body instances (servos, horns, mounted components).
+        self._compute_world_transforms()
+        self._create_purchased_bodies()
+
         from botcad.routing import solve_routing
 
         self.wire_routes = solve_routing(self)
+
+    def _compute_world_transforms(self) -> None:
+        """Walk kinematic tree and set world_pos/world_quat on each structural body.
+
+        At rest pose (all joints at 0 deg), body frames are axis-aligned with
+        their parents, so world position is the cumulative sum of joint.pos
+        vectors up the chain.  Same logic as _compute_world_positions() in
+        cad.py but stores results on Body objects directly.
+        """
+
+        def _walk(body: Body, parent_world_pos: Vec3) -> None:
+            body.world_pos = parent_world_pos
+            # Structural bodies at rest have identity orientation (frame_quat
+            # describes local geometry rotation, not world orientation).
+            body.world_quat = (1.0, 0.0, 0.0, 0.0)
+            for joint in body.joints:
+                if joint.child is not None:
+                    child = joint.child
+                    if child.is_wheel_body:
+                        offset = joint.wheel_outboard_offset()
+                        ax, ay, az = joint.axis
+                        child_pos: Vec3 = (
+                            parent_world_pos[0] + joint.pos[0] + ax * offset,
+                            parent_world_pos[1] + joint.pos[1] + ay * offset,
+                            parent_world_pos[2] + joint.pos[2] + az * offset,
+                        )
+                    else:
+                        child_pos = (
+                            parent_world_pos[0] + joint.pos[0],
+                            parent_world_pos[1] + joint.pos[1],
+                            parent_world_pos[2] + joint.pos[2],
+                        )
+                    _walk(child, child_pos)
+
+        if self.root is not None:
+            _walk(self.root, (0.0, 0.0, 0.0))
+
+    def _create_purchased_bodies(self) -> None:
+        """Create Body instances for all purchased parts (servos, horns, mounts).
+
+        Positions are derived from the parent structural body's world_pos
+        combined with the solved placement offsets from the packing solver.
+        Appended to all_bodies so exporters can iterate a single list.
+        """
+        from botcad.bracket import horn_disc_params
+
+        # Iterate over a snapshot of structural bodies (avoid mutating
+        # all_bodies while iterating).
+        structural_bodies = list(self.all_bodies)
+
+        for body in structural_bodies:
+            bwp = body.world_pos
+
+            # --- Servo bodies for each joint ---
+            for joint in body.joints:
+                servo_body = Body(
+                    name=f"servo_{joint.name}",
+                    kind=BodyKind.PURCHASED,
+                    parent_body_name=body.name,
+                )
+                # Servo center is in the parent body frame; transform to world
+                sc = joint.solved_servo_center
+                servo_body.world_pos = (
+                    bwp[0] + sc[0],
+                    bwp[1] + sc[1],
+                    bwp[2] + sc[2],
+                )
+                servo_body.world_quat = joint.solved_servo_quat
+                servo_body.mesh_file = f"servo_{joint.servo.name}.stl"
+                servo_body._component = joint.servo
+                self.all_bodies.append(servo_body)
+
+                # --- Horn disc body ---
+                params = horn_disc_params(joint.servo)
+                if params is not None:
+                    horn_body = Body(
+                        name=f"horn_{joint.name}",
+                        kind=BodyKind.PURCHASED,
+                        parent_body_name=body.name,
+                    )
+                    # Horn sits at the joint point, offset half-thickness
+                    # along the joint axis.
+                    jx = bwp[0] + joint.pos[0]
+                    jy = bwp[1] + joint.pos[1]
+                    jz = bwp[2] + joint.pos[2]
+                    ax, ay, az = joint.axis
+                    half_t = params.thickness / 2
+                    horn_body.world_pos = (
+                        jx + ax * half_t,
+                        jy + ay * half_t,
+                        jz + az * half_t,
+                    )
+                    # Orientation: Z-up rotated to joint axis
+                    from botcad.geometry import rotation_between
+
+                    horn_body.world_quat = rotation_between((0.0, 0.0, 1.0), joint.axis)
+                    horn_body.mesh_file = f"horn_{joint.name}.stl"
+                    horn_body._component = joint.servo  # horn is derived from servo
+                    self.all_bodies.append(horn_body)
+
+            # --- Mounted components (battery, camera, Pi, etc.) ---
+            for mount in body.mounts:
+                comp_body = Body(
+                    name=f"comp_{body.name}_{mount.label}",
+                    kind=BodyKind.PURCHASED,
+                    parent_body_name=body.name,
+                )
+                rp = mount.resolved_pos
+                comp_body.world_pos = (
+                    bwp[0] + rp[0],
+                    bwp[1] + rp[1],
+                    bwp[2] + rp[2],
+                )
+                comp_body.world_quat = body.world_quat  # same orientation
+                comp_body.mesh_file = f"comp_{body.name}_{mount.label}.stl"
+                comp_body._component = mount.component
+                self.all_bodies.append(comp_body)
 
     def _validate_bracket_rom(self) -> None:
         """Warn if any joint's ROM exceeds its bracket style's safe range."""

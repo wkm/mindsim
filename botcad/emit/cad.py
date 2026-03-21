@@ -334,8 +334,14 @@ def build_cad(bot: Bot) -> CadModel:
         cache = DiskCache()
         cache_hits = 0
 
-    n = len(bot.all_bodies)
-    for i, body in enumerate(bot.all_bodies):
+    # Only build geometry for fabricated (structural) bodies.  Purchased parts
+    # (servos, horns, components) have their own solid builders and are handled
+    # separately in emit_cad().
+    from botcad.skeleton import BodyKind
+
+    fabricated_bodies = [b for b in bot.all_bodies if b.kind == BodyKind.FABRICATED]
+    n = len(fabricated_bodies)
+    for i, body in enumerate(fabricated_bodies):
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
         pj = parent_joint_map.get(body.name)
@@ -664,10 +670,15 @@ def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
     Currently every body-to-body connection goes through a servo joint, so
     each body is its own group. When the skeleton DSL supports rigid
     attachments (bodies without joints), this will group them.
+
+    Only fabricated bodies are grouped — purchased parts have separate meshes.
     """
+    from botcad.skeleton import BodyKind
+
     groups: dict[str, list[Body]] = {}
     for body in bot.all_bodies:
-        groups[body.name] = [body]
+        if body.kind == BodyKind.FABRICATED:
+            groups[body.name] = [body]
     return groups
 
 

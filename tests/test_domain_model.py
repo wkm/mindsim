@@ -318,8 +318,13 @@ class TestBotBuild:
         bot = mod.build()
         bot.solve()
 
-        # 7 bodies: base, turntable, upper_arm, forearm, wrist, wrist_roll, jaw
-        assert len(bot.all_bodies) == 7
+        # 7 structural bodies: base, turntable, upper_arm, forearm, wrist, wrist_roll, jaw
+        from botcad.skeleton import BodyKind
+
+        structural = [b for b in bot.all_bodies if b.kind == BodyKind.FABRICATED]
+        assert len(structural) == 7
+        # Purchased bodies (servos, horns, components) are also in all_bodies
+        assert len(bot.all_bodies) > 7
         # 6 joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
         assert len(bot.all_joints) == 6
 

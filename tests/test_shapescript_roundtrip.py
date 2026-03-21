@@ -334,6 +334,11 @@ class TestBuildCadIntegration:
 
         cad = build_cad(bot_fixture)
 
-        assert len(cad.body_solids) == len(bot_fixture.all_bodies)
+        from botcad.skeleton import BodyKind
+
+        fabricated = [
+            b for b in bot_fixture.all_bodies if b.kind == BodyKind.FABRICATED
+        ]
+        assert len(cad.body_solids) == len(fabricated)
         for name, solid in cad.body_solids.items():
             assert abs(solid.volume) > 1e-9, f"{name} has zero volume"
