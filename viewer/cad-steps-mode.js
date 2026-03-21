@@ -288,6 +288,7 @@ class CadStepsViewer {
     });
     this.meshGroup = this.viewport.addGroup('body');
     this.toolGroup = this.viewport.addGroup('tool');
+    this.contextGroup = this.viewport.addGroup('context');  // body-so-far for create/locate steps
     this.ghostGroup = this.viewport.addGroup('ghost');
   }
 
@@ -578,24 +579,48 @@ class CadStepsViewer {
     }
     this._scrollToLine(idx);
 
-    // Always show the result of the current step — the cumulative body
-    // at this point in the program. Tool overlay shows what was cut/fused.
-    const bodyIdx = idx;
-    const geometry = await this._loadStepSTL(bodyIdx);
+    // Load current step's geometry
+    const geometry = await this._loadStepSTL(idx);
     if (!geometry) return;
 
-    // Remove old meshes
-    while (this.meshGroup.children.length > 0) {
-      const child = this.meshGroup.children[0];
-      this.meshGroup.remove(child);
-      if (child.isLineSegments && child.geometry) child.geometry.dispose();
-      if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
-    }
+    // Clear meshes (body + context groups)
+    const clearMeshGroup = (group) => {
+      while (group.children.length > 0) {
+        const child = group.children[0];
+        group.remove(child);
+        if (child.isLineSegments && child.geometry) child.geometry.dispose();
+        if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
+      }
+    };
+    clearMeshGroup(this.meshGroup);
+    clearMeshGroup(this.contextGroup);
 
-    // Body solid color based on op type:
-    // - create: blue (new primitive)
-    // - locate: purple (placement)
-    // - cut/union: neutral gray (the tool overlay provides the color)
+    // Determine if this step needs a body-context mesh.
+    // Cut/Fuse results ARE the cumulative body — no extra context needed.
+    // Create/Locate/Call produce a "side" shape — show the most recent
+    // body (last cut/fuse result) as translucent context.
+    const needsContext = (step.op === 'create' || step.op === 'locate');
+    if (needsContext) {
+      const ctxIdx = this._findLastBodyStep(idx);
+      if (ctxIdx >= 0) {
+        const ctxGeom = await this._loadStepSTL(ctxIdx);
+        if (ctxGeom) {
+          const ctxMat = new THREE.MeshPhysicalMaterial({
+            color: 0xCED9E0, transparent: true, opacity: 0.25,
+            roughness: 0.8, depthWrite: false,
+          });
+          this.contextGroup.add(new THREE.Mesh(ctxGeom, ctxMat));
+          const ctxEdges = new THREE.EdgesGeometry(ctxGeom, EDGE_THRESHOLD);
+          const ctxLines = new THREE.LineSegments(ctxEdges,
+            new THREE.LineBasicMaterial({ color: 0x5C7080, transparent: true, opacity: 0.2 }));
+          ctxLines.raycast = () => {};
+          this.contextGroup.add(ctxLines);
+        }
+      }
+    }
+    this.contextGroup.visible = needsContext && !this.isolateMode;
+
+    // Focus shape color based on op type
     let bodyColor = 0xCED9E0;
     if (step.op === 'create') {
       bodyColor = 0x2B95D6;
@@ -630,6 +655,15 @@ class CadStepsViewer {
     if (this.isolateMode) {
       this.viewport.frameOnGeometry(geometry);
     }
+  }
+
+  /** Find the most recent cut/fuse step before `idx` — that's the body-so-far. */
+  _findLastBodyStep(idx) {
+    for (let i = idx - 1; i >= 0; i--) {
+      const op = this.steps[i]?.op;
+      if (op === 'cut' || op === 'union') return i;
+    }
+    return -1;
   }
 
   async _updateToolMesh() {
