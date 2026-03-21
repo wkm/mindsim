@@ -39,7 +39,7 @@ export class ExploreMode {
     const treePanel = document.getElementById('tree-panel');
     if (treePanel) treePanel.style.display = 'block';
 
-    // Build component tree with ShapeScript navigation support
+    // Build component tree with ShapeScript navigation and visibility support
     this.tree = new ComponentTree(
       document.getElementById('tree-content'),
       this.manifest,
@@ -47,6 +47,9 @@ export class ExploreMode {
       {
         onShapeScript: (url) => { window.location.href = url; },
         onDoubleClick: (nodeId, data) => this._onDoubleClick(nodeId, data),
+        onToggleVisibility: (bodyName, visible) => this._setBodyVisible(bodyName, visible),
+        onIsolate: (bodyName) => this._isolateBody(bodyName),
+        onShowAll: () => this._showAllBodies(),
       }
     );
     this.tree.build();
@@ -186,6 +189,32 @@ export class ExploreMode {
         this.focus.ghost(bodyIds);
         this.viz.clear();
       }
+    }
+  }
+
+  // ── Body visibility controls (driven by tree node actions) ──
+
+  /** Set a single body's Three.js group visibility. */
+  _setBodyVisible(bodyName, visible) {
+    const bodyId = this.bodyNameToId[bodyName];
+    if (bodyId === undefined) return;
+    const group = this.ctx.bodies[bodyId];
+    if (group) group.visible = visible;
+  }
+
+  /** Hide all bodies except the named one. */
+  _isolateBody(bodyName) {
+    for (const [name, id] of Object.entries(this.bodyNameToId)) {
+      const group = this.ctx.bodies[id];
+      if (group) group.visible = (name === bodyName);
+    }
+  }
+
+  /** Restore all bodies to visible. */
+  _showAllBodies() {
+    for (const id of Object.values(this.bodyNameToId)) {
+      const group = this.ctx.bodies[id];
+      if (group) group.visible = true;
     }
   }
 

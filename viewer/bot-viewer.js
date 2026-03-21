@@ -40,10 +40,67 @@ export async function initBotViewer(botName) {
   // Three.js — delegated to Viewport3D
   const container = document.getElementById('canvas-container');
 
+  // Restore persisted tree panel width or use default
+  const TREE_MIN_WIDTH = 200;
+  const TREE_MAX_WIDTH = 500;
+  let treePanelWidth = TREE_PANEL_WIDTH;
+  try {
+    const saved = localStorage.getItem('mindsim-tree-panel-width');
+    if (saved) {
+      const w = parseInt(saved, 10);
+      if (w >= TREE_MIN_WIDTH && w <= TREE_MAX_WIDTH) treePanelWidth = w;
+    }
+  } catch { /* ignore */ }
+
   function getTreePanelWidth() {
     const treePanel = document.getElementById('tree-panel');
-    return (treePanel && treePanel.style.display !== 'none') ? TREE_PANEL_WIDTH : 0;
+    return (treePanel && treePanel.style.display !== 'none') ? treePanelWidth : 0;
   }
+
+  // Apply initial tree panel width
+  const treePanelEl = document.getElementById('tree-panel');
+  if (treePanelEl) treePanelEl.style.width = treePanelWidth + 'px';
+
+  // ── Resizable tree panel ──
+  function initTreeResize() {
+    const panel = document.getElementById('tree-panel');
+    if (!panel) return;
+
+    const handle = document.createElement('div');
+    handle.className = 'tree-resize-handle';
+    panel.appendChild(handle);
+
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      startX = e.clientX;
+      startWidth = treePanelWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const newWidth = Math.max(TREE_MIN_WIDTH, Math.min(TREE_MAX_WIDTH, startWidth + dx));
+      treePanelWidth = newWidth;
+      panel.style.width = newWidth + 'px';
+      updateCanvasLayout();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      try { localStorage.setItem('mindsim-tree-panel-width', String(treePanelWidth)); } catch { /* ignore */ }
+    });
+  }
+  initTreeResize();
 
   // Position container between tree panel and side panel
   container.style.left = getTreePanelWidth() + 'px';
