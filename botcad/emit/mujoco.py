@@ -31,10 +31,19 @@ from botcad.component import Vec3 as Vec3Type
 from botcad.fasteners import fastener_key as _hw_key
 from botcad.fasteners import fastener_stl_stem as _hw_name
 from botcad.geometry import rotate_vec, rotation_between
-from botcad.skeleton import BaseType, BodyShape
+from botcad.skeleton import BaseType, BodyKind, BodyShape
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
+
+
+def _relative_pos(pb_world: Vec3Type, parent_world: Vec3Type) -> Vec3Type:
+    """Convert a purchased body's world position to parent-body-relative position."""
+    return (
+        pb_world[0] - parent_world[0],
+        pb_world[1] - parent_world[1],
+        pb_world[2] - parent_world[2],
+    )
 
 
 def emit_mujoco(bot: Bot, output_dir: Path) -> None:
@@ -58,9 +67,10 @@ def _build_bot_xml(bot: Bot) -> str:
     default = SubElement(root, "default")
     SubElement(default, "motor", ctrlrange="-1 1", gear="1.0")
 
-    # Assets (mesh references)
+    # Assets (mesh references) — structural bodies only
     asset = SubElement(root, "asset")
-    for body in bot.all_bodies:
+    structural_bodies = [b for b in bot.all_bodies if b.kind != BodyKind.PURCHASED]
+    for body in structural_bodies:
         mesh_name = f"{body.name}_mesh"
         SubElement(
             asset,
@@ -71,7 +81,7 @@ def _build_bot_xml(bot: Bot) -> str:
         )
 
     # Component mesh assets (Pi, battery, camera, etc.)
-    for body in bot.all_bodies:
+    for body in structural_bodies:
         if body.is_wheel_body:
             continue
         for mount in body.mounts:
@@ -99,7 +109,7 @@ def _build_bot_xml(bot: Bot) -> str:
 
     # Hardware mesh assets (one per unique designation+head_type)
     seen_hw: set[tuple[str, str]] = set()
-    for body in bot.all_bodies:
+    for body in structural_bodies:
         for joint in body.joints:
             for ear in joint.servo.mounting_ears:
                 k = _hw_key(ear)
@@ -137,7 +147,7 @@ def _build_bot_xml(bot: Bot) -> str:
                     )
 
     # Horn mesh assets
-    for body in bot.all_bodies:
+    for body in structural_bodies:
         for joint in body.joints:
             from botcad.bracket import horn_disc_params
 
@@ -173,7 +183,7 @@ def _build_bot_xml(bot: Bot) -> str:
     # to cover compact mechanisms like wrist-roll + gripper chains.
     contact = SubElement(root, "contact")
     exclude_pairs: set[tuple[str, str]] = set()
-    for body in bot.all_bodies:
+    for body in structural_bodies:
         for j1 in body.joints:
             if j1.child is None:
                 continue
@@ -352,15 +362,21 @@ def _emit_body_tree(
         SubElement(body_el, "joint", **joint_attribs)
 
     # Horn disc geom (purchased part visualization on child bodies)
+    # The horn belongs to the parent structural body in the assembly tree,
+    # but is placed as a geom on the *child* MuJoCo body (this body).
+    # Read position from the purchased horn Body, converting world→relative
+    # to this child body's world position.
     if parent_joint is not None:
-        from botcad.bracket import horn_disc_params
+        # Find the horn body for this joint (parented to the parent structural body)
+        horn_key = f"horn_{parent_joint.name}"
+        horn_pb = None
+        for pb in bot.all_bodies:
+            if pb.kind == BodyKind.PURCHASED and pb.name == horn_key:
+                horn_pb = pb
+                break
 
-        params = horn_disc_params(parent_joint.servo)
-        if params is not None:
-            # Disc is exported at center; MuJoCo positions it with offset
-            ax, ay, az = parent_joint.axis
-            ht = params.thickness / 2
-            disc_pos = (ax * ht, ay * ht, az * ht)
+        if horn_pb is not None:
+            disc_pos = _relative_pos(horn_pb.world_pos, body.world_pos)
 
             disc_attribs: dict[str, str] = {
                 "name": f"{parent_joint.name}_horn_disc",
@@ -374,11 +390,8 @@ def _emit_body_tree(
             }
 
             # Rotation is already baked into the horn STL (it was oriented in cad.py)
-            # So we don't need quat here if we exported it pre-rotated.
-            # WAIT: I exported it pre-rotated in cad.py using _orient_z_to_axis.
-            # But MuJoCo mesh assets are just point-clouds.
-            # Actually, _orient_z_to_axis in cad.py returned the rotated solid.
-            # So the STL is already in the correct orientation relative to disc_pos=0.
+            # So we don't need quat here — the STL is already in the correct
+            # orientation relative to the disc position.
             SubElement(body_el, "geom", **disc_attribs)
 
     # Visual geom (mesh) — for wheel bodies, mesh is visual-only;
@@ -417,7 +430,7 @@ def _emit_body_tree(
         SubElement(body_el, "geom", **cyl_attribs)
 
     # Camera mount
-    _emit_camera(body_el, body)
+    _emit_camera(body_el, body, bot)
 
     # IMU site on root body
     if is_root:
@@ -429,14 +442,29 @@ def _emit_body_tree(
             size="0.005",
         )
 
-    # Mounted component visualization — meshes at resolved positions
-    _emit_mounted_components(body_el, body, is_wheel=body.is_wheel_body)
+    # Mounted component visualization — meshes at positions from purchased bodies
+    _emit_mounted_components(body_el, body, bot, is_wheel=body.is_wheel_body)
 
-    # Servo visualization geoms — detailed mesh at each joint
+    # Servo visualization geoms — read positions from purchased Body instances
+    # Build lookup of purchased bodies parented to this structural body
+    purchased = [
+        pb
+        for pb in bot.all_bodies
+        if pb.kind == BodyKind.PURCHASED and pb.parent_body_name == body.name
+    ]
+    servo_bodies = {pb.name: pb for pb in purchased if pb.name.startswith("servo_")}
+
     joint_placements: dict[str, tuple] = {}
     for joint in body.joints:
-        center = joint.solved_servo_center
-        quat = joint.solved_servo_quat
+        servo_key = f"servo_{joint.name}"
+        sb = servo_bodies.get(servo_key)
+        if sb is not None:
+            center = _relative_pos(sb.world_pos, body.world_pos)
+            quat = sb.world_quat
+        else:
+            # Fallback (should not happen after solve)
+            center = joint.solved_servo_center
+            quat = joint.solved_servo_quat
         joint_placements[joint.name] = (center, quat)
         SubElement(
             body_el,
@@ -453,7 +481,7 @@ def _emit_body_tree(
         )
 
     # Mounting hardware visualization — screws at ear/mount positions
-    _emit_mounting_hardware(body_el, body, joint_placements)
+    _emit_mounting_hardware(body_el, body, joint_placements, bot)
 
     # Wire route visualization — segments on their respective bodies
     _emit_body_wires(body_el, body, bot)
@@ -467,22 +495,46 @@ def _emit_body_tree(
 
 
 def _emit_mounted_components(
-    parent_el: Element, body: Body, is_wheel: bool = False
+    parent_el: Element, body: Body, bot: Bot, is_wheel: bool = False
 ) -> None:
-    """Emit visualization geoms for all mounted components (Pi, battery, camera, etc.)."""
+    """Emit visualization geoms for all mounted components (Pi, battery, camera, etc.).
+
+    Positions are read from purchased Body instances (world_pos converted to
+    parent-body-relative), not from mount.resolved_pos directly.
+    """
     if is_wheel:
         return  # wheel mesh already represents the component
+
+    # Build lookup of component purchased bodies for this structural body
+    comp_bodies: dict[str, Body] = {}
+    for pb in bot.all_bodies:
+        if (
+            pb.kind == BodyKind.PURCHASED
+            and pb.parent_body_name == body.name
+            and pb.name.startswith("comp_")
+        ):
+            comp_bodies[pb.name] = pb
+
     for mount in body.mounts:
         comp = mount.component
         r, g, b, a = comp.color
-        mesh_name = f"comp_{body.name}_{mount.label}_mesh"
+        comp_key = f"comp_{body.name}_{mount.label}"
+        mesh_name = f"{comp_key}_mesh"
+
+        # Read position from purchased Body, fall back to mount.resolved_pos
+        cb = comp_bodies.get(comp_key)
+        if cb is not None:
+            pos = _relative_pos(cb.world_pos, body.world_pos)
+        else:
+            pos = mount.resolved_pos
+
         SubElement(
             parent_el,
             "geom",
-            name=f"comp_{body.name}_{mount.label}",
+            name=comp_key,
             type="mesh",
             mesh=mesh_name,
-            pos=_fmt_vec3(mount.resolved_pos),
+            pos=_fmt_vec3(pos),
             rgba=f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
             contype="0",
             conaffinity="0",
@@ -494,8 +546,14 @@ def _emit_mounting_hardware(
     body_el: Element,
     body: Body,
     joint_placements: dict[str, tuple],
+    bot: Bot,
 ) -> None:
-    """Emit mesh geoms at screw/mounting positions."""
+    """Emit mesh geoms at screw/mounting positions.
+
+    Servo screw positions are derived from joint_placements (which come from
+    purchased Body world_pos). Component screw positions use the purchased
+    component Body's world_pos.
+    """
     from botcad.colors import COLOR_METAL_STEEL
 
     _SCREW_RGBA = COLOR_METAL_STEEL.with_alpha(0.9).rgba_str
@@ -567,11 +625,28 @@ def _emit_mounting_hardware(
     # Mount points are defined in component-local space. body.to_body_frame()
     # applies the body's frame_quat (e.g. Z→joint_axis for cylinders) so
     # positions and axes land in the correct orientation automatically.
+    # Component base position comes from purchased Body (world→relative).
+    comp_bodies: dict[str, Body] = {}
+    for pb in bot.all_bodies:
+        if (
+            pb.kind == BodyKind.PURCHASED
+            and pb.parent_body_name == body.name
+            and pb.name.startswith("comp_")
+        ):
+            comp_bodies[pb.name] = pb
+
     for mount in body.mounts:
+        comp_key = f"comp_{body.name}_{mount.label}"
+        cb = comp_bodies.get(comp_key)
+        if cb is not None:
+            base_pos = _relative_pos(cb.world_pos, body.world_pos)
+        else:
+            base_pos = mount.resolved_pos
+
         for mp in mount.component.mounting_points:
             mp_pos = body.to_body_frame(mount.rotate_point(mp.pos))
             mp_axis = body.to_body_frame(mount.rotate_point(mp.axis))
-            pos = _add_vec3(mount.resolved_pos, mp_pos)
+            pos = _add_vec3(base_pos, mp_pos)
             SubElement(
                 body_el,
                 "geom",
@@ -587,14 +662,32 @@ def _emit_mounting_hardware(
 from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
 
 
-def _emit_camera(parent_el: Element, body: Body) -> None:
-    """Emit camera element if this body has a camera mounted."""
+def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
+    """Emit camera element if this body has a camera mounted.
+
+    Camera position is read from the purchased Body instance.
+    """
     from botcad.component import CameraSpec
+
+    # Build lookup of component purchased bodies for this structural body
+    comp_bodies: dict[str, Body] = {}
+    for pb in bot.all_bodies:
+        if (
+            pb.kind == BodyKind.PURCHASED
+            and pb.parent_body_name == body.name
+            and pb.name.startswith("comp_")
+        ):
+            comp_bodies[pb.name] = pb
 
     for mount in body.mounts:
         if isinstance(mount.component, CameraSpec):
             cam = mount.component
-            pos = mount.resolved_pos
+            comp_key = f"comp_{body.name}_{mount.label}"
+            cb = comp_bodies.get(comp_key)
+            if cb is not None:
+                pos = _relative_pos(cb.world_pos, body.world_pos)
+            else:
+                pos = mount.resolved_pos
             # MuJoCo cameras look along local -Z.  Rotate +90° around X
             # so -Z maps to +Y (forward) and +Y maps to +Z (up).
             SubElement(
