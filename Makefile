@@ -58,7 +58,7 @@ lint:
 web:
 	pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \
 		"uv run mjpython main.py web --port 8081 --no-open" \
-		"sleep 5 && pnpm exec vite --open /viewer/"
+		"while ! curl -sf http://localhost:8081/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --open /viewer/"
 
 test-viewer:
 	pnpm exec playwright test --config viewer/tests/playwright.config.mjs
