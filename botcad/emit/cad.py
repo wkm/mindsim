@@ -1422,7 +1422,7 @@ def _make_wheel_solid(radius: float, width: float):
     tread_depth = 0.0008  # 0.8mm deep
     for i in range(n_treads):
         angle = i * (360 / n_treads)
-        tread = Box(tread_depth * 2, tire_w + 0.001, tread_w, align=C)
+        tread = Box(tread_depth * 2, tread_w, tire_w + 0.001, align=C)
         # Position at radius, then rotate around Z (wheel axle)
         tread = tread.moved(Location((radius, 0, 0)))
         tread = tread.moved(Location((0, 0, 0), (0, 0, angle)))

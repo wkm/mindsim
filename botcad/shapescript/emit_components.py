@@ -502,7 +502,8 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
     all_treads = None
     for i in range(n_treads):
         angle = i * (360 / n_treads)
-        tread = prog.box(tread_depth * 2, tire_w + 0.001, tread_w)
+        # Radial depth (X) × circumferential width (Y) × axle span (Z)
+        tread = prog.box(tread_depth * 2, tread_w, tire_w + 0.001)
         # Position at radius, then rotate around Z (wheel axle)
         tread = prog.locate(tread, pos=(radius, 0, 0))
         tread = prog.locate(tread, euler_deg=(0, 0, angle))
