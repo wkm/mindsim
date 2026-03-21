@@ -22,84 +22,6 @@ from botcad.components.camera import OV5647
 from botcad.skeleton import BodyShape, Bot
 
 
-def wheeler_base_solid():
-    from build123d import Align, Box, Cylinder, Location
-
-    # Dimensional constants
-    width = 0.130  # X: exactly spans to the servos at +/- 65mm
-    length = 0.080  # Y: long enough for battery and Pi Zero (rotated to run along Y)
-    height = 0.045  # Z
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-
-    # 1. Base block with filleted corners in Z
-    base = Box(width, length, height, align=C)
-
-    # Fillet vertical edges
-    vertical_edges = [
-        e for e in base.edges() if e.geom_type == "LINE" and abs(e.direction.Z) > 0.99
-    ]
-    if vertical_edges:
-        base = base.fillet(0.008, vertical_edges)
-
-    # 2. Main cavity for battery + electronics + camera
-    # We want approx 5mm thick walls, maybe thinner
-    wall = 0.005
-    cavity = Box(
-        width - wall * 2,
-        length - wall,
-        height,
-        align=(Align.CENTER, Align.CENTER, Align.MAX),
-    )
-    # cut from top, leaving a floor at the bottom
-    # We'll cut it such that it leaves exactly 'wall' (5mm) floor at the bottom
-    # Actually wait, align=MAX puts top face at Z=0. We'll shift it up
-    cavity = cavity.locate(Location((0, 0, height / 2)))
-    base = base - cavity
-
-    # 3. Pi Zero Mounting Standoffs
-    # The Pi is mounted at the top (top means exactly flush or slightly recessed)
-    # Pi Zero holes are at +/- 29mm X, +/- 11.5mm Y (rotated, so +/- 11.5mm X, +/- 29mm Y)
-    hole_pitch_x = 0.0115
-    hole_pitch_y = 0.029
-
-    # The Pi is positioned at "top", which resolves to Z = height/2 - pi_thickness/2
-    # pi dimensions are (0.065, 0.030, 0.005), rotated so (0.030, 0.065, 0.005)
-    # so Z = 0.045 / 2 - 0.005 / 2 = 0.020
-    # Standoff needs to reach Z = 0.020. Then the Pi sits on it.
-    pi_z = 0.020
-
-    standoffs = []
-    # 4 standoffs
-    for hx in [-hole_pitch_x, hole_pitch_x]:
-        for hy in [-hole_pitch_y, hole_pitch_y]:
-            # Cylinder from floor to pi_z
-            # Floor is at -height/2 + wall = -0.0225 + 0.005 = -0.0175
-            # So length = 0.020 - (-0.0175) = 0.0375
-            # We'll just build a full cylinder and rely on the base floor anchoring it
-            sh = pi_z - (-height / 2)  # from absolute bottom up to pi_z
-            standoff = Cylinder(
-                0.003, sh, align=(Align.CENTER, Align.CENTER, Align.MAX)
-            )
-            standoff = standoff.locate(Location((hx, hy, pi_z)))
-
-            # Screw hole for M2.5 (radius 1.1mm) cut from top of standoff down
-            hole = Cylinder(
-                0.0011, 0.010, align=(Align.CENTER, Align.CENTER, Align.MAX)
-            )
-            hole = hole.locate(Location((hx, hy, pi_z)))
-
-            standoff = standoff - hole
-            standoffs.append(standoff)
-
-    for s in standoffs:
-        base = base + s
-
-    # Remove the generic camera + battery cuts because botcad.cad already subtracts
-    # their bounding boxes from the solid exactly where they are mounted!
-    return base
-
-
 def build() -> Bot:
     """Define the wheeler_base robot."""
     bot = Bot("wheeler_base")
@@ -109,13 +31,13 @@ def build() -> Bot:
     # keeping X extent narrow to clear wheel servos at ±65mm.
     # Minimum height 45mm to stack battery (bottom) + camera + Pi (top)
     # without Z-axis overlap.
-    # using a custom_solid for the filleted shell, precise cavity, and exact Pi standoffs
+    # No custom_solid — standard pipeline generates the body shell with
+    # bracket pockets, component pockets, and wire channels.
     base = bot.body(
         "base",
         shape=BodyShape.BOX,
         padding=0.008,
         dimensions=(0.130, 0.080, 0.045),
-        custom_solid=wheeler_base_solid(),
     )
     # base.height is implicitly 0.045 through dimensions
     base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)

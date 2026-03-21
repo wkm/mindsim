@@ -30,7 +30,7 @@
   <worldbody>
     <body name="base" pos="0 0 0.0450">
       <freejoint name="root"/>
-      <inertial pos="0.000005 0.000240 0.004915" mass="0.253375" fullinertia="1.456128e-04 5.202354e-04 5.438845e-04 2.477703e-09 2.444682e-08 5.509651e-07"/>
+      <inertial pos="0.000007 0.000082 0.003387" mass="0.315578" fullinertia="1.872901e-04 5.706087e-04 6.199373e-04 1.579543e-08 2.072303e-08 1.972241e-07"/>
       <geom type="mesh" mesh="base_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
       <camera name="camera_cam" fovy="72.0" pos="0.000000 0.028000 0.000000" euler="1.5707963267948966 0 0"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
@@ -87,7 +87,7 @@
       <body name="left_rim" pos="-0.075000 0.000000 0.000000">
         <inertial pos="-0.000000 0.000000 -0.000000" mass="0.042513" fullinertia="4.249061e-05 2.891092e-05 4.357587e-05 -1.873344e-22 3.105449e-21 1.293483e-21"/>
         <joint name="left_wheel" type="hinge" pos="0.010000 -0.000000 -0.000000" axis="-1.000000 0.000000 0.000000" damping="0.0100"/>
-        <geom name="left_wheel_horn_disc" type="mesh" mesh="horn_left_wheel_mesh" pos="0.009000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="left_wheel_horn_disc" type="mesh" mesh="horn_left_wheel_mesh" pos="0.006000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="left_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
         <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 -0.707107 0.000000"/>
         <geom name="mount_left_rim_wheel_m1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.000000 0.000000 0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 -0.707107 0.000000"/>
@@ -100,7 +100,7 @@
       <body name="right_rim" pos="0.075000 0.000000 0.000000">
         <inertial pos="0.000000 0.000000 -0.000000" mass="0.042513" fullinertia="4.249061e-05 2.891092e-05 4.357587e-05 -2.107546e-22 -3.114633e-21 -1.904663e-21"/>
         <joint name="right_wheel" type="hinge" pos="-0.010000 -0.000000 -0.000000" axis="1.000000 0.000000 0.000000" damping="0.0100"/>
-        <geom name="right_wheel_horn_disc" type="mesh" mesh="horn_right_wheel_mesh" pos="-0.009000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="right_wheel_horn_disc" type="mesh" mesh="horn_right_wheel_mesh" pos="-0.006000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="right_rim_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0"/>
         <geom type="cylinder" size="0.045 0.005" rgba="0.0941 0.1255 0.1490 0.0000" contype="1" conaffinity="1" friction="1.5 0.005 0.0001" quat="0.707107 0.000000 0.707107 0.000000"/>
         <geom name="mount_right_rim_wheel_m1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.000000 0.000000 -0.006350" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 0.000000 0.707107 0.000000"/>

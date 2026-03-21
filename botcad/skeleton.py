@@ -509,11 +509,15 @@ class Bot:
                 if any(b.name == horn_name for b in self.all_bodies):
                     joint_bodies.append((horn_name, "horn"))
 
-                # Check all pairs — no two should intersect
+                # Check pairs — skip parent-servo (servo is intentionally
+                # inside the bracket pocket which is part of the parent body).
                 for ia in range(len(joint_bodies)):
                     for ib in range(ia + 1, len(joint_bodies)):
                         name_a, role_a = joint_bodies[ia]
                         name_b, role_b = joint_bodies[ib]
+                        # Servo sits inside parent body's bracket pocket — expected
+                        if {role_a, role_b} == {"parent", "servo"}:
+                            continue
                         _add(
                             name_a,
                             name_b,
@@ -521,8 +525,12 @@ class Bot:
                             f"{joint.name} {role_a}-{role_b} clearance",
                         )
 
-            # Mounted components must not intersect parent body
+            # Mounted components must not intersect parent body.
+            # Skip wheel components — the wheel component IS the wheel body
+            # (same geometry), so they always fully overlap.
             for mount in body.mounts:
+                if mount.component.is_wheel:
+                    continue
                 comp_name = f"comp_{body.name}_{mount.label}"
                 if any(b.name == comp_name for b in self.all_bodies):
                     _add(
@@ -714,17 +722,19 @@ class Bot:
                         kind=BodyKind.PURCHASED,
                         parent_body_name=body.name,
                     )
-                    # Horn sits at the joint point, offset half-thickness
-                    # along the joint axis.
+                    # Horn sits on the shaft boss tip, offset outboard from
+                    # the joint point by shaft_boss_height + half_horn_thickness.
                     jx = bwp[0] + joint.pos[0]
                     jy = bwp[1] + joint.pos[1]
                     jz = bwp[2] + joint.pos[2]
                     ax, ay, az = joint.axis
+                    boss_h = joint.servo.shaft_boss_height or 0.0
                     half_t = params.thickness / 2
+                    outboard = boss_h + half_t
                     horn_body.world_pos = (
-                        jx + ax * half_t,
-                        jy + ay * half_t,
-                        jz + az * half_t,
+                        jx + ax * outboard,
+                        jy + ay * outboard,
+                        jz + az * outboard,
                     )
                     # Orientation: Z-up rotated to joint axis
                     from botcad.geometry import rotation_between
