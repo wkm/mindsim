@@ -1518,41 +1518,97 @@ export class Viewport3D {
     // A point on the plane
     const planePoint = normal.clone().multiplyScalar(-plane.constant);
 
+    // Project all polygons to 2D and compute signed area to classify
+    // outer (positive area) vs holes (negative area)
+    const projected = polygons.map(polygon => {
+      const pts2d = polygon.map(p => {
+        const rel = p.clone().sub(planePoint);
+        return [rel.dot(u), rel.dot(v)];
+      });
+      // Signed area (shoelace formula)
+      let area = 0;
+      for (let i = 0; i < pts2d.length; i++) {
+        const j = (i + 1) % pts2d.length;
+        area += pts2d[i][0] * pts2d[j][1];
+        area -= pts2d[j][0] * pts2d[i][1];
+      }
+      area /= 2;
+      return { polygon, pts2d, area };
+    });
+
+    // Separate into outers (positive area) and holes (negative area)
+    // If all have the same sign, flip convention
+    const positives = projected.filter(p => p.area > 0);
+    const negatives = projected.filter(p => p.area < 0);
+
+    let outers, holes;
+    if (positives.length > 0 && negatives.length > 0) {
+      // Largest absolute area polygons are outers
+      outers = positives.length >= negatives.length ? positives : negatives;
+      holes = positives.length >= negatives.length ? negatives : positives;
+    } else {
+      // All same sign — sort by absolute area, largest is outer
+      const sorted = [...projected].sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+      outers = [sorted[0]];
+      holes = sorted.slice(1);
+    }
+
+    // For each outer, find which holes are inside it (point-in-polygon test on first vertex)
     const positions = [];
     const indices = [];
     let vertexOffset = 0;
 
-    for (const polygon of polygons) {
-      // Project 3D points to 2D
-      const flatPts = [];
-      for (const p of polygon) {
-        const rel = p.clone().sub(planePoint);
-        flatPts.push(rel.dot(u), rel.dot(v));
+    for (const outer of outers) {
+      // Find holes contained in this outer polygon
+      const myHoles = holes.filter(h => {
+        const testPt = h.pts2d[0];
+        return this._pointInPolygon2D(testPt, outer.pts2d);
+      });
+
+      // Build earcut input: outer vertices, then hole vertices
+      // holeIndices tells earcut where each hole starts
+      const flatCoords = [];
+      for (const [x, y] of outer.pts2d) {
+        flatCoords.push(x, y);
+      }
+      const holeIndices = [];
+      for (const hole of myHoles) {
+        holeIndices.push(flatCoords.length / 2); // index of first hole vertex
+        for (const [x, y] of hole.pts2d) {
+          flatCoords.push(x, y);
+        }
       }
 
       // Triangulate with earcut (Three.js bundles it)
       let triIndices;
       if (THREE.Earcut) {
-        triIndices = THREE.Earcut.triangulate(flatPts, [], 2);
+        triIndices = THREE.Earcut.triangulate(flatCoords, holeIndices, 2);
       } else {
-        // Fallback: fan triangulation (works for convex polygons)
         triIndices = [];
-        for (let i = 1; i < polygon.length - 1; i++) {
+        for (let i = 1; i < outer.polygon.length - 1; i++) {
           triIndices.push(0, i, i + 1);
         }
       }
 
-      // Add 3D vertices
-      for (const p of polygon) {
+      // Add 3D vertices: outer first, then holes
+      for (const p of outer.polygon) {
         positions.push(p.x, p.y, p.z);
       }
+      for (const hole of myHoles) {
+        for (const p of hole.polygon) {
+          positions.push(p.x, p.y, p.z);
+        }
+      }
 
-      // Add indices (offset by current vertex count)
+      // Add indices
       for (const idx of triIndices) {
         indices.push(idx + vertexOffset);
       }
 
-      vertexOffset += polygon.length;
+      vertexOffset += outer.polygon.length;
+      for (const hole of myHoles) {
+        vertexOffset += hole.polygon.length;
+      }
     }
 
     if (positions.length === 0) return null;
@@ -1562,17 +1618,30 @@ export class Viewport3D {
     geom.setIndex(indices);
     geom.computeVertexNormals();
 
-    // Add UVs for hatch texture — project positions to plane-local 2D
+    // Add UVs for hatch texture
     const uvs = [];
     for (let i = 0; i < positions.length; i += 3) {
       const p = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
       const rel = p.clone().sub(planePoint);
-      // Scale UVs so hatch pattern has consistent density
       uvs.push(rel.dot(u) * 100, rel.dot(v) * 100);
     }
     geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 
     return geom;
+  }
+
+  /** Point-in-polygon test (2D, ray casting). */
+  _pointInPolygon2D(point, polygon) {
+    const [px, py] = point;
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, yi] = polygon[i];
+      const [xj, yj] = polygon[j];
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
   }
 
   /**
