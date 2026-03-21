@@ -1566,65 +1566,80 @@ export class Viewport3D {
 
     if (projected.length === 0) return null;
 
-    // Sort by absolute area descending — largest is the outer boundary
+    // Sort by absolute area descending
     projected.sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
     console.log(`[section] polygon areas: ${projected.map(p => `${p.polygon.length}v=${p.area.toExponential(3)}`).join(', ')}`);
-    const outer = projected[0];
-    const holes = projected.slice(1);
 
-    // Ensure outer polygon has positive winding (CCW)
-    // Earcut expects outer = CCW, holes = CW
-    if (outer.area < 0) {
-      outer.pts2d.reverse();
-      outer.polygon.reverse();
-      outer.area = -outer.area;
-    }
-    // Ensure holes have negative winding (CW)
-    for (const h of holes) {
-      if (h.area > 0) {
-        h.pts2d.reverse();
-        h.polygon.reverse();
-        h.area = -h.area;
+    // Build containment tree: each polygon is either a top-level outer,
+    // a hole inside an outer, or an island inside a hole.
+    // We use a simple approach: for each polygon (sorted large→small),
+    // count how many larger polygons contain it.
+    // Even nesting depth (0, 2, 4...) = outer. Odd (1, 3...) = hole.
+    const roles = projected.map((poly, i) => {
+      let depth = 0;
+      for (let j = 0; j < i; j++) { // only check larger polygons
+        if (this._pointInPolygon2D(poly.pts2d[0], projected[j].pts2d)) {
+          depth++;
+        }
       }
-    }
+      return { ...poly, depth, isOuter: depth % 2 === 0 };
+    });
 
-    // Build earcut input: outer vertices, then all hole vertices
-    const flatCoords = [];
-    for (const [x, y] of outer.pts2d) {
-      flatCoords.push(x, y);
-    }
-    const holeIndices = [];
-    for (const hole of holes) {
-      // Only include holes that are actually inside the outer polygon
-      if (!this._pointInPolygon2D(hole.pts2d[0], outer.pts2d)) continue;
-      holeIndices.push(flatCoords.length / 2);
-      for (const [x, y] of hole.pts2d) {
-        flatCoords.push(x, y);
-      }
-    }
+    // Group: each outer gets the holes at depth = outer.depth + 1 that are inside it
+    const outers = roles.filter(r => r.isOuter);
+    const allHoles = roles.filter(r => !r.isOuter);
 
-    console.log(`[section] earcut: ${outer.pts2d.length} outer verts, ${holeIndices.length} holes, ${flatCoords.length / 2} total verts`);
+    console.log(`[section] containment: ${outers.length} outers, ${allHoles.length} holes`);
 
-    // Triangulate with earcut (handles concave polygons + holes)
-    const triIndices = Earcut.triangulate(flatCoords, holeIndices, 2);
-
-    console.log(`[section] earcut produced ${triIndices.length / 3} triangles`);
-
-    // Build 3D vertex array: outer first, then holes (same order as flatCoords)
+    // Triangulate each outer with its holes
     const positions = [];
-    for (const p of outer.polygon) {
-      positions.push(p.x, p.y, p.z);
-    }
-    for (const hole of holes) {
-      if (!this._pointInPolygon2D(hole.pts2d[0], outer.pts2d)) continue;
-      for (const p of hole.polygon) {
-        positions.push(p.x, p.y, p.z);
-      }
-    }
-
     const indices = [];
-    for (const idx of triIndices) {
-      indices.push(idx);
+    let vertexOffset = 0;
+
+    for (const outer of outers) {
+      // Ensure CCW winding for outer
+      if (outer.area < 0) {
+        outer.pts2d.reverse();
+        outer.polygon.reverse();
+      }
+
+      // Find holes directly inside this outer (depth == outer.depth + 1, contained by this outer)
+      const myHoles = allHoles.filter(h =>
+        h.depth === outer.depth + 1 &&
+        this._pointInPolygon2D(h.pts2d[0], outer.pts2d)
+      );
+
+      // Ensure CW winding for holes
+      for (const h of myHoles) {
+        if (h.area > 0) {
+          h.pts2d.reverse();
+          h.polygon.reverse();
+        }
+      }
+
+      // Build earcut input
+      const flatCoords = [];
+      for (const [x, y] of outer.pts2d) flatCoords.push(x, y);
+
+      const holeIndices = [];
+      for (const hole of myHoles) {
+        holeIndices.push(flatCoords.length / 2);
+        for (const [x, y] of hole.pts2d) flatCoords.push(x, y);
+      }
+
+      const triIndices = Earcut.triangulate(flatCoords, holeIndices, 2);
+
+      // Add 3D vertices (outer + holes, same order as flatCoords)
+      for (const p of outer.polygon) positions.push(p.x, p.y, p.z);
+      for (const hole of myHoles) {
+        for (const p of hole.polygon) positions.push(p.x, p.y, p.z);
+      }
+
+      // Add indices
+      for (const idx of triIndices) indices.push(idx + vertexOffset);
+
+      vertexOffset += outer.polygon.length;
+      for (const hole of myHoles) vertexOffset += hole.polygon.length;
     }
 
     if (positions.length === 0) return null;
