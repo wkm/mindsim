@@ -45,6 +45,10 @@ const ICONS = {
     <rect x="3" y="3" width="18" height="18" rx="2"/>
     <line x1="3" y1="12" x2="21" y2="12"/>
   </svg>`,
+  settings: `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>`,
 };
 
 // ── Cube face mapping: face index → preset name ──
@@ -88,16 +92,17 @@ const CUBE_EDGES = [
   { n: new THREE.Vector3(-1, 1, 0).normalize(),  label: 'Left-Back' },
 ];
 
-// Corners: average of three adjacent face normals → isometric view
+// Corners: isometric views with Z-bias matching VIEW_PRESETS.iso (1, -1, 0.8)
+// The 0.8 Z factor gives a slightly top-down perspective that matches the `1` key preset.
 const CUBE_CORNERS = [
-  { n: new THREE.Vector3(1, -1, 1).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(-1, -1, 1).normalize(),  label: 'Iso' },
-  { n: new THREE.Vector3(1, 1, 1).normalize(),    label: 'Iso' },
-  { n: new THREE.Vector3(-1, 1, 1).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(1, -1, -1).normalize(),  label: 'Iso' },
-  { n: new THREE.Vector3(-1, -1, -1).normalize(), label: 'Iso' },
-  { n: new THREE.Vector3(1, 1, -1).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(-1, 1, -1).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(1, -1, 0.8).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(-1, -1, 0.8).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, 0.8).normalize(),    label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, 0.8).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(1, -1, -0.8).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(-1, -1, -0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, -0.8).normalize(),   label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, -0.8).normalize(),  label: 'Iso' },
 ];
 
 export class Viewport3D {
@@ -119,6 +124,7 @@ export class Viewport3D {
     this._secOn = false;
     this._secAxis = 'z';
     this._secFrac = 0.5;
+    this._secFlipped = false;
     this._secPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
     this._secViz = null;
     this._capGroup = null;
@@ -332,6 +338,9 @@ export class Viewport3D {
   disableMeasureTool() {
     this._meas.disable(); this._ctrl.enabled = true;
     if (this._activeTool === 'measure') this._setActiveTool(null);
+    // Clear all measurements when deactivating the tool
+    if (this._meas.clearAll) this._meas.clearAll();
+    else if (this._meas.measurements) this._meas.measurements.length = 0;
   }
 
   enableSectionPlane(axis = 'z', frac = 0.5) {
@@ -409,6 +418,59 @@ export class Viewport3D {
     this._cam.top = halfH;
     this._cam.bottom = -halfH;
     this._cam.updateProjectionMatrix();
+  }
+
+  /**
+   * Switch between perspective and orthographic cameras at runtime,
+   * preserving the current view direction and target.
+   */
+  _switchCamera(type) {
+    if (type === this._cameraType) return;
+    const oldPos = this._cam.position.clone();
+    const oldUp = this._cam.up.clone();
+    const target = this._ctrl.target.clone();
+    const w = this._container.clientWidth || 1, h = this._container.clientHeight || 1;
+
+    if (type === 'orthographic') {
+      // Compute ortho frustum from perspective view distance
+      const dist = oldPos.distanceTo(target);
+      const halfH = dist * Math.tan(THREE.MathUtils.degToRad(this._cam.fov / 2));
+      const aspect = w / h;
+      this._cam = new THREE.OrthographicCamera(
+        -halfH * aspect, halfH * aspect, halfH, -halfH, 0.0001, 10,
+      );
+    } else {
+      // Compute perspective position from ortho frustum
+      const halfH = this._cam.top;
+      const fov = 45;
+      const dist = halfH / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+      this._cam = new THREE.PerspectiveCamera(fov, w / h, 0.0001, 10);
+      // Adjust position to match the ortho view distance
+      const dir = new THREE.Vector3().subVectors(oldPos, target).normalize();
+      oldPos.copy(target).addScaledVector(dir, dist);
+    }
+    this._cameraType = type;
+    this._cam.position.copy(oldPos);
+    this._cam.up.copy(oldUp);
+    this._cam.lookAt(target);
+    this._cam.updateProjectionMatrix();
+
+    // Reconnect controls
+    this._ctrl.dispose();
+    this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
+    this._ctrl.enableDamping = true;
+    this._ctrl.dampingFactor = 0.1;
+    this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this._ctrl.target.copy(target);
+    this._ctrl.update();
+
+    // Reconnect edge composer if active
+    if (this._edgeC) {
+      this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
+    }
+    // Reconnect measure tool camera reference
+    this._meas._camera = this._cam;
   }
 
   // ── Scene init ──
@@ -504,6 +566,17 @@ export class Viewport3D {
     cubeFill.position.set(-2, -1, -2);
     this._cubeScene.add(cubeFill);
 
+    // Per-face canvas rotation to ensure text reads correctly from each viewing direction.
+    // THREE.BoxGeometry UV layout means we must compensate for face orientation:
+    //   +X (right): no rotation needed
+    //   -X (left):  no rotation needed
+    //   +Y (back):  no rotation needed
+    //   -Y (front): no rotation needed
+    //   +Z (top):   no rotation needed (text reads correctly from above with Y-away)
+    //   -Z (bottom): rotate 180° so text reads correctly from below
+    // Rotation values in radians applied via ctx.rotate around canvas center.
+    const CUBE_FACE_ROTATION = [0, 0, 0, 0, 0, Math.PI];
+
     // Create face materials with canvas textures — cleaner labels
     const materials = CUBE_FACE_MAP.map((face, i) => {
       const texCanvas = document.createElement('canvas');
@@ -516,11 +589,20 @@ export class Viewport3D {
       ctx.strokeStyle = 'rgba(255,255,255,0.25)';
       ctx.lineWidth = 2;
       ctx.strokeRect(3, 3, 122, 122);
+      // Apply per-face rotation for correct text orientation
+      const rot = CUBE_FACE_ROTATION[i];
+      if (rot) {
+        ctx.save();
+        ctx.translate(64, 64);
+        ctx.rotate(rot);
+        ctx.translate(-64, -64);
+      }
       // Crisp smaller text
       ctx.fillStyle = '#5C7080';
       ctx.font = '500 18px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(face.label, 64, 64);
+      if (rot) ctx.restore();
       const tex = new THREE.CanvasTexture(texCanvas);
       tex.colorSpace = THREE.SRGBColorSpace;
       return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.65, metalness: 0.02 });
@@ -530,6 +612,7 @@ export class Viewport3D {
     this._cubeFaceTextures = materials.map((_, i) => ({
       baseColor: CUBE_FACE_COLORS[i],
       label: CUBE_FACE_MAP[i].label,
+      rotation: CUBE_FACE_ROTATION[i],
       brightness: 0, // 0 = base, 1 = hover highlight (lerped)
       targetBrightness: 0,
     }));
@@ -622,10 +705,10 @@ export class Viewport3D {
     const nearSurface = [abs.x, abs.y, abs.z].filter(v => v > edgeThreshold).length;
 
     if (nearSurface >= 3) {
-      // Corner: all three axes are significant
-      const dir = new THREE.Vector3(
-        Math.sign(point.x), Math.sign(point.y), Math.sign(point.z)
-      ).normalize();
+      // Corner: all three axes are significant — use preset corner directions
+      // that match VIEW_PRESETS.iso Z-bias (0.8) for consistent views
+      const sx = Math.sign(point.x), sy = Math.sign(point.y), sz = Math.sign(point.z);
+      const dir = new THREE.Vector3(sx, sy, sz * 0.8).normalize();
       return { type: 'corner', dir };
     } else if (nearSurface >= 2 && sorted[1] > cornerThreshold) {
       // Edge: two axes are significant
@@ -748,6 +831,14 @@ export class Viewport3D {
     ctx.strokeStyle = `rgba(255,255,255,${0.25 + t * 0.15})`;
     ctx.lineWidth = 2;
     ctx.strokeRect(3, 3, 122, 122);
+    // Apply per-face rotation for correct text orientation
+    const rot = info.rotation;
+    if (rot) {
+      ctx.save();
+      ctx.translate(64, 64);
+      ctx.rotate(rot);
+      ctx.translate(-64, -64);
+    }
     // Text — darker on hover for better contrast
     const textR = Math.round(0x5C + (0x18 - 0x5C) * t);
     const textG = Math.round(0x70 + (0x20 - 0x70) * t);
@@ -756,6 +847,7 @@ export class Viewport3D {
     ctx.font = '500 18px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(info.label, 64, 64);
+    if (rot) ctx.restore();
     mat.map.needsUpdate = true;
   }
 
@@ -848,6 +940,13 @@ export class Viewport3D {
       b.addEventListener('click', () => { this._secAxis = ax; this._hiliteAxis(); this._applySection(); });
       axRow.appendChild(b); this._secAxisBtns[ax] = b;
     }
+    // Flip button
+    const flipBtn = document.createElement('button');
+    flipBtn.style.cssText = axisBtnCSS + 'width:auto;padding:0 8px;';
+    flipBtn.textContent = 'Flip';
+    flipBtn.addEventListener('click', () => { this._secFlipped = !this._secFlipped; this._applySection(); });
+    axRow.appendChild(flipBtn);
+
     this._secPopover.appendChild(axRow);
 
     // Slider
@@ -868,6 +967,127 @@ export class Viewport3D {
 
     // Keep popover positioned next to the strip
     this._positionSecPopover();
+
+    // ── Settings button (bottom of strip) ──
+    const settingsDivider = document.createElement('div');
+    settingsDivider.style.cssText = 'height:1px;margin:2px 4px;background:rgba(206,217,224,0.2);';
+    strip.appendChild(settingsDivider);
+
+    this._settingsBtn = document.createElement('button');
+    this._settingsBtn.style.cssText = toolBtnCSS;
+    this._settingsBtn.innerHTML = ICONS.settings;
+    this._settingsBtn.addEventListener('click', () => {
+      const vis = this._settingsPopover.style.display === 'none';
+      this._settingsPopover.style.display = vis ? '' : 'none';
+      if (vis && this._updateSettingsPopoverPos) this._updateSettingsPopoverPos();
+    });
+    strip.appendChild(this._settingsBtn);
+    this._addToolTooltip(this._settingsBtn, 'Settings');
+
+    // Settings popover
+    this._settingsPopover = document.createElement('div');
+    this._settingsPopover.style.cssText = 'position:absolute;left:52px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.92);border-radius:8px;padding:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.25);font:12px system-ui,-apple-system,sans-serif;color:#CED9E0;min-width:140px;z-index:52;';
+
+    const settingsTitle = document.createElement('div');
+    settingsTitle.style.cssText = 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:8px;';
+    settingsTitle.textContent = 'Settings';
+    this._settingsPopover.appendChild(settingsTitle);
+
+    // Camera type toggle
+    const camRow = document.createElement('div');
+    camRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;';
+    const camLabel = document.createElement('span');
+    camLabel.textContent = 'Camera';
+    camLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
+    camRow.appendChild(camLabel);
+
+    const camToggle = document.createElement('div');
+    camToggle.style.cssText = 'display:flex;border:1px solid rgba(206,217,224,0.2);border-radius:4px;overflow:hidden;';
+    const camBtnCSS = 'border:none;padding:2px 8px;font:500 10px system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.12s;';
+    this._perspBtn = document.createElement('button');
+    this._perspBtn.textContent = 'Persp';
+    this._perspBtn.style.cssText = camBtnCSS;
+    this._orthoBtn = document.createElement('button');
+    this._orthoBtn.textContent = 'Ortho';
+    this._orthoBtn.style.cssText = camBtnCSS;
+
+    const updateCamBtns = () => {
+      const isPersp = this._cameraType === 'perspective';
+      this._perspBtn.style.background = isPersp ? '#30363D' : 'transparent';
+      this._perspBtn.style.color = isPersp ? '#E8EDF0' : '#738694';
+      this._orthoBtn.style.background = !isPersp ? '#30363D' : 'transparent';
+      this._orthoBtn.style.color = !isPersp ? '#E8EDF0' : '#738694';
+    };
+
+    this._perspBtn.addEventListener('click', () => { if (this._cameraType !== 'perspective') this._switchCamera('perspective'); updateCamBtns(); });
+    this._orthoBtn.addEventListener('click', () => { if (this._cameraType !== 'orthographic') this._switchCamera('orthographic'); updateCamBtns(); });
+    camToggle.appendChild(this._perspBtn);
+    camToggle.appendChild(this._orthoBtn);
+    camRow.appendChild(camToggle);
+    this._settingsPopover.appendChild(camRow);
+    updateCamBtns();
+
+    // Edge rendering checkbox
+    const edgeRow = document.createElement('label');
+    edgeRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;';
+    this._edgeCb = document.createElement('input');
+    this._edgeCb.type = 'checkbox';
+    this._edgeCb.checked = !!this._edgeC;
+    this._edgeCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
+    this._edgeCb.addEventListener('change', () => {
+      if (this._edgeCb.checked) {
+        if (!this._edgeC) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
+      } else {
+        if (this._edgeC) { this._edgeC = null; }
+      }
+    });
+    edgeRow.appendChild(this._edgeCb);
+    const edgeLabel = document.createElement('span');
+    edgeLabel.textContent = 'Edges';
+    edgeLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
+    edgeRow.appendChild(edgeLabel);
+    this._settingsPopover.appendChild(edgeRow);
+
+    // Grid checkbox
+    const gridRow = document.createElement('label');
+    gridRow.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
+    this._gridCb = document.createElement('input');
+    this._gridCb.type = 'checkbox';
+    // Find existing grid in scene
+    this._gridHelper = null;
+    this._scene.traverse(ch => { if (ch.isGridHelper) this._gridHelper = ch; });
+    this._gridCb.checked = !!this._gridHelper;
+    this._gridCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
+    this._gridCb.addEventListener('change', () => {
+      if (this._gridCb.checked) {
+        if (!this._gridHelper) {
+          this._gridHelper = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0);
+          this._gridHelper.rotation.x = Math.PI / 2;
+          this._scene.add(this._gridHelper);
+        }
+        this._gridHelper.visible = true;
+      } else if (this._gridHelper) {
+        this._gridHelper.visible = false;
+      }
+    });
+    gridRow.appendChild(this._gridCb);
+    const gridLabel = document.createElement('span');
+    gridLabel.textContent = 'Grid';
+    gridLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
+    gridRow.appendChild(gridLabel);
+    this._settingsPopover.appendChild(gridRow);
+
+    this._overlay.appendChild(this._settingsPopover);
+
+    // Position settings popover near bottom of strip
+    this._updateSettingsPopoverPos = () => {
+      if (this._disposed) return;
+      const sr = strip.getBoundingClientRect();
+      const cr = this._container.getBoundingClientRect();
+      this._settingsPopover.style.left = `${sr.right - cr.left + 6}px`;
+      this._settingsPopover.style.top = `${sr.bottom - cr.top - 40}px`;
+      this._settingsPopover.style.transform = 'none';
+    };
   }
 
   _positionSecPopover() {
@@ -916,7 +1136,14 @@ export class Viewport3D {
       else if (e.key === 'Escape') {
         e.preventDefault();
         if (this._meas.enabled) this.disableMeasureTool();
+        else if (this._meas.measurements && this._meas.measurements.length > 0) {
+          // Escape clears measurements even when tool is not active
+          this._meas.clearAll();
+        }
         if (this._secOn) this.disableSectionPlane();
+        if (this._settingsPopover && this._settingsPopover.style.display !== 'none') {
+          this._settingsPopover.style.display = 'none';
+        }
         this._setActiveTool(null);
       }
     };
@@ -969,9 +1196,10 @@ export class Viewport3D {
     const box = this._bbox();
     if (box) {
       const ai = AXIS_IDX[this._secAxis];
+      const sign = this._secFlipped ? 1 : -1;
       const pos = box.min.getComponent(ai) + (box.max.getComponent(ai) - box.min.getComponent(ai)) * this._secFrac;
-      const n = new THREE.Vector3(); n.setComponent(ai, -1);
-      this._secPlane.normal.copy(n); this._secPlane.constant = pos;
+      const n = new THREE.Vector3(); n.setComponent(ai, sign);
+      this._secPlane.normal.copy(n); this._secPlane.constant = -sign * pos;
       this._showSecViz(box, ai, pos);
     }
     const clips = [this._secPlane];
@@ -1211,5 +1439,6 @@ export class Viewport3D {
     this._syncOrientationCube();
     // Keep section popover positioned
     if (this._secOn && this._updateSecPopoverPos) this._updateSecPopoverPos();
+    if (this._settingsPopover && this._settingsPopover.style.display !== 'none' && this._updateSettingsPopoverPos) this._updateSettingsPopoverPos();
   }
 }

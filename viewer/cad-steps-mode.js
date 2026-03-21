@@ -709,6 +709,11 @@ class CadStepsViewer {
     }
     this.contextGroup.visible = needsContext;
 
+    // Re-apply section plane to new geometry if section is active
+    if (this.viewport._secOn) {
+      this.viewport._applySection();
+    }
+
     // "Final" ghost
     this.ghostGroup.visible = this.showFinal;
 
