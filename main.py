@@ -1284,14 +1284,14 @@ def _run_web_viewer(bot_name: str | None, port: int = 8080, no_open: bool = Fals
                 spec = importlib.util.spec_from_file_location("design", design_py)
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                bot = mod.build()
-                bot.solve()
-                from botcad.emit.viewer import emit_viewer_manifest
-
-                emit_viewer_manifest(bot, bot_dir)
-                print(f"Generated viewer_manifest.json for {bot_name}")
+                bot_obj = mod.build()
+                bot_obj.solve()
+                # Full emit: meshes, MuJoCo XML, BOM, manifest, renders.
+                # ShapeScript cache makes this fast for unchanged bodies.
+                bot_obj.emit()
+                print(f"Regenerated {bot_name} (design.py newer than manifest)")
             except Exception as e:
-                print(f"Warning: could not generate viewer manifest: {e}")
+                print(f"Warning: could not regenerate {bot_name}: {e}")
 
     # Build component registry for API
     print("Building component registry...")
