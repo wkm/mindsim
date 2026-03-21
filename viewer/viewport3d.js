@@ -1389,6 +1389,10 @@ export class Viewport3D {
         capMesh.raycast = () => {};
         capMesh.userData._vpCap = true;
         this._capGroup.add(capMesh);
+
+        // Track hatch textures for zoom-dependent repeat update
+        if (!this._hatchTextures) this._hatchTextures = [];
+        this._hatchTextures.push(hatchTex);
       }
     }
 
@@ -1649,14 +1653,13 @@ export class Viewport3D {
     geom.setIndex(indices);
     geom.computeVertexNormals();
 
-    // Add UVs for hatch texture — scale so pattern is visible at typical CAD sizes
-    // Geometry is in meters; we want ~10 hatch lines per cm = 1000 per meter
-    const UV_SCALE = 500;
+    // UVs in world-space (meters). texture.repeat is updated each frame
+    // based on camera zoom so hatching has consistent screen-space density.
     const uvs = [];
     for (let i = 0; i < positions.length; i += 3) {
       const p = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
       const rel = p.clone().sub(planePoint);
-      uvs.push(rel.dot(u) * UV_SCALE, rel.dot(v) * UV_SCALE);
+      uvs.push(rel.dot(u), rel.dot(v));
     }
     geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 
@@ -1714,6 +1717,38 @@ export class Viewport3D {
     return texture;
   }
 
+  /** Update hatch texture repeat so pattern has ~constant screen-space density. */
+  _updateHatchRepeat() {
+    if (!this._hatchTextures || this._hatchTextures.length === 0) return;
+
+    // Compute world-units-per-pixel from camera
+    let worldPerPx;
+    if (this._cameraType === 'orthographic') {
+      // Ortho: frustum height / viewport height
+      worldPerPx = (this._cam.top - this._cam.bottom) / this._ren.domElement.clientHeight;
+    } else {
+      // Perspective: approximate from distance to target
+      const dist = this._cam.position.distanceTo(this._ctrl.target);
+      const vFov = this._cam.fov * Math.PI / 180;
+      worldPerPx = (2 * dist * Math.tan(vFov / 2)) / this._ren.domElement.clientHeight;
+    }
+
+    // We want hatch lines spaced ~8 pixels apart on screen.
+    // The texture is 64px with lines every `spacing` (6px in texture space).
+    // texture.repeat = N means the texture tiles N times per 1 world unit.
+    // So line spacing in world = 1 / (N * linesPerTile)
+    // We want: lineSpacingWorld = 8 * worldPerPx
+    // → 1 / (N * linesPerTile) = 8 * worldPerPx
+    // → N = 1 / (8 * worldPerPx * linesPerTile)
+    const SCREEN_SPACING = 8; // pixels between hatch lines on screen
+    const LINES_PER_TILE = 64 / 6; // ~10.7 lines per 64px tile (spacing=6)
+    const repeat = 1 / (SCREEN_SPACING * worldPerPx * LINES_PER_TILE);
+
+    for (const tex of this._hatchTextures) {
+      tex.repeat.set(repeat, repeat);
+    }
+  }
+
   _clearSectionCaps() {
     if (this._capGroup) {
       this._capGroup.traverse(child => {
@@ -1727,6 +1762,7 @@ export class Viewport3D {
       this._capGroup = null;
     }
     this._contourLineMat = null;
+    this._hatchTextures = null;
   }
 
   // ── Render loop ──
@@ -1743,6 +1779,9 @@ export class Viewport3D {
       }
     }
     if (this._animCb) this._animCb();
+    // Update hatch texture repeat based on zoom so hatching has
+    // consistent screen-space density regardless of camera distance
+    this._updateHatchRepeat();
     // Edge detection works with section caps (no stencil dependency)
     if (this._edgeC) {
       this._edgeC.render();
