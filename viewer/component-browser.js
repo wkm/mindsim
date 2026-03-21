@@ -1,22 +1,18 @@
 /**
  * MindSim Component Browser — Three.js-based component viewer.
  *
- * Orthographic camera with view presets (Front/Side/Top/Iso) and a
- * checkbox-based layer system for inspecting component geometry.
+ * Uses Viewport3D for all 3D rendering (orthographic camera, section plane
+ * with stencil caps, measure tool, view presets). This module manages the
+ * component catalog, layer system, STL loading, and side panel UI.
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { clearGroup, orientToAxis } from './utils.js';
 import {
-  BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
-  hexStr, tintColor, createMaterial, addMeshWithEdges, createEdgeComposer,
+  BP, hexStr, tintColor, createMaterial, addMeshWithEdges,
 } from './presentation.js';
-import { MeasureTool } from './measure-tool.js';
+import { Viewport3D } from './viewport3d.js';
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -40,9 +36,6 @@ const VIEW_PRESETS = {
 // ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
-// True entity colors — the actual physical color of each part.
-// At render time these are tinted via presentation.tintColor() so
-// edges and annotations remain visible against lighter geometry.
 const LAYER_META = {
   body:             { label: 'Body',             colorHex: null,     opts: {} },
   servo:            { label: 'Servo',            colorHex: 0x182026, opts: {} },
@@ -69,19 +62,18 @@ class ComponentBrowser {
     this.layerGroups = {};    // layer id → THREE.Group
     this.activePreset = 'iso';
 
-    // Section plane state
+    // Section plane state (drives Viewport3D section)
     this.sectionEnabled = false;
-    this.sectionAxis = 'z';       // 'x', 'y', or 'z'
+    this.sectionAxis = 'z';
     this.sectionFlipped = false;
-    this.sectionPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
-    this.sectionFraction = 0.5;   // slider position (0–1 along bbox)
+    this.sectionFraction = 0.5;
 
     // ShapeScript steps state
     this.stepsMode = false;
-    this.stepsData = null;        // { component, steps: [{index, label, op, has_tool}] }
+    this.stepsData = null;
     this.stepsCurrentIdx = 0;
-    this.stepsStlCache = {};      // idx → BufferGeometry
-    this.stepsToolStlCache = {};  // idx → BufferGeometry
+    this.stepsStlCache = {};
+    this.stepsToolStlCache = {};
     this.stepsGroup = new THREE.Group();
     this.stepsGroup.name = 'shapescript-steps';
     this.stepsToolGroup = new THREE.Group();
@@ -90,84 +82,63 @@ class ComponentBrowser {
   }
 
   async init() {
-    this._setupThreeJS();
+    this._setupViewport();
     this._setupViewToolbar();
     this._setupAxisGizmo();
     await this._fetchCatalog();
     this._buildSidePanel();
-    this._animate();
   }
 
   // -----------------------------------------------------------------------
-  // Three.js setup — orthographic camera
+  // Viewport3D setup — delegates scene/camera/renderer/controls/lighting
   // -----------------------------------------------------------------------
 
-  _setupThreeJS() {
+  _setupViewport() {
     const container = document.getElementById('canvas-container');
     container.style.left = SIDEBAR_WIDTH + 'px';
     container.style.right = SIDE_PANEL_WIDTH + 'px';
 
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xF5F8FA);
+    this.viewport = new Viewport3D(container, {
+      cameraType: 'orthographic',
+      grid: true,
+      edges: true,
+    });
 
-    const vw = window.innerWidth - SIDEBAR_WIDTH - SIDE_PANEL_WIDTH;
-    const vh = window.innerHeight;
-    const aspect = vw / vh;
+    // Expose delegates for convenience
+    this.scene = this.viewport.scene;
+    this.camera = this.viewport.camera;
+    this.renderer = this.viewport.renderer;
+    this.controls = this.viewport.controls;
 
-    // Orthographic camera — frustum sized to a typical component (~0.1m)
-    const frustum = 0.06;
-    this.camera = new THREE.OrthographicCamera(
-      -frustum * aspect, frustum * aspect,
-      frustum, -frustum,
-      0.0001, 10,
-    );
-    this.camera.position.set(0.06, -0.06, 0.05);
-    this.camera.up.set(0, 0, 1);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(vw, vh);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.localClippingEnabled = true;
-    container.appendChild(this.renderer.domElement);
-
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.1;
-    this.controls.enableRotate = true;
-    this.controls.update();
-
-    // Measurement tool
-    this.measureTool = new MeasureTool(this.camera, this.scene, container);
-
-    // Lighting
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
-    dirLight.position.set(0.2, 0.4, 0.3);
-    dirLight.castShadow = true;
-    this.scene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
-    fillLight.position.set(-0.2, 0.1, -0.2);
-    this.scene.add(fillLight);
-
-    // Grid (200mm with 5mm divisions)
-    this.scene.add(new THREE.GridHelper(0.2, 40, 0xBFCCD6, 0xCED9E0));
-
-    // ShapeScript step groups (used in steps mode)
+    // ShapeScript step groups (added directly to scene)
     this.scene.add(this.stepsGroup);
     this.scene.add(this.stepsToolGroup);
 
-    // Create a group per layer
+    // Create a viewport group per layer so Viewport3D tracks them for
+    // bounding box and section cap computation
     for (const id of ALL_LAYER_IDS) {
-      const g = new THREE.Group();
-      g.name = id;
-      this.scene.add(g);
+      const g = this.viewport.addGroup(id);
       this.layerGroups[id] = g;
     }
 
-    // Post-processing edge detection (normal + depth, like Fusion 360)
-    this._edgeComposer = createEdgeComposer(this.renderer, this.scene, this.camera);
+    // Register section cap color callback so caps match layer colors
+    this.viewport.setSectionCapColorFn((groupName) => {
+      const meta = LAYER_META[groupName];
+      if (!meta) return null;
+      const entityColor = meta.colorHex !== null
+        ? meta.colorHex
+        : (this.currentComponent
+            ? new THREE.Color(
+                this.currentComponent.color[0],
+                this.currentComponent.color[1],
+                this.currentComponent.color[2],
+              )
+            : 0xCED9E0);
+      return tintColor(entityColor, 0.6);
+    });
+
+    // Start animation loop
+    this.viewport.animate();
 
     window.addEventListener('resize', () => this._updateLayout());
   }
@@ -194,12 +165,10 @@ class ComponentBrowser {
         });
         dropdown.appendChild(li);
       }
-      // Toggle dropdown
       if (dropdownBtn) {
         dropdownBtn.addEventListener('click', () => {
           dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
         });
-        // Close on click outside
         document.addEventListener('click', (e) => {
           if (!dropdownBtn.contains(e.target) && !dropdown.contains(e.target)) {
             dropdown.style.display = 'none';
@@ -212,17 +181,13 @@ class ComponentBrowser {
     const measureBtn = document.getElementById('measure-toggle');
     if (measureBtn) {
       measureBtn.addEventListener('click', () => {
-        const active = !this.measureTool.enabled;
+        const active = !this.viewport._meas.enabled;
         if (active) {
-          this.measureTool.enable();
-          // Disable orbit when measuring
-          this.controls.enabled = false;
+          this.viewport.enableMeasureTool();
         } else {
-          this.measureTool.disable();
-          this.controls.enabled = true;
+          this.viewport.disableMeasureTool();
         }
         measureBtn.classList.toggle('active', active);
-        // Show/hide clear button with measure tool
         const clearEl = document.getElementById('measure-clear');
         if (clearEl) clearEl.style.display = active ? '' : 'none';
       });
@@ -231,7 +196,7 @@ class ComponentBrowser {
     const clearBtn = document.getElementById('measure-clear');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
-        this.measureTool.clearAll();
+        this.viewport._meas.clearAll();
       });
     }
 
@@ -240,7 +205,7 @@ class ComponentBrowser {
       renderBtn.addEventListener('click', () => this._requestSVGRender());
     }
 
-    // Steps button — navigate to the unified ShapeScript debugger
+    // Steps button
     const stepsBtn = document.getElementById('steps-toggle');
     if (stepsBtn) {
       stepsBtn.addEventListener('click', () => {
@@ -250,7 +215,7 @@ class ComponentBrowser {
       });
     }
 
-    // Section plane controls
+    // Section plane controls — drive Viewport3D's section
     const sectionToggle = document.getElementById('section-toggle');
     if (sectionToggle) {
       sectionToggle.addEventListener('click', () => {
@@ -291,7 +256,7 @@ class ComponentBrowser {
       });
     }
 
-    // Keyboard shortcuts: 1-6 = views, 0 = iso, M = measure, S = section
+    // Keyboard shortcuts
     const keyMap = {
       '1': 'iso', '2': 'front', '3': 'back', '4': 'top',
       '5': 'bottom', '6': 'right', '7': 'left',
@@ -326,38 +291,27 @@ class ComponentBrowser {
     if (!preset) return;
 
     this.activePreset = key;
-
-    // Get bounding box center and size for framing
-    const box = this._getVisibleBBox();
-    const center = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
-    const size = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
-    const maxDim = Math.max(size.x, size.y, size.z);
-
-    // Position camera along preset direction
-    const dist = maxDim * 2;
-    this.camera.position.copy(center).addScaledVector(preset.dir, dist);
-    this.camera.up.copy(preset.up);
-    this.controls.target.copy(center);
-    this.camera.lookAt(center);
+    this.viewport.setViewPreset(key);
 
     // Lock rotation for axis-aligned views, allow for iso
     this.controls.enableRotate = (key === 'iso');
 
-    this._fitOrthoFrustum(box);
+    // Fit ortho frustum to visible geometry
+    const box = this._getVisibleBBox();
+    if (box) this.viewport._fitOrthoFrustum(box);
     this.controls.update();
     this._updatePresetButtons();
   }
 
   /** Orbit or pan the camera via arrow keys. */
   _arrowKeyNav(key, shift) {
-    const ORBIT_STEP = Math.PI / 12;  // 15° per keypress
+    const ORBIT_STEP = Math.PI / 12;
     const target = this.controls.target;
     const pos = this.camera.position;
     const offset = pos.clone().sub(target);
 
     if (shift) {
-      // Shift+Arrow: pan
-      const panStep = this.camera.top * 0.15;  // 15% of visible height
+      const panStep = this.camera.top * 0.15;
       this.camera.updateMatrixWorld();
       const right = new THREE.Vector3();
       const up = new THREE.Vector3();
@@ -374,25 +328,20 @@ class ComponentBrowser {
       target.add(move);
       pos.add(move);
     } else {
-      // Arrow: orbit
       if (key === 'ArrowLeft' || key === 'ArrowRight') {
-        // Horizontal orbit around Z axis
         const angle = key === 'ArrowLeft' ? ORBIT_STEP : -ORBIT_STEP;
         offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angle);
       } else {
-        // Vertical orbit — rotate around camera's local X axis
         const angle = key === 'ArrowUp' ? -ORBIT_STEP : ORBIT_STEP;
         this.camera.updateMatrixWorld();
         const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
         offset.applyAxisAngle(right, angle);
-        // Update up vector to stay coherent
         this.camera.up.applyAxisAngle(right, angle);
       }
       pos.copy(target).add(offset);
       this.camera.lookAt(target);
     }
 
-    // Unlock rotation since we're now in a custom orientation
     this.controls.enableRotate = true;
     this.activePreset = null;
     this._updatePresetButtons();
@@ -433,25 +382,6 @@ class ComponentBrowser {
     return hasGeometry ? box : null;
   }
 
-  _fitOrthoFrustum(box) {
-    if (!box) return;
-
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const pad = maxDim * 0.15;  // 15% padding
-
-    const container = document.getElementById('canvas-container');
-    const aspect = container.offsetWidth / container.offsetHeight;
-    const halfH = (maxDim / 2) + pad;
-    const halfW = halfH * aspect;
-
-    this.camera.left = -halfW;
-    this.camera.right = halfW;
-    this.camera.top = halfH;
-    this.camera.bottom = -halfH;
-    this.camera.updateProjectionMatrix();
-  }
-
   _fitCameraToVisibleMeshes() {
     const box = this._getVisibleBBox();
     if (!box) return;
@@ -460,7 +390,6 @@ class ComponentBrowser {
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
 
-    // Position along active preset direction
     const preset = VIEW_PRESETS[this.activePreset] || VIEW_PRESETS.iso;
     const dist = maxDim * 2;
     this.camera.position.copy(center).addScaledVector(preset.dir, dist);
@@ -468,7 +397,7 @@ class ComponentBrowser {
     this.controls.target.copy(center);
     this.camera.lookAt(center);
 
-    this._fitOrthoFrustum(box);
+    this.viewport._fitOrthoFrustum(box);
     this.controls.update();
   }
 
@@ -478,21 +407,7 @@ class ComponentBrowser {
     container.style.right = SIDE_PANEL_WIDTH + 'px';
 
     requestAnimationFrame(() => {
-      const w = container.offsetWidth;
-      const h = container.offsetHeight;
-      if (w > 0 && h > 0) {
-        // Update ortho frustum aspect ratio
-        const aspect = w / h;
-        const halfH = this.camera.top;  // preserve current zoom level
-        this.camera.left = -halfH * aspect;
-        this.camera.right = halfH * aspect;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(w, h);
-        this._edgeComposer.resize(w, h);
-        if (this._contourLineMat) {
-          this._contourLineMat.resolution.set(w, h);
-        }
-      }
+      this.viewport.resize();
     });
   }
 
@@ -550,7 +465,6 @@ class ComponentBrowser {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${comp.name}</h2>`;
 
-    // Layer controls
     html += this._buildLayerControls(comp);
 
     html += `<h3>General</h3>`;
@@ -594,12 +508,10 @@ class ComponentBrowser {
 
     panel.innerHTML = html;
 
-    // Wire up checkbox listeners
     panel.querySelectorAll('input[data-layer]').forEach(cb => {
       cb.addEventListener('change', () => this._onLayerToggle(cb.dataset.layer, cb.checked));
     });
 
-    // Create 3D markers and wire up hover highlighting
     this._createMarkers(comp);
 
     panel.querySelectorAll('.highlight-item').forEach(el => {
@@ -698,9 +610,9 @@ class ComponentBrowser {
       group.visible = false;
     }
 
-    // Re-fit the frustum without changing camera angle
+    // Re-fit frustum without changing camera angle
     const box = this._getVisibleBBox();
-    this._fitOrthoFrustum(box);
+    this.viewport._fitOrthoFrustum(box);
     this.controls.update();
 
     // Re-apply section plane (clips new geometry, rebuilds caps)
@@ -715,12 +627,11 @@ class ComponentBrowser {
 
     this.currentComponent = comp;
 
-    // Update top bar
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
     // Clear measurements, section, steps mode, and layers
-    this.measureTool.clearAll();
+    this.viewport._meas.clearAll();
     this._resetSection();
     if (this.stepsMode) {
       this.stepsMode = false;
@@ -734,17 +645,14 @@ class ComponentBrowser {
       if (btn) btn.classList.remove('active');
     }
     for (const id of ALL_LAYER_IDS) {
-      clearGroup(this.layerGroups[id]);
+      this.viewport.clearGroup(this.layerGroups[id]);
       this.layerGroups[id].visible = false;
     }
 
-    // First layer is the default
     const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
 
-    // Update side panel
     this._updateSidePanel(comp);
 
-    // Load default layer and fit view
     await this._loadLayer(defaultLayer);
     this.layerGroups[defaultLayer].visible = true;
     this._fitCameraToVisibleMeshes();
@@ -765,7 +673,6 @@ class ComponentBrowser {
       ? meta.colorHex
       : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
 
-    // Tint: 20% entity color on a light base — keeps edges visible
     const renderColor = tintColor(entityColor);
 
     await this._addSTLMesh(compName, layerId, renderColor, meta.opts, group);
@@ -891,7 +798,6 @@ class ComponentBrowser {
     const btn = document.getElementById('steps-toggle');
     if (btn) btn.classList.add('active');
 
-    // Hide layer geometry, show steps groups
     for (const id of ALL_LAYER_IDS) {
       this.layerGroups[id].visible = false;
     }
@@ -899,14 +805,11 @@ class ComponentBrowser {
     this.stepsGroup.visible = true;
     this.stepsToolGroup.visible = true;
 
-    // Reset caches
     this.stepsStlCache = {};
     this.stepsToolStlCache = {};
 
-    // Build steps UI in side panel
     this._buildStepsPanel();
 
-    // Show last step
     this._showComponentStep(this.stepsData.steps.length - 1);
   }
 
@@ -915,13 +818,11 @@ class ComponentBrowser {
     const btn = document.getElementById('steps-toggle');
     if (btn) btn.classList.remove('active');
 
-    // Clear steps geometry
     clearGroup(this.stepsGroup);
     clearGroup(this.stepsToolGroup);
     this.stepsGroup.visible = false;
     this.stepsToolGroup.visible = false;
 
-    // Restore layer geometry
     if (this._markerGroup) this._markerGroup.visible = true;
     const comp = this.currentComponent;
     if (comp) {
@@ -929,7 +830,6 @@ class ComponentBrowser {
       this.layerGroups[defaultLayer].visible = true;
     }
 
-    // Rebuild normal side panel
     if (comp) this._updateSidePanel(comp);
     this._fitCameraToVisibleMeshes();
   }
@@ -942,28 +842,23 @@ class ComponentBrowser {
     let html = `<h2>${comp.name}</h2>`;
     html += `<div class="prop-badge" style="margin-bottom:12px">ShapeScript Steps</div>`;
 
-    // Step info box
     html += `<div id="step-info" class="step-info"><div class="step-title">Loading...</div></div>`;
 
-    // Slider
     html += `<div class="slider-group">`;
     html += `<div class="slider-label"><span class="name">Step</span><span class="value" id="step-value">0</span></div>`;
     html += `<input type="range" id="steps-slider" min="0" max="${steps.length - 1}" value="${steps.length - 1}">`;
     html += `</div>`;
 
-    // Prev/Next buttons
     html += `<div style="display:flex;gap:8px;margin-bottom:12px">`;
     html += `<button class="btn" id="step-prev">Prev</button>`;
     html += `<button class="btn" id="step-next">Next</button>`;
     html += `</div>`;
 
-    // Tool toggle
     html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">`;
     html += `<input type="checkbox" id="step-tool-toggle" ${this.showStepTool ? 'checked' : ''}>`;
     html += `<label for="step-tool-toggle" style="font-size:12px;color:var(--bp-gray1);cursor:pointer">Show tool solid</label>`;
     html += `</div>`;
 
-    // Step list
     html += `<h3>All Steps</h3>`;
     html += `<div id="steps-list">`;
     const OP_COLORS = { create: '#2B95D6', cut: '#DB3737', union: '#0F9960' };
@@ -975,24 +870,22 @@ class ComponentBrowser {
     }
     html += `</div>`;
 
-    // Exit button
     html += `<div style="margin-top:16px"><button class="btn" id="steps-exit">Exit Steps</button></div>`;
 
     panel.innerHTML = html;
 
-    // Wire up controls
-    const slider = document.getElementById('steps-slider');
-    slider.addEventListener('input', () => this._showComponentStep(parseInt(slider.value)));
+    const sliderEl = document.getElementById('steps-slider');
+    sliderEl.addEventListener('input', () => this._showComponentStep(parseInt(sliderEl.value)));
 
     document.getElementById('step-prev').addEventListener('click', () => {
       if (this.stepsCurrentIdx > 0) {
-        slider.value = String(this.stepsCurrentIdx - 1);
+        sliderEl.value = String(this.stepsCurrentIdx - 1);
         this._showComponentStep(this.stepsCurrentIdx - 1);
       }
     });
     document.getElementById('step-next').addEventListener('click', () => {
       if (this.stepsCurrentIdx < steps.length - 1) {
-        slider.value = String(this.stepsCurrentIdx + 1);
+        sliderEl.value = String(this.stepsCurrentIdx + 1);
         this._showComponentStep(this.stepsCurrentIdx + 1);
       }
     });
@@ -1002,11 +895,10 @@ class ComponentBrowser {
     });
     document.getElementById('steps-exit').addEventListener('click', () => this._exitStepsMode());
 
-    // Step list click handlers
     panel.querySelectorAll('.step-row').forEach(row => {
       row.addEventListener('click', () => {
         const idx = parseInt(row.dataset.stepIdx);
-        slider.value = String(idx);
+        sliderEl.value = String(idx);
         this._showComponentStep(idx);
       });
       row.addEventListener('mouseenter', () => { row.style.background = 'rgba(206,217,224,0.5)'; });
@@ -1024,7 +916,6 @@ class ComponentBrowser {
     this.stepsCurrentIdx = idx;
     const step = steps[idx];
 
-    // Update info
     const infoEl = document.getElementById('step-info');
     if (infoEl) {
       const opLabel = step.op === 'cut' ? 'subtract' : step.op === 'union' ? 'add' : step.op;
@@ -1036,25 +927,21 @@ class ComponentBrowser {
     const valueEl = document.getElementById('step-value');
     if (valueEl) valueEl.textContent = `${idx + 1} / ${steps.length}`;
 
-    // Highlight in step list
     document.querySelectorAll('.step-row').forEach(row => {
       row.style.background = parseInt(row.dataset.stepIdx) === idx ? 'rgba(19,124,189,0.15)' : '';
     });
 
-    // Load body STL — for steps with a tool, show state BEFORE the operation
     const hasPrev = idx > 0 && step.has_tool;
     const bodyIdx = hasPrev ? idx - 1 : idx;
     const geometry = await this._loadComponentStepSTL(bodyIdx);
     if (!geometry) return;
 
-    // Clear and rebuild meshes
     clearGroup(this.stepsGroup);
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xCED9E0, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
     });
     this.stepsGroup.add(new THREE.Mesh(geometry, material));
 
-    // Edge outlines
     const edges = new THREE.EdgesGeometry(geometry, 28);
     const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0.6,
@@ -1062,14 +949,11 @@ class ComponentBrowser {
     lines.raycast = () => {};
     this.stepsGroup.add(lines);
 
-    // Tool overlay
     await this._updateStepToolMesh();
 
-    // Prefetch adjacent
     this._prefetchComponentStep(idx - 1);
     this._prefetchComponentStep(idx + 1);
 
-    // Auto-frame on first load
     if (!this._stepsHasFramed) {
       this._stepsFrameCamera(geometry);
       this._stepsHasFramed = true;
@@ -1153,107 +1037,61 @@ class ComponentBrowser {
     this.camera.lookAt(center);
     this.controls.enableRotate = true;
 
-    const pad = maxDim * 0.15;
-    const container = document.getElementById('canvas-container');
-    const aspect = container.offsetWidth / container.offsetHeight;
-    const halfH = (maxDim / 2) + pad;
-    this.camera.left = -halfH * aspect;
-    this.camera.right = halfH * aspect;
-    this.camera.top = halfH;
-    this.camera.bottom = -halfH;
-    this.camera.updateProjectionMatrix();
+    this.viewport._fitOrthoFrustum(box);
     this.controls.update();
   }
 
   // -----------------------------------------------------------------------
-  // Section plane
+  // Section plane — delegates to Viewport3D
   // -----------------------------------------------------------------------
 
   _updateSectionPlane() {
-    const box = this._getVisibleBBox();
-    const clips = this.sectionEnabled ? [this.sectionPlane] : [];
+    if (this.sectionEnabled) {
+      // Compute plane from our UI state and pass to viewport
+      const box = this._getVisibleBBox();
+      if (box) {
+        const axisIdx = AXIS_INDEX[this.sectionAxis];
+        const axisMin = box.min.getComponent(axisIdx);
+        const axisMax = box.max.getComponent(axisIdx);
+        const pos = axisMin + (axisMax - axisMin) * this.sectionFraction;
+        const sign = this.sectionFlipped ? 1 : -1;
+        const normal = new THREE.Vector3();
+        normal.setComponent(axisIdx, sign);
 
-    if (this.sectionEnabled && box) {
-      // Compute plane position from slider fraction along the chosen axis
-      const min = box.min;
-      const max = box.max;
-      const axisIdx = AXIS_INDEX[this.sectionAxis];
-      const axisMin = min.getComponent(axisIdx);
-      const axisMax = max.getComponent(axisIdx);
-      const pos = axisMin + (axisMax - axisMin) * this.sectionFraction;
+        // Configure viewport's section state and trigger rebuild
+        this.viewport._secOn = true;
+        this.viewport._secAxis = this.sectionAxis;
+        this.viewport._secFrac = this.sectionFraction;
+        this.viewport._secPlane.normal.copy(normal);
+        this.viewport._secPlane.constant = pos * -sign;
 
-      // Plane normal: default clips geometry on the + side; flip reverses
-      const sign = this.sectionFlipped ? 1 : -1;
-      const normal = new THREE.Vector3();
-      normal.setComponent(axisIdx, sign);
-      this.sectionPlane.normal.copy(normal);
-      this.sectionPlane.constant = pos * -sign;
+        // Apply clipping and rebuild caps
+        this.viewport._applySection();
 
-      this._updateSectionViz(box, axisIdx, pos);
-    } else {
-      this._removeSectionViz();
-    }
-
-    // Apply clipping planes to all meshes AND edge lines in layer groups
-    for (const id of ALL_LAYER_IDS) {
-      this.layerGroups[id].traverse(child => {
-        if (child.material) {
-          // Clone shared edge material on first clip so we don't
-          // mutate the global instance used by non-clipped viewers
-          if (child.isLineSegments && !child.material._clippable) {
-            child.material = child.material.clone();
-            child.material._clippable = true;
-          }
-          child.material.clippingPlanes = clips;
-          child.material.clipShadows = true;
+        // Update section viz position (the _applySection uses its own logic,
+        // but we need to handle flipped normal)
+        if (this.viewport._secViz) {
+          const center = box.getCenter(new THREE.Vector3());
+          const sz = box.getSize(new THREE.Vector3());
+          const planeSize = Math.max(sz.x, sz.y, sz.z) * 1.5;
+          this.viewport._secViz.scale.set(planeSize, planeSize, 1);
+          this.viewport._secViz.visible = true;
+          center.setComponent(axisIdx, pos);
+          this.viewport._secViz.position.copy(center);
+          this.viewport._secViz.rotation.set(0, 0, 0);
+          if (axisIdx === 0) this.viewport._secViz.rotation.y = Math.PI / 2;
+          else if (axisIdx === 1) this.viewport._secViz.rotation.x = Math.PI / 2;
         }
+      }
+    } else {
+      // Disable section in viewport
+      this.viewport._secOn = false;
+      if (this.viewport._secViz) this.viewport._secViz.visible = false;
+      this.viewport._clearSectionCaps();
+      this.viewport.scene.traverse(ch => {
+        if (ch.material) ch.material.clippingPlanes = [];
       });
     }
-
-    // Rebuild stencil-based section caps
-    this._rebuildSectionCaps(clips);
-  }
-
-  _updateSectionViz(box, axisIdx, pos) {
-    if (!this._sectionViz) {
-      const geom = new THREE.PlaneGeometry(1, 1);
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x2B95D6,
-        transparent: true,
-        opacity: 0.08,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      this._sectionViz = new THREE.Mesh(geom, mat);
-      this._sectionViz.renderOrder = RENDER_ORDER.SECTION_VIZ;
-      this._sectionViz.raycast = () => {};
-      this.scene.add(this._sectionViz);
-
-      // Edge ring around the plane
-      const ringGeom = new THREE.EdgesGeometry(geom);
-      this._sectionRing = new THREE.LineSegments(ringGeom, new THREE.LineBasicMaterial({
-        color: 0x2B95D6, transparent: true, opacity: 0.4,
-      }));
-      this._sectionRing.raycast = () => {};
-      this._sectionViz.add(this._sectionRing);
-    }
-
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const planeSize = Math.max(size.x, size.y, size.z) * 1.5;
-
-    this._sectionViz.scale.set(planeSize, planeSize, 1);
-    this._sectionViz.visible = true;
-
-    // Position and orient the plane quad
-    center.setComponent(axisIdx, pos);
-    this._sectionViz.position.copy(center);
-
-    // Rotate plane to face along the section axis
-    this._sectionViz.rotation.set(0, 0, 0);
-    if (axisIdx === 0) this._sectionViz.rotation.y = Math.PI / 2;      // X
-    else if (axisIdx === 1) this._sectionViz.rotation.x = Math.PI / 2;  // Y
-    // Z = default orientation (no rotation needed)
   }
 
   _resetSection() {
@@ -1266,211 +1104,7 @@ class ComponentBrowser {
     if (flipBtn) flipBtn.classList.remove('active');
     const controls = document.querySelector('#section-controls');
     if (controls) controls.style.display = 'none';
-    this._removeSectionViz();
-  }
-
-  _removeSectionViz() {
-    if (this._sectionViz) {
-      this._sectionViz.visible = false;
-    }
-    this._clearSectionCaps();
-  }
-
-  /**
-   * Stencil-based section caps: fills the cross-section interior with
-   * a solid color so the cut looks like a real cross-section, not a
-   * hollow shell.
-   *
-   * Technique:
-   * 1. For each visible mesh, create two invisible stencil helpers:
-   *    - Back-face pass: increments stencil where clipped back faces are visible
-   *    - Front-face pass: decrements stencil where clipped front faces are visible
-   * 2. A cap plane at the section position renders only where stencil != 0
-   *    (i.e., inside the geometry cross-section).
-   */
-  _rebuildSectionCaps(clips) {
-    this._clearSectionCaps();
-    if (!clips.length) return;
-
-    this._capGroup = new THREE.Group();
-    this._capGroup.name = 'section-caps';
-    this.scene.add(this._capGroup);
-
-    const box = this._getVisibleBBox();
-    const capSize = box
-      ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
-      : 0.2;
-
-    const allMeshes = [];
-    let layerIndex = 0;
-
-    // Process each layer separately so each gets its own cap color
-    for (const id of ALL_LAYER_IDS) {
-      const group = this.layerGroups[id];
-      if (!group.visible) continue;
-
-      const layerMeshes = [];
-      group.traverse(child => {
-        if (child.isMesh && child.geometry) {
-          layerMeshes.push(child);
-        }
-      });
-      if (layerMeshes.length === 0) continue;
-
-      const ref = layerIndex + 1;  // stencil ref (1-based, 0 = empty)
-      const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
-      layerIndex++;
-
-      // Stencil helpers for this layer's meshes
-      for (const mesh of layerMeshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
-          orderBase + RENDER_ORDER.STENCIL_BACK);
-        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
-          orderBase + RENDER_ORDER.STENCIL_FRONT);
-      }
-
-      // Cap plane for this layer — darker tint of the layer color
-      const meta = LAYER_META[id] || { colorHex: null };
-      const entityColor = meta.colorHex !== null
-        ? meta.colorHex
-        : new THREE.Color(
-            this.currentComponent.color[0],
-            this.currentComponent.color[1],
-            this.currentComponent.color[2],
-          );
-      // 60% tint for the cap fill (darker than the 50% body tint)
-      const capColor = tintColor(entityColor, 0.6);
-
-      const capGeom = new THREE.PlaneGeometry(capSize, capSize);
-      const capMat = new THREE.MeshBasicMaterial({
-        color: capColor,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        stencilWrite: true,
-        stencilFunc: THREE.EqualStencilFunc,
-        stencilRef: ref,
-        stencilFail: THREE.KeepStencilOp,
-        stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.ZeroStencilOp,  // clear after rendering
-      });
-      const capPlane = new THREE.Mesh(capGeom, capMat);
-      capPlane.raycast = () => {};
-      capPlane.renderOrder = orderBase + RENDER_ORDER.STENCIL_CAP;
-
-      if (this._sectionViz) {
-        capPlane.position.copy(this._sectionViz.position);
-        capPlane.rotation.copy(this._sectionViz.rotation);
-      }
-
-      this._capGroup.add(capPlane);
-      allMeshes.push(...layerMeshes);
-    }
-
-    // Compute cross-section contour lines across all layers
-    const contourSegments = [];
-    const plane = this.sectionPlane;
-    for (const mesh of allMeshes) {
-      this._computeMeshPlaneContour(mesh, plane, contourSegments);
-    }
-
-    if (contourSegments.length > 0) {
-      const lineGeom = new LineSegmentsGeometry();
-      lineGeom.setPositions(contourSegments);
-      const lineMat = new LineMaterial({
-        color: BP.DARK_GRAY3,
-        linewidth: 3,
-        resolution: new THREE.Vector2(
-          this.renderer.domElement.width,
-          this.renderer.domElement.height,
-        ),
-        clippingPlanes: clips,
-      });
-      const contourLines = new LineSegments2(lineGeom, lineMat);
-      contourLines.renderOrder = RENDER_ORDER.SECTION_CONTOUR;
-      contourLines.raycast = () => {};
-      this._capGroup.add(contourLines);
-      this._contourLineMat = lineMat;
-    }
-  }
-
-  /** Compute line segments where a mesh intersects a plane. */
-  _computeMeshPlaneContour(mesh, plane, out) {
-    const geom = mesh.geometry;
-    const posAttr = geom.getAttribute('position');
-    if (!posAttr) return;
-
-    const index = geom.index;
-    const matrix = mesh.matrixWorld;
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-
-    const triCount = index ? index.count / 3 : posAttr.count / 3;
-
-    for (let i = 0; i < triCount; i++) {
-      const i0 = index ? index.getX(i * 3) : i * 3;
-      const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
-      const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
-
-      a.fromBufferAttribute(posAttr, i0).applyMatrix4(matrix);
-      b.fromBufferAttribute(posAttr, i1).applyMatrix4(matrix);
-      c.fromBufferAttribute(posAttr, i2).applyMatrix4(matrix);
-
-      const da = plane.distanceToPoint(a);
-      const db = plane.distanceToPoint(b);
-      const dc = plane.distanceToPoint(c);
-
-      // Find edge crossings (sign changes)
-      const crossings = [];
-      if (da * db < 0) crossings.push(this._planeEdgeIntersect(a, b, da, db));
-      if (db * dc < 0) crossings.push(this._planeEdgeIntersect(b, c, db, dc));
-      if (dc * da < 0) crossings.push(this._planeEdgeIntersect(c, a, dc, da));
-
-      if (crossings.length === 2) {
-        out.push(
-          crossings[0].x, crossings[0].y, crossings[0].z,
-          crossings[1].x, crossings[1].y, crossings[1].z,
-        );
-      }
-    }
-  }
-
-  _planeEdgeIntersect(p1, p2, d1, d2) {
-    const t = d1 / (d1 - d2);
-    return new THREE.Vector3().lerpVectors(p1, p2, t);
-  }
-
-  /** Create an invisible stencil helper mesh that writes to the stencil buffer. */
-  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
-    const mat = new THREE.MeshBasicMaterial({
-      colorWrite: false,
-      depthWrite: false,
-      side,
-      clippingPlanes: clips,
-      stencilWrite: true,
-      stencilFunc: THREE.AlwaysStencilFunc,
-      stencilRef,
-      stencilFail: THREE.KeepStencilOp,
-      stencilZFail: THREE.KeepStencilOp,
-      stencilZPass: THREE.ReplaceStencilOp,
-    });
-    const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
-    mesh.position.copy(sourceMesh.position);
-    mesh.quaternion.copy(sourceMesh.quaternion);
-    mesh.scale.copy(sourceMesh.scale);
-    mesh.renderOrder = renderOrder;
-    mesh.raycast = () => {};
-    this._capGroup.add(mesh);
-  }
-
-  _clearSectionCaps() {
-    if (this._capGroup) {
-      this._capGroup.traverse(child => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
-      });
-      this.scene.remove(this._capGroup);
-      this._capGroup = null;
-    }
-    this._contourLineMat = null;
+    this._updateSectionPlane();
   }
 
   // -----------------------------------------------------------------------
@@ -1484,15 +1118,12 @@ class ComponentBrowser {
     const layers = ALL_LAYER_IDS.filter(id => this.layerGroups[id].visible);
     if (layers.length === 0) return;
 
-    // Extract actual view axes from camera world matrix (not camera.up,
-    // which is just a lookAt hint and drifts after orbiting)
     this.camera.updateMatrixWorld();
     const dir = new THREE.Vector3();
-    dir.setFromMatrixColumn(this.camera.matrixWorld, 2);  // +Z = backward (camera toward scene)
+    dir.setFromMatrixColumn(this.camera.matrixWorld, 2);
     const up = new THREE.Vector3();
-    up.setFromMatrixColumn(this.camera.matrixWorld, 1);   // +Y = screen up
+    up.setFromMatrixColumn(this.camera.matrixWorld, 1);
 
-    // Determine view label for annotation
     const preset = VIEW_PRESETS[this.activePreset];
     const viewLabel = preset ? preset.label : 'Custom';
 
@@ -1556,16 +1187,13 @@ class ComponentBrowser {
     const body = document.getElementById('svg-modal-body');
 
     title.textContent = `${componentName} — ${viewLabel} view`;
-    // Strip explicit width/height so SVG scales to fill the modal via CSS
     body.innerHTML = svgText.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
 
-    // Store for download
     this._lastSvgText = svgText;
     this._lastSvgName = `${componentName}_${viewLabel.toLowerCase()}`;
 
     modal.style.display = 'flex';
 
-    // Wire close handlers (re-wire each time to keep it simple)
     const close = () => { modal.style.display = 'none'; };
     document.querySelector('#svg-modal .modal-backdrop').onclick = close;
     document.getElementById('svg-modal-close').onclick = close;
@@ -1586,30 +1214,35 @@ class ComponentBrowser {
 
   _setupAxisGizmo() {
     this._gizmoSvg = document.getElementById('axis-gizmo');
-    // Axis definitions: direction in world space, color, label
     this._gizmoAxes = [
       { dir: new THREE.Vector3(1, 0, 0), color: hexStr(BP.RED3),   label: '+X', neg: '-X' },
       { dir: new THREE.Vector3(0, 1, 0), color: hexStr(BP.GREEN3), label: '+Y', neg: '-Y' },
       { dir: new THREE.Vector3(0, 0, 1), color: hexStr(BP.BLUE4),  label: '+Z', neg: '-Z' },
     ];
+
+    // Drive gizmo updates from the viewport animation loop
+    const origAnimCb = this.viewport._animCb;
+    this.viewport.animate(() => {
+      if (origAnimCb) origAnimCb();
+      this._updateAxisGizmo();
+    });
   }
 
   _updateAxisGizmo() {
     const svg = this._gizmoSvg;
     if (!svg) return;
 
-    const cx = 50, cy = 50;  // center of the 100×100 SVG
-    const len = 32;           // axis line length in px
+    const cx = 50, cy = 50;
+    const len = 32;
     svg.innerHTML = '';
 
     this.camera.updateMatrixWorld();
     const invMat = this.camera.matrixWorld.clone().invert();
 
-    // Sort axes by depth so front-most draws last (on top)
     const projected = this._gizmoAxes.map(axis => {
       const d = axis.dir.clone().transformDirection(invMat);
       return { ...axis, d, depth: d.z };
-    }).sort((a, b) => b.depth - a.depth);  // back-to-front
+    }).sort((a, b) => b.depth - a.depth);
 
     for (const { d, color, label } of projected) {
       const behind = d.z > 0.2;
@@ -1618,7 +1251,6 @@ class ComponentBrowser {
       const sx = d.x * len;
       const sy = -d.y * len;
 
-      // Axis line
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', cx);
       line.setAttribute('y1', cy);
@@ -1630,7 +1262,6 @@ class ComponentBrowser {
       line.setAttribute('opacity', opacity);
       svg.appendChild(line);
 
-      // Dot at the tip
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       dot.setAttribute('cx', cx + sx);
       dot.setAttribute('cy', cy + sy);
@@ -1639,7 +1270,6 @@ class ComponentBrowser {
       dot.setAttribute('opacity', opacity);
       svg.appendChild(dot);
 
-      // Label next to the dot
       const labelDist = len + 12;
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', cx + d.x * labelDist);
@@ -1653,30 +1283,12 @@ class ComponentBrowser {
       svg.appendChild(text);
     }
 
-    // Center dot
     const centerDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     centerDot.setAttribute('cx', cx);
     centerDot.setAttribute('cy', cy);
     centerDot.setAttribute('r', 2);
     centerDot.setAttribute('fill', '#8A9BA8');
     svg.appendChild(centerDot);
-  }
-
-  // -----------------------------------------------------------------------
-  // Animation loop
-  // -----------------------------------------------------------------------
-
-  _animate() {
-    const loop = () => {
-      this.controls.update();
-      this._edgeComposer.render();
-      this._updateAxisGizmo();
-      if (this.measureTool.measurements.length > 0 || this.measureTool._firstPoint) {
-        this.measureTool.update();
-      }
-      requestAnimationFrame(loop);
-    };
-    loop();
   }
 }
 
@@ -1690,7 +1302,6 @@ export async function initComponentBrowser(componentParam) {
   if (componentParam && componentParam !== 'catalog') {
     await browser.loadComponent(componentParam);
 
-    // Auto-redirect to unified ShapeScript debugger if ?steps=true
     const params = new URLSearchParams(window.location.search);
     if (params.get('steps') === 'true') {
       window.location.href = `?cadsteps=component:${encodeURIComponent(componentParam)}`;
