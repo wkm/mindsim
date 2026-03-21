@@ -454,20 +454,27 @@ def build_cad(bot: Bot) -> CadModel:
         violations = [r for r in clearance_results if not r.satisfied]
         if violations:
             for v in violations:
-                warnings.warn(
-                    f"Clearance violation: {v.body_a} \u2194 {v.body_b} "
-                    f"({v.label}): {v.distance * 1000:.1f}mm "
-                    f"(min {v.min_distance * 1000:.1f}mm)",
-                    stacklevel=2,
-                )
+                if v.intersects:
+                    msg = (
+                        f"Intersection: {v.body_a} \u2194 {v.body_b} "
+                        f"({v.label}): overlap {v.intersection_volume * 1e9:.1f} mm\u00b3"
+                    )
+                else:
+                    msg = (
+                        f"Clearance violation: {v.body_a} \u2194 {v.body_b} "
+                        f"({v.label}): {v.distance * 1000:.1f}mm "
+                        f"(min {v.min_distance * 1000:.1f}mm)"
+                    )
+                warnings.warn(msg, stacklevel=2)
 
         # Print summary
         for r in clearance_results:
             status = "\u2713" if r.satisfied else "\u2717"
-            print(
-                f"  {status} {r.body_a} \u2194 {r.body_b}: "
-                f"{r.distance * 1000:.2f}mm ({r.label})"
-            )
+            if r.intersects:
+                detail = f"INTERSECT overlap={r.intersection_volume * 1e9:.1f}mm\u00b3"
+            else:
+                detail = f"{r.distance * 1000:.2f}mm gap"
+            print(f"  {status} {r.body_a} \u2194 {r.body_b}: {detail} ({r.label})")
 
     return CadModel(
         body_solids=body_solids,

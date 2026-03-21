@@ -23,25 +23,31 @@ class ClearanceResult:
 
     body_a: str
     body_b: str
-    distance: float  # meters -- negative means intersection
+    intersects: bool  # do the bodies overlap?
+    intersection_volume: float  # m³ -- volume of overlap (0 = no overlap)
+    distance: float  # meters -- surface-to-surface gap (0 if intersecting)
     min_distance: float  # meters -- required minimum gap
     label: str
-    satisfied: bool  # distance >= min_distance
-    intersection_volume: float = 0.0  # m³ -- volume of overlap (0 = no overlap)
+
+    @property
+    def satisfied(self) -> bool:
+        if self.intersects:
+            return False  # any intersection is a violation
+        return self.distance >= self.min_distance
 
 
-def _compute_distance(placed_a, placed_b) -> tuple[float, float]:
-    """Compute the signed distance between two positioned solids.
+def _check_clearance(placed_a, placed_b) -> tuple[bool, float, float]:
+    """Check clearance between two positioned solids.
 
-    Returns (distance, intersection_volume):
-    - distance > 0: gap between surfaces
-    - distance == 0: surfaces touching
-    - distance < 0: bodies overlap (magnitude is approximate penetration)
-    - intersection_volume: volume of the overlapping region (0 if no overlap)
+    Returns (intersects, intersection_volume, distance):
+    - intersects: True if bodies overlap
+    - intersection_volume: m³ of overlap (0 if no overlap)
+    - distance: surface-to-surface gap in meters (0 if intersecting, >= 0 always)
     """
     from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 
     # Step 1: Check for intersection via boolean common
+    int_vol = 0.0
     try:
         common = placed_a & placed_b
         solids = common.solids() if hasattr(common, "solids") else []
@@ -49,21 +55,17 @@ def _compute_distance(placed_a, placed_b) -> tuple[float, float]:
         if hasattr(common, "volume") and not solids:
             int_vol = abs(common.volume) if common.volume else 0.0
     except Exception:
-        int_vol = 0.0
+        pass
 
     if int_vol > 1e-15:
-        # Bodies intersect — report negative distance proportional to overlap
-        # Approximate penetration depth from intersection volume
-        # (cube root gives a length scale)
-        penetration = -(int_vol ** (1.0 / 3.0))
-        return penetration, int_vol
+        return True, int_vol, 0.0
 
     # Step 2: No intersection — measure gap via BRepExtrema
     dist_calc = BRepExtrema_DistShapeShape(placed_a.wrapped, placed_b.wrapped)
     if dist_calc.IsDone() and dist_calc.NbSolution() > 0:
-        return dist_calc.Value(), 0.0
+        return False, 0.0, dist_calc.Value()
 
-    return float("inf"), 0.0
+    return False, 0.0, float("inf")
 
 
 def validate_clearances(bot: Bot, body_solids: dict) -> list[ClearanceResult]:
@@ -102,17 +104,17 @@ def validate_clearances(bot: Bot, body_solids: dict) -> list[ClearanceResult]:
             Location(body_b.world_pos, quat_to_euler(body_b.world_quat))
         )
 
-        distance, int_vol = _compute_distance(placed_a, placed_b)
+        intersects, int_vol, distance = _check_clearance(placed_a, placed_b)
 
         results.append(
             ClearanceResult(
                 body_a=constraint.body_a,
                 body_b=constraint.body_b,
+                intersects=intersects,
+                intersection_volume=int_vol,
                 distance=distance,
                 min_distance=constraint.min_distance,
                 label=constraint.label,
-                satisfied=distance >= constraint.min_distance,
-                intersection_volume=int_vol,
             )
         )
 
