@@ -577,11 +577,9 @@ class CadStepsViewer {
     }
     this._scrollToLine(idx);
 
-    // In holistic mode, for steps with a tool show the state BEFORE this
-    // operation so the tool overlay shows what's about to change.
-    // In isolate mode, always show the current step's result.
-    const hasPrev = !this.isolateMode && idx > 0 && step.has_tool;
-    const bodyIdx = hasPrev ? idx - 1 : idx;
+    // Always show the result of the current step — the cumulative body
+    // at this point in the program. Tool overlay shows what was cut/fused.
+    const bodyIdx = idx;
     const geometry = await this._loadStepSTL(bodyIdx);
     if (!geometry) return;
 
