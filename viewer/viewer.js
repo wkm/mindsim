@@ -22,13 +22,21 @@ if (cadstepsParam) {
   document.getElementById('top-bar').style.display = '';
   document.getElementById('side-panel').style.display = 'none';
   document.getElementById('mode-tabs').style.display = 'none';
-  const cadBotName = cadstepsParam.split(':')[0];
+  const cadParts = cadstepsParam.split(':');
   const botNameEl = document.getElementById('bot-name');
-  botNameEl.textContent = `${cadBotName} — CAD Steps`;
-  botNameEl.style.cursor = 'pointer';
-  botNameEl.addEventListener('click', () => {
-    window.location.href = `?bot=${encodeURIComponent(cadBotName)}`;
-  });
+  if (cadParts[0] === 'component') {
+    botNameEl.textContent = `${cadParts[1]} — ShapeScript`;
+    botNameEl.style.cursor = 'pointer';
+    botNameEl.addEventListener('click', () => {
+      window.location.href = `?component=${encodeURIComponent(cadParts[1])}`;
+    });
+  } else {
+    botNameEl.textContent = `${cadParts[0]} — ShapeScript`;
+    botNameEl.style.cursor = 'pointer';
+    botNameEl.addEventListener('click', () => {
+      window.location.href = `?bot=${encodeURIComponent(cadParts[0])}`;
+    });
+  }
   import('./cad-steps-mode.js').then(m => m.initCadSteps(cadstepsParam));
 
 } else if (botName) {

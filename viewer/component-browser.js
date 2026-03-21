@@ -240,10 +240,14 @@ class ComponentBrowser {
       renderBtn.addEventListener('click', () => this._requestSVGRender());
     }
 
-    // Steps toggle
+    // Steps button — navigate to the unified ShapeScript debugger
     const stepsBtn = document.getElementById('steps-toggle');
     if (stepsBtn) {
-      stepsBtn.addEventListener('click', () => this._toggleStepsMode());
+      stepsBtn.addEventListener('click', () => {
+        if (this.currentComponent) {
+          window.location.href = `?cadsteps=component:${encodeURIComponent(this.currentComponent.name)}`;
+        }
+      });
     }
 
     // Section plane controls
@@ -1686,10 +1690,10 @@ export async function initComponentBrowser(componentParam) {
   if (componentParam && componentParam !== 'catalog') {
     await browser.loadComponent(componentParam);
 
-    // Auto-open steps mode if ?steps=true
+    // Auto-redirect to unified ShapeScript debugger if ?steps=true
     const params = new URLSearchParams(window.location.search);
     if (params.get('steps') === 'true') {
-      await browser._toggleStepsMode();
+      window.location.href = `?cadsteps=component:${encodeURIComponent(componentParam)}`;
     }
   }
 }

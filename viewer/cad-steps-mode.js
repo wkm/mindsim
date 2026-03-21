@@ -142,20 +142,28 @@ const EDITOR_STYLES = `
 `;
 
 export async function initCadSteps(param) {
-  const [botName, bodyName] = param.split(':');
-  if (!botName || !bodyName) {
-    console.error('cadsteps param must be bot:body, got:', param);
+  const parts = param.split(':');
+  if (parts.length < 2) {
+    console.error('cadsteps param must be bot:body or component:name, got:', param);
     return;
   }
 
-  const viewer = new CadStepsViewer(botName, bodyName);
-  await viewer.init();
+  // Detect mode: "component:OV5647" vs "wheeler_arm:base"
+  if (parts[0] === 'component') {
+    const viewer = new CadStepsViewer(null, null, parts[1]);
+    await viewer.init();
+  } else {
+    const viewer = new CadStepsViewer(parts[0], parts[1], null);
+    await viewer.init();
+  }
 }
 
 class CadStepsViewer {
-  constructor(botName, bodyName) {
+  constructor(botName, bodyName, componentName = null) {
     this.botName = botName;
     this.bodyName = bodyName;
+    this.componentName = componentName;
+    this.isComponentMode = componentName !== null;
     this.steps = [];
     this.currentStep = 0;
     this.stlLoader = new STLLoader();
@@ -177,14 +185,17 @@ class CadStepsViewer {
     const loadingEl = document.getElementById('loading');
     const loadingText = document.getElementById('loading-text');
     loadingEl.style.display = '';
-    loadingText.textContent = `Building CAD steps for ${this.bodyName}...`;
+    const targetLabel = this.isComponentMode ? this.componentName : this.bodyName;
+    loadingText.textContent = `Building CAD steps for ${targetLabel}...`;
 
     // Hide the default side panel — we use our own layout
     const sidePanel = document.getElementById('side-panel');
     if (sidePanel) sidePanel.style.display = 'none';
 
     this.allBodies = [];
-    await Promise.all([this._fetchSteps(), this._fetchBodies()]);
+    const fetches = [this._fetchSteps()];
+    if (!this.isComponentMode) fetches.push(this._fetchBodies());
+    await Promise.all(fetches);
 
     this._buildLayout();
     this._setupThreeJS();
@@ -526,7 +537,9 @@ class CadStepsViewer {
   // ── Data fetching ──
 
   async _fetchSteps() {
-    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps`;
+    const url = this.isComponentMode
+      ? `/api/components/${encodeURIComponent(this.componentName)}/shapescript`
+      : `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps`;
     const resp = await fetch(url);
     if (!resp.ok) {
       console.error('Failed to fetch CAD steps:', resp.status, await resp.text());
@@ -650,7 +663,9 @@ class CadStepsViewer {
     if (idx < 0 || idx >= this.steps.length) return null;
     if (cache[idx]) return cache[idx];
 
-    const url = `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/${suffix}`;
+    const url = this.isComponentMode
+      ? `/api/components/${encodeURIComponent(this.componentName)}/shapescript/${idx}/${suffix}`
+      : `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/${suffix}`;
     return new Promise((resolve) => {
       this.stlLoader.load(url, (geometry) => {
         geometry.computeVertexNormals();
