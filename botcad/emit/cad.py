@@ -83,6 +83,35 @@ class CadStep:
     script: str = ""  # ShapeScript code line, e.g. "cut_3 = Cut(box_0, loc_2)"
 
 
+def _solid_to_brep_bytes(solid) -> bytes:
+    """Serialize a build123d Solid to BREP format bytes."""
+    import tempfile
+
+    from build123d import export_brep
+
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=True) as tmp:
+        export_brep(solid, tmp.name)
+        return Path(tmp.name).read_bytes()
+
+
+def _solid_from_brep_bytes(brep_bytes: bytes):
+    """Deserialize a build123d Solid from BREP format bytes."""
+    import tempfile
+
+    from build123d import import_brep
+
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=True) as tmp:
+        Path(tmp.name).write_bytes(brep_bytes)
+        return import_brep(tmp.name)
+
+
+def _restore_mass_from_cache(body: Body, cached: dict) -> None:
+    """Restore mass properties from cache instead of recomputing from solid."""
+    body.solved_mass = cached["mass"]
+    body.solved_com = cached["com"]
+    body.solved_inertia = cached["inertia"]
+
+
 def _update_mass_from_solid(body: Body, solid) -> None:
     """Compute mass, COM, and inertia from the actual CAD solid + component masses.
 
@@ -298,9 +327,12 @@ def build_cad(bot: Bot) -> CadModel:
     body_solids: dict[str, object] = {}
     if use_shapescript:
         from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cache import DiskCache
         from botcad.shapescript.emit_body import emit_body_ir
 
         ir_backend = OcctBackend()
+        cache = DiskCache()
+        cache_hits = 0
 
     n = len(bot.all_bodies)
     for i, body in enumerate(bot.all_bodies):
@@ -311,18 +343,45 @@ def build_cad(bot: Bot) -> CadModel:
 
         if use_shapescript:
             prog = emit_body_ir(body, pj, wire_segs or None)
-            result = ir_backend.execute(prog)
-            solid = result.shapes[prog.output_ref.id]
+            cached = cache.get(prog)
+            if cached is not None:
+                # Cache hit — restore solid from BREP bytes + mass properties
+                solid = _solid_from_brep_bytes(cached["brep"])
+                _restore_mass_from_cache(body, cached)
+                cache_hits += 1
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (cached)")
+            else:
+                # Cache miss — execute and cache
+                result = ir_backend.execute(prog)
+                solid = result.shapes[prog.output_ref.id]
+                if solid is not None:
+                    _update_mass_from_solid(body, solid)
+                    cache.put(
+                        prog,
+                        {
+                            "brep": _solid_to_brep_bytes(solid),
+                            "mass": body.solved_mass,
+                            "com": body.solved_com,
+                            "inertia": body.solved_inertia,
+                        },
+                    )
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s")
         else:
             steps = _build_body_solid(body, pj, wire_segs or None)
             solid = steps[-1].solid if steps else None
+            if solid is not None:
+                _update_mass_from_solid(body, solid)
+            dt = time.monotonic() - t0
+            print(f" {dt:.1f}s")
 
         if solid is not None:
             body_solids[body.name] = solid
-            _update_mass_from_solid(body, solid)
-        dt = time.monotonic() - t0
-        print(f" {dt:.1f}s")
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
+
+    if use_shapescript:
+        print(f"[build_cad] {cache_hits}/{n} cache hits")
 
     return CadModel(
         body_solids=body_solids,

@@ -48,3 +48,4 @@ viewer/.cdn_cache/
 .claude/*
 !.claude/settings.json
 \n# Component reference files\nreferences/components/
+.botcad_cache/
