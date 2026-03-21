@@ -1411,6 +1411,10 @@ export class Viewport3D {
       contourLines.renderOrder = RENDER_ORDER.SECTION_CONTOUR;
       contourLines.raycast = () => {};
       contourLines.userData._vpCap = true;
+      // Offset contour lines slightly toward the camera along the section
+      // plane normal so they sit in front of both the cap and clipped body
+      const offset = this._secPlane.normal.clone().multiplyScalar(0.0001);
+      contourLines.position.copy(offset);
       this._capGroup.add(contourLines);
       this._contourLineMat = lineMat;
     }
