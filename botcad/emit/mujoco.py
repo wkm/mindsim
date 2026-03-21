@@ -139,17 +139,16 @@ def _build_bot_xml(bot: Bot) -> str:
     # Horn mesh assets
     for body in bot.all_bodies:
         for joint in body.joints:
-            if not joint.servo.continuous:
-                from botcad.bracket import horn_disc_params
+            from botcad.bracket import horn_disc_params
 
-                if horn_disc_params(joint.servo):
-                    SubElement(
-                        asset,
-                        "mesh",
-                        name=f"horn_{joint.name}_mesh",
-                        file=f"horn_{joint.name}.stl",
-                        scale="1 1 1",
-                    )
+            if horn_disc_params(joint.servo):
+                SubElement(
+                    asset,
+                    "mesh",
+                    name=f"horn_{joint.name}_mesh",
+                    file=f"horn_{joint.name}.stl",
+                    scale="1 1 1",
+                )
 
     # Wire mesh assets
     for route in bot.wire_routes:
@@ -353,7 +352,7 @@ def _emit_body_tree(
         SubElement(body_el, "joint", **joint_attribs)
 
     # Horn disc geom (purchased part visualization on child bodies)
-    if parent_joint is not None and not body.is_wheel_body:
+    if parent_joint is not None:
         from botcad.bracket import horn_disc_params
 
         params = horn_disc_params(parent_joint.servo)

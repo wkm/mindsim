@@ -472,10 +472,9 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     # --- Per-horn STLs ---
     for body in bot.all_bodies:
         for joint in body.joints:
-            if not joint.servo.continuous:
-                horn = _horn_solid(joint.servo)
-                if horn:
-                    export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
+            horn = _horn_solid(joint.servo)
+            if horn:
+                export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
     # --- Per-wire STLs ---
     from botcad.component import BusType
