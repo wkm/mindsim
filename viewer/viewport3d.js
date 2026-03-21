@@ -166,6 +166,12 @@ export class Viewport3D {
    */
   setSectionCapColorFn(fn) { this._sectionCapColorFn = fn; }
 
+  /** Zoom to fit all visible geometry (F key). */
+  zoomToFit() {
+    const box = this._bbox();
+    if (box) this.frameOnBox(box);
+  }
+
   frameOnGeometry(geometry) {
     geometry.computeBoundingBox();
     this.frameOnBox(geometry.boundingBox);
@@ -1202,7 +1208,7 @@ export class Viewport3D {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       if (e.ctrlKey || e.metaKey) return;
       if (KEY_TO_PRESET[e.key]) { e.preventDefault(); this.setViewPreset(KEY_TO_PRESET[e.key]); }
-      else if (e.key === 'f') { e.preventDefault(); this.setFollowMode(!this._followMode); }
+      else if (e.key === 'f') { e.preventDefault(); this.zoomToFit(); }
       else if (e.key === 'm') { e.preventDefault(); this._measBtn.click(); }
       else if (e.key === 's') { e.preventDefault(); this._secBtn.click(); }
       else if (e.key === 'Escape') {
