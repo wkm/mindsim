@@ -190,6 +190,16 @@ export class Viewport3D {
   }
   setViewPreset(name) {
     const p = VIEW_PRESETS[name]; if (!p) return;
+
+    // If already at this angle, zoom to fit instead of re-animating
+    const currentDir = new THREE.Vector3();
+    currentDir.subVectors(this._cam.position, this._ctrl.target).normalize();
+    const presetDir = p.dir.clone().normalize();
+    if (currentDir.dot(presetDir) > 0.99) {
+      this.zoomToFit();
+      return;
+    }
+
     const box = this._bbox();
     const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
     const sz = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
@@ -1239,6 +1249,7 @@ export class Viewport3D {
   // ── Content bounding box ──
   _bbox() {
     const box = new THREE.Box3(); let has = false;
+    // Scan named groups
     for (const g of Object.values(this._groups)) {
       if (!g.visible) continue;
       g.traverse(ch => {
@@ -1249,6 +1260,19 @@ export class Viewport3D {
         }
       });
     }
+    // Also scan direct scene children that aren't named groups or viewport internals
+    this._scene.children.forEach(child => {
+      if (child.isGroup && !this._groups[child.name] && child.visible
+          && !child.userData._vpSec && !child.userData._vpCap && child.name !== 'section-caps') {
+        child.traverse(ch => {
+          if (ch.isMesh && ch.geometry) {
+            ch.geometry.computeBoundingBox();
+            const b = ch.geometry.boundingBox.clone(); b.applyMatrix4(ch.matrixWorld);
+            box.union(b); has = true;
+          }
+        });
+      }
+    });
     return has ? box : null;
   }
 
@@ -1340,9 +1364,22 @@ export class Viewport3D {
     const allMeshes = [];
     const layerMeshes = {};
 
+    // Collect meshes from named groups AND from ungrouped scene children
+    const sources = [];
     for (const [groupName, group] of Object.entries(this._groups)) {
       if (!group.visible) continue;
-      group.traverse(child => {
+      sources.push({ name: groupName, node: group });
+    }
+    // Also scan direct scene children that aren't groups or viewport internals
+    this._scene.children.forEach(child => {
+      if (child.isGroup && !this._groups[child.name] && child.visible
+          && !child.userData._vpSec && !child.userData._vpCap && child.name !== 'section-caps') {
+        sources.push({ name: child.name || 'scene', node: child });
+      }
+    });
+
+    for (const { name: groupName, node } of sources) {
+      node.traverse(child => {
         if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
           allMeshes.push({ mesh: child, groupName });
           if (!layerMeshes[groupName]) layerMeshes[groupName] = [];
