@@ -23,12 +23,17 @@ if (cadstepsParam) {
   document.getElementById('side-panel').style.display = 'none';
   document.getElementById('mode-tabs').style.display = 'none';
   const cadParts = cadstepsParam.split(':');
+  const fromBot = params.get('from');
   const botNameEl = document.getElementById('bot-name');
   if (cadParts[0] === 'component') {
     botNameEl.textContent = `${cadParts[1]} — ShapeScript`;
     botNameEl.style.cursor = 'pointer';
     botNameEl.addEventListener('click', () => {
-      window.location.href = `?component=${encodeURIComponent(cadParts[1])}`;
+      if (fromBot) {
+        window.location.href = `?bot=${encodeURIComponent(fromBot)}`;
+      } else {
+        window.location.href = `?component=${encodeURIComponent(cadParts[1])}`;
+      }
     });
   } else {
     botNameEl.textContent = `${cadParts[0]} — ShapeScript`;

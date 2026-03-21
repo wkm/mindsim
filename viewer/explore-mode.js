@@ -90,9 +90,9 @@ export class ExploreMode {
     const [type] = nodeId.split(':');
 
     if (type === 'body' && nodeData.kind === 'fabricated') {
-      window.location.href = `?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(nodeData.name)}`;
+      window.location.href = `?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(nodeData.name)}&from=${encodeURIComponent(botName)}`;
     } else if (type === 'part' && nodeData.shapescript_component) {
-      window.location.href = `?cadsteps=component:${encodeURIComponent(nodeData.shapescript_component)}`;
+      window.location.href = `?cadsteps=component:${encodeURIComponent(nodeData.shapescript_component)}&from=${encodeURIComponent(botName)}`;
     }
   }
 
@@ -266,7 +266,7 @@ export class ExploreMode {
     // CAD steps link
     if (body.kind === 'fabricated') {
       const botName = this.manifest.bot_name;
-      html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}" class="btn btn-sm" style="display:inline-block;margin-top:8px;text-decoration:none;">View ShapeScript</a>`;
+      html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="display:inline-block;margin-top:8px;text-decoration:none;">View ShapeScript</a>`;
     }
 
     panel.innerHTML = html;
@@ -381,7 +381,7 @@ export class ExploreMode {
 
     // ShapeScript link
     if (part.shapescript_component) {
-      html += `<a href="?cadsteps=component:${encodeURIComponent(part.shapescript_component)}" class="btn btn-sm" style="display:inline-block;margin-top:8px;text-decoration:none;">View ShapeScript</a>`;
+      html += `<a href="?cadsteps=component:${encodeURIComponent(part.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}" class="btn btn-sm" style="display:inline-block;margin-top:8px;text-decoration:none;">View ShapeScript</a>`;
     }
 
     panel.innerHTML = html;

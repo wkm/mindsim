@@ -149,7 +149,7 @@ export class ComponentTree {
     const labelText = body.name;
     const data = { ...body, _type: 'body' };
     const shapescriptUrl = body.kind === 'fabricated'
-      ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}`
+      ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
       : null;
 
     const node = this._createNode(nodeId, labelText, 'body', data, hasChildren, shapescriptUrl);
@@ -163,7 +163,7 @@ export class ComponentTree {
         const iconType = comp.category || 'mount';
         const compData = { ...comp, _type: 'part' };
         const compSsUrl = comp.shapescript_component
-          ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}`
+          ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
           : null;
 
         // Check for fasteners associated with this mount
@@ -197,7 +197,7 @@ export class ComponentTree {
           const servoLabel = `${servo.name} @ ${joint.name}`;
           const servoData = { ...servo, _type: 'part', servo_specs: joint.servo_specs };
           const servoSsUrl = servo.shapescript_component
-            ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}`
+            ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
             : null;
           const servoHasChildren = horns.length > 0 || fasteners.length > 0;
           const servoNode = this._createNode(servoNodeId, servoLabel, 'servo', servoData, servoHasChildren, servoSsUrl);
@@ -210,7 +210,7 @@ export class ComponentTree {
               const hornNodeId = `part:${horn.id}`;
               const hornData = { ...horn, _type: 'part' };
               const hornSsUrl = horn.shapescript_component
-                ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}`
+                ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
                 : null;
               const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl);
               servoChildrenEl.appendChild(hornNode);

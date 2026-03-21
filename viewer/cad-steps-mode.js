@@ -144,6 +144,16 @@ const EDITOR_STYLES = `
     padding: 2px 6px; height: 28px; cursor: pointer; outline: none;
   }
   .cs-body-select:hover { background: var(--secondary); }
+  .cs-body-select optgroup { font-style: normal; font-weight: 600; color: #738694; }
+  .cs-body-select option { font-weight: 400; color: var(--foreground); }
+
+  /* Back-to-bot link */
+  .cs-back-link {
+    font-size: 12px; color: #5C7080; text-decoration: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: color 0.15s;
+  }
+  .cs-back-link:hover { color: var(--foreground); }
 `;
 
 export async function initCadSteps(param) {
@@ -200,8 +210,15 @@ class CadStepsViewer {
     if (sidePanel) sidePanel.style.display = 'none';
 
     this.allBodies = [];
+    this.ssServos = [];
+    this.ssComponents = [];
+    this.fromBot = new URLSearchParams(window.location.search).get('from');
+
+    // In component mode with a from-bot context, use fromBot for manifest lookup
+    if (this.isComponentMode && this.fromBot) this.botName = this.fromBot;
+
     const fetches = [this._fetchSteps()];
-    if (!this.isComponentMode) fetches.push(this._fetchBodies());
+    if (this.botName) fetches.push(this._fetchBodies());
     await Promise.all(fetches);
 
     this._buildLayout();
@@ -309,23 +326,65 @@ class CadStepsViewer {
     const topBar = document.getElementById('top-bar');
     if (!topBar) return;
 
-    // Add body switcher to the nav bar if multiple bodies
-    if (this.allBodies.length > 1) {
+    // "Back to bot" link when viewing a component from a bot context
+    const fromBot = new URLSearchParams(window.location.search).get('from');
+    if (fromBot) {
+      const sep = document.createElement('span');
+      sep.className = 'nav-sep';
+      topBar.appendChild(sep);
+
+      const backLink = document.createElement('a');
+      backLink.className = 'cs-back-link';
+      backLink.href = `?bot=${encodeURIComponent(fromBot)}`;
+      backLink.innerHTML = `&#8592; Back to ${this._escapeHtml(fromBot)}`;
+      topBar.appendChild(backLink);
+    }
+
+    // Body/component switcher dropdown
+    const hasItems = this.allBodies.length > 0 ||
+      this.ssServos.length > 0 || this.ssComponents.length > 0;
+    const totalItems = this.allBodies.length + this.ssServos.length + this.ssComponents.length;
+    if (totalItems > 1) {
       const sep = document.createElement('span');
       sep.className = 'nav-sep';
       topBar.appendChild(sep);
 
       const select = document.createElement('select');
       select.className = 'cs-body-select';
-      for (const name of this.allBodies) {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        if (name === this.bodyName) opt.selected = true;
-        select.appendChild(opt);
-      }
+
+      // Current value: "body:name" or "component:name"
+      const currentValue = this.isComponentMode
+        ? `component:${this.componentName}`
+        : `body:${this.bodyName}`;
+
+      // Helper to add optgroup
+      const addGroup = (label, items, prefix) => {
+        if (items.length === 0) return;
+        const group = document.createElement('optgroup');
+        group.label = label;
+        for (const name of items) {
+          const opt = document.createElement('option');
+          opt.value = `${prefix}:${name}`;
+          opt.textContent = name;
+          if (opt.value === currentValue) opt.selected = true;
+          group.appendChild(opt);
+        }
+        select.appendChild(group);
+      };
+
+      addGroup('Bodies', this.allBodies, 'body');
+      addGroup('Servos', this.ssServos, 'component');
+      addGroup('Components', this.ssComponents, 'component');
+
       select.addEventListener('change', () => {
-        window.location.href = `?cadsteps=${encodeURIComponent(this.botName)}:${encodeURIComponent(select.value)}`;
+        const [type, ...rest] = select.value.split(':');
+        const name = rest.join(':');
+        const fromParam = this.botName ? `&from=${encodeURIComponent(this.botName)}` : '';
+        if (type === 'component') {
+          window.location.href = `?cadsteps=component:${encodeURIComponent(name)}${fromParam}`;
+        } else {
+          window.location.href = `?cadsteps=${encodeURIComponent(this.botName)}:${encodeURIComponent(name)}`;
+        }
       });
       topBar.appendChild(select);
     }
@@ -601,6 +660,21 @@ class CadStepsViewer {
       if (resp.ok) {
         const manifest = await resp.json();
         this.allBodies = (manifest.bodies || []).map(b => b.name);
+
+        // Collect parts with shapescript_component, grouped by category
+        const parts = manifest.parts || [];
+        const seen = new Set();
+        this.ssServos = [];
+        this.ssComponents = [];
+        for (const p of parts) {
+          if (!p.shapescript_component || seen.has(p.shapescript_component)) continue;
+          seen.add(p.shapescript_component);
+          if (p.category === 'servo' || p.category === 'horn') {
+            this.ssServos.push(p.shapescript_component);
+          } else {
+            this.ssComponents.push(p.shapescript_component);
+          }
+        }
       }
     } catch { /* manifest not available */ }
   }
