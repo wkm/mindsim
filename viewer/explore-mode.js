@@ -46,7 +46,6 @@ export class ExploreMode {
       (nodeId, data) => this.onNodeClick(nodeId, data),
       {
         onShapeScript: (url) => { window.location.href = url; },
-        onDoubleClick: (nodeId, data) => this._onDoubleClick(nodeId, data),
         onToggleVisibility: (bodyName, visible) => this._setBodyVisible(bodyName, visible),
         onIsolate: (bodyName) => this._isolateBody(bodyName),
         onShowAll: () => this._showAllBodies(),
@@ -85,18 +84,6 @@ export class ExploreMode {
     else if (type === 'fastener-group') this._buildFastenerGroupProperties(nodeData);
     else if (type === 'wire-group') this._buildWireGroupProperties(nodeData);
     else if (type === 'assembly') this._buildAssemblyProperties(nodeData);
-  }
-
-  _onDoubleClick(nodeId, nodeData) {
-    // Navigate to ShapeScript on double-click for bodies and parts
-    const botName = this.manifest.bot_name;
-    const [type] = nodeId.split(':');
-
-    if (type === 'body' && nodeData.kind === 'fabricated') {
-      window.location.href = `?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(nodeData.name)}&from=${encodeURIComponent(botName)}`;
-    } else if (type === 'part' && nodeData.shapescript_component) {
-      window.location.href = `?cadsteps=component:${encodeURIComponent(nodeData.shapescript_component)}&from=${encodeURIComponent(botName)}`;
-    }
   }
 
   /** Resolve a nodeId to its primary MuJoCo body ID. */

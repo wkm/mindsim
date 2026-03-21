@@ -720,15 +720,6 @@ export class ComponentTree {
       this.onSelect(nodeId, data);
     });
 
-    // Double-click for ShapeScript navigation
-    if (shapescriptUrl) {
-      header.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        if (this.onDoubleClick) this.onDoubleClick(nodeId, data);
-        else if (this.onShapeScript) this.onShapeScript(shapescriptUrl);
-        else window.location.href = shapescriptUrl;
-      });
-    }
 
     // Click header text to toggle children too
     if (hasChildren) {
