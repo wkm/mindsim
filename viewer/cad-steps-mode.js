@@ -163,9 +163,11 @@ export async function initCadSteps(param) {
     return;
   }
 
-  // Detect mode: "component:OV5647" vs "wheeler_arm:base"
+  // Detect mode: "component:OV5647" or "component:horn:STS3215" vs "wheeler_arm:base"
   if (parts[0] === 'component') {
-    const viewer = new CadStepsViewer(null, null, parts[1]);
+    // Component name may contain colons (e.g., "horn:STS3215")
+    const componentName = parts.slice(1).join(':');
+    const viewer = new CadStepsViewer(null, null, componentName);
     await viewer.init();
   } else {
     const viewer = new CadStepsViewer(parts[0], parts[1], null);
