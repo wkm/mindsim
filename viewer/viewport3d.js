@@ -1354,12 +1354,13 @@ export class Viewport3D {
       const orderBase = SECTION_STENCIL_BASE + layerIndex * SECTION_STENCIL_STRIDE;
       layerIndex++;
 
-      // Stencil helpers
+      // Stencil helpers — increment on back faces, decrement on front faces.
+      // Where stencil > 0, we're inside the geometry (= cross-section interior).
       for (const mesh of layerMeshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
-          orderBase + RENDER_ORDER.STENCIL_BACK);
-        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
-          orderBase + RENDER_ORDER.STENCIL_FRONT);
+        this._addStencilHelper(mesh, THREE.BackSide, clips,
+          orderBase + RENDER_ORDER.STENCIL_BACK, THREE.IncrementWrapStencilOp);
+        this._addStencilHelper(mesh, THREE.FrontSide, clips,
+          orderBase + RENDER_ORDER.STENCIL_FRONT, THREE.DecrementWrapStencilOp);
       }
 
       // Cap color — use callback if provided, otherwise default darker tint
@@ -1382,11 +1383,11 @@ export class Viewport3D {
         side: THREE.DoubleSide,
         depthWrite: true,
         stencilWrite: true,
-        stencilFunc: THREE.EqualStencilFunc,
-        stencilRef: ref,
+        stencilFunc: THREE.NotEqualStencilFunc,
+        stencilRef: 0,
         stencilFail: THREE.KeepStencilOp,
         stencilZFail: THREE.KeepStencilOp,
-        stencilZPass: THREE.ZeroStencilOp,
+        stencilZPass: THREE.ReplaceStencilOp,
       });
       const capPlane = new THREE.Mesh(capGeom, capMat);
       capPlane.raycast = () => {};
@@ -1472,7 +1473,7 @@ export class Viewport3D {
   }
 
   /** Create an invisible stencil helper mesh. */
-  _addStencilHelper(sourceMesh, side, stencilRef, clips, renderOrder) {
+  _addStencilHelper(sourceMesh, side, clips, renderOrder, stencilOp) {
     const mat = new THREE.MeshBasicMaterial({
       colorWrite: false,
       depthWrite: false,
@@ -1480,10 +1481,10 @@ export class Viewport3D {
       clippingPlanes: clips,
       stencilWrite: true,
       stencilFunc: THREE.AlwaysStencilFunc,
-      stencilRef,
+      stencilRef: 0,
       stencilFail: THREE.KeepStencilOp,
       stencilZFail: THREE.KeepStencilOp,
-      stencilZPass: THREE.ReplaceStencilOp,
+      stencilZPass: stencilOp,
     });
     const mesh = new THREE.Mesh(sourceMesh.geometry, mat);
     mesh.position.copy(sourceMesh.position);
