@@ -170,13 +170,24 @@ class Joint:
     def wheel_outboard_offset(self) -> float:
         """How far a wheel child body sits outboard from the joint shaft.
 
-        Offset = shaft_boss_height + half_wheel_width.  Returns 0 if no child.
+        Physical stack: shaft_boss → horn disc → wheel hub.
+        Offset = shaft_boss_height + horn_thickness + half_wheel_width.
+        Returns 0 if no child.
         """
         if self.child is None:
             return 0.0
         boss_h = self.servo.shaft_boss_height or 0.0
         half_w = (self.child.width or self.child.dimensions[2]) / 2
-        return boss_h + half_w
+
+        # Horn disc thickness (the mechanical interface between servo and wheel)
+        from botcad.bracket import horn_disc_params
+
+        horn_h = 0.0
+        params = horn_disc_params(self.servo)
+        if params is not None:
+            horn_h = params.thickness
+
+        return boss_h + horn_h + half_w
 
     def body(
         self,
