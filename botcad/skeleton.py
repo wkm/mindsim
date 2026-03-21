@@ -278,6 +278,23 @@ class Body:
     # Computed once during _collect_tree(), read by all emitters.
     is_wheel_body: bool = False
 
+    # World-frame placement (computed during solve/build_cad)
+    world_pos: Vec3 = (0.0, 0.0, 0.0)
+    world_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
+    # ShapeScript program that generates this body's geometry (set during build_cad)
+    shapescript: object | None = None
+
+    # For purchased parts: which structural body this part is associated with
+    parent_body_name: str | None = None
+
+    # Mesh filename for this body (e.g., "base.stl", "servo_STS3215.stl")
+    mesh_file: str | None = None
+
+    # For purchased bodies: reference to the component that generated them.
+    # Used by build_cad() to assign the correct ShapeScript.
+    _component: Component | None = field(default=None, repr=False)
+
     def to_body_frame(self, p: Vec3) -> Vec3:
         """Transform a canonical-frame point/vector into body-frame coordinates."""
         w, x, y, z = self.frame_quat
