@@ -1346,55 +1346,40 @@ export class Viewport3D {
 
     const plane = this._secPlane;
 
-    for (const [groupName, meshes] of Object.entries(layerMeshes)) {
-      // 1. Compute contour segments for this layer
-      const segments = [];
-      for (const mesh of meshes) {
-        this._computeMeshPlaneContour(mesh, plane, segments);
-      }
-      if (segments.length === 0) continue;
-
-      // 2. Build closed polygons from segments
-      const polygons = this._chainSegments(segments);
-      if (polygons.length === 0) continue;
-
-      // 3. Triangulate polygons on the cutting plane
-      const capGeom = this._triangulateCapsOnPlane(polygons, plane);
-      if (!capGeom) continue;
-
-      // 4. Create cap mesh with hatch texture
-      let capColor;
-      if (this._sectionCapColorFn) {
-        capColor = this._sectionCapColorFn(groupName);
-      }
-      if (capColor == null) {
-        const firstMat = meshes[0]?.material;
-        const baseColor = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
-        capColor = tintColor(baseColor, 0.6);
-      }
-
-      const hatchTex = this._createHatchTexture(capColor);
-      const capMat = new THREE.MeshBasicMaterial({
-        map: hatchTex,
-        side: THREE.DoubleSide,
-        clippingPlanes: clips,
-      });
-
-      const capMesh = new THREE.Mesh(capGeom, capMat);
-      capMesh.raycast = () => {};
-      capMesh.userData._vpCap = true;
-      this._capGroup.add(capMesh);
-    }
-
-    // Section contour lines across all meshes
-    const contourSegments = [];
+    // DEBUG: collect ALL segments across all meshes, log counts
+    const allSegments = [];
     for (const { mesh } of allMeshes) {
-      this._computeMeshPlaneContour(mesh, this._secPlane, contourSegments);
+      this._computeMeshPlaneContour(mesh, plane, allSegments);
+    }
+    console.log(`[section] ${allMeshes.length} meshes, ${allSegments.length / 6} contour segments`);
+
+    // Chain into closed polygons
+    const polygons = this._chainSegments(allSegments);
+    console.log(`[section] ${polygons.length} closed polygons, vertex counts: ${polygons.map(p => p.length).join(', ')}`);
+
+    // Triangulate
+    if (polygons.length > 0) {
+      const capGeom = this._triangulateCapsOnPlane(polygons, plane);
+      if (capGeom) {
+        console.log(`[section] cap geometry: ${capGeom.getAttribute('position').count} vertices, ${capGeom.index ? capGeom.index.count / 3 : 0} triangles`);
+        // SIMPLE RED SOLID — no hatching, no clipping on the cap itself
+        const capMat = new THREE.MeshBasicMaterial({
+          color: 0xDB3737,
+          side: THREE.DoubleSide,
+        });
+        const capMesh = new THREE.Mesh(capGeom, capMat);
+        capMesh.raycast = () => {};
+        capMesh.userData._vpCap = true;
+        this._capGroup.add(capMesh);
+      } else {
+        console.warn('[section] triangulation returned null');
+      }
     }
 
-    if (contourSegments.length > 0) {
+    // Contour lines (keep for now)
+    if (allSegments.length > 0) {
       const lineGeom = new LineSegmentsGeometry();
-      lineGeom.setPositions(contourSegments);
+      lineGeom.setPositions(allSegments);
       const w = this._ren.domElement.width, h = this._ren.domElement.height;
       const lineMat = new LineMaterial({
         color: BP.DARK_GRAY3,
