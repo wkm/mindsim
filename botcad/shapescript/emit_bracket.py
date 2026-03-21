@@ -13,7 +13,8 @@ cradle_solid_script translates cradle_solid() into native ShapeScript ops:
 outer box, servo pocket cut, fastener holes, and connector/cable passage.
 
 coupler_solid_script builds the C-shaped coupler: front plate, rear plate,
-side wall, horn holes, boss clearance. D-clip plate geometry uses PrebuiltOp.
+side wall, horn holes, boss clearance. D-clip plate geometry uses native
+cylinder-cut-in-half ops (no PrebuiltOp).
 """
 
 from __future__ import annotations
@@ -239,7 +240,9 @@ def bracket_solid_script(
         # ── Connector passage (-Z face) ──
         if servo.connector_pos is not None:
             port = _emit_connector_port(
-                prog, servo, spec,
+                prog,
+                servo,
+                spec,
                 wall_center=(0, 0, outer_bot_z),
                 exit_axis=(0.0, 0.0, -1.0),
             )
@@ -311,28 +314,24 @@ def bracket_solid_script(
             hole = prog.cylinder(
                 hole_r, hole_depth, align=ALIGN_MIN_Z, tag="fastener_hole"
             )
-            hole = prog.locate(
-                hole, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)
-            )
+            hole = prog.locate(hole, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
             shell = prog.cut(shell, hole)
 
             # Counterbore for socket head cap screws
             if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
                 cb_r = fspec.head_diameter / 2 + 0.0002
                 cb_depth = fspec.head_height + 0.0005
-                cb = prog.cylinder(
-                    cb_r, cb_depth, align=ALIGN_MIN_Z, tag="counterbore"
-                )
-                cb = prog.locate(
-                    cb, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)
-                )
+                cb = prog.cylinder(cb_r, cb_depth, align=ALIGN_MIN_Z, tag="counterbore")
+                cb = prog.locate(cb, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
                 shell = prog.cut(shell, cb)
 
         # ── Connector port / cable slot ──
         if servo.connector_pos is not None:
             wall_x = -outer_x / 2
             port = _emit_connector_port(
-                prog, servo, spec,
+                prog,
+                servo,
+                spec,
                 wall_center=(wall_x, 0, 0),
                 exit_axis=(-1.0, 0.0, 0.0),
             )
@@ -476,7 +475,9 @@ def cradle_solid_script(
     # ── Connector passage ──
     if servo.connector_pos is not None:
         port = _emit_connector_port(
-            prog, servo, spec,
+            prog,
+            servo,
+            spec,
             wall_center=(cradle_min_x, 0, 0),
             exit_axis=(-1.0, 0.0, 0.0),
         )
@@ -500,20 +501,16 @@ def coupler_solid_script(
 ) -> ShapeScript:
     """Build a ShapeScript for coupler_solid().
 
-    Structural composition (front plate + rear plate + side wall + horn holes
-    + boss clearance) uses native ShapeScript ops. The D-clip plate shaping
-    uses PrebuiltOp since it requires complex semicircle/rectangle boolean
-    clipping that isn't expressible with Box/Cylinder primitives alone.
+    All geometry uses native ShapeScript ops — no PrebuiltOps.
+    Front plate + rear plate + side wall + horn holes + boss clearance,
+    with D-clip plate shaping via cylinder-cut-in-half (semicircle + rect).
     """
     import math
 
     from botcad.bracket import BracketSpec as BS
-    from botcad.bracket import (
-        _body_collision_half_y,
-        _horn_clip_radius,
-        coupler_solid,
-    )
+    from botcad.bracket import _body_collision_half_y, _horn_clip_radius
     from botcad.fasteners import resolve_fastener
+    from botcad.shapescript.ops import ALIGN_MAX_Z, ALIGN_MIN_Z, Align3
 
     if spec is None:
         spec = BS()
@@ -574,11 +571,114 @@ def coupler_solid_script(
 
     horn_clip_r = _horn_clip_radius(servo, spec)
 
-    # ── Build front plate (via PrebuiltOp for D-clip shaping) ──
-    # The D-clip plate geometry (semicircle + rectangle clipping) is too
-    # complex for Box/Cylinder primitives — use the direct build123d result.
-    direct_coupler = coupler_solid(servo, spec)
-    shell_ref = prog.prebuilt(direct_coupler, tag="coupler_structural")
+    def _clip_plate_to_d_shape(plate_ref, clip_r, z_base, z_align_max):
+        """Clip plate to D-shape: semicircle (-X) + rectangle (+X).
+
+        Mirrors bracket.py _clip_plate_to_horn_circle using native ops:
+        cylinder cut in half → semicircle keep zone, fused with rect keep zone.
+        """
+        clip_h = plate_t + 0.002
+        z_str = "max" if z_align_max else "min"
+        align_z = ALIGN_MAX_Z if z_align_max else ALIGN_MIN_Z
+        # Align3 with x="min" and matching z alignment (must match cylinders)
+        align_xmin_z = Align3(x="min", z=z_str)
+        clip_z = z_base + 0.001 if z_align_max else z_base - 0.001
+
+        # Big cylinder covering entire plate (what we subtract from)
+        clip_outer = prog.cylinder(plate_lx, clip_h, align=align_z)
+        clip_outer = prog.locate(clip_outer, pos=(0, 0, clip_z))
+
+        # Keep circle = cylinder of clip_r
+        keep_circle = prog.cylinder(clip_r, clip_h + 0.002, align=align_z)
+        keep_circle = prog.locate(keep_circle, pos=(0, 0, clip_z))
+
+        # Cut away +X half to get -X semicircle
+        cut_pos_x = prog.box(
+            clip_r + 0.001,
+            clip_r * 2 + 0.004,
+            clip_h + 0.004,
+            align=align_xmin_z,
+        )
+        cut_pos_x = prog.locate(cut_pos_x, pos=(0, plate_cy, clip_z))
+        keep_semi = prog.cut(keep_circle, cut_pos_x)
+
+        # Rectangle from X=0 to plate_max_x, width = 2*clip_r
+        keep_rect = prog.box(
+            plate_max_x + 0.001,
+            clip_r * 2 + 0.002,
+            clip_h + 0.002,
+            align=align_xmin_z,
+        )
+        keep_rect = prog.locate(keep_rect, pos=(0, plate_cy, clip_z))
+
+        # D-shape keep zone = semicircle + rectangle
+        keep = prog.fuse(keep_semi, keep_rect)
+        # Clip = everything outside D-shape
+        clip_cut = prog.cut(clip_outer, keep)
+        return prog.cut(plate_ref, clip_cut)
+
+    # ── Front plate ──
+    front_plate = prog.box(
+        plate_lx, plate_ly, plate_t, align=ALIGN_MIN_Z, tag="front_plate"
+    )
+    front_plate = prog.locate(front_plate, pos=(plate_cx, plate_cy, front_z))
+
+    # Boss clearance on front plate
+    if boss_clear_r > 0:
+        boss_hole = prog.cylinder(
+            boss_clear_r,
+            plate_t + 0.002,
+            align=ALIGN_MIN_Z,
+            tag="front_boss_hole",
+        )
+        boss_hole = prog.locate(boss_hole, pos=(0, 0, front_z - 0.001))
+        front_plate = prog.cut(front_plate, boss_hole)
+
+    front_plate = _clip_plate_to_d_shape(
+        front_plate,
+        horn_clip_r,
+        front_z,
+        z_align_max=False,
+    )
+
+    # ── Rear plate ──
+    rear_plate = prog.box(
+        plate_lx, plate_ly, plate_t, align=ALIGN_MAX_Z, tag="rear_plate"
+    )
+    rear_plate = prog.locate(rear_plate, pos=(plate_cx, plate_cy, rear_z))
+
+    # Boss clearance on rear plate
+    if boss_clear_r > 0:
+        boss_hole = prog.cylinder(
+            boss_clear_r,
+            plate_t + 0.002,
+            align=ALIGN_MAX_Z,
+            tag="rear_boss_hole",
+        )
+        boss_hole = prog.locate(boss_hole, pos=(0, 0, rear_z + 0.001))
+        rear_plate = prog.cut(rear_plate, boss_hole)
+
+    rear_plate = _clip_plate_to_d_shape(
+        rear_plate,
+        horn_clip_r,
+        rear_z,
+        z_align_max=True,
+    )
+
+    # ── Side wall ──
+    wall_z_lo = rear_z - plate_t
+    wall_z_hi = front_z + plate_t
+    wall_lz = wall_z_hi - wall_z_lo
+    wall_cz = (wall_z_lo + wall_z_hi) / 2
+    wall_cx = plate_max_x - plate_t / 2
+    wall_width = horn_clip_r * 2
+
+    side_wall = prog.box(plate_t, wall_width, wall_lz, tag="side_wall")
+    side_wall = prog.locate(side_wall, pos=(wall_cx, plate_cy, wall_cz))
+
+    # ── Fuse all three pieces ──
+    shell = prog.fuse(front_plate, side_wall)
+    shell = prog.fuse(shell, rear_plate)
 
     # ── Front horn holes ──
     if servo.horn_mounting_points:
@@ -587,11 +687,34 @@ def coupler_solid_script(
     else:
         horn_hole_r = 0.00125
 
-    # Front holes are already cut into the prebuilt solid, but we express
-    # the structural composition natively and use the prebuilt for the
-    # final clipped result.
+    for hx, hy, _hz in front_holes:
+        hole = prog.cylinder(
+            horn_hole_r,
+            plate_t + 0.002,
+            align=ALIGN_MIN_Z,
+            tag="front_horn_hole",
+        )
+        hole = prog.locate(hole, pos=(hx, hy, front_z - 0.001))
+        shell = prog.cut(shell, hole)
 
-    prog.output_ref = shell_ref
+    # ── Rear horn holes ──
+    if servo.rear_horn_mounting_points:
+        rear_fspec = resolve_fastener(servo.rear_horn_mounting_points[0])
+        rear_hole_r = rear_fspec.clearance_hole / 2
+    else:
+        rear_hole_r = horn_hole_r
+
+    for hx, hy, _hz in rear_holes:
+        hole = prog.cylinder(
+            rear_hole_r,
+            plate_t + 0.002,
+            align=ALIGN_MAX_Z,
+            tag="rear_horn_hole",
+        )
+        hole = prog.locate(hole, pos=(hx, hy, rear_z + 0.001))
+        shell = prog.cut(shell, hole)
+
+    prog.output_ref = shell
     return prog
 
 
@@ -670,7 +793,9 @@ def _coupler_solid_script_native(
     horn_clip_r = _horn_clip_radius(servo, spec)
 
     # ── Front plate ──
-    front_plate = prog.box(plate_lx, plate_ly, plate_t, align=ALIGN_MIN_Z, tag="front_plate")
+    front_plate = prog.box(
+        plate_lx, plate_ly, plate_t, align=ALIGN_MIN_Z, tag="front_plate"
+    )
     front_plate = prog.locate(front_plate, pos=(plate_cx, plate_cy, front_z))
 
     # Boss clearance on front plate
@@ -682,7 +807,9 @@ def _coupler_solid_script_native(
         front_plate = prog.cut(front_plate, boss_hole)
 
     # ── Rear plate ──
-    rear_plate = prog.box(plate_lx, plate_ly, plate_t, align=ALIGN_MAX_Z, tag="rear_plate")
+    rear_plate = prog.box(
+        plate_lx, plate_ly, plate_t, align=ALIGN_MAX_Z, tag="rear_plate"
+    )
     rear_plate = prog.locate(rear_plate, pos=(plate_cx, plate_cy, rear_z))
 
     # Boss clearance on rear plate

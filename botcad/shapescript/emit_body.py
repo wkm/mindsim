@@ -37,11 +37,8 @@ def emit_body_ir(
     Returns:
         A ShapeScript whose output_ref is the final body solid.
     """
-    from build123d import Location
-
     from botcad.bracket import (
         BracketSpec,
-        coupler_solid,
     )
     from botcad.component import BearingSpec, CameraSpec
     from botcad.emit.cad import _ensure_solid
@@ -145,11 +142,16 @@ def emit_body_ir(
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
 
-        # Use .moved() to match direct path (cad.py:986) — .locate() mutates
-        # @lru_cache'd shapes in-place. See memory/feedback_build123d_locate.md.
-        coupler = coupler_solid(servo, bracket_spec)
-        coupler = coupler.moved(Location(center, euler))
-        coupler_ref = prog.prebuilt(coupler, tag="coupler")
+        # Sub-program produces coupler in servo-local frame; locate moves it.
+        from botcad.shapescript.emit_bracket import coupler_solid_script
+
+        coupler_key = f"coupler_{servo.name}"
+        if coupler_key not in prog.sub_programs:
+            prog.sub_programs[coupler_key] = coupler_solid_script(
+                servo, bracket_spec
+            )
+        coupler_ref = prog.call(coupler_key, tag="coupler")
+        coupler_ref = prog.locate(coupler_ref, pos=center, euler_deg=euler)
         shell = prog.fuse(shell, coupler_ref)
 
     # ── 4. Bracket footprint cut + bracket union (cad.py:845-865) ──
