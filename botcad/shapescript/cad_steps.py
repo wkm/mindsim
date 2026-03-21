@@ -92,17 +92,14 @@ def shapescript_to_cad_steps(
                     CadStep(label=label, solid=solid, op="union", tool=tool_solid, script=script_line)
                 )
 
-            # Transforms — update the previous step's solid (don't create new step)
+            # Transforms — show as their own step (purple in the viewer)
             case LocateOp(ref=ref, target=t):
-                if steps and steps[-1].solid is shapes.get(t.id):
-                    steps[-1] = CadStep(
-                        label=steps[-1].label,
-                        solid=solid,
-                        op=steps[-1].op,
-                        tool=steps[-1].tool,
-                        group=steps[-1].group,
-                        script=script_line,
-                    )
+                tool_solid = shapes.get(t.id)  # the pre-move shape
+                locate_tag = _find_tag_for_ref(prog, t)
+                label = "Locate" + (f" {locate_tag}" if locate_tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="locate", tool=tool_solid, script=script_line)
+                )
 
             case _:
                 pass

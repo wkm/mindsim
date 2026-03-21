@@ -24,11 +24,12 @@ const EDGE_MATERIAL = new THREE.LineBasicMaterial({
 });
 const EDGE_THRESHOLD = 28; // degrees — only sharp edges
 
-// Op type → color (for tool overlay)
+// Op type → color
 const OP_COLORS = {
-  create: 0x2B95D6,  // blue
-  cut:    0xDB3737,  // red
-  union:  0x0F9960,  // green
+  create: 0x2B95D6,  // blue — new primitive
+  cut:    0xDB3737,  // red — subtraction
+  union:  0x0F9960,  // green — addition
+  locate: 0x9179F2,  // purple — spatial placement
 };
 
 // ── Styles for the code editor pane ──
@@ -126,7 +127,7 @@ const EDITOR_STYLES = `
   .ss-prim { color: #2B95D6; }      /* Box, Cylinder, Sphere */
   .ss-cut { color: #DB3737; }       /* Cut */
   .ss-fuse { color: #0F9960; }      /* Fuse */
-  .ss-loc { color: #D4A843; }       /* Locate */
+  .ss-loc { color: #9179F2; }       /* Locate — purple, matches 3D view */
   .ss-call { color: #9179F2; }      /* Call */
   .ss-pre { color: #738694; }       /* Prebuilt */
   .ss-comment { color: #5C7080; font-style: italic; }
@@ -591,10 +592,15 @@ class CadStepsViewer {
       if (child.material && child.material !== EDGE_MATERIAL) child.material.dispose();
     }
 
-    // Body solid — in isolate mode, create ops get blue tint
+    // Body solid color based on op type:
+    // - create: blue (new primitive)
+    // - locate: purple (placement)
+    // - cut/union: neutral gray (the tool overlay provides the color)
     let bodyColor = 0xCED9E0;
-    if (this.isolateMode && step.op === 'create') {
+    if (step.op === 'create') {
       bodyColor = 0x2B95D6;
+    } else if (step.op === 'locate') {
+      bodyColor = 0x9179F2;
     }
     const material = new THREE.MeshPhysicalMaterial({
       color: bodyColor,
@@ -635,8 +641,9 @@ class CadStepsViewer {
     const geometry = await this._loadSTL(this.toolStlCache, this.currentStep, 'tool-stl');
     if (!geometry) return;
 
-    const isCut = step.op === 'cut';
-    const toolColor = isCut ? 0xDB3737 : 0x0F9960;
+    const toolColor = step.op === 'cut' ? 0xDB3737
+      : step.op === 'locate' ? 0x9179F2
+      : 0x0F9960; // union/default = green
     const material = new THREE.MeshPhysicalMaterial({
       color: toolColor,
       transparent: true,
