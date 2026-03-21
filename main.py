@@ -706,6 +706,8 @@ def _get_component_steps(comp_name: str, registry: dict) -> list:
         from botcad.shapescript.emit_servo import servo_script
 
         script_fn = servo_script
+    elif comp.is_wheel:
+        script_fn = emit_components.wheel_component_script
     else:
         # Fallback: try {category}_script
         fn = getattr(emit_components, f"{category}_script", None)

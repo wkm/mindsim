@@ -752,3 +752,62 @@ def emit_child_clearance(
 
     clearance = prog.locate(clearance, pos=pos, euler_deg=euler)
     return clearance
+
+
+# ── Compute board (Raspberry Pi) ─────────────────────────────────
+
+
+def compute_script(comp) -> ShapeScript:
+    """Translate raspberry_pi_zero_solid() to ShapeScript ops.
+
+    PCB box with Z-axis fillets for corner radii, mounting holes,
+    and component blocks (ports, GPIO header, SoC).
+    """
+    prog = ShapeScript()
+
+    # PCB plate
+    pcb = prog.box(0.065, 0.030, 0.0015, tag="pcb")
+    # Corner fillets (Z-aligned edges)
+    pcb = prog.fillet_by_axis(pcb, "z", 0.003)
+
+    # Mounting holes (4x, 3.5mm from edges)
+    hole_r = 0.00275 / 2.0
+    hole_depth = 0.002
+    for label, pos in [
+        ("hole_bl", (-0.029, -0.0115, 0)),
+        ("hole_br", (0.029, -0.0115, 0)),
+        ("hole_tl", (-0.029, 0.0115, 0)),
+        ("hole_tr", (0.029, 0.0115, 0)),
+    ]:
+        hole = prog.cylinder(hole_r, hole_depth, tag=label)
+        hole = prog.locate(hole, pos=pos)
+        pcb = prog.cut(pcb, hole)
+
+    # Port block (HDMI/Power/USB on bottom edge)
+    ports = prog.box(0.040, 0.007, 0.003, tag="ports")
+    ports = prog.locate(ports, pos=(0, -0.0115, 0.002))
+
+    # GPIO header
+    gpio = prog.box(0.051, 0.005, 0.003, tag="gpio")
+    gpio = prog.locate(gpio, pos=(0, 0.0125, 0.002))
+
+    # SoC
+    soc = prog.box(0.012, 0.012, 0.0015, tag="soc")
+    soc = prog.locate(soc, pos=(0, 0, 0.0015))
+
+    # Union all
+    result = prog.fuse(pcb, ports)
+    result = prog.fuse(result, gpio)
+    result = prog.fuse(result, soc)
+
+    prog.output_ref = result
+    return prog
+
+
+def wheel_component_script(comp) -> ShapeScript:
+    """Wrapper for wheel_script that accepts a Component."""
+    # Wheel dimensions: radius from X/2, width from Z
+    dims = comp.dimensions
+    radius = dims[0] / 2
+    width = dims[2]
+    return wheel_script(radius, width)

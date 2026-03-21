@@ -355,6 +355,16 @@ export class ComponentTree {
         node.style.display = this._filters[cat] ? '' : 'none';
       }
     }
+    // Hide chevrons on nodes where all children are now hidden
+    const parents = this._treeRoot.querySelectorAll('.tree-node-children');
+    for (const childrenEl of parents) {
+      const visibleKids = [...childrenEl.children].filter(c => c.style.display !== 'none');
+      const header = childrenEl.parentElement?.querySelector(':scope > .tree-node-header');
+      const chevron = header?.querySelector('.tree-chevron');
+      if (chevron) {
+        chevron.style.display = visibleKids.length > 0 ? '' : 'none';
+      }
+    }
   }
 
   _applySearch() {
