@@ -187,7 +187,6 @@ def bracket_solid_script(
     from botcad.bracket import BracketSpec as BS
     from botcad.bracket import (
         _cable_slot_dims,
-        _connector_port,
         _ear_bottom_z,
         horn_disc_params,
     )
@@ -239,14 +238,12 @@ def bracket_solid_script(
 
         # ── Connector passage (-Z face) ──
         if servo.connector_pos is not None:
-            cut_solid, _housing = _connector_port(
-                servo,
-                spec,
+            port = _emit_connector_port(
+                prog, servo, spec,
                 wall_center=(0, 0, outer_bot_z),
                 exit_axis=(0.0, 0.0, -1.0),
             )
-            if cut_solid is not None:
-                port = prog.prebuilt(cut_solid, tag="connector_port")
+            if port is not None:
                 shell = prog.cut(shell, port)
             else:
                 _cx, cy, _cz = servo.connector_pos
@@ -334,15 +331,12 @@ def bracket_solid_script(
         # ── Connector port / cable slot ──
         if servo.connector_pos is not None:
             wall_x = -outer_x / 2
-            cut_solid, _housing = _connector_port(
-                servo,
-                spec,
+            port = _emit_connector_port(
+                prog, servo, spec,
                 wall_center=(wall_x, 0, 0),
                 exit_axis=(-1.0, 0.0, 0.0),
             )
-            if cut_solid is not None:
-                # Complex shaped passage — use PrebuiltOp
-                port = prog.prebuilt(cut_solid, tag="connector_port")
+            if port is not None:
                 shell = prog.cut(shell, port)
             else:
                 # Fallback: rectangular cable slot
@@ -408,12 +402,10 @@ def cradle_solid_script(
     """Build a ShapeScript for cradle_solid() using native ops.
 
     Outer box - pocket - fastener holes - connector passage.
-    Connector port geometry uses PrebuiltOp when complex.
     """
     from botcad.bracket import BracketSpec as BS
     from botcad.bracket import (
         _cable_slot_dims,
-        _connector_port,
         _ear_bottom_z,
         coupler_sweep_radius,
     )
@@ -483,14 +475,12 @@ def cradle_solid_script(
 
     # ── Connector passage ──
     if servo.connector_pos is not None:
-        cut_solid, _housing = _connector_port(
-            servo,
-            spec,
+        port = _emit_connector_port(
+            prog, servo, spec,
             wall_center=(cradle_min_x, 0, 0),
             exit_axis=(-1.0, 0.0, 0.0),
         )
-        if cut_solid is not None:
-            port = prog.prebuilt(cut_solid, tag="connector_port")
+        if port is not None:
             shell = prog.cut(shell, port)
         else:
             _cx, cy, cz = servo.connector_pos

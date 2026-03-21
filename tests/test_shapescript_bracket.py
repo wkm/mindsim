@@ -290,3 +290,77 @@ class TestBracketSolidScript:
         servo = _servo()
         prog = bracket_solid_script(servo)
         assert prog.output_ref is not None
+
+
+class TestConnectorPortNative:
+    """Connector port should use native Box+locate ops, not PrebuiltOp."""
+
+    def test_bracket_sts3215_no_prebuilt_connector(self):
+        """STS3215 bracket connector port should not use PrebuiltOp."""
+        from botcad.components.servo import STS3215
+        from botcad.shapescript.emit_bracket import bracket_solid_script
+        from botcad.shapescript.ops import PrebuiltOp
+
+        servo = STS3215()
+        prog = bracket_solid_script(servo)
+
+        prebuilt_ops = [op for op in prog.ops if isinstance(op, PrebuiltOp)]
+        assert len(prebuilt_ops) == 0, (
+            f"Expected no PrebuiltOp but found {len(prebuilt_ops)}: "
+            f"{[op.tag for op in prebuilt_ops]}"
+        )
+
+    def test_cradle_sts3215_no_prebuilt_connector(self):
+        """STS3215 cradle connector port should not use PrebuiltOp."""
+        from botcad.components.servo import STS3215
+        from botcad.shapescript.ops import PrebuiltOp
+
+        servo = STS3215()
+        prog = cradle_solid_script(servo)
+
+        prebuilt_ops = [op for op in prog.ops if isinstance(op, PrebuiltOp)]
+        assert len(prebuilt_ops) == 0, (
+            f"Expected no PrebuiltOp but found {len(prebuilt_ops)}: "
+            f"{[op.tag for op in prebuilt_ops]}"
+        )
+
+    def test_bracket_sts3215_connector_volume_matches(self):
+        """STS3215 bracket with connector port: IR volume matches direct."""
+        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.components.servo import STS3215
+        from botcad.shapescript.emit_bracket import bracket_solid_script
+
+        servo = STS3215()
+        spec = BracketSpec()
+
+        direct = bracket_solid(servo, spec)
+        direct_vol = _total_volume(direct)
+
+        prog = bracket_solid_script(servo, spec)
+        result = _exec(prog)
+        ir_vol = _total_volume(result.shapes[prog.output_ref.id])
+
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"STS3215 bracket connector port volume mismatch: "
+            f"IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
+        )
+
+    def test_cradle_sts3215_connector_volume_matches(self):
+        """STS3215 cradle with connector port: IR volume matches direct."""
+        from botcad.bracket import BracketSpec, cradle_solid
+        from botcad.components.servo import STS3215
+
+        servo = STS3215()
+        spec = BracketSpec()
+
+        direct = cradle_solid(servo, spec)
+        direct_vol = _total_volume(direct)
+
+        prog = cradle_solid_script(servo, spec)
+        result = _exec(prog)
+        ir_vol = _total_volume(result.shapes[prog.output_ref.id])
+
+        assert ir_vol == pytest.approx(direct_vol, rel=0.001), (
+            f"STS3215 cradle connector port volume mismatch: "
+            f"IR={ir_vol:.10e} vs direct={direct_vol:.10e}"
+        )
