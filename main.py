@@ -1055,7 +1055,10 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         try:
             stl_bytes = _generate_stl_bytes(comp, part)
         except Exception as e:
-            self.send_error(500, f"STL generation failed: {e}")
+            import traceback
+
+            traceback.print_exc()
+            self.send_error(500, f"STL generation failed for {name}/{part}: {e}")
             return
 
         if stl_bytes is None:

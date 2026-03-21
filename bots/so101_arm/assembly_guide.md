@@ -70,28 +70,28 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 4. **Attach turntable** to base via STS3215 at joint `shoulder_pan` (axis: vertical):
    - Screw servo into base bracket using 6x M3 screws through mounting ears
-   - Attach turntable coupler to servo horn using 8x M2.5 screws
+   - Attach turntable coupler to servo horn using 8x M2 screws
 
 5. **Attach upper_arm** to turntable via STS3215 at joint `shoulder_lift` (axis: roll):
    - Screw servo into turntable bracket using 6x M3 screws through mounting ears
-   - Attach upper_arm coupler to servo horn using 8x M2.5 screws
+   - Attach upper_arm coupler to servo horn using 8x M2 screws
 
 6. **Attach forearm** to upper_arm via STS3215 at joint `elbow_flex` (axis: roll):
    - Screw servo into upper_arm bracket using 6x M3 screws through mounting ears
-   - Attach forearm coupler to servo horn using 8x M2.5 screws
+   - Attach forearm coupler to servo horn using 8x M2 screws
 
 7. **Attach wrist** to forearm via STS3215 at joint `wrist_flex` (axis: roll):
    - Screw servo into forearm bracket using 6x M3 screws through mounting ears
-   - Attach wrist coupler to servo horn using 8x M2.5 screws
+   - Attach wrist coupler to servo horn using 8x M2 screws
 
 8. **Attach wrist_roll** to wrist via STS3215 at joint `wrist_roll` (axis: vertical):
    - Screw servo into wrist bracket using 6x M3 screws through mounting ears
-   - Attach wrist_roll coupler to servo horn using 8x M2.5 screws
+   - Attach wrist_roll coupler to servo horn using 8x M2 screws
    - Mount PiCamera2 (camera) at front position using 4x M2
 
 9. **Attach jaw** to wrist_roll via STS3215 at joint `gripper` (axis: roll):
    - Screw servo into wrist_roll bracket using 6x M3 screws through mounting ears
-   - Attach jaw coupler to servo horn using 8x M2.5 screws
+   - Attach jaw coupler to servo horn using 8x M2 screws
 
 10. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 

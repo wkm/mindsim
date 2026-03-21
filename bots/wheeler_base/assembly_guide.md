@@ -59,12 +59,12 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
    - Screw servo into base bracket using 6x M3 screws through mounting ears
-   - Attach left_rim coupler to servo horn using 8x M2.5 screws
+   - Attach left_rim coupler to servo horn using 8x M2 screws
    - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 5. **Attach right_rim** to base via STS3215 at joint `right_wheel` (axis: roll):
    - Screw servo into base bracket using 6x M3 screws through mounting ears
-   - Attach right_rim coupler to servo horn using 8x M2.5 screws
+   - Attach right_rim coupler to servo horn using 8x M2 screws
    - Mount Pololu 90x10mm Wheel (wheel) at center position using 6x M3
 
 6. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
