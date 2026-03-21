@@ -121,6 +121,16 @@ class ShapeScript:
         self.ops.append(CallOp(ref=ref, sub_program_key=key, tag=tag))
         return ref
 
+    # ── Copy ──
+
+    def copy(self, source: ShapeRef, tag: str | None = None) -> ShapeRef:
+        """Create an independent copy of an existing shape."""
+        from botcad.shapescript.ops import CopyOp
+
+        ref = self._next_ref("copy")
+        self.ops.append(CopyOp(ref=ref, source=source, tag=tag))
+        return ref
+
     # ── Booleans ──
 
     def fuse(self, target: ShapeRef, tool: ShapeRef) -> ShapeRef:
@@ -206,7 +216,8 @@ class ShapeScript:
                 euler = (0.0, angle, 0.0)
             else:
                 euler = (angle, 0.0, 0.0)
-            clone = self.locate(shape, euler_deg=euler)
+            clone = self.copy(shape, tag=f"{tag}_{i}" if tag else None)
+            clone = self.locate(clone, euler_deg=euler)
             result = self.fuse(result, clone)
         return result
 

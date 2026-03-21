@@ -22,6 +22,7 @@ from botcad.shapescript.ops import (  # noqa: F401
     BoxOp,
     CallOp,
     ChamferOp,
+    CopyOp,
     CutOp,
     CylinderOp,
     ExportSTEPOp,
@@ -137,6 +138,14 @@ class OcctBackend:
                     shapes[ref.id] = sub_result.shapes[sub_prog.output_ref.id]
                     if tag:
                         tags.declare(tag, ref)
+
+                case CopyOp(ref=ref, source=src, tag=tag):
+                    # .copy() creates an independent clone
+                    s = shapes[src.id]
+                    shapes[ref.id] = s.copy()
+                    if tag:
+                        tags.declare(tag, ref)
+                    tags.propagate_transform(ref, src)
 
                 # -- Booleans --
                 case FuseOp(ref=ref, target=t, tool=tl):

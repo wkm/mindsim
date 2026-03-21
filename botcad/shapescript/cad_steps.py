@@ -75,6 +75,10 @@ def shapescript_to_cad_steps(
                     CadStep(label=label, solid=solid, op="create", group=key, script=script_line)
                 )
 
+            case CopyOp(ref=ref, source=src, tag=tag):
+                label = "Copy" + (f" ({tag})" if tag else f" of {src.id}")
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
+
             # Booleans — cut/union steps with tool
             case CutOp(ref=ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
@@ -168,6 +172,12 @@ def format_op(op) -> str:
 
         case CallOp(sub_program_key=key, tag=tag):
             s = f"Call({key!r})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case CopyOp(source=src, tag=tag):
+            s = f"Copy({src.id})"
             if tag:
                 s += f"  # {tag}"
             return prefix + s

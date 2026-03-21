@@ -90,6 +90,22 @@ class CallOp:
     tag: str | None = None
 
 
+# ── Copy ──
+
+
+@dataclass(frozen=True)
+class CopyOp:
+    """Create an independent copy of an existing shape.
+
+    The copy can be located/modified without affecting the original.
+    Create a prototype once, Copy it N times, Locate each differently.
+    """
+
+    ref: ShapeRef
+    source: ShapeRef
+    tag: str | None = None
+
+
 # ── Booleans ──
 
 
@@ -200,7 +216,7 @@ class ExportSTEPOp:
 
 
 # Union of all ops for type narrowing
-PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp]
+PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp, CopyOp]
 BooleanOp = Union[FuseOp, CutOp]
 TransformOp = LocateOp
 ModificationOp = Union[FilletOp, FilletAllEdgesOp, FilletByAxisOp, ChamferOp]
