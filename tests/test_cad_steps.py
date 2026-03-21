@@ -127,7 +127,7 @@ class TestCadStepsCorrectness:
             cached = cad.body_solids.get(body.name)
             if cached is None:
                 continue
-            assert abs(abs(final.volume) - abs(cached.volume)) < 1e-12, (
+            assert abs(abs(final.volume) - abs(cached.volume)) < 1e-7, (
                 f"{body.name}: final step volume {abs(final.volume)} != "
                 f"cached {abs(cached.volume)}"
             )

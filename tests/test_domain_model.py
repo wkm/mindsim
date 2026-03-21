@@ -206,7 +206,7 @@ class TestComponentCatalog:
         servo = STS3215()
         for mp in servo.horn_mounting_points:
             assert mp.axis == (0.0, 0.0, 1.0)
-            assert mp.fastener_type == "M2.5"
+            assert mp.fastener_type == "M2"
 
     def test_sts3215_specs_match_datasheet(self):
         from botcad.components.servo import STS3215
@@ -225,7 +225,7 @@ class TestComponentCatalog:
         servo = STS3215()
         for mp in servo.rear_horn_mounting_points:
             assert mp.axis == (0.0, 0.0, -1.0)
-            assert mp.fastener_type == "M2.5"
+            assert mp.fastener_type == "M2"
 
     def test_pi_mount_points(self):
         from botcad.components.compute import RaspberryPiZero2W
@@ -233,7 +233,7 @@ class TestComponentCatalog:
         pi = RaspberryPiZero2W()
         for mp in pi.mounting_points:
             assert mp.axis == (0.0, 0.0, -1.0)
-            assert mp.fastener_type == "M2.5"
+            assert mp.fastener_type == "M2"
 
     def test_camera_mount_points(self):
         from botcad.components.camera import OV5647
