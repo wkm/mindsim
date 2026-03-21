@@ -1697,9 +1697,8 @@ export class Viewport3D {
     ctx.fillStyle = cssColor;
     ctx.fillRect(0, 0, size, size);
 
-    // Lighter diagonal hatch lines for contrast
-    const lighter = c.clone().lerp(new THREE.Color(0xffffff), 0.6);
-    ctx.strokeStyle = '#' + lighter.getHexString();
+    // DEBUG: bright red hatch lines to verify they render
+    ctx.strokeStyle = '#FF0000';
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     for (let i = -size; i < size * 2; i += spacing) {
