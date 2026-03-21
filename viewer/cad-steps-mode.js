@@ -1,18 +1,22 @@
 /**
  * MindSim CAD Steps Viewer — split-pane code debugger for ShapeScript.
  *
- * Left pane: 3D viewport showing body solid + tool overlay.
+ * Left pane: 3D viewport (Viewport3D) showing body solid + tool overlay.
  * Right pane: syntax-highlighted code editor showing all ShapeScript ops.
  * Click a line to scrub. Current step highlighted with blue bar.
  * Resizable panes with draggable divider.
+ *
+ * Smart camera:
+ *   Holistic mode — frames once on the final step's bounding box; stays fixed.
+ *   Isolate mode — re-frames on the current step's geometry with animation.
  *
  * URL: ?cadsteps=<bot_name>:<body_name>
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { clearGroup } from './utils.js';
+import { Viewport3D } from './viewport3d.js';
 
 // Edge rendering — matches bot-viewer.js and component-browser.js
 const EDGE_MATERIAL = new THREE.LineBasicMaterial({
@@ -169,13 +173,11 @@ class CadStepsViewer {
     this.stlLoader = new STLLoader();
     this.stlCache = {};      // step index → BufferGeometry
     this.toolStlCache = {};  // step index → BufferGeometry (tool solid)
-    this.meshGroup = new THREE.Group();   // result solid + its edges
-    this.toolGroup = new THREE.Group();   // tool solid + its edges
-    this.ghostGroup = new THREE.Group();  // ghost of final body (isolate mode)
     this.showTool = true;
     this.isolateMode = false;
     this._ghostGeometry = null;           // cached final-step geometry for ghost
     this._leftBasis = 60; // percent
+    this._hasFramedHolistic = false;      // true once we've framed on the final body
   }
 
   async init() {
@@ -201,13 +203,19 @@ class CadStepsViewer {
     await Promise.all(fetches);
 
     this._buildLayout();
-    this._setupThreeJS();
+    this._setupViewport();
     this._buildNavExtras();
     this._buildEditorPane();
 
     loadingEl.style.display = 'none';
 
-    this._animate();
+    // Frame camera on final step geometry, then start animation
+    await this._frameOnFinalBody();
+
+    this.viewport.animate(() => {
+      // per-frame hook — nothing needed currently
+    });
+
     if (this.steps.length > 0) {
       await this._showStep(this.steps.length - 1);
     }
@@ -260,7 +268,7 @@ class CadStepsViewer {
       const newBasis = startLeftBasis + (dx / totalW) * 100;
       this._leftBasis = Math.max(20, Math.min(80, newBasis));
       this.viewportEl.style.flexBasis = this._leftBasis + '%';
-      this._resizeRenderer();
+      this.viewport.resize();
     };
     const onMouseUp = () => {
       this.dividerEl.classList.remove('dragging');
@@ -270,58 +278,27 @@ class CadStepsViewer {
     this.dividerEl.addEventListener('mousedown', onMouseDown);
   }
 
-  _resizeRenderer() {
-    if (!this.renderer) return;
-    const w = this.viewportEl.clientWidth;
-    const h = this.viewportEl.clientHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
+  // ── Viewport3D setup ──
+
+  _setupViewport() {
+    this.viewport = new Viewport3D(this.viewportEl, {
+      cameraType: 'perspective',
+      grid: true,
+    });
+    this.meshGroup = this.viewport.addGroup('body');
+    this.toolGroup = this.viewport.addGroup('tool');
+    this.ghostGroup = this.viewport.addGroup('ghost');
   }
 
-  // ── Three.js ──
+  // ── Smart camera: frame on final body once for holistic mode ──
 
-  _setupThreeJS() {
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xF5F8FA);
-
-    const w = this.viewportEl.clientWidth;
-    const h = this.viewportEl.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, w / h, 0.0001, 10);
-    this.camera.position.set(0.08, 0.08, 0.1);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(w, h);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.viewportEl.appendChild(this.renderer.domElement);
-
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.1;
-    this.controls.update();
-
-    // Lighting — match bot viewer
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
-    dirLight.position.set(0.3, 0.5, 0.4);
-    this.scene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillLight.position.set(-0.3, -0.2, -0.4);
-    this.scene.add(fillLight);
-
-    // Grid
-    const grid = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0);
-    grid.rotation.x = Math.PI / 2; // XY plane
-    this.scene.add(grid);
-
-    this.scene.add(this.meshGroup);
-    this.scene.add(this.toolGroup);
-    this.scene.add(this.ghostGroup);
-
-    // Handle resize
-    window.addEventListener('resize', () => this._resizeRenderer());
+  async _frameOnFinalBody() {
+    if (this.steps.length === 0) return;
+    const finalGeometry = await this._loadStepSTL(this.steps.length - 1);
+    if (finalGeometry) {
+      this.viewport.frameOnGeometry(finalGeometry);
+      this._hasFramedHolistic = true;
+    }
   }
 
   // ── Nav bar extras (body switcher) ──
@@ -645,10 +622,9 @@ class CadStepsViewer {
     this._prefetch(idx - 1);
     this._prefetch(idx + 1);
 
-    // Auto-frame on first load
-    if (idx === this.steps.length - 1 && !this._hasFramed) {
-      this._frameCamera(geometry);
-      this._hasFramed = true;
+    // Smart camera: in isolate mode, frame on current step geometry
+    if (this.isolateMode) {
+      this.viewport.frameOnGeometry(geometry);
     }
   }
 
@@ -743,30 +719,5 @@ class CadStepsViewer {
     if (this.steps[idx]?.has_tool && !this.toolStlCache[idx]) {
       this._loadSTL(this.toolStlCache, idx, 'tool-stl');
     }
-  }
-
-  _frameCamera(geometry) {
-    geometry.computeBoundingBox();
-    const box = geometry.boundingBox;
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const dist = maxDim * 2.5;
-
-    this.controls.target.copy(center);
-    this.camera.position.set(
-      center.x + dist * 0.6,
-      center.y + dist * 0.6,
-      center.z + dist * 0.8
-    );
-    this.controls.update();
-  }
-
-  _animate() {
-    requestAnimationFrame(() => this._animate());
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
   }
 }
