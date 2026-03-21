@@ -1,1 +1,15 @@
-cyl_0 = Cylinder(r=0.0090, h=0.0000)
+cyl_0 = Cylinder(r=0.0090, h=0.0020)  # horn_disc
+cyl_1 = Cylinder(r=0.0045, h=0.0030)  # shaft_bore
+cut_2 = Cut(cyl_0, cyl_1)
+cyl_3 = Cylinder(r=0.0010, h=0.0030)  # horn_hole
+loc_4 = Locate(cyl_3, pos=(0.0070, 0.0000, 0.0000))
+cut_5 = Cut(cut_2, loc_4)
+copy_6 = Copy(cyl_3)
+loc_7 = Locate(copy_6, pos=(-0.0070, 0.0000, 0.0000))
+cut_8 = Cut(cut_5, loc_7)
+copy_9 = Copy(cyl_3)
+loc_10 = Locate(copy_9, pos=(0.0000, 0.0070, 0.0000))
+cut_11 = Cut(cut_8, loc_10)
+copy_12 = Copy(cyl_3)
+loc_13 = Locate(copy_12, pos=(0.0000, -0.0070, 0.0000))
+cut_14 = Cut(cut_11, loc_13)
