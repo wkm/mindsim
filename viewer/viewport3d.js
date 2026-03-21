@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three';
+import { Earcut } from 'three/src/extras/Earcut.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
@@ -1604,16 +1605,8 @@ export class Viewport3D {
 
     console.log(`[section] earcut: ${outer.pts2d.length} outer verts, ${holeIndices.length} holes, ${flatCoords.length / 2} total verts`);
 
-    // Triangulate
-    let triIndices;
-    if (THREE.Earcut) {
-      triIndices = THREE.Earcut.triangulate(flatCoords, holeIndices, 2);
-    } else {
-      triIndices = [];
-      for (let i = 1; i < outer.polygon.length - 1; i++) {
-        triIndices.push(0, i, i + 1);
-      }
-    }
+    // Triangulate with earcut (handles concave polygons + holes)
+    const triIndices = Earcut.triangulate(flatCoords, holeIndices, 2);
 
     console.log(`[section] earcut produced ${triIndices.length / 3} triangles`);
 
