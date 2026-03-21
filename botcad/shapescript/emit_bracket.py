@@ -5,8 +5,9 @@ ops (no PrebuiltOp).
 
 bracket_solid_script translates bracket_solid() line-by-line into
 ShapeScript ops: outer box, servo pocket, horn clearance, shaft boss,
-fastener holes, and connector/cable passage. SCS0009 and connector
-ports that are hard to express purely in ShapeScript use PrebuiltOp.
+fastener holes, and connector/cable passage. Both STS3215 and SCS0009
+use native ops. Connector ports that are hard to express purely in
+ShapeScript use native Box + locate ops.
 
 cradle_solid_script translates cradle_solid() into native ShapeScript ops:
 outer box, servo pocket cut, fastener holes, and connector/cable passage.
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from botcad.shapescript.ops import ShapeRef
 from botcad.shapescript.program import ShapeScript
 
 if TYPE_CHECKING:
@@ -26,27 +28,112 @@ if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
 
+def _emit_connector_port(
+    prog: ShapeScript,
+    servo: ServoSpec,
+    spec: BracketSpec,
+    wall_center: tuple[float, float, float],
+    exit_axis: tuple[float, float, float],
+) -> ShapeRef | None:
+    """Emit native ShapeScript ops for a connector passage through a bracket wall.
+
+    Computes a bounding box over all wire port connector envelopes + clearance,
+    then emits a single Box + locate positioned at wall_center. Returns a ShapeRef
+    for the cut solid, or None if no connectors are present.
+
+    This is the ShapeScript equivalent of bracket._connector_port().
+    """
+    from botcad.connectors import connector_spec
+
+    # Collect all wire ports with connectors
+    ports = []
+    for wp in servo.wire_ports:
+        if wp.connector_type:
+            try:
+                cspec = connector_spec(wp.connector_type)
+                ports.append((wp, cspec))
+            except KeyError:
+                pass
+
+    if not ports:
+        return None
+
+    tol = spec.tolerance
+    wall = spec.wall
+    ax, ay, az = exit_axis
+
+    clearance = tol + 0.001  # per side
+
+    if abs(ax) > 0.5:
+        # Passage through X wall — footprint in Y-Z plane
+        y_coords: list[float] = []
+        z_coords: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            y_coords.extend([wp.pos[1] - hw, wp.pos[1] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(y_coords) - min(y_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(passage_depth, cut_w, cut_h, tag="connector_port")
+        cut_pos = (wall_center[0], center_y, center_z)
+    elif abs(az) > 0.5:
+        # Passage through Z wall — footprint in X-Y plane
+        x_coords: list[float] = []
+        y_coords2: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            y_coords2.extend([wp.pos[1] - hh, wp.pos[1] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(y_coords2) - min(y_coords2)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_y = (max(y_coords2) + min(y_coords2)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(cut_w, cut_h, passage_depth, tag="connector_port")
+        cut_pos = (center_x, center_y, wall_center[2])
+    else:
+        # Passage through Y wall — footprint in X-Z plane
+        x_coords2: list[float] = []
+        z_coords2: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords2.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            z_coords2.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(x_coords2) - min(x_coords2)
+        cut_h = max(z_coords2) - min(z_coords2)
+        center_x = (max(x_coords2) + min(x_coords2)) / 2
+        center_z = (max(z_coords2) + min(z_coords2)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(cut_w, passage_depth, cut_h, tag="connector_port")
+        cut_pos = (center_x, wall_center[1], center_z)
+
+    cut = prog.locate(cut, pos=cut_pos)
+    return cut
+
+
 def bracket_envelope_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Build a ShapeScript for bracket_envelope() using native Box + locate.
 
-    SCS0009 uses PrebuiltOp (different geometry). STS3215 and similar
+    SCS0009 uses ear-tab geometry (U-shaped tray). STS3215 and similar
     use _bracket_outer() logic: Box at (0, 0, center_z) with insertion
     clearance extending 5x bracket height above.
     """
     from botcad.bracket import BracketSpec as BS
-    from botcad.bracket import _ear_bottom_z, bracket_envelope
+    from botcad.bracket import _ear_bottom_z
 
     if spec is None:
         spec = BS()
-
-    # SCS0009 has unique geometry — wrap as PrebuiltOp
-    if servo.name == "SCS0009":
-        prog = ShapeScript()
-        ref = prog.prebuilt(bracket_envelope(servo, spec), tag="bracket_envelope")
-        prog.output_ref = ref
-        return prog
 
     prog = ShapeScript()
 
@@ -54,16 +141,31 @@ def bracket_envelope_script(
     tol = spec.tolerance
     wall = spec.wall
 
-    ear_bottom_z = _ear_bottom_z(servo, wall)
+    if servo.name == "SCS0009":
+        # SCS0009: U-shaped tray — envelope uses ear tab geometry
+        ear_ext = 0.00465
+        ear_thick = 0.0025
+        ear_top_z = body_z / 2 - 0.00775
+        ear_bot_z = ear_top_z - ear_thick
 
-    # Matches _bracket_outer() with insertion_clearance = bracket_height * 5
-    outer_x = body_x + 2 * (tol + wall)
-    outer_y = body_y + 2 * (tol + wall)
-    bracket_height = body_z / 2 + wall - ear_bottom_z
-    insertion_clearance = bracket_height * 5
-    outer_top_z = body_z / 2 + wall + insertion_clearance
-    outer_z = outer_top_z - ear_bottom_z
-    outer_center_z = (outer_top_z + ear_bottom_z) / 2
+        outer_x = body_x + 2 * ear_ext + 2 * wall
+        outer_y = body_y + 2 * (tol + wall)
+        bracket_height = ear_bot_z - (-body_z / 2 - wall)
+        outer_top_z = ear_bot_z + bracket_height * 5
+        outer_bot_z = -body_z / 2 - wall
+        outer_z = outer_top_z - outer_bot_z
+        outer_center_z = (outer_top_z + outer_bot_z) / 2
+    else:
+        ear_bottom_z = _ear_bottom_z(servo, wall)
+
+        # Matches _bracket_outer() with insertion_clearance = bracket_height * 5
+        outer_x = body_x + 2 * (tol + wall)
+        outer_y = body_y + 2 * (tol + wall)
+        bracket_height = body_z / 2 + wall - ear_bottom_z
+        insertion_clearance = bracket_height * 5
+        outer_top_z = body_z / 2 + wall + insertion_clearance
+        outer_z = outer_top_z - ear_bottom_z
+        outer_center_z = (outer_top_z + ear_bottom_z) / 2
 
     outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_envelope")
     outer = prog.locate(outer, pos=(0, 0, outer_center_z))
@@ -77,17 +179,16 @@ def bracket_solid_script(
 ) -> ShapeScript:
     """Build a ShapeScript expressing the full bracket_solid geometry.
 
-    STS3215 (and similar) brackets are fully expressed as ShapeScript ops:
-    outer box, servo pocket cut, horn clearance hole, shaft boss clearance,
-    fastener holes, and connector/cable passage. SCS0009 uses PrebuiltOp
-    since its geometry differs substantially.
+    Both STS3215 and SCS0009 are expressed as native ShapeScript ops.
+    STS3215: outer box, servo pocket, horn clearance, shaft boss, fastener holes,
+    connector passage. SCS0009: U-shaped tray, body pocket, fastener holes,
+    connector passage on -Z face.
     """
     from botcad.bracket import BracketSpec as BS
     from botcad.bracket import (
         _cable_slot_dims,
         _connector_port,
         _ear_bottom_z,
-        bracket_solid,
         horn_disc_params,
     )
     from botcad.fasteners import HeadType, resolve_fastener
@@ -96,107 +197,162 @@ def bracket_solid_script(
     if spec is None:
         spec = BS()
 
-    # SCS0009 has unique geometry — wrap as PrebuiltOp
-    if servo.name == "SCS0009":
-        prog = ShapeScript()
-        ref = prog.prebuilt(bracket_solid(servo, spec), tag="bracket_solid")
-        prog.output_ref = ref
-        return prog
-
     prog = ShapeScript()
 
     # ── Outer box ──
     body_x, body_y, body_z = servo.effective_body_dims
     tol = spec.tolerance
     wall = spec.wall
-    ear_bottom_z = _ear_bottom_z(servo, wall)
 
-    outer_x = body_x + 2 * (tol + wall)
-    outer_y = body_y + 2 * (tol + wall)
-    outer_top_z = body_z / 2 + wall
-    outer_z = outer_top_z - ear_bottom_z
-    outer_center_z = (outer_top_z + ear_bottom_z) / 2
+    if servo.name == "SCS0009":
+        # SCS0009: U-shaped tray from bottom up to ear tabs
+        ear_ext = 0.00465
+        ear_thick = 0.0025
+        ear_top_z = body_z / 2 - 0.00775
+        ear_bot_z = ear_top_z - ear_thick
 
-    outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_outer")
-    outer = prog.locate(outer, pos=(0, 0, outer_center_z))
+        outer_x = body_x + 2 * ear_ext + 2 * wall
+        outer_y = body_y + 2 * (tol + wall)
+        outer_top_z = ear_bot_z
+        outer_bot_z = -body_z / 2 - wall
+        outer_z = outer_top_z - outer_bot_z
+        outer_center_z = (outer_top_z + outer_bot_z) / 2
 
-    # ── Servo body pocket (open on +Z for insertion) ──
-    pocket_x = body_x + 2 * tol
-    pocket_y = body_y + 2 * tol
-    pocket_z = body_z + tol + wall + 0.001
-    pocket_center_z = -body_z / 2 + pocket_z / 2 - tol
+        outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_outer")
+        outer = prog.locate(outer, pos=(0, 0, outer_center_z))
 
-    pocket = prog.box(pocket_x, pocket_y, pocket_z, tag="pocket")
-    pocket = prog.locate(pocket, pos=(0, 0, pocket_center_z))
-    shell = prog.cut(outer, pocket)
+        # ── Body pocket (open on +Z for servo insertion) ──
+        pocket_x = body_x + 2 * tol
+        pocket_y = body_y + 2 * tol
+        pocket_z = outer_z + 0.002  # through full height
+        pocket = prog.box(pocket_x, pocket_y, pocket_z, tag="pocket")
+        pocket = prog.locate(pocket, pos=(0, 0, outer_center_z))
+        shell = prog.cut(outer, pocket)
 
-    # ── Horn clearance hole (+Z face) ──
-    horn_radius = 0.011
-    params = horn_disc_params(servo)
-    if params is not None:
-        horn_radius = params.radius + spec.shaft_clearance
+        # ── Fastener holes at each ear position ──
+        for ear in servo.mounting_ears:
+            fspec = resolve_fastener(ear)
+            hole_r = fspec.clearance_hole / 2
+            hole = prog.cylinder(hole_r, outer_z + 0.002, tag="fastener_hole")
+            hole = prog.locate(hole, pos=(ear.pos[0], ear.pos[1], outer_center_z))
+            shell = prog.cut(shell, hole)
 
-    shaft_hole_h = wall + 0.002
-    shaft_hole_z = body_z / 2 - 0.001
-    shaft_hole = prog.cylinder(
-        horn_radius, shaft_hole_h, align=ALIGN_MIN_Z, tag="horn_hole"
-    )
-    shaft_hole = prog.locate(
-        shaft_hole,
-        pos=(servo.shaft_offset[0], servo.shaft_offset[1], shaft_hole_z),
-    )
-    shell = prog.cut(shell, shaft_hole)
+        # ── Connector passage (-Z face) ──
+        if servo.connector_pos is not None:
+            cut_solid, _housing = _connector_port(
+                servo,
+                spec,
+                wall_center=(0, 0, outer_bot_z),
+                exit_axis=(0.0, 0.0, -1.0),
+            )
+            if cut_solid is not None:
+                port = prog.prebuilt(cut_solid, tag="connector_port")
+                shell = prog.cut(shell, port)
+            else:
+                _cx, cy, _cz = servo.connector_pos
+                slot_w, slot_h = _cable_slot_dims(servo, spec)
+                slot_depth = wall + tol + 0.002
+                slot = prog.box(slot_w, slot_h, slot_depth, tag="cable_slot")
+                slot_z = outer_bot_z + slot_depth / 2 - 0.001
+                slot = prog.locate(slot, pos=(0, cy, slot_z))
+                shell = prog.cut(shell, slot)
+    else:
+        ear_bottom_z = _ear_bottom_z(servo, wall)
 
-    # ── Shaft boss clearance (bearing housing above body top) ──
-    if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
-        boss_r = servo.shaft_boss_radius + tol
-        boss_h = servo.shaft_boss_height + tol + 0.001
-        boss = prog.cylinder(boss_r, boss_h, align=ALIGN_MIN_Z, tag="shaft_boss")
-        boss = prog.locate(
-            boss,
-            pos=(servo.shaft_offset[0], servo.shaft_offset[1], body_z / 2 - 0.001),
+        outer_x = body_x + 2 * (tol + wall)
+        outer_y = body_y + 2 * (tol + wall)
+        outer_top_z = body_z / 2 + wall
+        outer_z = outer_top_z - ear_bottom_z
+        outer_center_z = (outer_top_z + ear_bottom_z) / 2
+
+        outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_outer")
+        outer = prog.locate(outer, pos=(0, 0, outer_center_z))
+
+        # ── Servo body pocket (open on +Z for insertion) ──
+        pocket_x = body_x + 2 * tol
+        pocket_y = body_y + 2 * tol
+        pocket_z = body_z + tol + wall + 0.001
+        pocket_center_z = -body_z / 2 + pocket_z / 2 - tol
+
+        pocket = prog.box(pocket_x, pocket_y, pocket_z, tag="pocket")
+        pocket = prog.locate(pocket, pos=(0, 0, pocket_center_z))
+        shell = prog.cut(outer, pocket)
+
+        # ── Horn clearance hole (+Z face) ──
+        horn_radius = 0.011
+        params = horn_disc_params(servo)
+        if params is not None:
+            horn_radius = params.radius + spec.shaft_clearance
+
+        shaft_hole_h = wall + 0.002
+        shaft_hole_z = body_z / 2 - 0.001
+        shaft_hole = prog.cylinder(
+            horn_radius, shaft_hole_h, align=ALIGN_MIN_Z, tag="horn_hole"
         )
-        shell = prog.cut(shell, boss)
-
-    # ── Fastener holes at each mounting ear ──
-    for ear in servo.mounting_ears:
-        fspec = resolve_fastener(ear)
-        hole_r = fspec.clearance_hole / 2
-        hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
-        hole = prog.cylinder(hole_r, hole_depth, align=ALIGN_MIN_Z, tag="fastener_hole")
-        hole = prog.locate(hole, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
-        shell = prog.cut(shell, hole)
-
-        # Counterbore for socket head cap screws
-        if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
-            cb_r = fspec.head_diameter / 2 + 0.0002
-            cb_depth = fspec.head_height + 0.0005
-            cb = prog.cylinder(cb_r, cb_depth, align=ALIGN_MIN_Z, tag="counterbore")
-            cb = prog.locate(cb, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001))
-            shell = prog.cut(shell, cb)
-
-    # ── Connector port / cable slot ──
-    if servo.connector_pos is not None:
-        wall_x = -outer_x / 2
-        cut_solid, _housing = _connector_port(
-            servo,
-            spec,
-            wall_center=(wall_x, 0, 0),
-            exit_axis=(-1.0, 0.0, 0.0),
+        shaft_hole = prog.locate(
+            shaft_hole,
+            pos=(servo.shaft_offset[0], servo.shaft_offset[1], shaft_hole_z),
         )
-        if cut_solid is not None:
-            # Complex shaped passage — use PrebuiltOp
-            port = prog.prebuilt(cut_solid, tag="connector_port")
-            shell = prog.cut(shell, port)
-        else:
-            # Fallback: rectangular cable slot
-            cx, cy, cz = servo.connector_pos
-            slot_w, slot_h = _cable_slot_dims(servo, spec)
-            slot_depth = wall + tol + 0.002
-            slot = prog.box(slot_depth, slot_w, slot_h, tag="cable_slot")
-            slot_x = wall_x + slot_depth / 2 - 0.001
-            slot = prog.locate(slot, pos=(slot_x, cy, cz))
-            shell = prog.cut(shell, slot)
+        shell = prog.cut(shell, shaft_hole)
+
+        # ── Shaft boss clearance (bearing housing above body top) ──
+        if servo.shaft_boss_radius > 0 and servo.shaft_boss_height > 0:
+            boss_r = servo.shaft_boss_radius + tol
+            boss_h = servo.shaft_boss_height + tol + 0.001
+            boss = prog.cylinder(boss_r, boss_h, align=ALIGN_MIN_Z, tag="shaft_boss")
+            boss = prog.locate(
+                boss,
+                pos=(servo.shaft_offset[0], servo.shaft_offset[1], body_z / 2 - 0.001),
+            )
+            shell = prog.cut(shell, boss)
+
+        # ── Fastener holes at each mounting ear ──
+        for ear in servo.mounting_ears:
+            fspec = resolve_fastener(ear)
+            hole_r = fspec.clearance_hole / 2
+            hole_depth = abs(ear.pos[2] - ear_bottom_z) + wall + 0.002
+            hole = prog.cylinder(
+                hole_r, hole_depth, align=ALIGN_MIN_Z, tag="fastener_hole"
+            )
+            hole = prog.locate(
+                hole, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)
+            )
+            shell = prog.cut(shell, hole)
+
+            # Counterbore for socket head cap screws
+            if fspec.head_type == HeadType.SOCKET_HEAD_CAP:
+                cb_r = fspec.head_diameter / 2 + 0.0002
+                cb_depth = fspec.head_height + 0.0005
+                cb = prog.cylinder(
+                    cb_r, cb_depth, align=ALIGN_MIN_Z, tag="counterbore"
+                )
+                cb = prog.locate(
+                    cb, pos=(ear.pos[0], ear.pos[1], ear_bottom_z - 0.001)
+                )
+                shell = prog.cut(shell, cb)
+
+        # ── Connector port / cable slot ──
+        if servo.connector_pos is not None:
+            wall_x = -outer_x / 2
+            cut_solid, _housing = _connector_port(
+                servo,
+                spec,
+                wall_center=(wall_x, 0, 0),
+                exit_axis=(-1.0, 0.0, 0.0),
+            )
+            if cut_solid is not None:
+                # Complex shaped passage — use PrebuiltOp
+                port = prog.prebuilt(cut_solid, tag="connector_port")
+                shell = prog.cut(shell, port)
+            else:
+                # Fallback: rectangular cable slot
+                cx, cy, cz = servo.connector_pos
+                slot_w, slot_h = _cable_slot_dims(servo, spec)
+                slot_depth = wall + tol + 0.002
+                slot = prog.box(slot_depth, slot_w, slot_h, tag="cable_slot")
+                slot_x = wall_x + slot_depth / 2 - 0.001
+                slot = prog.locate(slot, pos=(slot_x, cy, cz))
+                shell = prog.cut(shell, slot)
 
     prog.output_ref = shell
     return prog
