@@ -27,8 +27,8 @@ from botcad.skeleton import BodyShape, Bot, BracketStyle
 def build() -> Bot:
     """Define the wheeler_arm robot."""
     bot = Bot("wheeler_arm")
-    base_mod = bot.module("base")
-    arm_mod = bot.module("arm")
+    base_mod = bot.assembly("base")
+    arm_mod = bot.assembly("arm")
 
     # Base body — houses electronics, battery on bottom, Pi in center
     base = base_mod.body("base", shape=BodyShape.BOX, padding=0.008)
@@ -73,7 +73,11 @@ def build() -> Bot:
         bracket_style=BracketStyle.COUPLER,
     )
     turntable = shoulder_yaw.body(
-        "turntable", shape=BodyShape.CYLINDER, radius=0.03, height=0.02, module=arm_mod
+        "turntable",
+        shape=BodyShape.CYLINDER,
+        radius=0.03,
+        height=0.02,
+        assembly=arm_mod,
     )
 
     # Shoulder pitch: tilts the arm up/down, axis = X

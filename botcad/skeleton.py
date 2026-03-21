@@ -1,16 +1,24 @@
 """Kinematic tree DSL for parametric robot design.
 
-Defines Bot, Body, and Joint classes that form the user-facing API for
-building robots from real components. The kinematic tree is:
+Defines Bot, Body, Assembly, and Joint classes that form the user-facing API
+for building robots from real components. The design taxonomy is:
 
-    Bot
-    └── Body (root)
-        ├── mounted Components
-        ├── Joint (with ServoSpec)
-        │   └── Body (child)
-        │       ├── ...
-        └── Joint
-            └── Body
+    Assembly > Body > Feature
+
+    Bot (root assembly)
+    └── Assembly (functional grouping, can nest)
+        ├── Assembly (sub-assembly)
+        │     ├── Body (fabricated — printed)
+        │     └── Body (purchased — servo, battery)
+        └── Body (fabricated or purchased)
+
+    Body (root)
+    ├── mounted Components
+    ├── Joint (with ServoSpec)
+    │   └── Body (child)
+    │       ├── ...
+    └── Joint
+        └── Body
 
 Every Joint requires a ServoSpec — the servo's physical dimensions, torque,
 and speed determine the joint's geometry, control limits, and damping.
@@ -37,6 +45,13 @@ class BodyShape(StrEnum):
     JAW = "jaw"
 
 
+class BodyKind(StrEnum):
+    """Whether a body is fabricated (3D printed) or purchased off-the-shelf."""
+
+    FABRICATED = "fabricated"
+    PURCHASED = "purchased"
+
+
 class BracketStyle(StrEnum):
     """Servo bracket mounting style."""
 
@@ -52,18 +67,46 @@ class BaseType(StrEnum):
 
 
 @dataclass
-class Module:
-    """A named fabrication unit — a group of bodies printed/assembled together."""
+class Assembly:
+    """A group of bodies and sub-assemblies — a functional unit.
+
+    Assemblies nest: a gripper is an assembly inside an arm assembly
+    inside a robot assembly. The Bot itself is the root assembly.
+    """
 
     name: str
     _bot: Bot = field(repr=False)
+    parent: Assembly | None = None
+    _sub_assemblies: dict[str, Assembly] = field(default_factory=dict)
+
+    def assembly(self, name: str) -> Assembly:
+        """Create a named sub-assembly."""
+        if name in self._sub_assemblies:
+            return self._sub_assemblies[name]
+        sub = Assembly(name=name, _bot=self._bot, parent=self)
+        self._sub_assemblies[name] = sub
+        return sub
 
     def body(self, name: str, shape: BodyShape = BodyShape.BOX, **kwargs) -> Body:
-        """Create a body in this module. First body created becomes bot root."""
-        b = Body(name=name, shape=shape, module=self, **kwargs)
+        """Create a body in this assembly. First body created becomes bot root."""
+        b = Body(name=name, shape=shape, assembly=self, **kwargs)
         if self._bot.root is None:
             self._bot.root = b
         return b
+
+    @property
+    def path(self) -> str:
+        """Full path from root: 'robot/arm/gripper'."""
+        parts = []
+        node: Assembly | None = self
+        while node is not None:
+            parts.append(node.name)
+            node = node.parent
+        return "/".join(reversed(parts))
+
+
+# Backward compatibility
+Module = Assembly
 
 
 @dataclass
@@ -151,9 +194,12 @@ class Joint:
         padding: float = 0.005,
         dimensions: Vec3 | None = None,
         custom_solid: object | None = None,
-        module: Module | None = None,
+        assembly: Assembly | None = None,
+        module: Assembly | None = None,
     ) -> Body:
         """Create and attach a child body to this joint."""
+        # Accept both 'assembly' and 'module' (backward compat)
+        effective_assembly = assembly or module
         b = Body(
             name=name,
             shape=shape,
@@ -168,7 +214,7 @@ class Joint:
             padding=padding,
             explicit_dimensions=dimensions,
             custom_solid=custom_solid,
-            module=module,
+            assembly=effective_assembly,
         )
         self.child = b
         return b
@@ -193,6 +239,7 @@ class Body:
 
     name: str
     shape: BodyShape = BodyShape.BOX
+    kind: BodyKind = BodyKind.FABRICATED
     radius: float = 0.0
     width: float = 0.0
     height: float = 0.0
@@ -204,7 +251,7 @@ class Body:
     padding: float = 0.005  # clearance around components (meters)
     explicit_dimensions: Vec3 | None = None
     custom_solid: object | None = None
-    module: Module | None = None
+    assembly: Assembly | None = None
 
     mounts: list[Mount] = field(default_factory=list)
     joints: list[Joint] = field(default_factory=list)
@@ -356,14 +403,18 @@ class Bot:
     all_joints: list[Joint] = field(default_factory=list)
     wire_routes: list = field(default_factory=list)
 
-    _modules: dict[str, Module] = field(default_factory=dict)
+    _assemblies: dict[str, Assembly] = field(default_factory=dict)
     _cad_model: object = field(default=None, init=False, repr=False)
 
-    def module(self, name: str) -> Module:
-        """Create or retrieve a named module (fabrication unit)."""
-        if name not in self._modules:
-            self._modules[name] = Module(name=name, _bot=self)
-        return self._modules[name]
+    def assembly(self, name: str) -> Assembly:
+        """Create or retrieve a named assembly."""
+        if name not in self._assemblies:
+            self._assemblies[name] = Assembly(name=name, _bot=self)
+        return self._assemblies[name]
+
+    def module(self, name: str) -> Assembly:
+        """Backward-compatible alias for assembly()."""
+        return self.assembly(name)
 
     def body(
         self,
@@ -386,7 +437,7 @@ class Bot:
         return b
 
     def _collect_tree(self) -> None:
-        """Walk the kinematic tree, populate all_bodies/all_joints, resolve modules.
+        """Walk the kinematic tree, populate all_bodies/all_joints, resolve assemblies.
 
         Also computes frame_quat for bodies whose geometry is reoriented
         relative to their canonical (Z-up) frame — currently cylinders that
@@ -397,10 +448,10 @@ class Bot:
         self.all_bodies.clear()
         self.all_joints.clear()
 
-        def _walk(body: Body, parent_module: Module | None) -> None:
-            # Inherit module from parent if not set explicitly
-            if body.module is None:
-                body.module = parent_module
+        def _walk(body: Body, parent_assembly: Assembly | None) -> None:
+            # Inherit assembly from parent if not set explicitly
+            if body.assembly is None:
+                body.assembly = parent_assembly
             # Compute is_wheel_body from mounted components
             body.is_wheel_body = any(m.component.is_wheel for m in body.mounts)
             self.all_bodies.append(body)
@@ -413,22 +464,39 @@ class Bot:
                     # point coordinates can be transformed consistently.
                     if child.shape is BodyShape.CYLINDER:
                         child.frame_quat = rotation_between((0.0, 0.0, 1.0), joint.axis)
-                    _walk(child, body.module)
+                    _walk(child, body.assembly)
 
         if self.root is not None:
             _walk(self.root, None)
 
-    def _module_bodies(self, module_name: str) -> list[Body]:
-        """Return all bodies belonging to the named module."""
-        return [b for b in self.all_bodies if b.module and b.module.name == module_name]
+    def _assembly_bodies(self, assembly_name: str) -> list[Body]:
+        """Return all bodies belonging to the named assembly."""
+        return [
+            b
+            for b in self.all_bodies
+            if b.assembly and b.assembly.name == assembly_name
+        ]
 
-    def _module_joints(self, module_name: str) -> list[Joint]:
-        """Return joints owned by the named module (parent body's module)."""
-        parent_module: dict[str, str | None] = {}
+    def _assembly_joints(self, assembly_name: str) -> list[Joint]:
+        """Return joints owned by the named assembly (parent body's assembly)."""
+        parent_assembly: dict[str, str | None] = {}
         for body in self.all_bodies:
             for joint in body.joints:
-                parent_module[joint.name] = body.module.name if body.module else None
-        return [j for j in self.all_joints if parent_module.get(j.name) == module_name]
+                parent_assembly[joint.name] = (
+                    body.assembly.name if body.assembly else None
+                )
+        return [
+            j for j in self.all_joints if parent_assembly.get(j.name) == assembly_name
+        ]
+
+    # Backward-compatible aliases
+    def _module_bodies(self, module_name: str) -> list[Body]:
+        """Return all bodies belonging to the named module. Alias for _assembly_bodies."""
+        return self._assembly_bodies(module_name)
+
+    def _module_joints(self, module_name: str) -> list[Joint]:
+        """Return joints owned by the named module. Alias for _assembly_joints."""
+        return self._assembly_joints(module_name)
 
     def solve(self) -> None:
         """Run packing solver and wire routing."""
@@ -511,16 +579,16 @@ class Bot:
 
         emit_drawings(self, output_dir_path)
 
-        # Per-module outputs (STEP, BOM, assembly guide)
-        if self._modules:
+        # Per-assembly outputs (STEP, BOM, assembly guide)
+        if self._assemblies:
             from botcad.emit.bom import emit_bom_for_module
-            from botcad.emit.cad import emit_cad_for_module
+            from botcad.emit.cad import emit_cad_for_assembly
             from botcad.emit.readme import emit_assembly_guide_for_module
 
-            for mod_name in self._modules:
-                emit_cad_for_module(self, mod_name, output_dir_path, parts)
-                emit_bom_for_module(self, mod_name, output_dir_path)
-                emit_assembly_guide_for_module(self, mod_name, output_dir_path)
+            for asm_name in self._assemblies:
+                emit_cad_for_assembly(self, asm_name, output_dir_path, parts)
+                emit_bom_for_module(self, asm_name, output_dir_path)
+                emit_assembly_guide_for_module(self, asm_name, output_dir_path)
 
         from botcad.emit.viewer import emit_viewer_manifest
 

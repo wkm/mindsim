@@ -467,3 +467,90 @@ class TestJawShape:
         assert dims[0] == 0.03  # default width
         assert dims[1] == 0.005  # default thickness
         assert dims[2] == 0.04  # default length
+
+
+# -- TestAssemblyHierarchy --
+
+
+class TestAssemblyHierarchy:
+    def test_assembly_nesting(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        base = bot.assembly("base")
+        arm = bot.assembly("arm")
+        gripper = arm.assembly("gripper")
+
+        assert gripper.parent is arm
+        assert gripper.path == "arm/gripper"
+        assert arm.path == "arm"
+
+    def test_body_inherits_assembly(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        body = arm.body("upper_arm")
+        assert body.assembly is arm
+
+    def test_module_alias(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        m = bot.module("foo")
+        a = bot.assembly("foo")
+        assert m is a  # same object
+
+    def test_module_class_alias(self):
+        from botcad.skeleton import Assembly, Module
+
+        assert Module is Assembly
+
+    def test_sub_assembly_idempotent(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        g1 = arm.assembly("gripper")
+        g2 = arm.assembly("gripper")
+        assert g1 is g2
+
+    def test_assembly_path_deep(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        gripper = arm.assembly("gripper")
+        finger = gripper.assembly("finger")
+        assert finger.path == "arm/gripper/finger"
+
+    def test_body_kind_default(self):
+        from botcad.skeleton import Body, BodyKind
+
+        b = Body(name="test")
+        assert b.kind == BodyKind.FABRICATED
+
+    def test_body_kind_purchased(self):
+        from botcad.skeleton import Body, BodyKind
+
+        b = Body(name="servo_body", kind=BodyKind.PURCHASED)
+        assert b.kind == BodyKind.PURCHASED
+
+    def test_assembly_bodies_collected(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        base_asm = bot.assembly("base")
+        root = base_asm.body("base")
+        j = root.joint(
+            "shoulder",
+            servo=__import__("botcad.components", fromlist=["STS3215"]).STS3215(),
+            axis="z",
+            pos=(0.0, 0.0, 0.04),
+        )
+        upper = j.body("upper_arm", assembly=arm)
+        bot.solve()
+
+        assert bot._assembly_bodies("arm") == [upper]
+        assert bot._assembly_bodies("base") == [root]

@@ -48,10 +48,29 @@ def _round_vec(v):
     return [round(x, 6) for x in v]
 
 
+def _build_assembly_tree(bot: Bot) -> list[dict]:
+    """Build the assembly hierarchy for the viewer manifest."""
+    from botcad.skeleton import Assembly
+
+    def _assembly_dict(asm: Assembly) -> dict:
+        # Collect body names belonging to this assembly
+        body_names = [b.name for b in bot.all_bodies if b.assembly is asm]
+        sub_assemblies = [_assembly_dict(sub) for sub in asm._sub_assemblies.values()]
+        return {
+            "name": asm.name,
+            "path": asm.path,
+            "bodies": body_names,
+            "sub_assemblies": sub_assemblies,
+        }
+
+    return [_assembly_dict(asm) for asm in bot._assemblies.values()]
+
+
 def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     """Generate viewer_manifest.json in the bot's output directory."""
     manifest = {
         "bot_name": bot.name,
+        "assemblies": _build_assembly_tree(bot),
         "bodies": [],
         "joints": [],
         "assembly_steps": [],

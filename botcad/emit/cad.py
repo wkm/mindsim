@@ -66,7 +66,7 @@ class AssemblyPart:
     """A positioned CAD solid in the assembly, tagged with metadata."""
 
     solid: object  # build123d Solid (positioned in world frame)
-    module: str | None  # fabrication module name, or None
+    assembly: str | None  # assembly name, or None
     kind: str  # "body" | "horn" | "servo"
     label: str  # human-readable identifier
 
@@ -536,7 +536,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=positioned,
-                    module=group_root.module.name if group_root.module else None,
+                    assembly=group_root.assembly.name if group_root.assembly else None,
                     kind="body",
                     label=group_name,
                 )
@@ -572,7 +572,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=positioned,
-                    module=body.module.name if body.module else None,
+                    assembly=body.assembly.name if body.assembly else None,
                     kind="horn",
                     label=f"{joint.name}_horn",
                 )
@@ -1620,20 +1620,24 @@ def _make_bearing_solid(bearing: BearingSpec):
     return _as_solid(outer - inner)
 
 
-def emit_cad_for_module(
-    bot: Bot, module_name: str, output_dir: Path, parts: list[AssemblyPart]
+def emit_cad_for_assembly(
+    bot: Bot, assembly_name: str, output_dir: Path, parts: list[AssemblyPart]
 ) -> None:
-    """Export a per-module STEP file containing only parts in the named module."""
+    """Export a per-assembly STEP file containing only parts in the named assembly."""
     from build123d import Compound, export_step
 
-    module_parts = [p.solid for p in parts if p.module == module_name]
+    asm_parts = [p.solid for p in parts if p.assembly == assembly_name]
 
-    if module_parts:
-        assembly = Compound(label=f"{bot.name}_{module_name}", children=module_parts)
-        filename = f"assembly_{module_name}.step"
+    if asm_parts:
+        compound = Compound(label=f"{bot.name}_{assembly_name}", children=asm_parts)
+        filename = f"assembly_{assembly_name}.step"
         export_step(
-            assembly,
+            compound,
             str(output_dir / filename),
             timestamp="2026-01-01T00:00:00",
         )
-        print(f"CAD: wrote {filename} ({len(module_parts)} parts)")
+        print(f"CAD: wrote {filename} ({len(asm_parts)} parts)")
+
+
+# Backward-compatible alias
+emit_cad_for_module = emit_cad_for_assembly

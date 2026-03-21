@@ -25,8 +25,8 @@ from botcad.skeleton import BodyShape, Bot, BracketStyle
 def build() -> Bot:
     """Define the SO-101 arm robot."""
     bot = Bot("so101_arm")
-    base_mod = bot.module("base")
-    arm_mod = bot.module("arm")
+    base_mod = bot.assembly("base")
+    arm_mod = bot.assembly("arm")
 
     # Base body — houses Pi and battery
     base = base_mod.body("base", shape=BodyShape.BOX, padding=0.008)
@@ -48,7 +48,7 @@ def build() -> Bot:
         "turntable",
         shape=BodyShape.BOX,
         dimensions=(0.06, 0.04, 0.04),
-        module=arm_mod,
+        assembly=arm_mod,
     )
 
     # Shoulder lift: tilts the arm up/down, axis = X

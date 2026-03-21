@@ -16,16 +16,29 @@ from botcad.component import (
     ServoSpec,
     WirePort,
 )
-from botcad.skeleton import BaseType, Body, BodyShape, Bot, BracketStyle, Joint
+from botcad.skeleton import (
+    Assembly,
+    BaseType,
+    Body,
+    BodyKind,
+    BodyShape,
+    Bot,
+    BracketStyle,
+    Joint,
+    Module,
+)
 
 __all__ = [
+    "Assembly",
     "BaseType",
+    "BodyKind",
     "BodyShape",
     "Bot",
     "Body",
     "BracketStyle",
     "BusType",
     "Joint",
+    "Module",
     "Component",
     "ServoSpec",
     "WirePort",
