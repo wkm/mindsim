@@ -106,6 +106,25 @@ class CopyOp:
     tag: str | None = None
 
 
+# ── Patterns ──
+
+
+@dataclass(frozen=True)
+class RadialArrayOp:
+    """Clone a shape N times in a radial pattern around an axis.
+
+    The source shape is assumed to be already positioned at the desired
+    radius. Each clone is rotated by 360/count degrees. All clones
+    (including the original at angle=0) are fused into one shape.
+    """
+
+    ref: ShapeRef
+    source: ShapeRef
+    count: int
+    axis: str = "z"  # "x", "y", or "z"
+    tag: str | None = None
+
+
 # ── Booleans ──
 
 
@@ -216,7 +235,7 @@ class ExportSTEPOp:
 
 
 # Union of all ops for type narrowing
-PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp, CopyOp]
+PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp, CopyOp, RadialArrayOp]
 BooleanOp = Union[FuseOp, CutOp]
 TransformOp = LocateOp
 ModificationOp = Union[FilletOp, FilletAllEdgesOp, FilletByAxisOp, ChamferOp]

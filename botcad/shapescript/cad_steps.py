@@ -80,6 +80,10 @@ def shapescript_to_cad_steps(
                 label = "Copy" + (f" ({tag})" if tag else f" of {src.id}")
                 steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
 
+            case RadialArrayOp(ref=ref, source=src, count=n, axis=ax, tag=tag):
+                label = f"RadialArray ×{n}" + (f" ({tag})" if tag else "")
+                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
+
             # Booleans — cut/union steps with tool
             case CutOp(ref=ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
@@ -141,6 +145,7 @@ def format_op(op) -> str:
         FuseOp,
         LocateOp,
         PrebuiltOp,
+        RadialArrayOp,
         SphereOp,
     )
 
@@ -180,6 +185,12 @@ def format_op(op) -> str:
 
         case CopyOp(source=src, tag=tag):
             s = f"Copy({src.id})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
+
+        case RadialArrayOp(source=src, count=n, axis=ax, tag=tag):
+            s = f"RadialArray({src.id}, count={n}, axis={ax!r})"
             if tag:
                 s += f"  # {tag}"
             return prefix + s

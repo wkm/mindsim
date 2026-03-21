@@ -206,20 +206,13 @@ class ShapeScript:
             all_treads = prog.radial_array(tread, 60, axis="z", tag="treads")
             tire = prog.cut(tire, all_treads)
         """
-        step = 360.0 / count
-        result = shape  # clone 0 is the original (already at angle=0)
-        for i in range(1, count):
-            angle = i * step
-            if axis == "z":
-                euler = (0.0, 0.0, angle)
-            elif axis == "y":
-                euler = (0.0, angle, 0.0)
-            else:
-                euler = (angle, 0.0, 0.0)
-            clone = self.copy(shape, tag=f"{tag}_{i}" if tag else None)
-            clone = self.locate(clone, euler_deg=euler)
-            result = self.fuse(result, clone)
-        return result
+        from botcad.shapescript.ops import RadialArrayOp
+
+        ref = self._next_ref("array")
+        self.ops.append(
+            RadialArrayOp(ref=ref, source=shape, count=count, axis=axis, tag=tag)
+        )
+        return ref
 
     # ── Queries ──
 

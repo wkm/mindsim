@@ -38,6 +38,7 @@ from botcad.shapescript.ops import (  # noqa: F401
     QueryCentroidOp,
     QueryInertiaOp,
     QueryVolumeOp,
+    RadialArrayOp,
     SphereOp,
 )
 from botcad.shapescript.program import ShapeScript
@@ -148,6 +149,27 @@ class OcctBackend:
                     if tag:
                         tags.declare(tag, ref)
                     tags.propagate_transform(ref, src)
+
+                case RadialArrayOp(ref=ref, source=src, count=n, axis=axis, tag=tag):
+                    import copy as _copy
+
+                    s = shapes[src.id]
+                    step = 360.0 / n
+                    arr = s  # clone 0 = original at angle 0
+                    for i in range(1, n):
+                        angle = i * step
+                        if axis == "z":
+                            euler = (0, 0, angle)
+                        elif axis == "y":
+                            euler = (0, angle, 0)
+                        else:
+                            euler = (angle, 0, 0)
+                        clone = _copy.copy(s)
+                        clone = clone.moved(Location((0, 0, 0), euler))
+                        arr = _as_solid(arr.fuse(clone))
+                    shapes[ref.id] = arr
+                    if tag:
+                        tags.declare(tag, ref)
 
                 # -- Booleans --
                 case FuseOp(ref=ref, target=t, tool=tl):
