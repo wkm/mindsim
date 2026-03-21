@@ -349,6 +349,7 @@ def build_cad(bot: Bot) -> CadModel:
 
         if use_shapescript:
             prog = emit_body_ir(body, pj, wire_segs or None)
+            body.shapescript = prog
             cached = cache.get(prog)
             if cached is not None:
                 # Cache hit — restore solid from BREP bytes + mass properties
@@ -384,10 +385,16 @@ def build_cad(bot: Bot) -> CadModel:
 
         if solid is not None:
             body_solids[body.name] = solid
+            body.mesh_file = f"{body.name}.stl"
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
     if use_shapescript:
         print(f"[build_cad] {cache_hits}/{n} cache hits")
+
+    # Purchased bodies don't yet have ShapeScript IR emitters — their geometry
+    # is built by servo_solid(), _horn_solid(), make_component_solid() etc.
+    # The _component reference on each purchased body enables future IR emitters
+    # to generate the appropriate script.  For now, shapescript stays None.
 
     return CadModel(
         body_solids=body_solids,
