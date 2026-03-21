@@ -140,9 +140,11 @@ class OcctBackend:
                         tags.declare(tag, ref)
 
                 case CopyOp(ref=ref, source=src, tag=tag):
-                    # .copy() creates an independent clone
+                    # copy.copy() creates an independent clone of the OCCT solid
+                    import copy
+
                     s = shapes[src.id]
-                    shapes[ref.id] = s.copy()
+                    shapes[ref.id] = copy.copy(s)
                     if tag:
                         tags.declare(tag, ref)
                     tags.propagate_transform(ref, src)

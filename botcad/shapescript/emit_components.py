@@ -40,10 +40,14 @@ def camera_script(spec: CameraSpec) -> ShapeScript:
     pcb = prog.box(pcb_w, pcb_h, pcb_thick)
 
     # 2. Mounting holes — subtract from PCB
-    for mp in spec.mounting_points:
-        hole = prog.cylinder(mp.diameter / 2, pcb_thick + 0.001)
-        hole = prog.locate(hole, pos=mp.pos)
-        pcb = prog.cut(pcb, hole)
+    if spec.mounting_points:
+        hole_proto = prog.cylinder(
+            spec.mounting_points[0].diameter / 2, pcb_thick + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(spec.mounting_points):
+            hole = hole_proto if i == 0 else prog.copy(hole_proto)
+            hole = prog.locate(hole, pos=mp.pos)
+            pcb = prog.cut(pcb, hole)
 
     # 3. Lens base (8.5 x 8.5mm, z-min aligned, offset +2.5mm Y)
     base_size = 0.0085
@@ -88,10 +92,11 @@ def battery_script(spec: BatterySpec) -> ShapeScript:
     # 1. Main battery body (filleted cells — native ops)
     if spec.cells_s == 2:
         cell_w = length / 2 - 0.001
-        cell = prog.box(w, cell_w, h)
+        cell = prog.box(w, cell_w, h, tag="battery_cell")
         cell = prog.fillet_all(cell, 0.003)
         cell_neg = prog.locate(cell, pos=(0, -length / 4, 0))
-        cell_pos = prog.locate(cell, pos=(0, length / 4, 0))
+        cell_pos_copy = prog.copy(cell)
+        cell_pos = prog.locate(cell_pos_copy, pos=(0, length / 4, 0))
         body = prog.fuse(cell_neg, cell_pos)
     else:
         body = prog.box(w, length, h, tag="battery_body")
@@ -180,16 +185,18 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         # 3 pin blades on mating face (+Z)
         pin_w, pin_d, pin_h = 0.0006, 0.0002, 0.002
         pitch = 0.00254
+        pin_proto = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z, tag="pin_blade")
         for i in range(3):
             px = -pitch + i * pitch
-            pin = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z)
+            pin = pin_proto if i == 0 else prog.copy(pin_proto)
             pin = prog.locate(pin, pos=(px, 0, bz / 2))
             body = prog.fuse(body, pin)
 
         # Wire entry channels on back face (-Z)
+        chan_proto = prog.cylinder(0.0005, by * 0.3, tag="wire_entry")
         for i in range(3):
             px = -pitch + i * pitch
-            chan = prog.cylinder(0.0005, by * 0.3)
+            chan = chan_proto if i == 0 else prog.copy(chan_proto)
             chan = prog.locate(chan, pos=(px, 0, -bz / 2))
             body = prog.cut(body, chan)
 
@@ -206,9 +213,10 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         body = prog.cut(body, slot)
 
         # Contact ridges inside
+        ridge_proto = prog.box(0.0003, by * 0.2, bz * 0.15, tag="contact_ridge")
         for i in range(7):
             rx = -bx * 0.38 + i * bx * 0.76 / 6
-            ridge = prog.box(0.0003, by * 0.2, bz * 0.15)
+            ridge = ridge_proto if i == 0 else prog.copy(ridge_proto)
             ridge = prog.locate(ridge, pos=(rx, -by * 0.1, -bz * 0.15))
             body = prog.fuse(body, ridge)
 
@@ -231,12 +239,15 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         body = prog.fuse(body, flat_pin)
 
         # Grip ridges on sides
+        ridge_proto = prog.box(bx * 0.8, by * 0.06, 0.0005, tag="grip_ridge")
+        first_use = True
         for i in range(3):
             gz = -bz * 0.3 + i * bz * 0.3
-            ridge = prog.box(bx * 0.8, by * 0.06, 0.0005)
+            ridge = ridge_proto if first_use else prog.copy(ridge_proto)
+            first_use = False
             ridge = prog.locate(ridge, pos=(0, by / 2, gz))
             body = prog.fuse(body, ridge)
-            ridge2 = prog.box(bx * 0.8, by * 0.06, 0.0005)
+            ridge2 = prog.copy(ridge_proto)
             ridge2 = prog.locate(ridge2, pos=(0, -by / 2, gz))
             body = prog.fuse(body, ridge2)
 
@@ -257,18 +268,20 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         # 3 pin blades on mating face (+Z)
         pitch = 0.0025
         pin_w, pin_d, pin_h = 0.0006, 0.0002, 0.002
+        pin_proto = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z, tag="pin_blade")
         for i in range(3):
             px = -pitch + i * pitch
-            pin = prog.box(pin_w, pin_d, pin_h, align=ALIGN_MIN_Z)
+            pin = pin_proto if i == 0 else prog.copy(pin_proto)
             pin = prog.locate(pin, pos=(px, 0, bz / 2))
             body = prog.fuse(body, pin)
 
         # Strain relief bumps on back face (-Z)
+        bump_proto = prog.cylinder(
+            0.0006, 0.001, align=Align3(z="max"), tag="strain_bump"
+        )
         for i in range(3):
             px = -pitch + i * pitch
-            bump = prog.cylinder(
-                0.0006, 0.001, align=Align3(z="max")
-            )
+            bump = bump_proto if i == 0 else prog.copy(bump_proto)
             bump = prog.locate(bump, pos=(px, 0, -bz / 2))
             body = prog.fuse(body, bump)
 
@@ -280,13 +293,16 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
 
         # Two rows of socket holes — batch fuse all holes then cut once
         pitch = 0.00254
+        hole_proto = prog.cylinder(
+            0.0004, bz * 0.5, align=Align3(z="max"), tag="socket_hole"
+        )
         holes = None
+        first_use = True
         for row_y in [-0.00127, 0.00127]:
             for i in range(20):
                 px = -pitch * 9.5 + i * pitch
-                hole = prog.cylinder(
-                    0.0004, bz * 0.5, align=Align3(z="max")
-                )
+                hole = hole_proto if first_use else prog.copy(hole_proto)
+                first_use = False
                 hole = prog.locate(hole, pos=(px, row_y, -bz / 2))
                 if holes is None:
                     holes = hole
@@ -369,9 +385,10 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
     pin_h = 0.003
     n_pins = max(2, int(bx / 0.00254))
     if spec.connector_type != ConnectorType.GPIO_2X20:
+        pin_proto = prog.cylinder(0.0003, pin_h, align=Align3(z="max"), tag="solder_pin")
         for i in range(min(n_pins, 6)):
             px = -bx / 2 + bx * (i + 0.5) / min(n_pins, 6)
-            pin = prog.cylinder(0.0003, pin_h, align=Align3(z="max"))
+            pin = pin_proto if i == 0 else prog.copy(pin_proto)
             pin = prog.locate(pin, pos=(px, 0, -rz / 2))
             body = prog.fuse(body, pin)
 
@@ -514,12 +531,13 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
 
     # --- M3 mounting holes (6x) ---
     m3_r = 0.0016
+    m3_hole_proto = prog.cylinder(m3_r, hub_w + 0.002, tag="m3_hole")
     for i in range(6):
         angle_rad = i * math.pi / 3
         r_bcd = 0.00635 if (i % 3 == 0) else 0.00955
         mx = r_bcd * math.cos(angle_rad)
         my = r_bcd * math.sin(angle_rad)
-        hole = prog.cylinder(m3_r, hub_w + 0.002)
+        hole = m3_hole_proto if i == 0 else prog.copy(m3_hole_proto)
         hole = prog.locate(hole, pos=(mx, my, 0))
         hub = prog.cut(hub, hole)
 
@@ -528,6 +546,24 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
     spoke_length = rim_inner_r - spoke_inner_r + 0.004
     mid_r = (spoke_inner_r + rim_inner_r) / 2
 
+    # Spoke and slot prototypes (identical dimensions for all 6 spokes)
+    spoke_proto = prog.box(spoke_length, spoke_tangential, spoke_w, tag="spoke")
+
+    slot_r_start = spoke_inner_r + 0.006
+    slot_r_end = rim_inner_r - 0.004
+    slot_dia = 0.0022
+    slot_len = slot_r_end - slot_r_start
+    slot_thick = spoke_w + 0.002
+    slot_mid = (slot_r_start + slot_r_end) / 2
+
+    # Slot prototype = box + 2 end cylinders (stadium shape)
+    s_box_proto = prog.box(slot_len - slot_dia, slot_dia, slot_thick, tag="slot_box")
+    c1_proto = prog.cylinder(slot_dia / 2, slot_thick, tag="slot_end")
+    c1_located = prog.locate(c1_proto, pos=((slot_len - slot_dia) / 2, 0, 0))
+    c2_proto = prog.copy(c1_proto)
+    c2_located = prog.locate(c2_proto, pos=(-(slot_len - slot_dia) / 2, 0, 0))
+    slot_proto = prog.fuse(prog.fuse(s_box_proto, c1_located), c2_located)
+
     spokes_ref = None
     for i in range(6):
         angle_rad = i * math.pi / 3
@@ -535,24 +571,11 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
         cx = mid_r * math.cos(angle_rad)
         cy = mid_r * math.sin(angle_rad)
 
-        spoke = prog.box(spoke_length, spoke_tangential, spoke_w)
+        spoke = spoke_proto if i == 0 else prog.copy(spoke_proto)
         spoke = prog.locate(spoke, pos=(cx, cy, 0), euler_deg=(0, 0, angle_deg))
 
         # --- M2 accessory slot in spoke ---
-        slot_r_start = spoke_inner_r + 0.006
-        slot_r_end = rim_inner_r - 0.004
-        slot_dia = 0.0022
-        slot_len = slot_r_end - slot_r_start
-        slot_thick = spoke_w + 0.002
-        slot_mid = (slot_r_start + slot_r_end) / 2
-
-        # Slot = box + 2 end cylinders (stadium shape)
-        s_box = prog.box(slot_len - slot_dia, slot_dia, slot_thick)
-        c1 = prog.cylinder(slot_dia / 2, slot_thick)
-        c1 = prog.locate(c1, pos=((slot_len - slot_dia) / 2, 0, 0))
-        c2 = prog.cylinder(slot_dia / 2, slot_thick)
-        c2 = prog.locate(c2, pos=(-(slot_len - slot_dia) / 2, 0, 0))
-        slot = prog.fuse(prog.fuse(s_box, c1), c2)
+        slot = slot_proto if i == 0 else prog.copy(slot_proto)
 
         # Place slot at radial midpoint, then rotate to spoke angle
         slot = prog.locate(slot, pos=(slot_mid, 0, 0))
@@ -767,13 +790,14 @@ def compute_script(comp) -> ShapeScript:
     # Mounting holes (4x, 3.5mm from edges)
     hole_r = 0.00275 / 2.0
     hole_depth = 0.002
-    for label, pos in [
+    hole_proto = prog.cylinder(hole_r, hole_depth, tag="mounting_hole")
+    for i, (_label, pos) in enumerate([
         ("hole_bl", (-0.029, -0.0115, 0)),
         ("hole_br", (0.029, -0.0115, 0)),
         ("hole_tl", (-0.029, 0.0115, 0)),
         ("hole_tr", (0.029, 0.0115, 0)),
-    ]:
-        hole = prog.cylinder(hole_r, hole_depth, tag=label)
+    ]):
+        hole = hole_proto if i == 0 else prog.copy(hole_proto)
         hole = prog.locate(hole, pos=pos)
         pcb = prog.cut(pcb, hole)
 

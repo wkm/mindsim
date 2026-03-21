@@ -687,13 +687,14 @@ def coupler_solid_script(
     else:
         horn_hole_r = 0.00125
 
-    for hx, hy, _hz in front_holes:
-        hole = prog.cylinder(
-            horn_hole_r,
-            plate_t + 0.002,
-            align=ALIGN_MIN_Z,
-            tag="front_horn_hole",
-        )
+    front_hole_proto = prog.cylinder(
+        horn_hole_r,
+        plate_t + 0.002,
+        align=ALIGN_MIN_Z,
+        tag="front_horn_hole",
+    )
+    for i, (hx, hy, _hz) in enumerate(front_holes):
+        hole = front_hole_proto if i == 0 else prog.copy(front_hole_proto)
         hole = prog.locate(hole, pos=(hx, hy, front_z - 0.001))
         shell = prog.cut(shell, hole)
 
@@ -704,13 +705,14 @@ def coupler_solid_script(
     else:
         rear_hole_r = horn_hole_r
 
-    for hx, hy, _hz in rear_holes:
-        hole = prog.cylinder(
-            rear_hole_r,
-            plate_t + 0.002,
-            align=ALIGN_MAX_Z,
-            tag="rear_horn_hole",
-        )
+    rear_hole_proto = prog.cylinder(
+        rear_hole_r,
+        plate_t + 0.002,
+        align=ALIGN_MAX_Z,
+        tag="rear_horn_hole",
+    )
+    for i, (hx, hy, _hz) in enumerate(rear_holes):
+        hole = rear_hole_proto if i == 0 else prog.copy(rear_hole_proto)
         hole = prog.locate(hole, pos=(hx, hy, rear_z + 0.001))
         shell = prog.cut(shell, hole)
 
@@ -842,10 +844,11 @@ def _coupler_solid_script_native(
     else:
         horn_hole_r = 0.00125
 
-    for hx, hy, _hz in front_holes:
-        hole = prog.cylinder(
-            horn_hole_r, plate_t + 0.002, align=ALIGN_MIN_Z, tag="front_horn_hole"
-        )
+    front_hole_proto = prog.cylinder(
+        horn_hole_r, plate_t + 0.002, align=ALIGN_MIN_Z, tag="front_horn_hole"
+    )
+    for i, (hx, hy, _hz) in enumerate(front_holes):
+        hole = front_hole_proto if i == 0 else prog.copy(front_hole_proto)
         hole = prog.locate(hole, pos=(hx, hy, front_z - 0.001))
         shell = prog.cut(shell, hole)
 
@@ -856,10 +859,11 @@ def _coupler_solid_script_native(
     else:
         rear_hole_r = horn_hole_r
 
-    for hx, hy, _hz in rear_holes:
-        hole = prog.cylinder(
-            rear_hole_r, plate_t + 0.002, align=ALIGN_MAX_Z, tag="rear_horn_hole"
-        )
+    rear_hole_proto = prog.cylinder(
+        rear_hole_r, plate_t + 0.002, align=ALIGN_MAX_Z, tag="rear_horn_hole"
+    )
+    for i, (hx, hy, _hz) in enumerate(rear_holes):
+        hole = rear_hole_proto if i == 0 else prog.copy(rear_hole_proto)
         hole = prog.locate(hole, pos=(hx, hy, rear_z + 0.001))
         shell = prog.cut(shell, hole)
 
