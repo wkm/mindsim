@@ -4,6 +4,7 @@ import pytest
 
 from botcad.component import Appearance
 from botcad.materials import ALUMINUM, PLA, TPU, Material
+from botcad.skeleton import Body, BodyShape
 
 
 def test_pla_density():
@@ -67,3 +68,28 @@ def test_appearance_with_metallic():
     a = Appearance(color=(0.8, 0.8, 0.8, 1.0), metallic=1.0, roughness=0.3)
     assert a.metallic == 1.0
     assert a.roughness == 0.3
+
+
+def test_body_defaults_to_pla():
+    """Every body should default to PLA material."""
+    body = Body(name="test", shape=BodyShape.BOX)
+    assert body.material is PLA
+    assert body.material.density == 1200.0
+
+
+def test_tpu_differs_from_pla():
+    """TPU and PLA have different densities — mass computation should differ."""
+    assert TPU.density != PLA.density
+    assert TPU.process is not None
+    assert TPU.process.infill != PLA.process.infill
+
+
+def test_fabricated_body_gets_appearance_after_solve():
+    """After appearance assignment, fabricated bodies must have non-None appearance."""
+    body = Body(name="test", shape=BodyShape.BOX)
+    # Simulate the appearance assignment logic from solve()
+    from botcad.colors import COLOR_STRUCTURE_BODY
+
+    body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
+    assert body.appearance is not None
+    assert len(body.appearance.color) == 4

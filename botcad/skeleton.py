@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from botcad.component import Component, ServoSpec, Vec3
+from botcad.component import Appearance, Component, ServoSpec, Vec3
+from botcad.materials import PLA, Material
 
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
 
@@ -231,6 +232,10 @@ class Body:
     # Computed once during _collect_tree(), read by all emitters.
     is_wheel_body: bool = False
 
+    # Material and appearance — set during solve() or at construction time.
+    material: Material = PLA
+    appearance: Appearance | None = None
+
     def to_body_frame(self, p: Vec3) -> Vec3:
         """Transform a canonical-frame point/vector into body-frame coordinates."""
         w, x, y, z = self.frame_quat
@@ -437,6 +442,7 @@ class Bot:
         self._collect_tree()
         self._validate_bracket_rom()
         solve_packing(self)
+        self._assign_appearances()
 
         from botcad.routing import solve_routing
 
@@ -464,6 +470,31 @@ class Bot:
                     f"Reduce range_rad or use bracket_style='pocket'.",
                     stacklevel=2,
                 )
+
+    def _assign_appearances(self) -> None:
+        """Set appearance on every body that doesn't already have one.
+
+        Purchased bodies (with mounted components) inherit their component's
+        appearance. Fabricated bodies get shape-based defaults.
+        """
+        from botcad.colors import BP_GRAY5, COLOR_STRUCTURE_BODY, COLOR_STRUCTURE_DARK
+
+        for body in self.all_bodies:
+            if body.appearance is not None:
+                continue  # already set explicitly
+            # Purchased body: inherit from first component
+            if body.mounts and body.mounts[0].component.appearance:
+                body.appearance = body.mounts[0].component.appearance
+                continue
+            # Fabricated body: shape-based default
+            if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
+                body.appearance = Appearance(color=COLOR_STRUCTURE_DARK.rgba)
+            elif body.shape is BodyShape.TUBE:
+                body.appearance = Appearance(color=(*BP_GRAY5, 1.0))
+            elif body.shape is BodyShape.JAW:
+                body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
+            else:
+                body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
 
     def build_cad(self):
         """Build CAD geometry and refine mass/inertia from actual solids."""
