@@ -51,8 +51,8 @@
   <worldbody>
     <body name="base" pos="0 0 0.0350">
       <freejoint name="root"/>
-      <inertial pos="-0.005507 -0.000000 -0.001101" mass="0.161429" fullinertia="6.573997e-05 1.222860e-04 1.048302e-04 5.872872e-08 8.024133e-06 -4.225563e-17"/>
-      <geom type="mesh" mesh="base_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+      <inertial pos="-0.004378 -0.000000 -0.000509" mass="0.169019" fullinertia="6.625118e-05 1.296162e-04 1.115522e-04 5.619100e-08 1.058608e-05 -9.912460e-11"/>
+      <geom type="mesh" mesh="base_mesh" rgba="0.0588 0.6000 0.3765 1.0000" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
       <geom name="comp_base_pi" type="mesh" mesh="comp_base_pi_mesh" pos="0.000000 0.000000 0.000000" rgba="0.0588 0.6000 0.3765 1.0000" contype="0" conaffinity="0" group="1"/>
       <geom name="comp_base_battery" type="mesh" mesh="comp_base_battery_mesh" pos="0.000000 0.000000 -0.016000" rgba="0.0745 0.4863 0.7412 1.0000" contype="0" conaffinity="0" group="1"/>
@@ -80,7 +80,7 @@
       <geom name="wire_power_base_0" type="mesh" mesh="wire_power_base_0_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="mesh" mesh="wire_power_base_1_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <body name="turntable" pos="0.000000 0.000000 0.031000">
-        <inertial pos="-0.009029 0.000000 0.020275" mass="0.083018" fullinertia="5.576345e-05 7.393478e-05 3.334868e-05 1.564437e-22 9.443608e-06 -4.253643e-22"/>
+        <inertial pos="-0.010591 -0.000000 0.017080" mass="0.090795" fullinertia="5.981139e-05 7.601396e-05 3.131109e-05 1.622865e-24 9.045471e-06 -3.640679e-23"/>
         <joint name="shoulder_pan" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-1.9200 1.9200"/>
         <geom name="shoulder_pan_horn_disc" type="mesh" mesh="horn_shoulder_pan_mesh" pos="0.000000 0.000000 0.000850" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="turntable_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
@@ -104,7 +104,7 @@
         <geom name="wire_camera_csi_turntable_6" type="mesh" mesh="wire_camera_csi_turntable_6_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
         <geom name="wire_camera_csi_turntable_7" type="mesh" mesh="wire_camera_csi_turntable_7_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
         <body name="upper_arm" pos="0.000000 0.000000 0.020000">
-          <inertial pos="-0.010814 0.000000 0.100867" mass="0.086916" fullinertia="1.864391e-04 2.083550e-04 3.352473e-05 -1.828978e-12 2.865351e-05 1.775592e-11"/>
+          <inertial pos="-0.010796 -0.000000 0.092285" mass="0.101861" fullinertia="2.325151e-04 2.499422e-04 3.051041e-05 -2.541402e-13 3.028432e-05 -4.385082e-12"/>
           <joint name="shoulder_lift" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6237" range="-1.7450 1.7450"/>
           <geom name="shoulder_lift_horn_disc" type="mesh" mesh="horn_shoulder_lift_mesh" pos="0.000850 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
           <geom type="mesh" mesh="upper_arm_mesh" rgba="0.7490 0.8000 0.8392 1.0000" contype="1" conaffinity="1"/>
@@ -128,7 +128,7 @@
           <geom name="wire_camera_csi_upper_arm_4" type="mesh" mesh="wire_camera_csi_upper_arm_4_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
           <geom name="wire_camera_csi_upper_arm_5" type="mesh" mesh="wire_camera_csi_upper_arm_5_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
           <body name="forearm" pos="0.000000 0.000000 0.116000">
-            <inertial pos="-0.012090 -0.000000 0.118071" mass="0.081840" fullinertia="2.255420e-04 2.469409e-04 3.046092e-05 1.008840e-17 2.738050e-05 -1.633635e-16"/>
+            <inertial pos="-0.011453 0.000000 0.106038" mass="0.094977" fullinertia="2.942375e-04 3.115155e-04 2.795251e-05 -6.917004e-15 3.391302e-05 1.186737e-13"/>
             <joint name="elbow_flex" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6237" range="-1.6900 1.6900"/>
             <geom name="elbow_flex_horn_disc" type="mesh" mesh="horn_elbow_flex_mesh" pos="0.000850 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
             <geom type="mesh" mesh="forearm_mesh" rgba="0.7490 0.8000 0.8392 1.0000" contype="1" conaffinity="1"/>
@@ -152,7 +152,7 @@
             <geom name="wire_camera_csi_forearm_2" type="mesh" mesh="wire_camera_csi_forearm_2_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
             <geom name="wire_camera_csi_forearm_3" type="mesh" mesh="wire_camera_csi_forearm_3_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
             <body name="wrist" pos="0.000000 0.000000 0.135000">
-              <inertial pos="-0.011320 -0.000004 0.006662" mass="0.088470" fullinertia="3.222157e-05 5.050443e-05 3.074692e-05 -4.578710e-09 -1.911590e-06 -1.739872e-08"/>
+              <inertial pos="-0.011384 -0.000003 0.006619" mass="0.087995" fullinertia="3.160345e-05 4.978366e-05 3.066284e-05 -5.570266e-09 -1.739048e-06 -1.459561e-08"/>
               <joint name="wrist_flex" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.6237" range="-1.6580 1.6580"/>
               <geom name="wrist_flex_horn_disc" type="mesh" mesh="horn_wrist_flex_mesh" pos="0.000850 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
               <geom type="mesh" mesh="wrist_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
@@ -174,11 +174,11 @@
               <geom name="wire_servo_bus_wrist_7" type="mesh" mesh="wire_servo_bus_wrist_7_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
               <geom name="wire_camera_csi_wrist_1" type="mesh" mesh="wire_camera_csi_wrist_1_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
               <body name="wrist_roll" pos="0.000000 0.000000 0.032000">
-                <inertial pos="-0.012414 0.000014 0.025381" mass="0.071963" fullinertia="2.796124e-05 3.917944e-05 2.123668e-05 -9.281227e-08 6.354955e-07 3.248463e-07"/>
+                <inertial pos="-0.012648 -0.000045 0.022419" mass="0.074465" fullinertia="2.880194e-05 3.857755e-05 1.969050e-05 -9.518309e-08 4.882392e-06 -1.114290e-07"/>
                 <joint name="wrist_roll" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-2.7440 2.8410"/>
                 <geom name="wrist_roll_horn_disc" type="mesh" mesh="horn_wrist_roll_mesh" pos="0.000000 0.000000 0.000850" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom type="mesh" mesh="wrist_roll_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
-                <camera name="camera_cam" fovy="62.2" pos="0.000000 0.005500 0.000000" euler="0 3.141592653589793 0"/>
+                <geom type="mesh" mesh="wrist_roll_mesh" rgba="0.0392 0.4000 0.2510 1.0000" contype="1" conaffinity="1"/>
+                <camera name="camera_cam" fovy="62.2" pos="0.000000 0.005500 0.000000" euler="1.5707963267948966 0 0"/>
                 <geom name="comp_wrist_roll_camera" type="mesh" mesh="comp_wrist_roll_camera_mesh" pos="0.000000 0.005500 0.000000" rgba="0.0392 0.4000 0.2510 1.0000" contype="0" conaffinity="0" group="1"/>
                 <geom name="gripper_servo" type="mesh" mesh="servo_STS3215_mesh" pos="-0.016300 0.000000 0.030500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
                 <geom name="screw_gripper_ear_1" type="mesh" mesh="hardware_0.0032_mesh" pos="-0.033650 -0.010250 0.013500" rgba="0.6549 0.7137 0.7608 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 -0.707107 0.000000"/>
