@@ -351,20 +351,21 @@ class TestPackingOverlaps:
         bot.solve()
         return bot
 
-    @pytest.mark.xfail(
-        reason="Known packing overlaps — designs need rework "
-        "(geometry-derived dimensions expose previously hidden overlaps)",
-        strict=True,
-    )
     @pytest.mark.parametrize(
         "design_path,module_name",
         [
             ("bots/wheeler_base/design.py", "wb_overlap_test"),
-            ("bots/wheeler_arm/design.py", "wa_overlap_test"),
-            ("bots/so101_arm/design.py", "so_overlap_test"),
+            pytest.param(
+                "bots/wheeler_arm/design.py", "wa_overlap_test",
+                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+            ),
+            pytest.param(
+                "bots/so101_arm/design.py", "so_overlap_test",
+                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+            ),
         ],
     )
-    def test_no_packing_overlaps_xfail(self, design_path, module_name):
+    def test_no_packing_overlaps(self, design_path, module_name):
         from botcad.packing import find_internal_overlaps
 
         bot = self._build_bot(design_path, module_name)
