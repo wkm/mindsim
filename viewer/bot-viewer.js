@@ -129,27 +129,29 @@ export async function initBotViewer(botName) {
   }
 
   // ---------------------------------------------------------------------------
-  // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
+  // Coordinate helpers — MuJoCo is Z-up, Three.js viewport is Z-up, no swizzle needed
   // ---------------------------------------------------------------------------
   function getPosition(buffer, index, target) {
     return target.set(
       buffer[index * 3 + 0],
-      buffer[index * 3 + 2],
-      -buffer[index * 3 + 1]
+      buffer[index * 3 + 1],
+      buffer[index * 3 + 2]
     );
   }
 
   function getQuaternion(buffer, index, target) {
+    // MuJoCo quaternion layout: [w, x, y, z]
+    // Three.js Quaternion constructor: (x, y, z, w)
     return target.set(
-      -buffer[index * 4 + 1],
-      -buffer[index * 4 + 3],
+      buffer[index * 4 + 1],
       buffer[index * 4 + 2],
-      -buffer[index * 4 + 0]
+      buffer[index * 4 + 3],
+      buffer[index * 4 + 0]
     );
   }
 
   function toMujocoPos(v) {
-    return v.set(v.x, -v.z, v.y);
+    return v;  // identity — same coordinate system
   }
 
   // ---------------------------------------------------------------------------
@@ -239,11 +241,18 @@ export async function initBotViewer(botName) {
       } else if (type === mjtGeom.mjGEOM_SPHERE.value) {
         geometry = new THREE.SphereGeometry(size[0], 16, 16);
       } else if (type === mjtGeom.mjGEOM_CAPSULE.value) {
+        // MuJoCo capsule extends along Z; Three.js CapsuleGeometry extends along Y.
+        // Rotate -90° around X to align Y→Z.
         geometry = new THREE.CapsuleGeometry(size[0], size[1] * 2.0, 12, 12);
+        geometry.rotateX(-Math.PI / 2);
       } else if (type === mjtGeom.mjGEOM_CYLINDER.value) {
+        // MuJoCo cylinder extends along Z; Three.js CylinderGeometry extends along Y.
+        // Rotate -90° around X to align Y→Z.
         geometry = new THREE.CylinderGeometry(size[0], size[0], size[1] * 2.0, 16);
+        geometry.rotateX(-Math.PI / 2);
       } else if (type === mjtGeom.mjGEOM_BOX.value) {
-        geometry = new THREE.BoxGeometry(size[0] * 2, size[2] * 2, size[1] * 2);
+        // MuJoCo box size = [half_x, half_y, half_z]; Three.js BoxGeometry(x, y, z)
+        geometry = new THREE.BoxGeometry(size[0] * 2, size[1] * 2, size[2] * 2);
       } else if (type === mjtGeom.mjGEOM_MESH.value) {
         const meshID = model.geom_dataid[g];
         if (!(meshID in meshCache)) {
@@ -252,11 +261,7 @@ export async function initBotViewer(botName) {
             model.mesh_vertadr[meshID] * 3,
             (model.mesh_vertadr[meshID] + model.mesh_vertnum[meshID]) * 3
           );
-          for (let v = 0; v < vertBuf.length; v += 3) {
-            const tmp = vertBuf[v + 1];
-            vertBuf[v + 1] = vertBuf[v + 2];
-            vertBuf[v + 2] = -tmp;
-          }
+          // No vertex swizzle — MuJoCo meshes are Z-up, matching our viewport
           const faceBuf = model.mesh_face.subarray(
             model.mesh_faceadr[meshID] * 3,
             (model.mesh_faceadr[meshID] + model.mesh_facenum[meshID]) * 3
