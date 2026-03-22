@@ -384,6 +384,56 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     return outer
 
 
+def bracket_envelope_ir(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+    """Bracket envelope as ShapeScript IR.
+
+    Mirrors bracket_envelope() but emits ShapeScript ops instead of
+    calling build123d directly. Used during migration to unify on IR.
+    """
+    from botcad.shapescript.program import ShapeScript
+
+    if spec is None:
+        spec = BracketSpec()
+
+    prog = ShapeScript()
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+
+    if servo.name == "SCS0009":
+        # SCS0009: U-shaped tray — envelope uses ear tab geometry
+        ear_ext = 0.00465
+        ear_thick = 0.0025
+        ear_top_z = body_z / 2 - 0.00775
+        ear_bot_z = ear_top_z - ear_thick
+
+        outer_x = body_x + 2 * ear_ext + 2 * wall
+        outer_y = body_y + 2 * (tol + wall)
+        bracket_height = ear_bot_z - (-body_z / 2 - wall)
+        outer_top_z = ear_bot_z + bracket_height * 5
+        outer_bot_z = -body_z / 2 - wall
+        outer_z = outer_top_z - outer_bot_z
+        outer_center_z = (outer_top_z + outer_bot_z) / 2
+    else:
+        ear_bottom_z = _ear_bottom_z(servo, wall)
+
+        # Matches _bracket_outer() with insertion_clearance = bracket_height * 5
+        outer_x = body_x + 2 * (tol + wall)
+        outer_y = body_y + 2 * (tol + wall)
+        bracket_height = body_z / 2 + wall - ear_bottom_z
+        insertion_clearance = bracket_height * 5
+        outer_top_z = body_z / 2 + wall + insertion_clearance
+        outer_z = outer_top_z - ear_bottom_z
+        outer_center_z = (outer_top_z + ear_bottom_z) / 2
+
+    outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_envelope")
+    outer = prog.locate(outer, pos=(0, 0, outer_center_z))
+
+    prog.output_ref = outer
+    return prog
+
+
 @lru_cache(maxsize=32)
 def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     """Build a bracket solid for wheel/linear applications.
@@ -1069,6 +1119,47 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     )
     envelope = envelope.locate(Location((cradle_cx, 0, outer_cz)))
     return envelope
+
+
+def cradle_envelope_ir(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+    """Cradle envelope as ShapeScript IR.
+
+    Mirrors cradle_envelope() but emits ShapeScript ops instead of
+    calling build123d directly.
+    """
+    from botcad.shapescript.program import ShapeScript
+
+    if spec is None:
+        spec = BracketSpec()
+
+    prog = ShapeScript()
+
+    body_x, body_y, body_z = servo.effective_body_dims
+    tol = spec.tolerance
+    wall = spec.wall
+    sx = servo.shaft_offset[0]
+
+    ear_bottom_z = _ear_bottom_z(servo, wall)
+
+    cradle_min_x = -body_x / 2 - tol - wall
+    cradle_nominal_max_x = sx - 0.002
+    cradle_lx_nominal = cradle_nominal_max_x - cradle_min_x
+    cradle_max_x = cradle_nominal_max_x + cradle_lx_nominal * 5
+    cradle_lx = cradle_max_x - cradle_min_x
+    cradle_cx = (cradle_min_x + cradle_max_x) / 2
+
+    outer_ly = body_y + 2 * (tol + wall)
+    grip_margin = 0.004
+    outer_top_z = -body_z / 2 + grip_margin
+    outer_bottom_z = ear_bottom_z
+    outer_lz = outer_top_z - outer_bottom_z
+    outer_cz = (outer_top_z + outer_bottom_z) / 2
+
+    envelope = prog.box(cradle_lx, outer_ly, outer_lz, tag="cradle_envelope")
+    envelope = prog.locate(envelope, pos=(cradle_cx, 0, outer_cz))
+
+    prog.output_ref = envelope
+    return prog
 
 
 def coupler_sweep_radius(servo: ServoSpec, spec: BracketSpec | None = None) -> float:
