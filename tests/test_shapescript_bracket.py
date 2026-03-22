@@ -39,7 +39,7 @@ class TestBracketEnvelopeRoundtrip:
     """bracket_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_envelope
+        from botcad.bracket import BracketSpec, _bracket_envelope_b3d as bracket_envelope
 
         servo = _servo()
         spec = BracketSpec()
@@ -76,7 +76,7 @@ class TestSCS0009BracketEnvelopeRoundtrip:
     """SCS0009 bracket_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_envelope
+        from botcad.bracket import BracketSpec, _bracket_envelope_b3d as bracket_envelope
         from botcad.components.servo import SCS0009
 
         servo = SCS0009()
@@ -117,7 +117,7 @@ class TestCradleEnvelopeRoundtrip:
     """cradle_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, cradle_envelope
+        from botcad.bracket import BracketSpec, _cradle_envelope_b3d as cradle_envelope
 
         servo = _servo()
         spec = BracketSpec()
@@ -154,7 +154,7 @@ class TestCradleSolidRoundtrip:
     """cradle_solid via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, cradle_solid
+        from botcad.bracket import BracketSpec, _cradle_solid_b3d as cradle_solid
 
         servo = _servo()
         spec = BracketSpec()
@@ -191,7 +191,7 @@ class TestCouplerSolidRoundtrip:
     """coupler_solid via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, coupler_solid
+        from botcad.bracket import BracketSpec, _coupler_solid_b3d as coupler_solid
 
         servo = _servo()
         spec = BracketSpec()
@@ -217,7 +217,7 @@ class TestBracketSolidScript:
     """bracket_solid via ShapeScript must match direct build123d volume."""
 
     def test_sts3215_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec, _bracket_solid_b3d as bracket_solid
         from botcad.components.servo import STS3215
         from botcad.shapescript.emit_bracket import bracket_solid_script
 
@@ -236,7 +236,7 @@ class TestBracketSolidScript:
         )
 
     def test_scs0009_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec, _bracket_solid_b3d as bracket_solid
         from botcad.components.servo import SCS0009
         from botcad.shapescript.emit_bracket import bracket_solid_script
 
@@ -326,7 +326,7 @@ class TestConnectorPortNative:
 
     def test_bracket_sts3215_connector_volume_matches(self):
         """STS3215 bracket with connector port: IR volume matches direct."""
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec, _bracket_solid_b3d as bracket_solid
         from botcad.components.servo import STS3215
         from botcad.shapescript.emit_bracket import bracket_solid_script
 
@@ -347,7 +347,7 @@ class TestConnectorPortNative:
 
     def test_cradle_sts3215_connector_volume_matches(self):
         """STS3215 cradle with connector port: IR volume matches direct."""
-        from botcad.bracket import BracketSpec, cradle_solid
+        from botcad.bracket import BracketSpec, _cradle_solid_b3d as cradle_solid
         from botcad.components.servo import STS3215
 
         servo = STS3215()

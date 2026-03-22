@@ -378,12 +378,19 @@ def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     """Build scene showing bracket + servo + envelope + annotations."""
     from build123d import export_stl
 
-    from botcad.bracket import BracketSpec, bracket_envelope, bracket_solid, servo_solid
+    from botcad.bracket import (
+        BracketSpec,
+        bracket_envelope_solid,
+        bracket_solid_solid,
+        servo_solid,
+    )
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_bracket_"))
-    export_stl(bracket_solid(servo, BracketSpec()), str(temp_dir / "bracket.stl"))
+    export_stl(bracket_solid_solid(servo, BracketSpec()), str(temp_dir / "bracket.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
-    export_stl(bracket_envelope(servo, BracketSpec()), str(temp_dir / "envelope.stl"))
+    export_stl(
+        bracket_envelope_solid(servo, BracketSpec()), str(temp_dir / "envelope.stl")
+    )
 
     scene = SceneBuilder(model_name="bracket_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("bracket", "bracket.stl", COLOR_BRACKET)
@@ -399,12 +406,19 @@ def build_cradle_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     """Build scene showing cradle + servo + envelope + annotations."""
     from build123d import export_stl
 
-    from botcad.bracket import BracketSpec, cradle_envelope, cradle_solid, servo_solid
+    from botcad.bracket import (
+        BracketSpec,
+        cradle_envelope_solid,
+        cradle_solid_solid,
+        servo_solid,
+    )
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_cradle_"))
-    export_stl(cradle_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
+    export_stl(cradle_solid_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
-    export_stl(cradle_envelope(servo, BracketSpec()), str(temp_dir / "envelope.stl"))
+    export_stl(
+        cradle_envelope_solid(servo, BracketSpec()), str(temp_dir / "envelope.stl")
+    )
 
     scene = SceneBuilder(model_name="cradle_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("cradle", "cradle.stl", COLOR_CRADLE)
@@ -419,10 +433,10 @@ def build_coupler_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     """Build scene showing coupler in shaft-centered frame."""
     from build123d import export_stl
 
-    from botcad.bracket import BracketSpec, coupler_solid
+    from botcad.bracket import BracketSpec, coupler_solid_solid
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_coupler_"))
-    export_stl(coupler_solid(servo, BracketSpec()), str(temp_dir / "coupler.stl"))
+    export_stl(coupler_solid_solid(servo, BracketSpec()), str(temp_dir / "coupler.stl"))
 
     scene = SceneBuilder(model_name="coupler_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("coupler", "coupler.stl", COLOR_COUPLER)
@@ -488,15 +502,20 @@ def build_coupler_assembly_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     """Build scene showing cradle + servo + coupler together in servo frame."""
     from build123d import Location, export_stl
 
-    from botcad.bracket import BracketSpec, coupler_solid, cradle_solid, servo_solid
+    from botcad.bracket import (
+        BracketSpec,
+        coupler_solid_solid,
+        cradle_solid_solid,
+        servo_solid,
+    )
 
     temp_dir = Path(tempfile.mkdtemp(prefix="botcad_coupler_asm_"))
-    export_stl(cradle_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
+    export_stl(cradle_solid_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
 
     # Coupler in shaft-centered frame → move to servo frame
     sx, sy, sz = servo.shaft_offset
-    coupler = coupler_solid(servo, BracketSpec()).moved(Location((sx, sy, sz)))
+    coupler = coupler_solid_solid(servo, BracketSpec()).moved(Location((sx, sy, sz)))
     export_stl(coupler, str(temp_dir / "coupler.stl"))
 
     scene = SceneBuilder(

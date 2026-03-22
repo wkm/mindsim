@@ -27,11 +27,6 @@ from typing import TYPE_CHECKING
 
 from botcad.bracket import (
     BracketSpec,
-    bracket_envelope,
-    bracket_solid,
-    coupler_solid,
-    cradle_envelope,
-    cradle_solid,
     horn_disc_params,
     servo_solid,
 )
@@ -1146,7 +1141,9 @@ def _build_body_solid(
         rotated_offset = rotate_vec(quat, servo.shaft_offset)
         center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
-        coupler = coupler_solid(servo, bracket_spec)
+        from botcad.bracket import coupler_solid_solid
+
+        coupler = coupler_solid_solid(servo, bracket_spec)
         coupler = coupler.moved(Location(center, euler))
         tool_solid = _ensure_solid(coupler)
         shell = _as_solid(shell.fuse(coupler))
@@ -1168,9 +1165,11 @@ def _build_body_solid(
         euler = quat_to_euler(joint.solved_servo_quat)
 
         if joint.bracket_style is BracketStyle.COUPLER:
-            envelope = cradle_envelope(servo, bracket_spec)
+            from botcad.bracket import cradle_envelope_solid, cradle_solid_solid
+
+            envelope = cradle_envelope_solid(servo, bracket_spec)
             envelope = envelope.moved(Location(center, euler))
-            cradle = cradle_solid(servo, bracket_spec)
+            cradle = cradle_solid_solid(servo, bracket_spec)
             cradle = cradle.moved(Location(center, euler))
             tool_envelope = _ensure_solid(envelope)
             shell = _bool_cut(shell, envelope)
@@ -1194,9 +1193,11 @@ def _build_body_solid(
                 )
             )
         else:
-            envelope = bracket_envelope(servo, bracket_spec)
+            from botcad.bracket import bracket_envelope_solid, bracket_solid_solid
+
+            envelope = bracket_envelope_solid(servo, bracket_spec)
             envelope = envelope.moved(Location(center, euler))
-            bracket = bracket_solid(servo, bracket_spec)
+            bracket = bracket_solid_solid(servo, bracket_spec)
             bracket = bracket.moved(Location(center, euler))
             tool_envelope = _ensure_solid(envelope)
             shell = shell - envelope

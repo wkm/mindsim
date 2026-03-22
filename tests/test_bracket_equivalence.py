@@ -1,11 +1,11 @@
 """Validate that ShapeScript bracket emission matches direct build123d.
 
-This is a migration validation test. It asserts that
-backend_occt.execute(bracket_script) produces volumes within 0.1%
-of the direct build123d bracket_solid() for all bracket types.
+This is a migration validation test. It asserts that executing the
+ShapeScript IR (now the primary interface) produces volumes within 0.1%
+of the legacy direct build123d functions.
 
-Delete this test after the migration is complete and bracket.py
-no longer has a build123d code path.
+Delete this test after the migration is complete and the _b3d functions
+are removed from bracket.py.
 """
 from __future__ import annotations
 
@@ -15,20 +15,18 @@ b3d = pytest.importorskip("build123d")
 
 from botcad.bracket import (
     BracketSpec,
+    _bracket_envelope_b3d,
+    _bracket_solid_b3d,
+    _coupler_solid_b3d,
+    _cradle_envelope_b3d,
+    _cradle_solid_b3d,
+    _exec_ir,
+    _servo_solid_b3d,
     bracket_envelope,
     bracket_solid,
     coupler_solid,
     cradle_envelope,
     cradle_solid,
-    servo_solid,
-)
-from botcad.shapescript.backend_occt import OcctBackend
-from botcad.shapescript.emit_bracket import (
-    bracket_envelope_script,
-    bracket_solid_script,
-    coupler_solid_script,
-    cradle_envelope_script,
-    cradle_solid_script,
 )
 from botcad.shapescript.emit_servo import servo_script
 
@@ -37,16 +35,6 @@ def _servo():
     from botcad.components.servo import STS3215
 
     return STS3215()
-
-
-def _exec(prog):
-    """Execute a ShapeScript and return the output solid.
-
-    OcctBackend().execute() returns an ExecutionResult with a .shapes dict
-    mapping ref IDs to build123d Solids. We extract the output solid.
-    """
-    result = OcctBackend().execute(prog)
-    return result.shapes[prog.output_ref.id]
 
 
 def _vol(solid):
@@ -69,12 +57,7 @@ def _com(solid):
 
 
 class TestBracketEquivalence:
-    """ShapeScript emission must match direct build123d within 0.1%.
-
-    Volume alone won't catch positional bugs (e.g. a bracket translated
-    to the wrong location). We also compare bounding box extents and
-    center-of-mass to catch spatial regressions.
-    """
+    """ShapeScript emission must match direct build123d within 0.1%."""
 
     TOLERANCE = 0.001  # 0.1%
 
@@ -94,36 +77,36 @@ class TestBracketEquivalence:
 
     def test_bracket_envelope(self):
         servo, spec = _servo(), BracketSpec()
-        direct = bracket_envelope(servo, spec)
-        ir = _exec(bracket_envelope_script(servo, spec))
+        direct = _bracket_envelope_b3d(servo, spec)
+        ir = _exec_ir(bracket_envelope(servo, spec))
         self._assert_equiv(direct, ir, "bracket_envelope")
 
     def test_bracket_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = bracket_solid(servo, spec)
-        ir = _exec(bracket_solid_script(servo, spec))
+        direct = _bracket_solid_b3d(servo, spec)
+        ir = _exec_ir(bracket_solid(servo, spec))
         self._assert_equiv(direct, ir, "bracket_solid")
 
     def test_cradle_envelope(self):
         servo, spec = _servo(), BracketSpec()
-        direct = cradle_envelope(servo, spec)
-        ir = _exec(cradle_envelope_script(servo, spec))
+        direct = _cradle_envelope_b3d(servo, spec)
+        ir = _exec_ir(cradle_envelope(servo, spec))
         self._assert_equiv(direct, ir, "cradle_envelope")
 
     def test_cradle_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = cradle_solid(servo, spec)
-        ir = _exec(cradle_solid_script(servo, spec))
+        direct = _cradle_solid_b3d(servo, spec)
+        ir = _exec_ir(cradle_solid(servo, spec))
         self._assert_equiv(direct, ir, "cradle_solid")
 
     def test_coupler_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = coupler_solid(servo, spec)
-        ir = _exec(coupler_solid_script(servo, spec))
+        direct = _coupler_solid_b3d(servo, spec)
+        ir = _exec_ir(coupler_solid(servo, spec))
         self._assert_equiv(direct, ir, "coupler_solid")
 
     def test_servo_solid(self):
         servo = _servo()
-        direct = servo_solid(servo)
-        ir = _exec(servo_script(servo))
+        direct = _servo_solid_b3d(servo)
+        ir = _exec_ir(servo_script(servo))
         self._assert_equiv(direct, ir, "servo_solid")

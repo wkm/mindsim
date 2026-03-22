@@ -24,7 +24,7 @@ def servo_solid():
 @pytest.fixture(scope="session")
 def bracket_solid():
     """Build a bracket solid for testing."""
-    from botcad.bracket import BracketSpec, bracket_solid
+    from botcad.bracket import BracketSpec, bracket_solid_solid as bracket_solid
     from botcad.components import STS3215
 
     servo = STS3215()

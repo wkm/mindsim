@@ -23,20 +23,20 @@ def _clear_all_caches():
     We must clear caches between runs to avoid cross-contamination.
     """
     from botcad.bracket import (
-        bracket_envelope,
-        bracket_solid,
-        coupler_solid,
-        cradle_envelope,
-        cradle_solid,
+        _bracket_envelope_b3d,
+        _bracket_solid_b3d,
+        _coupler_solid_b3d,
+        _cradle_envelope_b3d,
+        _cradle_solid_b3d,
     )
     from botcad.emit.cad import _make_body_solid, _make_wheel_solid
 
     for fn in [
-        bracket_envelope,
-        bracket_solid,
-        coupler_solid,
-        cradle_envelope,
-        cradle_solid,
+        _bracket_envelope_b3d,
+        _bracket_solid_b3d,
+        _coupler_solid_b3d,
+        _cradle_envelope_b3d,
+        _cradle_solid_b3d,
         _make_body_solid,
         _make_wheel_solid,
     ]:

@@ -125,42 +125,42 @@ def bracket_envelope_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Delegate to bracket.py's bracket_envelope_ir()."""
-    from botcad.bracket import bracket_envelope_ir
+    from botcad.bracket import bracket_envelope
 
-    return bracket_envelope_ir(servo, spec)
+    return bracket_envelope(servo, spec)
 
 
 def bracket_solid_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Delegate to bracket.py's bracket_solid_ir()."""
-    from botcad.bracket import bracket_solid_ir
+    from botcad.bracket import bracket_solid
 
-    return bracket_solid_ir(servo, spec)
+    return bracket_solid(servo, spec)
 
 
 def cradle_envelope_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Delegate to bracket.py's cradle_envelope_ir()."""
-    from botcad.bracket import cradle_envelope_ir
+    from botcad.bracket import cradle_envelope
 
-    return cradle_envelope_ir(servo, spec)
+    return cradle_envelope(servo, spec)
 
 
 def cradle_solid_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Delegate to bracket.py's cradle_solid_ir()."""
-    from botcad.bracket import cradle_solid_ir
+    from botcad.bracket import cradle_solid
 
-    return cradle_solid_ir(servo, spec)
+    return cradle_solid(servo, spec)
 
 
 def coupler_solid_script(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
     """Delegate to bracket.py's coupler_solid_ir()."""
-    from botcad.bracket import coupler_solid_ir
+    from botcad.bracket import coupler_solid
 
-    return coupler_solid_ir(servo, spec)
+    return coupler_solid(servo, spec)

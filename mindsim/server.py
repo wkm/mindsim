@@ -273,17 +273,13 @@ def _generate_solid(comp, part: str):
     elif isinstance(comp, ServoSpec):
         from botcad.bracket import (
             BracketSpec,
-            bracket_envelope,
-            bracket_solid,
-            coupler_solid,
-            cradle_envelope,
-            cradle_solid,
+            bracket_solid_solid,
             servo_solid,
         )
 
         spec = BracketSpec()
         if part == "bracket":
-            solid = bracket_solid(comp, spec)
+            solid = bracket_solid_solid(comp, spec)
         elif part == "servo":
             solid = servo_solid(comp)
         elif part == "horn":
@@ -302,13 +298,21 @@ def _generate_solid(comp, part: str):
                         )
                     )
         elif part == "cradle":
-            solid = cradle_solid(comp, spec)
+            from botcad.bracket import cradle_solid_solid
+
+            solid = cradle_solid_solid(comp, spec)
         elif part == "coupler":
-            solid = coupler_solid(comp, spec)
+            from botcad.bracket import coupler_solid_solid
+
+            solid = coupler_solid_solid(comp, spec)
         elif part == "bracket_envelope":
-            solid = bracket_envelope(comp, spec)
+            from botcad.bracket import bracket_envelope_solid
+
+            solid = bracket_envelope_solid(comp, spec)
         elif part == "cradle_envelope":
-            solid = cradle_envelope(comp, spec)
+            from botcad.bracket import cradle_envelope_solid
+
+            solid = cradle_envelope_solid(comp, spec)
 
     if solid is not None:
         with _solid_cache_lock:

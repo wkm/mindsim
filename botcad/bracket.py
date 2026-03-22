@@ -363,20 +363,15 @@ def _bracket_outer(
 
 
 @lru_cache(maxsize=32)
-def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Return the bracket's outer box extended with an insertion channel.
+def _bracket_envelope_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Return the bracket's outer box as a build123d Solid (legacy).
 
-    Used by the CAD emitter to cut the bracket footprint from the parent
-    body shell before unioning the finished bracket in. The insertion
-    channel extends 5x the bracket height above it (+Z) so the servo
-    has a clear insertion path through the parent body shell.
+    Used internally by the equivalence test. After migration, delete.
     """
     if spec is None:
         spec = BracketSpec()
     if servo.name == "SCS0009":
         return _scs0009_bracket_envelope(servo, spec)
-    # Insertion clearance must extend well past any parent body shell.
-    # Use 5x bracket height — enough for bodies up to ~200mm.
     body_z = servo.effective_body_dims[2]
     ear_bot_z = _ear_bottom_z(servo, spec.wall)
     bracket_height = body_z / 2 + spec.wall - ear_bot_z
@@ -384,11 +379,11 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     return outer
 
 
-def bracket_envelope_ir(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
-    """Bracket envelope as ShapeScript IR.
+def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+    """Return the bracket's outer box as ShapeScript IR.
 
-    Mirrors bracket_envelope() but emits ShapeScript ops instead of
-    calling build123d directly. Used during migration to unify on IR.
+    Used by the CAD emitter to cut the bracket footprint from the parent
+    body shell. The insertion channel extends 5x the bracket height above.
     """
     from botcad.shapescript.program import ShapeScript
 
@@ -435,18 +430,10 @@ def bracket_envelope_ir(servo: ServoSpec, spec: BracketSpec | None = None) -> Sh
 
 
 @lru_cache(maxsize=32)
-def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Build a bracket solid for wheel/linear applications.
+def _bracket_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a bracket solid via direct build123d (legacy).
 
-    Wraps ±X, ±Y, and -Z (unpowered horn side). The +Z face is open
-    with a clearance hole for the powered horn disc + shaft boss.
-    Fasteners go through the mounting ear holes from the -Z side.
-    The -Z face has a wire cutout slot for the connector cable.
-
-    The caller should first subtract bracket_envelope() from the parent
-    body, then union this bracket in: ``(shell - envelope) + bracket``.
-
-    Returns a build123d Solid centered on the servo body origin.
+    Used internally by the equivalence test. After migration, delete.
     """
     from build123d import Align, Box, Cylinder, Location
 
@@ -543,13 +530,13 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def bracket_solid_ir(
+def bracket_solid(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
-    """Bracket solid as ShapeScript IR.
+    """Build a bracket solid for wheel/linear applications as ShapeScript IR.
 
-    Both STS3215 and SCS0009 are expressed as native ShapeScript ops.
-    Mirrors bracket_solid() line-by-line.
+    Wraps ±X, ±Y, and -Z (unpowered horn side). The +Z face is open
+    with a clearance hole for the powered horn disc + shaft boss.
     """
     from botcad.shapescript.emit_bracket import _emit_connector_port
     from botcad.shapescript.ops import ALIGN_MIN_Z
@@ -765,11 +752,10 @@ def horn_disc_params(
 
 
 @lru_cache(maxsize=32)
-def servo_solid(servo: ServoSpec):
-    """Build a detailed solid representing the physical servo body.
+def _servo_solid_b3d(servo: ServoSpec):
+    """Build a servo body solid via direct build123d (legacy).
 
-    Dispatches to a form-factor-specific builder based on the servo name.
-    Centered on body center (0,0,0) in servo local frame.
+    Used internally by the equivalence test. After migration, delete.
     """
     if servo.name == "SCS0009":
         return _scs0009_solid(servo)
@@ -1132,26 +1118,10 @@ def _scs0009_bracket_envelope(servo: ServoSpec, spec: BracketSpec):
 
 
 @lru_cache(maxsize=32)
-def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Build a shallow-tray cradle for rotational joint applications.
+def _cradle_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a cradle solid via direct build123d (legacy).
 
-    The cradle cups the servo from below, gripping the ±Y sides and
-    bottom (-Z, below mounting ears). Both the +Z and -Z horn faces
-    are fully exposed so the coupler can bridge them. Used as the
-    static (parent-body) side of a coupler-style joint.
-
-    Cross-section looking from +X, Y horizontal, Z vertical::
-
-            (front horn +Z — exposed)
-
-        W   SSSSSSSSSS   W    <- side walls grip ±Y
-        W   SSSSSSSSSS   W    <- body mid-section
-        W===SSSSSSSSSS===W    <- ear shelf ledges
-        WWWWWWWWWWWWWWWWWWW    <- bottom wall (below ears)
-
-            (rear horn -Z — exposed)
-
-    Built in servo local frame (origin = body center, Z = shaft axis).
+    Used internally by the equivalence test. After migration, delete.
     """
     from build123d import Align, Box, Location
 
@@ -1247,13 +1217,12 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def cradle_solid_ir(
+def cradle_solid(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
-    """Cradle solid as ShapeScript IR.
+    """Build a shallow-tray cradle as ShapeScript IR.
 
     Outer box - pocket - fastener holes - connector passage.
-    Mirrors cradle_solid() line-by-line.
     """
     from botcad.shapescript.emit_bracket import _emit_connector_port
     from botcad.shapescript.ops import ALIGN_MIN_Z
@@ -1347,11 +1316,10 @@ def cradle_solid_ir(
 
 
 @lru_cache(maxsize=32)
-def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Cradle envelope for cutting from parent body shell.
+def _cradle_envelope_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Cradle envelope as build123d Solid (legacy).
 
-    Covers the cradle footprint plus a 5x insertion channel in +X
-    so the servo can slide in from the shaft side.
+    Used internally by the equivalence test. After migration, delete.
     """
     from build123d import Align, Box, Location
 
@@ -1366,9 +1334,6 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     ear_bottom_z = _ear_bottom_z(servo, wall)
 
     cradle_min_x = -body_x / 2 - tol - wall
-    # Extend +X by 5x the cradle X extent for insertion clearance.
-    # Must extend well past the parent body to avoid near-tangent
-    # OCCT boolean issues.
     cradle_nominal_max_x = sx - 0.002
     cradle_lx_nominal = cradle_nominal_max_x - cradle_min_x
     cradle_max_x = cradle_nominal_max_x + cradle_lx_nominal * 5
@@ -1376,7 +1341,6 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     cradle_cx = (cradle_min_x + cradle_max_x) / 2
 
     outer_ly = body_y + 2 * (tol + wall)
-    # Match the shallow-tray Z extent from cradle_solid
     grip_margin = 0.004
     outer_top_z = -body_z / 2 + grip_margin
     outer_bottom_z = ear_bottom_z
@@ -1393,11 +1357,10 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None):
     return envelope
 
 
-def cradle_envelope_ir(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
     """Cradle envelope as ShapeScript IR.
 
-    Mirrors cradle_envelope() but emits ShapeScript ops instead of
-    calling build123d directly.
+    Covers the cradle footprint plus a 5x insertion channel in +X.
     """
     from botcad.shapescript.program import ShapeScript
 
@@ -1552,25 +1515,10 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
 
 
 @lru_cache(maxsize=32)
-def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Build a C-shaped coupler bridging front and rear horn faces.
+def _coupler_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Build a coupler solid via direct build123d (legacy).
 
-    Side profile (looking from +Y):
-
-              TTTTTTTTTTTT      <- top plate (front horn face)
-              T  hh  hh  W     <- horn holes, W = side wall
-              T          W
-              T   servo  W     <- servo body lives in this gap
-              T          W
-              T  hh  hh  W     <- horn holes
-              BBBBBBBBBBBB      <- bottom plate (rear horn face)
-
-    The coupler is one printed C-shape:
-    - Top plate bolted to front horn (screws down into horn)
-    - Bottom plate bolted to rear horn (screws up into horn)
-    - Side wall on the +X edge (past shaft, outside servo body) connecting them
-
-    Built in shaft-centered frame (origin = shaft center, Z = shaft axis).
+    Used internally by the equivalence test. After migration, delete.
     """
     from build123d import Align, Box, Cylinder, Location
 
@@ -1778,15 +1726,13 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def coupler_solid_ir(
+def coupler_solid(
     servo: ServoSpec, spec: BracketSpec | None = None
 ) -> ShapeScript:
-    """Coupler solid as ShapeScript IR.
+    """Build a C-shaped coupler as ShapeScript IR.
 
-    All geometry uses native ShapeScript ops - no PrebuiltOps.
     Front plate + rear plate + side wall + horn holes + boss clearance,
-    with D-clip plate shaping via cylinder-cut-in-half (semicircle + rect).
-    Mirrors coupler_solid() line-by-line.
+    with D-clip plate shaping.
     """
     import math
 
@@ -1994,3 +1940,50 @@ def coupler_solid_ir(
 
     prog.output_ref = shell
     return prog
+
+
+# ── Convenience wrappers: execute ShapeScript IR and return a Solid ────────
+#
+# These exist so callers that need a build123d Solid can get one without
+# knowing about ShapeScript. They import OcctBackend lazily to avoid
+# circular imports.
+
+
+def _exec_ir(prog: ShapeScript):
+    """Execute ShapeScript IR and return the output Solid."""
+    from botcad.shapescript.backend_occt import OcctBackend
+
+    result = OcctBackend().execute(prog)
+    return result.shapes[prog.output_ref.id]
+
+
+def bracket_envelope_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute bracket_envelope IR and return a Solid."""
+    return _exec_ir(bracket_envelope(servo, spec))
+
+
+def bracket_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute bracket_solid IR and return a Solid."""
+    return _exec_ir(bracket_solid(servo, spec))
+
+
+def cradle_envelope_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute cradle_envelope IR and return a Solid."""
+    return _exec_ir(cradle_envelope(servo, spec))
+
+
+def cradle_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute cradle_solid IR and return a Solid."""
+    return _exec_ir(cradle_solid(servo, spec))
+
+
+def coupler_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute coupler_solid IR and return a Solid."""
+    return _exec_ir(coupler_solid(servo, spec))
+
+
+def servo_solid(servo: ServoSpec):
+    """Execute servo_script IR and return a Solid."""
+    from botcad.shapescript.emit_servo import servo_script
+
+    return _exec_ir(servo_script(servo))
