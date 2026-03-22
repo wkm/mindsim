@@ -33,13 +33,13 @@ def build() -> Bot:
     # without Z-axis overlap.
     # No custom_solid — standard pipeline generates the body shell with
     # bracket pockets, component pockets, and wire channels.
+    # Let the packing solver determine dimensions from actual component
+    # geometry (derived from ShapeScript bounding boxes during solve()).
     base = bot.body(
         "base",
         shape=BodyShape.BOX,
         padding=0.008,
-        dimensions=(0.130, 0.080, 0.045),
     )
-    # base.height is implicitly 0.045 through dimensions
     base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
     base.mount(OV5647(), position="front", label="camera")
     base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)

@@ -132,11 +132,20 @@ class Mount:
     rotate_z: bool = False  # if True, swap X/Y dimensions (90° around Z)
     resolved_pos: Vec3 = (0.0, 0.0, 0.0)  # filled by packing solver
     resolved_insertion_axis: Vec3 = (0.0, 0.0, 1.0)  # filled by packing solver
+    solved_bbox: Vec3 | None = None  # actual bounding box from ShapeScript execution
 
     @property
     def placed_dimensions(self) -> Vec3:
-        """Component dimensions in the body frame (X/Y swapped if rotate_z)."""
-        d = self.component.dimensions
+        """Component dimensions in the body frame (actual bbox if computed, else declared).
+
+        Prefers solved_bbox (derived from ShapeScript geometry) over the
+        component's declared dimensions.  X/Y are swapped when rotate_z is set.
+        """
+        d = (
+            self.solved_bbox
+            if self.solved_bbox is not None
+            else self.component.dimensions
+        )
         if self.rotate_z:
             return (d[1], d[0], d[2])
         return d
@@ -622,12 +631,100 @@ class Bot:
         """Return joints owned by the named module. Alias for _assembly_joints."""
         return self._assembly_joints(module_name)
 
+    def _compute_component_dimensions(self) -> None:
+        """Execute component ShapeScripts to derive true bounding boxes.
+
+        Runs each mounted component's ShapeScript through the OCCT backend
+        and stores the actual bounding box on the mount.  This ensures the
+        packing solver and pocket cutter use geometry-derived dimensions
+        instead of the component's declared (approximate) dimensions.
+        """
+        import logging
+
+        from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.emit_components import (
+            battery_script,
+            bearing_script,
+            camera_script,
+            compute_script,
+            wheel_component_script,
+        )
+        from botcad.shapescript.emit_servo import servo_script
+
+        log = logging.getLogger(__name__)
+        backend = OcctBackend()
+        cache: dict[str, Vec3] = {}
+
+        for body in self.all_bodies:
+            for mount in body.mounts:
+                comp = mount.component
+                if comp.name in cache:
+                    mount.solved_bbox = cache[comp.name]
+                    continue
+
+                prog = None
+                try:
+                    if isinstance(comp, CameraSpec):
+                        prog = camera_script(comp)
+                    elif isinstance(comp, BatterySpec):
+                        prog = battery_script(comp)
+                    elif isinstance(comp, BearingSpec):
+                        prog = bearing_script(comp)
+                    elif isinstance(comp, ServoSpec):
+                        prog = servo_script(comp)
+                    elif comp.is_wheel:
+                        prog = wheel_component_script(comp)
+                    else:
+                        prog = compute_script(comp)
+                except Exception:
+                    log.debug(
+                        "No ShapeScript emitter for component %s, "
+                        "using declared dimensions",
+                        comp.name,
+                    )
+
+                if prog is not None and prog.output_ref is not None:
+                    try:
+                        result = backend.execute(prog)
+                        solid = result.shapes.get(prog.output_ref.id)
+                        if solid is not None:
+                            bb = solid.bounding_box()
+                            bbox: Vec3 = (
+                                bb.max.X - bb.min.X,
+                                bb.max.Y - bb.min.Y,
+                                bb.max.Z - bb.min.Z,
+                            )
+                            mount.solved_bbox = bbox
+                            cache[comp.name] = bbox
+
+                            # Log significant discrepancies
+                            declared = comp.dimensions
+                            for i, axis in enumerate(["X", "Y", "Z"]):
+                                diff = abs(bbox[i] - declared[i])
+                                if diff > 0.001:
+                                    log.info(
+                                        "[dims] %s %s: declared=%.1fmm actual=%.1fmm",
+                                        comp.name,
+                                        axis,
+                                        declared[i] * 1000,
+                                        bbox[i] * 1000,
+                                    )
+                    except Exception:
+                        log.debug(
+                            "ShapeScript execution failed for %s, "
+                            "using declared dimensions",
+                            comp.name,
+                            exc_info=True,
+                        )
+
     def solve(self) -> None:
         """Run packing solver and wire routing."""
         from botcad.packing import solve_packing
 
         self._collect_tree()
         self._validate_bracket_rom()
+        self._compute_component_dimensions()
         solve_packing(self)
 
         # After packing has positioned servos and components, compute
