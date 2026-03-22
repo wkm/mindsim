@@ -21,7 +21,7 @@ BOT_DIRS = sorted(p.parent for p in BOTS_DIR.glob("*/viewer_manifest.json"))
 @pytest.fixture(scope="session")
 def component_registry():
     """Build the component registry once per test session."""
-    from main import _build_component_registry
+    from mindsim.server import _build_component_registry
 
     return _build_component_registry()
 
@@ -74,7 +74,7 @@ class TestComponentToJson:
     }
 
     def test_required_keys_present(self, component_registry):
-        from main import _component_to_json
+        from mindsim.server import _component_to_json
 
         for name, (_factory, comp, category) in component_registry.items():
             info = _component_to_json(comp, category)
@@ -83,7 +83,7 @@ class TestComponentToJson:
 
     def test_servo_has_servo_subdict(self, component_registry):
         from botcad.component import ServoSpec
-        from main import _component_to_json
+        from mindsim.server import _component_to_json
 
         for name, (_factory, comp, category) in component_registry.items():
             info = _component_to_json(comp, category)
@@ -101,7 +101,7 @@ class TestComponentToJson:
                     assert key in servo, f"{name}: servo sub-dict missing '{key}'"
 
     def test_lists_are_lists(self, component_registry):
-        from main import _component_to_json
+        from mindsim.server import _component_to_json
 
         for name, (_factory, comp, category) in component_registry.items():
             info = _component_to_json(comp, category)
@@ -115,7 +115,7 @@ class TestComponentToJson:
             assert isinstance(info["color"], list), f"{name}: color not list"
 
     def test_json_serializable(self, component_registry):
-        from main import _component_to_json
+        from mindsim.server import _component_to_json
 
         for name, (_factory, comp, category) in component_registry.items():
             info = _component_to_json(comp, category)
@@ -133,7 +133,7 @@ class TestComponentToJson:
 class TestComponentLayers:
     def test_servo_layers(self, component_registry):
         from botcad.component import ServoSpec
-        from main import _component_layers
+        from mindsim.server import _component_layers
 
         expected_base = {
             "servo",
@@ -153,7 +153,7 @@ class TestComponentLayers:
 
     def test_plain_component_has_body(self, component_registry):
         from botcad.component import ServoSpec
-        from main import _component_layers
+        from mindsim.server import _component_layers
 
         for name, (_factory, comp, _cat) in component_registry.items():
             if not isinstance(comp, ServoSpec):

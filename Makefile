@@ -54,8 +54,9 @@ lint:
 	uv run ruff format .
 
 web:
-	@echo "Starting Python API server on :8081..."
-	@uv run mjpython main.py web --port 8081 --no-open & echo $$! > /tmp/mindsim-api.pid
+	@echo "Starting FastAPI server on :8081 with hot-reload..."
+	@uv run uvicorn mindsim.server:app --host 0.0.0.0 --port 8081 --reload \
+		--reload-dir botcad --reload-dir mindsim & echo $$! > /tmp/mindsim-api.pid
 	@echo "Waiting for API server..."
 	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
 		curl -sf http://localhost:8081/api/bots >/dev/null 2>&1 && break; \
