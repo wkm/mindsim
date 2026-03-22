@@ -50,19 +50,34 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| base | `meshes/base.stl` | box | 89.0 x 51.0 x 50.0 |
+| base | `meshes/base.stl` | box | 94.0 x 50.0 x 50.0 |
 | turntable | `meshes/turntable.stl` | box | 60.0 x 40.0 x 40.0 |
 | upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 143.5 |
 | forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 162.5 |
 | wrist | `meshes/wrist.stl` | box | 40.0 x 35.0 x 64.0 |
 | wrist_roll | `meshes/wrist_roll.stl` | box | 35.0 x 35.0 x 37.0 |
 | jaw | `meshes/jaw.stl` | jaw | 30.0 x 5.0 x 40.0 |
+| servo_shoulder_pan | `meshes/servo_shoulder_pan.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_shoulder_pan | `meshes/horn_shoulder_pan.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_pi | `meshes/comp_base_pi.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_battery | `meshes/comp_base_battery.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_shoulder_lift | `meshes/servo_shoulder_lift.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_shoulder_lift | `meshes/horn_shoulder_lift.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_elbow_flex | `meshes/servo_elbow_flex.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_elbow_flex | `meshes/horn_elbow_flex.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_wrist_flex | `meshes/servo_wrist_flex.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_wrist_flex | `meshes/horn_wrist_flex.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_wrist_roll | `meshes/servo_wrist_roll.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_wrist_roll | `meshes/horn_wrist_roll.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_gripper | `meshes/servo_gripper.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_gripper | `meshes/horn_gripper.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_wrist_roll_camera | `meshes/comp_wrist_roll_camera.stl` | box | 50.0 x 50.0 x 50.0 |
 
 ## Assembly Sequence
 
 1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–6 as listed above.
 
-2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
+2. **Print structural parts** — Print all 22 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
    - Mount RaspberryPiZero2W (pi) at center position using 4x M2.5

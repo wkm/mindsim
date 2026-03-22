@@ -9,8 +9,8 @@
 | STS3215 | 1 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| Structural (printed) | — | — | 49 | PLA/PETG frame |
-| **Total** | | | **169** | |
+| Structural (printed) | — | — | 51 | PLA/PETG frame |
+| **Total** | | | **171** | |
 
 ## Power Budget
 

@@ -1,17 +1,41 @@
 {
   "bot_name": "wheeler_arm",
+  "assemblies": [
+    {
+      "name": "base",
+      "path": "base",
+      "bodies": [
+        "base",
+        "left_rim",
+        "right_rim"
+      ],
+      "sub_assemblies": []
+    },
+    {
+      "name": "arm",
+      "path": "arm",
+      "bodies": [
+        "turntable",
+        "upper_arm",
+        "forearm",
+        "hand"
+      ],
+      "sub_assemblies": []
+    }
+  ],
   "bodies": [
     {
       "name": "base",
       "mesh": "base.stl",
+      "kind": "fabricated",
       "parent": null,
       "shape": "box",
       "dimensions": [
-        0.1034,
-        0.051,
+        0.104,
+        0.05,
         0.05
       ],
-      "mass": 0.3135,
+      "mass": 0.3116,
       "mounts": [
         {
           "label": "pi",
@@ -43,14 +67,15 @@
     {
       "name": "left_rim",
       "mesh": "left_rim.stl",
+      "kind": "fabricated",
       "parent": "base",
       "shape": "cylinder",
       "dimensions": [
-        0.1,
-        0.1,
+        0.099987,
+        0.099987,
         0.02
       ],
-      "mass": 0.0421,
+      "mass": 0.0425,
       "joint": "left_wheel",
       "mounts": [
         {
@@ -69,14 +94,15 @@
     {
       "name": "right_rim",
       "mesh": "right_rim.stl",
+      "kind": "fabricated",
       "parent": "base",
       "shape": "cylinder",
       "dimensions": [
-        0.1,
-        0.1,
+        0.099987,
+        0.099987,
         0.02
       ],
-      "mass": 0.0421,
+      "mass": 0.0425,
       "joint": "right_wheel",
       "mounts": [
         {
@@ -95,6 +121,7 @@
     {
       "name": "turntable",
       "mesh": "turntable.stl",
+      "kind": "fabricated",
       "parent": "base",
       "shape": "cylinder",
       "dimensions": [
@@ -102,12 +129,13 @@
         0.06,
         0.0475
       ],
-      "mass": 0.1035,
+      "mass": 0.1029,
       "joint": "shoulder_yaw"
     },
     {
       "name": "upper_arm",
       "mesh": "upper_arm.stl",
+      "kind": "fabricated",
       "parent": "turntable",
       "shape": "tube",
       "dimensions": [
@@ -115,12 +143,13 @@
         0.036,
         0.1475
       ],
-      "mass": 0.1032,
+      "mass": 0.1028,
       "joint": "shoulder_pitch"
     },
     {
       "name": "forearm",
       "mesh": "forearm.stl",
+      "kind": "fabricated",
       "parent": "upper_arm",
       "shape": "tube",
       "dimensions": [
@@ -128,12 +157,13 @@
         0.032,
         0.1
       ],
-      "mass": 0.0866,
+      "mass": 0.0862,
       "joint": "elbow"
     },
     {
       "name": "hand",
       "mesh": "hand.stl",
+      "kind": "fabricated",
       "parent": "forearm",
       "shape": "box",
       "dimensions": [
@@ -355,6 +385,1441 @@
         "gear_ratio": 345.0,
         "mass": 0.055
       }
+    }
+  ],
+  "parts": [
+    {
+      "id": "servo_left_wheel",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.044,
+        0.0,
+        0.0125
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_left_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "horn_left_wheel.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_right_wheel",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        0.044,
+        0.0,
+        0.0125
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_right_wheel",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "horn_right_wheel.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_shoulder_yaw",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.0125,
+        0.0,
+        0.024
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_shoulder_yaw",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "horn_shoulder_yaw.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "comp_base_pi",
+      "name": "RaspberryPiZero2W",
+      "kind": "purchased",
+      "category": "component",
+      "parent_body": "base",
+      "mount_label": "pi",
+      "mesh": "comp_base_pi.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.01,
+      "shapescript_component": "RaspberryPiZero2W"
+    },
+    {
+      "id": "comp_base_battery",
+      "name": "LiPo2S-1000",
+      "kind": "purchased",
+      "category": "battery",
+      "parent_body": "base",
+      "mount_label": "battery",
+      "mesh": "comp_base_battery.stl",
+      "pos": [
+        0.0,
+        0.0,
+        -0.0158
+      ],
+      "mass": 0.055,
+      "shapescript_component": "LiPo2S-1000"
+    },
+    {
+      "id": "comp_left_rim_wheel",
+      "name": "Pololu 90x10mm Wheel",
+      "kind": "purchased",
+      "category": "wheel",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "comp_left_rim_wheel.stl",
+      "pos": [
+        -0.07,
+        0.0,
+        0.0
+      ],
+      "mass": 0.022,
+      "shapescript_component": "Pololu 90x10mm Wheel"
+    },
+    {
+      "id": "comp_right_rim_wheel",
+      "name": "Pololu 90x10mm Wheel",
+      "kind": "purchased",
+      "category": "wheel",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "comp_right_rim_wheel.stl",
+      "pos": [
+        0.07,
+        0.0,
+        0.0
+      ],
+      "mass": 0.022,
+      "shapescript_component": "Pololu 90x10mm Wheel"
+    },
+    {
+      "id": "servo_shoulder_pitch",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.016,
+        0.0,
+        0.0725
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_shoulder_pitch",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "horn_shoulder_pitch.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_elbow",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.016,
+        0.0,
+        0.1925
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_elbow",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "horn_elbow.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "servo_wrist",
+      "name": "STS3215",
+      "kind": "purchased",
+      "category": "servo",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "servo_STS3215.stl",
+      "pos": [
+        -0.0125,
+        0.0,
+        0.264
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.055,
+      "shapescript_component": "STS3215"
+    },
+    {
+      "id": "horn_wrist",
+      "name": "Horn disc",
+      "kind": "purchased",
+      "category": "horn",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "horn_wrist.stl",
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "id": "comp_hand_camera",
+      "name": "OV5647",
+      "kind": "purchased",
+      "category": "camera",
+      "parent_body": "hand",
+      "mount_label": "camera",
+      "mesh": "comp_hand_camera.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.28
+      ],
+      "mass": 0.003,
+      "shapescript_component": "OV5647"
+    },
+    {
+      "id": "fastener_left_wheel_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_left_wheel_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "left_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_right_wheel_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "right_wheel",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_yaw_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "joint": "shoulder_yaw",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_shoulder_pitch_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "turntable",
+      "joint": "shoulder_pitch",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_elbow_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "upper_arm",
+      "joint": "elbow",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_ear_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_rear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_rear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_rear_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_wrist_rear_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "forearm",
+      "joint": "wrist",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_base_pi_0",
+      "name": "M2.5 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mount_label": "pi",
+      "mesh": "hardware_M2.5_shc.stl"
+    },
+    {
+      "id": "fastener_base_pi_1",
+      "name": "M2.5 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mount_label": "pi",
+      "mesh": "hardware_M2.5_shc.stl"
+    },
+    {
+      "id": "fastener_base_pi_2",
+      "name": "M2.5 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mount_label": "pi",
+      "mesh": "hardware_M2.5_shc.stl"
+    },
+    {
+      "id": "fastener_base_pi_3",
+      "name": "M2.5 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mount_label": "pi",
+      "mesh": "hardware_M2.5_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_left_rim_wheel_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_4",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_right_rim_wheel_5",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "right_rim",
+      "mount_label": "wheel",
+      "mesh": "hardware_M3_shc.stl"
+    },
+    {
+      "id": "fastener_hand_camera_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "hand",
+      "mount_label": "camera",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_hand_camera_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "hand",
+      "mount_label": "camera",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_hand_camera_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "hand",
+      "mount_label": "camera",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "fastener_hand_camera_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "hand",
+      "mount_label": "camera",
+      "mesh": "hardware_M2_shc.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_0",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_0.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_1",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_1.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_2",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_2.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_3",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_3.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_4",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_4.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_5",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_5.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_6",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_6.stl"
+    },
+    {
+      "id": "wire_servo_bus_base_7",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_base_7.stl"
+    },
+    {
+      "id": "wire_servo_bus_turntable_8",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "turntable",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_turntable_8.stl"
+    },
+    {
+      "id": "wire_servo_bus_turntable_9",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "turntable",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_turntable_9.stl"
+    },
+    {
+      "id": "wire_servo_bus_upper_arm_10",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "upper_arm",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_upper_arm_10.stl"
+    },
+    {
+      "id": "wire_servo_bus_upper_arm_11",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "upper_arm",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_upper_arm_11.stl"
+    },
+    {
+      "id": "wire_servo_bus_forearm_12",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "forearm",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_forearm_12.stl"
+    },
+    {
+      "id": "wire_servo_bus_forearm_13",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "forearm",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_forearm_13.stl"
+    },
+    {
+      "id": "wire_camera_csi_hand_0",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "hand",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_hand_0.stl"
+    },
+    {
+      "id": "wire_camera_csi_forearm_1",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "forearm",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_forearm_1.stl"
+    },
+    {
+      "id": "wire_camera_csi_forearm_2",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "forearm",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_forearm_2.stl"
+    },
+    {
+      "id": "wire_camera_csi_upper_arm_3",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "upper_arm",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_upper_arm_3.stl"
+    },
+    {
+      "id": "wire_camera_csi_upper_arm_4",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "upper_arm",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_upper_arm_4.stl"
+    },
+    {
+      "id": "wire_camera_csi_turntable_5",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "turntable",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_turntable_5.stl"
+    },
+    {
+      "id": "wire_camera_csi_turntable_6",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "turntable",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_turntable_6.stl"
+    },
+    {
+      "id": "wire_camera_csi_base_7",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_base_7.stl"
+    },
+    {
+      "id": "wire_camera_csi_base_8",
+      "name": "camera_csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "csi",
+      "mesh": "wire_camera_csi_base_8.stl"
+    },
+    {
+      "id": "wire_power_base_0",
+      "name": "power",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_base_0.stl"
+    },
+    {
+      "id": "wire_power_base_1",
+      "name": "power",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_base_1.stl"
     }
   ],
   "assembly_steps": [

@@ -6,7 +6,7 @@
 
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
-| STS3215 | 6 | 45.4 x 24.8 x 37.9 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
+| STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
@@ -23,16 +23,25 @@
 
 ## Fasteners
 
-| Fastener | Qty | Usage |
-|----------|-----|-------|
-| M2 | 4 | 4x for PiCamera2 |
-| M2.5 | 52 | 8x per horn coupler (6 joints); 4x for RaspberryPiZero2W |
-| M3 | 36 | 6x per joint bracket (6 joints) |
+| Fastener | Head Type | Qty | Usage |
+|----------|-----------|-----|-------|
+| M2 | Socket Head Cap | 52 | 8x per horn coupler (6 joints); 4x for PiCamera2 |
+| M2.5 | Socket Head Cap | 4 | 4x for RaspberryPiZero2W |
+| M3 | Socket Head Cap | 36 | 6x per joint bracket (6 joints) |
+
+## Connectors
+
+| Connector | Qty |
+|-----------|-----|
+| 5264_3pin | 12 |
+| csi_15pin | 1 |
+| jst_xh_3pin | 1 |
+| xt30 | 1 |
 
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 53.9 | 0.0 |
-| camera_csi | csi | 78.0 | 19.6 |
+| servo_bus | uart_half_duplex | 53.7 | 0.0 |
+| camera_csi | csi | 77.9 | 19.6 |
 | power | power | 8.5 | 0.0 |

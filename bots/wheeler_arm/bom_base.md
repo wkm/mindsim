@@ -10,8 +10,8 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 124 | PLA/PETG frame |
-| **Total** | | | **398** | |
+| Structural (printed) | — | — | 123 | PLA/PETG frame |
+| **Total** | | | **397** | |
 
 ## Power Budget
 
