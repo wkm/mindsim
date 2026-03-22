@@ -292,7 +292,8 @@ def _generate_solid(comp, part: str):
 
                 horn = _horn_solid(comp)
                 if horn is not None:
-                    solid = horn.locate(
+                    # .moved() not .locate() — _horn_solid is @lru_cache'd
+                    solid = horn.moved(
                         Location(
                             (params.center_xy[0], params.center_xy[1], params.center_z)
                         )
@@ -302,9 +303,15 @@ def _generate_solid(comp, part: str):
 
             solid = cradle_solid_solid(comp, spec)
         elif part == "coupler":
+            from build123d import Location
+
             from botcad.bracket import coupler_solid_solid
 
-            solid = coupler_solid_solid(comp, spec)
+            raw = coupler_solid_solid(comp, spec)
+            if raw is not None:
+                # Coupler is built in shaft-centered frame; shift to servo local frame
+                sx, sy, _sz = comp.shaft_offset
+                solid = raw.moved(Location((sx, sy, 0)))
         elif part == "bracket_envelope":
             from botcad.bracket import bracket_envelope_solid
 
