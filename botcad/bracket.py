@@ -825,7 +825,9 @@ def horn_disc_params(
     max_z = max(mp.pos[2] for mp in servo.horn_mounting_points)
     thickness = max(max_z - sz, 0.002)
 
-    center_z = sz + thickness / 2
+    # Horn sits on top of the shaft boss, not the body face.
+    horn_base_z = sz + servo.shaft_boss_height
+    center_z = horn_base_z + thickness / 2
 
     return HornDiscParams(
         radius=radius,
