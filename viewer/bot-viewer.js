@@ -107,7 +107,7 @@ export async function initBotViewer(botName) {
   container.style.right = SIDE_PANEL_WIDTH + 'px';
 
   const viewport = new Viewport3D(container, {
-    cameraType: 'perspective',
+    cameraType: 'orthographic',
     grid: true,
   });
   const scene = viewport.scene;
@@ -212,9 +212,8 @@ export async function initBotViewer(botName) {
   // Build Three.js scene from MuJoCo model
   // ---------------------------------------------------------------------------
   function buildScene() {
-    mujocoRoot = new THREE.Group();
+    mujocoRoot = viewport.addGroup('mujoco');
     mujocoRoot.name = 'MuJoCo Root';
-    scene.add(mujocoRoot);
 
     const meshCache = {};
 
