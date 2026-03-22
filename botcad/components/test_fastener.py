@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from botcad.colors import COLOR_METAL_BRASS
-from botcad.component import Component, MountPoint
+from botcad.component import Appearance, Component, MountPoint
 
 # Pre-computed unit vectors for angled fasteners
 _INV_SQRT2 = math.sqrt(2) / 2  # ~0.7071
@@ -118,7 +118,9 @@ def TestFastenerPrism() -> Component:
                 fastener_type="M3",
             ),
         ),
-        color=COLOR_METAL_BRASS.rgba,
+        appearance=Appearance(
+            color=COLOR_METAL_BRASS.rgba, metallic=1.0, roughness=0.3
+        ),
     )
 
 

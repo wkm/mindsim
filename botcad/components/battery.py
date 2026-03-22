@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_POWER_BATTERY, COLOR_STRUCTURE_DARK
-from botcad.component import BatterySpec, BusType, WirePort
+from botcad.component import Appearance, BatterySpec, BusType, WirePort
 
 
 def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
@@ -30,7 +30,7 @@ def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
             # Balance lead
             WirePort("balance", pos=(length / 2, 0.01, 0.0), bus_type=BusType.BALANCE),
         ),
-        color=COLOR_POWER_BATTERY.rgba,
+        appearance=Appearance(color=COLOR_POWER_BATTERY.rgba),
         chemistry="LiPo",
         cells_s=2,
     )

@@ -20,7 +20,14 @@ from __future__ import annotations
 import math
 
 from botcad.colors import COLOR_STRUCTURE_DARK
-from botcad.component import BusType, MountingEar, MountPoint, ServoSpec, WirePort
+from botcad.component import (
+    Appearance,
+    BusType,
+    MountingEar,
+    MountPoint,
+    ServoSpec,
+    WirePort,
+)
 
 # ── Feetech STS3215 (C018, 12V variant) ─────────────────────────────
 #
@@ -105,7 +112,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             )
             for i, (x, y) in enumerate(_HORN_XY)
         ),
-        color=COLOR_STRUCTURE_DARK.rgba,
+        appearance=Appearance(color=COLOR_STRUCTURE_DARK.rgba),
         stall_torque=_STS3215_STALL_TORQUE,
         no_load_speed=_STS3215_NO_LOAD_SPEED,
         voltage=_STS3215_VOLTAGE,
@@ -223,7 +230,7 @@ def STS3250(continuous: bool = False) -> ServoSpec:
             )
             for i, (x, y) in enumerate(_HORN_XY)
         ),
-        color=COLOR_STRUCTURE_DARK.rgba,
+        appearance=Appearance(color=COLOR_STRUCTURE_DARK.rgba),
         stall_torque=_STS3250_STALL_TORQUE,
         no_load_speed=_STS3250_NO_LOAD_SPEED,
         voltage=_STS3215_VOLTAGE,  # same 12V
@@ -369,7 +376,7 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
             )
             for i, (x, y) in enumerate(_SCS0009_HORN_XY)
         ),
-        color=COLOR_STRUCTURE_DARK.rgba,
+        appearance=Appearance(color=COLOR_STRUCTURE_DARK.rgba),
         stall_torque=_SCS0009_STALL_TORQUE,
         no_load_speed=_SCS0009_NO_LOAD_SPEED,
         voltage=_SCS0009_VOLTAGE,
