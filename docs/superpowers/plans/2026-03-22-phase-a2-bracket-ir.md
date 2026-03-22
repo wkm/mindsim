@@ -81,53 +81,89 @@ def _servo():
 
 
 def _exec(prog):
-    return OcctBackend().execute(prog)
+    """Execute a ShapeScript and return the output solid.
+
+    OcctBackend().execute() returns an ExecutionResult with a .shapes dict
+    mapping ref IDs to build123d Solids. We extract the output solid.
+    """
+    result = OcctBackend().execute(prog)
+    return result.shapes[prog.output_ref.id]
 
 
 def _vol(solid):
     return abs(solid.volume)
 
 
+def _bbox(solid):
+    """Return bounding box as ((xmin,ymin,zmin), (xmax,ymax,zmax))."""
+    bb = solid.bounding_box()
+    return (bb.min, bb.max)
+
+
+def _com(solid):
+    """Return center of mass as (x, y, z)."""
+    return solid.center()
+
+
 class TestBracketEquivalence:
-    """ShapeScript emission must match direct build123d within 0.1%."""
+    """ShapeScript emission must match direct build123d within 0.1%.
+
+    Volume alone won't catch positional bugs (e.g. a bracket translated
+    to the wrong location). We also compare bounding box extents and
+    center-of-mass to catch spatial regressions.
+    """
 
     TOLERANCE = 0.001  # 0.1%
 
+    def _assert_equiv(self, direct_solid, ir_solid, label: str):
+        """Assert volume, bounding box, and center-of-mass equivalence."""
+        dv, iv = _vol(direct_solid), _vol(ir_solid)
+        assert abs(dv - iv) / dv < self.TOLERANCE, f"{label} volume mismatch"
+
+        dbb, ibb = _bbox(direct_solid), _bbox(ir_solid)
+        for axis in range(3):
+            assert abs(dbb[0][axis] - ibb[0][axis]) < 1e-4, f"{label} bbox min[{axis}]"
+            assert abs(dbb[1][axis] - ibb[1][axis]) < 1e-4, f"{label} bbox max[{axis}]"
+
+        dc, ic = _com(direct_solid), _com(ir_solid)
+        for axis in range(3):
+            assert abs(dc[axis] - ic[axis]) < 1e-4, f"{label} COM[{axis}]"
+
     def test_bracket_envelope(self):
         servo, spec = _servo(), BracketSpec()
-        direct = _vol(bracket_envelope(servo, spec))
-        ir = _vol(_exec(bracket_envelope_script(servo, spec)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = bracket_envelope(servo, spec)
+        ir = _exec(bracket_envelope_script(servo, spec))
+        self._assert_equiv(direct, ir, "bracket_envelope")
 
     def test_bracket_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = _vol(bracket_solid(servo, spec))
-        ir = _vol(_exec(bracket_solid_script(servo, spec)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = bracket_solid(servo, spec)
+        ir = _exec(bracket_solid_script(servo, spec))
+        self._assert_equiv(direct, ir, "bracket_solid")
 
     def test_cradle_envelope(self):
         servo, spec = _servo(), BracketSpec()
-        direct = _vol(cradle_envelope(servo, spec))
-        ir = _vol(_exec(cradle_envelope_script(servo, spec)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = cradle_envelope(servo, spec)
+        ir = _exec(cradle_envelope_script(servo, spec))
+        self._assert_equiv(direct, ir, "cradle_envelope")
 
     def test_cradle_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = _vol(cradle_solid(servo, spec))
-        ir = _vol(_exec(cradle_solid_script(servo, spec)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = cradle_solid(servo, spec)
+        ir = _exec(cradle_solid_script(servo, spec))
+        self._assert_equiv(direct, ir, "cradle_solid")
 
     def test_coupler_solid(self):
         servo, spec = _servo(), BracketSpec()
-        direct = _vol(coupler_solid(servo, spec))
-        ir = _vol(_exec(coupler_solid_script(servo, spec)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = coupler_solid(servo, spec)
+        ir = _exec(coupler_solid_script(servo, spec))
+        self._assert_equiv(direct, ir, "coupler_solid")
 
     def test_servo_solid(self):
         servo = _servo()
-        direct = _vol(servo_solid(servo))
-        ir = _vol(_exec(servo_script(servo)))
-        assert abs(direct - ir) / direct < self.TOLERANCE
+        direct = servo_solid(servo)
+        ir = _exec(servo_script(servo))
+        self._assert_equiv(direct, ir, "servo_solid")
 ```
 
 - [ ] **Step 2: Run equivalence tests**
@@ -264,11 +300,13 @@ git commit -m "refactor: bracket/cradle solid IR emitted from bracket.py"
 
 Copy `coupler_solid_script()` from `emit_bracket.py:499-720` into bracket.py.
 
-- [ ] **Step 2: Create `servo_solid_ir()` in bracket.py**
+- [ ] **Step 2: Note on emit_servo.py**
 
-Copy `servo_script()` from `emit_servo.py` into bracket.py as `servo_solid_ir()`. Or keep it in a separate `servo_ir.py` if bracket.py gets too large — use judgment.
+`emit_servo.py` contains `servo_script()`, `sts_series_script()`, `scs0009_script()`, and helpers (`_group_ears_by_y_side`, `_emit_servo_connector`). Multiple callers import the sub-functions directly (e.g. `tests/test_shapescript_components.py` imports `sts_series_script` and `scs0009_script`; `botcad/skeleton.py` imports `servo_script`).
 
-- [ ] **Step 3: Update emit_bracket.py and emit_servo.py to delegate**
+**Do NOT move `servo_script` to bracket.py.** `emit_servo.py` is a self-contained ShapeScript emitter with its own helpers and is already in the right place. Leave it as-is for this migration. A future cleanup could consolidate all component emitters, but that is out of scope here. The equivalence test still validates `servo_solid` against `servo_script` — that is sufficient.
+
+- [ ] **Step 3: Update emit_bracket.py to delegate**
 
 - [ ] **Step 4: Run equivalence tests**
 
@@ -306,7 +344,9 @@ Add a convenience helper:
 def bracket_envelope_solid(servo, spec=None):
     """Execute bracket_envelope IR and return a Solid. Convenience wrapper."""
     from botcad.shapescript.backend_occt import OcctBackend
-    return OcctBackend().execute(bracket_envelope(servo, spec))
+    prog = bracket_envelope(servo, spec)
+    result = OcctBackend().execute(prog)
+    return result.shapes[prog.output_ref.id]
 ```
 
 Repeat for: `bracket_solid`, `cradle_solid`, `cradle_envelope`, `coupler_solid`, `servo_solid`.
@@ -315,11 +355,20 @@ Repeat for: `bracket_solid`, `cradle_solid`, `cradle_envelope`, `coupler_solid`,
 
 Search for every call to `bracket_solid()`, `cradle_solid()`, etc. that expects a Solid. Update them to call the `*_solid()` convenience wrapper or execute the IR themselves.
 
-Key callers:
-- `botcad/emit/cad.py` — calls `bracket_solid()`, `cradle_solid()`, `coupler_solid()`, `bracket_envelope()`, `cradle_envelope()`
+Key callers (exhaustive — search for `from botcad.bracket import` and `from botcad.shapescript.emit_bracket import`):
+- `botcad/emit/cad.py` — calls `bracket_solid()`, `cradle_solid()`, `coupler_solid()`, `bracket_envelope()`, `cradle_envelope()`, `servo_solid()`
+- `botcad/emit/drawings.py` — imports `bracket_solid`, `servo_solid`
+- `botcad/emit/component_renders.py` — imports `bracket_envelope`, `bracket_solid`, `cradle_envelope`, `cradle_solid`, `coupler_solid`, `servo_solid`
 - `botcad/clearance.py` — may call bracket functions
 - `mindsim/server.py` — `_generate_solid()` calls bracket functions
-- `tests/test_shapescript_bracket.py` — update to use new names
+- `tests/test_shapescript_bracket.py` — imports from emit_bracket
+- `tests/test_shapescript_snapshots.py` — imports from emit_bracket
+- `tests/test_render_svg.py` — imports `servo_solid`, `bracket_solid`
+- `tests/test_bracket_orientations.py` — imports `bracket_envelope`, `bracket_solid`, `servo_solid`
+- `tests/test_shapescript_roundtrip.py` — may import bracket functions
+- `tests/test_shapescript_components.py` — imports `servo_solid`
+- `scripts/compare_cad.py` — imports `servo_solid`
+- `scripts/regen_test_renders.py` — imports `coupler_solid`, `cradle_solid`, `servo_solid`
 
 - [ ] **Step 3: Run equivalence tests**
 
@@ -379,7 +428,12 @@ Run: `make validate`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A
+git rm botcad/shapescript/emit_bracket.py
+git add botcad/bracket.py botcad/shapescript/emit_body.py botcad/emit/cad.py \
+    botcad/emit/drawings.py botcad/emit/component_renders.py \
+    tests/test_shapescript_bracket.py tests/test_shapescript_snapshots.py \
+    tests/test_render_svg.py tests/test_bracket_orientations.py \
+    tests/test_shapescript_components.py scripts/compare_cad.py scripts/regen_test_renders.py
 git commit -m "refactor: delete emit_bracket.py — bracket.py is the single source of bracket IR"
 ```
 
@@ -403,19 +457,29 @@ Read `_build_body_solid()` in cad.py. It:
 
 `emit_body_ir()` in emit_body.py does the same thing but produces ShapeScript.
 
-- [ ] **Step 2: Replace _build_body_solid with IR execution**
+- [ ] **Step 2: Replace `_make_body_solid` with IR execution**
+
+**Important:** `_build_body_solid()` returns `list[CadStep]` (debug step history), not a Solid. `_make_body_solid()` wraps it and extracts `steps[-1].solid`. There are two options:
+
+- **Option A (simpler):** Replace `_make_body_solid()` only. This preserves `_build_body_solid()` for debug viz (CadStep generation) while the production path goes through IR.
+- **Option B (full):** Replace both, but then debug step visualization (`make_body_solid_with_steps`, `?cadsteps=` viewer) needs a ShapeScript-based replacement.
+
+**Recommended: Option A.** Replace `_make_body_solid`:
 
 ```python
-def _build_body_solid(body, bot, bracket_spec):
+def _make_body_solid(body, parent_joint=None, wire_segments=None):
     """Build a body solid by executing its ShapeScript IR."""
     from botcad.shapescript.backend_occt import OcctBackend
     from botcad.shapescript.emit_body import emit_body_ir
 
-    prog = emit_body_ir(body, bot, bracket_spec)
-    return OcctBackend().execute(prog)
+    prog = emit_body_ir(body, parent_joint, wire_segments)
+    result = OcctBackend().execute(prog)
+    return result.shapes[prog.output_ref.id]
 ```
 
-This replaces ~250 lines with ~5 lines.
+Note the correct `emit_body_ir` signature: `emit_body_ir(body, parent_joint, wire_segments)` — NOT `(body, bot, bracket_spec)`. The function takes a single Body, its parent Joint (or None for root), and optional wire segment tuples. BracketSpec is created internally by `emit_body_ir`.
+
+This replaces `_make_body_solid`'s delegation to `_build_body_solid` with direct IR execution. `_build_body_solid` and `make_body_solid_with_steps` remain for debug CadStep generation until a future task replaces them.
 
 - [ ] **Step 3: Run equivalence test**
 
@@ -503,7 +567,8 @@ Run `make web`, verify so101_arm and wheeler_base look correct.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A
+git rm tests/test_bracket_equivalence.py
+git add tests/shapescript_baselines/ botcad/bracket.py
 git commit -m "chore: delete migration test, regenerate baselines and bot meshes after bracket IR migration"
 ```
 

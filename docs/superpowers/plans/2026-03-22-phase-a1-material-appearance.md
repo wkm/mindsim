@@ -26,6 +26,7 @@
 | `botcad/components/camera.py` | Modify | color= -> appearance= |
 | `botcad/components/compute.py` | Modify | color= -> appearance= |
 | `botcad/components/controller.py` | Modify | color= -> appearance= |
+| `botcad/components/test_fastener.py` | Modify | color= -> appearance= |
 | `botcad/packing.py` | Modify | Read body.material.density instead of hardcoded 1200.0 |
 | `botcad/emit/cad.py` | Modify | Read body.material for mass; read body.appearance for color |
 | `botcad/emit/mujoco.py` | Modify | Read body.appearance for color |
@@ -44,6 +45,8 @@
 ```python
 # tests/test_materials.py
 from __future__ import annotations
+
+import pytest
 
 from botcad.materials import ALUMINUM, PLA, TPU, Material, PrintProcess
 
@@ -85,8 +88,6 @@ def test_print_process_wall_thickness():
     assert p is not None
     assert p.wall_layers * p.nozzle_width == pytest.approx(0.0008)
 ```
-
-Add `import pytest` at the top.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -250,9 +251,17 @@ class Component:
         return self.appearance.color
 ```
 
-Remove the old `color: RGBA` field. The `@property` ensures all existing `.color` reads still work without changes.
+Remove the old `color: RGBA` field. The `@property` ensures all existing `.color` **reads** still work without changes.
 
-- [ ] **Step 2: Update all component factories**
+> **Constructor compat warning:** The `@property` only provides *read* compatibility (`.color` attribute access). It does NOT preserve `color=` as a constructor keyword argument. Any code passing `color=` to the `Component(...)` constructor will break with `TypeError: unexpected keyword argument 'color'`. Step 2 must find and migrate ALL such call sites.
+
+- [ ] **Step 2: Update all `color=` constructor call sites**
+
+Grep the **entire codebase** (not just `botcad/components/`) for `color=` passed to `Component(...)` constructors:
+
+```bash
+rg 'color=' --glob '*.py' botcad/ bots/ tests/
+```
 
 Each factory changes `color=X.rgba` to `appearance=Appearance(color=X.rgba)`:
 
@@ -268,6 +277,7 @@ Each factory changes `color=X.rgba` to `appearance=Appearance(color=X.rgba)`:
 | `botcad/components/camera.py` | 174 | `color=COLOR_ELECTRONICS_DARK.rgba` | `appearance=Appearance(color=COLOR_ELECTRONICS_DARK.rgba)` |
 | `botcad/components/compute.py` | 58 | `color=COLOR_ELECTRONICS_PCB.rgba` | `appearance=Appearance(color=COLOR_ELECTRONICS_PCB.rgba)` |
 | `botcad/components/controller.py` | 36 | `color=COLOR_ELECTRONICS_CONTROLLER.rgba` | `appearance=Appearance(color=COLOR_ELECTRONICS_CONTROLLER.rgba)` |
+| `botcad/components/test_fastener.py` | 121 | `color=COLOR_METAL_BRASS.rgba` | `appearance=Appearance(color=COLOR_METAL_BRASS.rgba, metallic=1.0, roughness=0.3)` |
 
 Each file also needs `from botcad.component import Appearance` added to imports.
 
@@ -311,9 +321,11 @@ from botcad.component import Appearance
 In `Bot._collect_tree()` or wherever fabricated bodies are constructed, set `material=PLA` as the default. Check how bodies are created — they're defined in `bots/*/design.py`. Since Body is mutable, the simplest approach: set `material = PLA` as the field default for all bodies, since most are 3D-printed.
 
 ```python
-    material: Material = field(default_factory=lambda: PLA)
+    material: Material = PLA
     appearance: Appearance | None = None
 ```
+
+`PLA` is a frozen dataclass instance, so it is safe to use directly as a default (no mutable-default pitfall). No `field(default_factory=...)` wrapper needed.
 
 Import `PLA` from `botcad.materials`.
 
@@ -332,7 +344,7 @@ for body in self.all_bodies:
     if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
         body.appearance = Appearance(color=COLOR_STRUCTURE_DARK.rgba)
     elif body.shape is BodyShape.TUBE:
-        body.appearance = Appearance(color=BP_GRAY5.rgba if hasattr(BP_GRAY5, 'rgba') else (*BP_GRAY5, 1.0))
+        body.appearance = Appearance(color=(*BP_GRAY5, 1.0))  # BP_GRAY5 is a plain (r,g,b) tuple from _hex()
     elif body.shape is BodyShape.JAW:
         body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
     else:
@@ -344,14 +356,48 @@ For purchased bodies (in `_create_purchased_bodies`):
 body.appearance = comp.appearance  # inherit from Component
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Add unit tests for Body material/appearance defaults**
+
+Append to `tests/test_materials.py`:
+
+```python
+from botcad.skeleton import Body, BodyShape
+from botcad.materials import PLA, TPU
+
+
+def test_body_defaults_to_pla():
+    """Every body should default to PLA material."""
+    body = Body(name="test", shape=BodyShape.BOX)
+    assert body.material is PLA
+    assert body.material.density == 1200.0
+
+
+def test_tpu_differs_from_pla():
+    """TPU and PLA have different densities — mass computation should differ."""
+    assert TPU.density != PLA.density
+    assert TPU.process is not None
+    assert TPU.process.infill != PLA.process.infill
+
+
+def test_fabricated_body_gets_appearance_after_solve():
+    """After appearance assignment, fabricated bodies must have non-None appearance."""
+    body = Body(name="test", shape=BodyShape.BOX)
+    # Simulate the appearance assignment logic from solve()
+    from botcad.component import Appearance
+    from botcad.colors import COLOR_STRUCTURE_BODY
+    body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
+    assert body.appearance is not None
+    assert len(body.appearance.color) == 4
+```
+
+- [ ] **Step 5: Run tests**
 
 Run: `make validate`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add botcad/skeleton.py
+git add botcad/skeleton.py tests/test_materials.py
 git commit -m "feat: add material and appearance fields to Body, assign during solve()"
 ```
 
@@ -462,34 +508,11 @@ git commit -m "refactor: color emitters read body.appearance instead of computin
 
 ---
 
-### Task 7: Delete _compute_world_positions() from cad.py
-
-**Files:**
-- Modify: `botcad/emit/cad.py:723-755` — delete function
-- Modify: callers of `_compute_world_positions()` — use `body.world_pos`
-
-- [ ] **Step 1: Find all callers**
-
-Search for `_compute_world_positions` in cad.py. Update each call site to read `body.world_pos` directly from the skeleton.
-
-- [ ] **Step 2: Delete the function**
-
-Remove `_compute_world_positions()` (lines 723-755).
-
-- [ ] **Step 3: Run tests**
-
-Run: `make validate`
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add botcad/emit/cad.py
-git commit -m "refactor: delete _compute_world_positions(), read body.world_pos from skeleton"
-```
+> **Out of scope:** `_compute_world_positions()` in `cad.py` is dead code that could be deleted, but it is unrelated to the Material/Appearance refactor. Track it as a separate cleanup task.
 
 ---
 
-### Task 8: Final validation and bot regeneration
+### Task 7: Final validation and bot regeneration
 
 - [ ] **Step 1: Run full validation**
 
@@ -518,10 +541,10 @@ git commit -m "chore: regenerate bot meshes after Material/Appearance refactor"
 
 ```
 Task 1 (Material types) ──→ Task 4 (Body fields) ──→ Task 5 (mass wiring)
-Task 2 (Appearance type) ─┤                          Task 6 (color wiring)
-Task 3 (Component migration) ─────────────────────→ Task 7 (delete world_pos dup)
-                                                      ↓
-                                                   Task 8 (validate + regen)
+Task 2 (Appearance type) ─┤                       ──→ Task 6 (color wiring)
+Task 3 (Component migration) ──────────────────────────────┐
+                                                           ↓
+                                                   Task 7 (validate + regen)
 ```
 
-Tasks 1-3 are the foundation. Tasks 5-7 are independent of each other (can parallelize). Task 8 gates on all.
+Tasks 1-3 are the foundation. Tasks 5-6 are independent of each other (can parallelize). Task 7 gates on all.
