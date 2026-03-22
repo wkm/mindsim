@@ -97,7 +97,7 @@ class TestServoSubPartClearance:
         )
 
     @pytest.mark.xfail(
-        reason="Bracket pocket walls intentionally share edges with servo body"
+        reason="660mm³ overlap — bracket boss clearance hole doesn't fully clear servo shaft boss"
     )
     def test_bracket_does_not_intersect_servo(self):
         servo = _servo()
