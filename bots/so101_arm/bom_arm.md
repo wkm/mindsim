@@ -6,10 +6,10 @@
 
 | Part | Qty | Dimensions (mm) | Mass (g) | Notes |
 |------|-----|-----------------|----------|-------|
-| STS3215 | 5 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
+| STS3215 | 5 | 45.4 x 24.8 x 37.9 | 55 | Joints: shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 183 | PLA/PETG frame |
-| **Total** | | | **461** | |
+| Structural (printed) | — | — | 185 | PLA/PETG frame |
+| **Total** | | | **463** | |
 
 ## Power Budget
 
@@ -20,14 +20,8 @@
 
 ## Fasteners
 
-| Fastener | Head Type | Qty | Usage |
-|----------|-----------|-----|-------|
-| M2 | Socket Head Cap | 44 | 8x per horn coupler (5 joints); 4x for PiCamera2 |
-| M3 | Socket Head Cap | 30 | 6x per joint bracket (5 joints) |
-
-## Connectors
-
-| Connector | Qty |
-|-----------|-----|
-| 5264_3pin | 10 |
-| csi_15pin | 1 |
+| Fastener | Qty | Usage |
+|----------|-----|-------|
+| M2 | 4 | 4x for PiCamera2 |
+| M2.5 | 40 | 8x per horn coupler (5 joints) |
+| M3 | 30 | 6x per joint bracket (5 joints) |

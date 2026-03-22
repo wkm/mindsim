@@ -13,6 +13,16 @@ Vec3 = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
 
 
+@dataclass(frozen=True)
+class Appearance:
+    """Visual properties for rendering. Emitters read this, never compute colors."""
+
+    color: RGBA
+    metallic: float = 0.0  # 0=plastic, 1=metal
+    roughness: float = 0.7  # surface roughness
+    opacity: float = 1.0  # transparency
+
+
 class BusType(StrEnum):
     """Wire bus protocol type."""
 
@@ -74,10 +84,15 @@ class Component:
     mass: float  # kg
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
-    color: RGBA = (0.541, 0.608, 0.659, 1.0)  # BP_GRAY3 — default
+    appearance: Appearance = Appearance(color=(0.541, 0.608, 0.659, 1.0))
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
     is_wheel: bool = False  # True for wheel components
+
+    @property
+    def color(self) -> RGBA:
+        """Backward-compatible color accessor."""
+        return self.appearance.color
 
 
 @dataclass(frozen=True)

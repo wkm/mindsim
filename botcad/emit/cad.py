@@ -42,9 +42,6 @@ from botcad.skeleton import BodyKind, BodyShape, BracketStyle
 
 log = logging.getLogger(__name__)
 
-# PLA plastic density (kg/m³)
-_PLA_DENSITY = 1200.0
-
 if TYPE_CHECKING:
     from botcad.component import Component, Vec3
     from botcad.skeleton import Body, Bot, Joint
@@ -128,13 +125,18 @@ def _update_mass_from_solid(body: Body, solid) -> None:
         return  # degenerate solid, keep packing solver estimates
 
     # FDM print mass model: perimeter walls + sparse infill
-    line_width = 0.0004  # 0.4mm nozzle
-    n_walls = 2
-    infill_fraction = 0.20
-    wall_thickness = n_walls * line_width  # 0.8mm total perimeter
+    mat = body.material
+    if mat and mat.process:
+        p = mat.process
+        wall_thickness = p.wall_layers * p.nozzle_width
+        infill_fraction = p.infill
+    else:
+        wall_thickness = 0.0008
+        infill_fraction = 0.20
+    density = mat.density if mat else 1200.0
     wall_volume = solid.area * wall_thickness
     infill_volume = max(0.0, vol - wall_volume) * infill_fraction
-    struct_mass = (wall_volume + infill_volume) * _PLA_DENSITY
+    struct_mass = (wall_volume + infill_volume) * density
 
     struct_com = solid.center()  # geometric centroid
     # matrix_of_inertia returns volumetric inertia about centroid.

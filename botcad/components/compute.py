@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_ELECTRONICS_PCB
-from botcad.component import BusType, Component, MountPoint, WirePort
+from botcad.component import Appearance, BusType, Component, MountPoint, WirePort
 
 
 def RaspberryPiZero2W() -> Component:
@@ -55,7 +55,7 @@ def RaspberryPiZero2W() -> Component:
                 fastener_type="M2.5",
             ),
         ),
-        color=COLOR_ELECTRONICS_PCB.rgba,
+        appearance=Appearance(color=COLOR_ELECTRONICS_PCB.rgba),
         voltage=5.0,
         typical_current=0.6,  # ~600mA typical under load
     )

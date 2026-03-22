@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_ELECTRONICS_CONTROLLER
-from botcad.component import BusType, Component, MountPoint, WirePort
+from botcad.component import Appearance, BusType, Component, MountPoint, WirePort
 
 
 def WaveshareSerialBus() -> Component:
@@ -33,7 +33,7 @@ def WaveshareSerialBus() -> Component:
             MountPoint("m3", pos=(-0.022, 0.009, 0.0), diameter=0.003),
             MountPoint("m4", pos=(0.022, 0.009, 0.0), diameter=0.003),
         ),
-        color=COLOR_ELECTRONICS_CONTROLLER.rgba,
+        appearance=Appearance(color=COLOR_ELECTRONICS_CONTROLLER.rgba),
         voltage=5.0,
         typical_current=0.1,  # board logic only, servo power is separate
     )

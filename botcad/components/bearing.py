@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_METAL_STEEL
-from botcad.component import BearingSpec
+from botcad.component import Appearance, BearingSpec
 
 
 def Bearing6x3x3() -> BearingSpec:
@@ -18,5 +18,7 @@ def Bearing6x3x3() -> BearingSpec:
         od=0.006,
         id=0.003,
         width=0.003,
-        color=COLOR_METAL_STEEL.rgba,
+        appearance=Appearance(
+            color=COLOR_METAL_STEEL.rgba, metallic=1.0, roughness=0.3
+        ),
     )

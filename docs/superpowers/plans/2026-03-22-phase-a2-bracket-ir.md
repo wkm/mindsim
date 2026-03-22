@@ -497,7 +497,7 @@ Run: `make validate`
 
 ```bash
 git add botcad/emit/cad.py
-git commit -m "refactor: _build_body_solid() executes ShapeScript IR — no more direct build123d"
+git commit -m "refactor: _make_body_solid() executes ShapeScript IR — no more direct build123d"
 ```
 
 ---

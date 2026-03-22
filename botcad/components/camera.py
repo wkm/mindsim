@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_ELECTRONICS_DARK, COLOR_STRUCTURE_DARK
-from botcad.component import BusType, CameraSpec, MountPoint, WirePort
+from botcad.component import Appearance, BusType, CameraSpec, MountPoint, WirePort
 
 
 def OV5647() -> CameraSpec:
@@ -60,7 +60,7 @@ def OV5647() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=COLOR_ELECTRONICS_DARK.rgba,
+        appearance=Appearance(color=COLOR_ELECTRONICS_DARK.rgba),
     )
 
 
@@ -171,5 +171,5 @@ def PiCamera2() -> CameraSpec:
                 fastener_type="M2",
             ),
         ),
-        color=COLOR_ELECTRONICS_DARK.rgba,
+        appearance=Appearance(color=COLOR_ELECTRONICS_DARK.rgba),
     )
