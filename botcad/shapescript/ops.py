@@ -5,10 +5,10 @@ that downstream ops use to reference the result. Tags are optional string
 labels that propagate through boolean operations so fillets/chamfers can
 reference edges by name rather than by topological index.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Union
 
 Vec3 = tuple[float, float, float]
 
@@ -235,14 +235,12 @@ class ExportSTEPOp:
 
 
 # Union of all ops for type narrowing
-PrimitiveOp = Union[BoxOp, CylinderOp, SphereOp, PrebuiltOp, CallOp, CopyOp, RadialArrayOp]
-BooleanOp = Union[FuseOp, CutOp]
+PrimitiveOp = (
+    BoxOp | CylinderOp | SphereOp | PrebuiltOp | CallOp | CopyOp | RadialArrayOp
+)
+BooleanOp = FuseOp | CutOp
 TransformOp = LocateOp
-ModificationOp = Union[FilletOp, FilletAllEdgesOp, FilletByAxisOp, ChamferOp]
-QueryOp = Union[
-    QueryVolumeOp, QueryCentroidOp, QueryInertiaOp, QueryBBoxOp, QueryAreaOp
-]
-ExportOp = Union[ExportSTLOp, ExportSTEPOp]
-ShapeOp = Union[
-    PrimitiveOp, BooleanOp, TransformOp, ModificationOp, QueryOp, ExportOp
-]
+ModificationOp = FilletOp | FilletAllEdgesOp | FilletByAxisOp | ChamferOp
+QueryOp = QueryVolumeOp | QueryCentroidOp | QueryInertiaOp | QueryBBoxOp | QueryAreaOp
+ExportOp = ExportSTLOp | ExportSTEPOp
+ShapeOp = PrimitiveOp | BooleanOp | TransformOp | ModificationOp | QueryOp | ExportOp

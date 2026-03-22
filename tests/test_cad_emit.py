@@ -182,7 +182,8 @@ class TestWheelerSymmetry:
 
     def test_bracket_envelopes_mirror_in_body(self):
         """Left and right servo envelope cuts should be symmetric in X."""
-        from botcad.bracket import BracketSpec, bracket_envelope_solid as bracket_envelope
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import bracket_envelope_solid as bracket_envelope
         from botcad.geometry import quat_to_euler
 
         bot = _build_bot("wheeler_base")

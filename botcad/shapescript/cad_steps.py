@@ -60,60 +60,96 @@ def shapescript_to_cad_steps(
 
         match op:
             # Primitives — create steps
-            case BoxOp(ref=ref, tag=tag):
+            case BoxOp(ref=_ref, tag=tag):
                 label = "Create box" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
-
-            case CylinderOp(ref=ref, tag=tag):
-                label = "Create cylinder" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
-
-            case SphereOp(ref=ref, tag=tag):
-                label = "Create sphere" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
-
-            case PrebuiltOp(ref=ref, tag=tag):
-                label = "Prebuilt" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
-
-            case CallOp(ref=ref, sub_program_key=key, tag=tag):
-                label = f"Call: {key}" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", group=key, script=script_line)
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
                 )
 
-            case CopyOp(ref=ref, source=src, tag=tag):
-                label = "Copy" + (f" ({tag})" if tag else f" of {src.id}")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
+            case CylinderOp(ref=_ref, tag=tag):
+                label = "Create cylinder" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
 
-            case RadialArrayOp(ref=ref, source=src, count=n, axis=ax, tag=tag):
+            case SphereOp(ref=_ref, tag=tag):
+                label = "Create sphere" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
+
+            case PrebuiltOp(ref=_ref, tag=tag):
+                label = "Prebuilt" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
+
+            case CallOp(ref=_ref, sub_program_key=key, tag=tag):
+                label = f"Call: {key}" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        group=key,
+                        script=script_line,
+                    )
+                )
+
+            case CopyOp(ref=_ref, source=src, tag=tag):
+                label = "Copy" + (f" ({tag})" if tag else f" of {src.id}")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
+
+            case RadialArrayOp(ref=_ref, source=src, count=n, axis=_ax, tag=tag):
                 label = f"RadialArray ×{n}" + (f" ({tag})" if tag else "")
-                steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
 
             # Booleans — cut/union steps with tool
-            case CutOp(ref=ref, target=t, tool=tl):
+            case CutOp(ref=_ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
                 tool_tag = tag_by_ref.get(tl.id)
                 label = "Cut" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="cut", tool=tool_solid, script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="cut",
+                        tool=tool_solid,
+                        script=script_line,
+                    )
                 )
 
-            case FuseOp(ref=ref, target=t, tool=tl):
+            case FuseOp(ref=_ref, target=t, tool=tl):
                 tool_solid = shapes.get(tl.id)
                 tool_tag = tag_by_ref.get(tl.id)
                 label = "Union" + (f" {tool_tag}" if tool_tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="union", tool=tool_solid, script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="union",
+                        tool=tool_solid,
+                        script=script_line,
+                    )
                 )
 
             # Transforms — show as their own step (purple in the viewer)
-            case LocateOp(ref=ref, target=t):
+            case LocateOp(ref=_ref, target=t):
                 tool_solid = shapes.get(t.id)  # the pre-move shape
                 locate_tag = tag_by_ref.get(t.id)
                 label = "Locate" + (f" {locate_tag}" if locate_tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="locate", tool=tool_solid, script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="locate",
+                        tool=tool_solid,
+                        script=script_line,
+                    )
                 )
 
             case _:
@@ -123,7 +159,11 @@ def shapescript_to_cad_steps(
                     tag = getattr(op, "tag", None)
                     if tag:
                         label += f" ({tag})"
-                    steps.append(CadStep(label=label, solid=solid, op="create", script=script_line))
+                    steps.append(
+                        CadStep(
+                            label=label, solid=solid, op="create", script=script_line
+                        )
+                    )
 
     return steps
 

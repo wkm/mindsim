@@ -7,7 +7,7 @@ import pytest
 b3d = pytest.importorskip("build123d")
 rr = pytest.importorskip("rerun")
 
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScript  # noqa: E402
 
 
 class TestShapeScriptDebugRerun:
@@ -18,7 +18,7 @@ class TestShapeScriptDebugRerun:
         prog = ShapeScript()
         box = prog.box(1, 1, 1, tag="shell")
         hole = prog.cylinder(0.2, 2, tag="hole")
-        result = prog.cut(box, hole)
+        _result = prog.cut(box, hole)
 
         # Should not raise — produces Rerun data but does not spawn viewer
         debug_program(prog, spawn_viewer=False)

@@ -4,15 +4,19 @@ Validates that every op type can be converted to CadStep objects
 and formatted via format_op() without crashing. This catches missing
 imports in cad_steps.py.
 """
+
 from __future__ import annotations
 
 import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.shapescript.backend_occt import OcctBackend
-from botcad.shapescript.cad_steps import format_op, shapescript_to_cad_steps
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.backend_occt import OcctBackend  # noqa: E402
+from botcad.shapescript.cad_steps import (  # noqa: E402
+    format_op,
+    shapescript_to_cad_steps,
+)
+from botcad.shapescript.program import ShapeScript  # noqa: E402
 
 
 def _exec(prog):
@@ -161,11 +165,17 @@ class TestFormatOpAllTypes:
             LocateOp(ref=ShapeRef("l"), target=ShapeRef("a"), pos=(1, 0, 0)),
             FilletOp(ref=ShapeRef("fi"), target=ShapeRef("a"), tags=("e",), radius=0.1),
             FilletAllEdgesOp(ref=ShapeRef("fa"), target=ShapeRef("a"), radius=0.1),
-            FilletByAxisOp(ref=ShapeRef("fb"), target=ShapeRef("a"), axis="z", radius=0.1),
+            FilletByAxisOp(
+                ref=ShapeRef("fb"), target=ShapeRef("a"), axis="z", radius=0.1
+            ),
             ChamferOp(ref=ShapeRef("ch"), target=ShapeRef("a"), tags=("e",), size=0.1),
         ]
 
         for op in ops:
             result = format_op(op)
-            assert isinstance(result, str), f"format_op({type(op).__name__}) returned {type(result)}"
-            assert len(result) > 0, f"format_op({type(op).__name__}) returned empty string"
+            assert isinstance(result, str), (
+                f"format_op({type(op).__name__}) returned {type(result)}"
+            )
+            assert len(result) > 0, (
+                f"format_op({type(op).__name__}) returned empty string"
+            )

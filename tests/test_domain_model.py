@@ -356,12 +356,18 @@ class TestPackingOverlaps:
         [
             ("bots/wheeler_base/design.py", "wb_overlap_test"),
             pytest.param(
-                "bots/wheeler_arm/design.py", "wa_overlap_test",
-                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+                "bots/wheeler_arm/design.py",
+                "wa_overlap_test",
+                marks=pytest.mark.xfail(
+                    reason="hardcoded dimensions — needs auto-sizing"
+                ),
             ),
             pytest.param(
-                "bots/so101_arm/design.py", "so_overlap_test",
-                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+                "bots/so101_arm/design.py",
+                "so_overlap_test",
+                marks=pytest.mark.xfail(
+                    reason="hardcoded dimensions — needs auto-sizing"
+                ),
             ),
         ],
     )
@@ -467,7 +473,7 @@ class TestAssemblyHierarchy:
         from botcad.skeleton import Bot
 
         bot = Bot("test")
-        base = bot.assembly("base")
+        _base = bot.assembly("base")
         arm = bot.assembly("arm")
         gripper = arm.assembly("gripper")
 

@@ -1,4 +1,5 @@
 """Tests for ShapeScript operation dataclasses, ShapeScript, and TagRegistry."""
+
 from __future__ import annotations
 
 import pytest
@@ -219,7 +220,7 @@ class TestCallOp:
 
 # ── Task 2: ShapeScript tests ──
 
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScript  # noqa: E402
 
 
 class TestShapeScript:
@@ -271,14 +272,14 @@ class TestShapeScript:
     def test_locate_with_defaults(self):
         prog = ShapeScript()
         a = prog.box(1, 1, 1)
-        b = prog.locate(a, pos=(0.01, 0, 0))
+        _b = prog.locate(a, pos=(0.01, 0, 0))
         assert isinstance(prog.ops[1], LocateOp)
         assert prog.ops[1].euler_deg == (0.0, 0.0, 0.0)
 
     def test_fillet_with_tags(self):
         prog = ShapeScript()
         a = prog.box(1, 1, 1, tag="edges")
-        b = prog.fillet(a, tags=("edges",), radius=0.05)
+        _b = prog.fillet(a, tags=("edges",), radius=0.05)
         assert isinstance(prog.ops[1], FilletOp)
         assert prog.ops[1].tags == ("edges",)
 
@@ -381,7 +382,7 @@ class TestShapeScript:
 
 # ── Task 3: TagRegistry tests ──
 
-from botcad.shapescript.tags import TagRegistry
+from botcad.shapescript.tags import TagRegistry  # noqa: E402
 
 
 class TestTagRegistry:

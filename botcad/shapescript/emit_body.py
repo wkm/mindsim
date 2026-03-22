@@ -147,9 +147,7 @@ def emit_body_ir(
 
         coupler_key = f"coupler_{servo.name}"
         if coupler_key not in prog.sub_programs:
-            prog.sub_programs[coupler_key] = coupler_solid_script(
-                servo, bracket_spec
-            )
+            prog.sub_programs[coupler_key] = coupler_solid_script(servo, bracket_spec)
         coupler_ref = prog.call(coupler_key, tag="coupler")
         coupler_ref = prog.locate(coupler_ref, pos=center, euler_deg=euler)
         shell = prog.fuse(shell, coupler_ref)
@@ -181,9 +179,7 @@ def emit_body_ir(
             brk_key = f"cradle_{servo.name}"
             if env_key not in prog.sub_programs:
                 prog.sub_programs[env_key] = cradle_envelope_script(servo, bracket_spec)
-                prog.sub_programs[brk_key] = cradle_solid_script(
-                    servo, bracket_spec
-                )
+                prog.sub_programs[brk_key] = cradle_solid_script(servo, bracket_spec)
         else:
             env_key = f"bracket_env_{servo.name}"
             brk_key = f"bracket_{servo.name}"
@@ -191,9 +187,7 @@ def emit_body_ir(
                 prog.sub_programs[env_key] = bracket_envelope_script(
                     servo, bracket_spec
                 )
-                prog.sub_programs[brk_key] = bracket_solid_script(
-                    servo, bracket_spec
-                )
+                prog.sub_programs[brk_key] = bracket_solid_script(servo, bracket_spec)
 
         # Call sub-programs and locate at joint position
         env_ref = prog.call(env_key, tag=f"bracket_env_{joint.name}")
@@ -274,11 +268,11 @@ def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims):
 
     ax, ay, az = ins
     if abs(ax) > 0.5:
-        euler = (0, 90, 0)
+        _euler = (0, 90, 0)
     elif abs(ay) > 0.5:
-        euler = (90, 0, 0)
+        _euler = (90, 0, 0)
     else:
-        euler = (0, 0, 0)
+        _euler = (0, 0, 0)
 
     aperture = prog.cylinder(aperture_r, wall_depth, align=ALIGN_CENTER)
     # NOTE: The direct path does two .locate() calls (rotation then position),

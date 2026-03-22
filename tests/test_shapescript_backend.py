@@ -4,6 +4,7 @@ Property tests validate geometric invariants that must hold regardless
 of backend implementation. These tests double as a backend conformance
 suite for future backends (truck, mesh-CSG, etc.).
 """
+
 from __future__ import annotations
 
 import math
@@ -12,8 +13,8 @@ import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend  # noqa: E402
+from botcad.shapescript.program import ShapeScript  # noqa: E402
 
 # -- Helpers --
 

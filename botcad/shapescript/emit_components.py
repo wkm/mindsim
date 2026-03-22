@@ -21,9 +21,14 @@ if TYPE_CHECKING:
     from botcad.component import (
         BatterySpec,
         BearingSpec,
+        BusType,
         CameraSpec,
         ServoSpec,
     )
+    from botcad.connectors import ConnectorSpec
+    from botcad.fasteners import FastenerSpec
+    from botcad.shapescript.ops import ShapeRef
+    from botcad.skeleton import Body, Joint
 
 
 def camera_script(spec: CameraSpec) -> ShapeScript:
@@ -159,7 +164,9 @@ def horn_script(servo: ServoSpec) -> ShapeScript | None:
 
     # Center bore (spline shaft hole)
     if servo.shaft_boss_radius > 0:
-        bore = prog.cylinder(servo.shaft_boss_radius, params.thickness + 0.001, tag="shaft_bore")
+        bore = prog.cylinder(
+            servo.shaft_boss_radius, params.thickness + 0.001, tag="shaft_bore"
+        )
         horn = prog.cut(horn, bore)
 
     # Mounting screw holes
@@ -253,9 +260,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
         body = prog.cut(body, chamfer_block)
 
         # Round pin on mating face (+X)
-        round_pin = prog.cylinder(
-            0.001, 0.003, align=ALIGN_MIN_Z
-        )
+        round_pin = prog.cylinder(0.001, 0.003, align=ALIGN_MIN_Z)
         round_pin = prog.locate(round_pin, pos=(bx / 2, -by * 0.2, 0))
         body = prog.fuse(body, round_pin)
 
@@ -387,7 +392,9 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
         shroud_h = rz * 0.4
         shroud = prog.box(rx, ry, shroud_h, align=Align3(z="min"))
         shroud = prog.locate(shroud, pos=(0, 0, rz / 2))
-        inner = prog.box(bx - 0.001, by - 0.001, shroud_h + 0.001, align=Align3(z="min"))
+        inner = prog.box(
+            bx - 0.001, by - 0.001, shroud_h + 0.001, align=Align3(z="min")
+        )
         inner = prog.locate(inner, pos=(0, 0, rz / 2))
         shroud = prog.cut(shroud, inner)
         body = prog.fuse(body, shroud)
@@ -412,7 +419,9 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
     pin_h = 0.003
     n_pins = max(2, int(bx / 0.00254))
     if spec.connector_type != ConnectorType.GPIO_2X20:
-        pin_proto = prog.cylinder(0.0003, pin_h, align=Align3(z="max"), tag="solder_pin")
+        pin_proto = prog.cylinder(
+            0.0003, pin_h, align=Align3(z="max"), tag="solder_pin"
+        )
         for i in range(min(n_pins, 6)):
             px = -bx / 2 + bx * (i + 0.5) / min(n_pins, 6)
             pin = prog.instance(pin_proto, i)
@@ -645,7 +654,6 @@ def emit_wire_channel(prog: ShapeScript, seg, bus_type: BusType) -> ShapeRef | N
     """
     import math
 
-
     dx = seg.end[0] - seg.start[0]
     dy = seg.end[1] - seg.start[1]
     dz = seg.end[2] - seg.start[2]
@@ -733,9 +741,7 @@ def _emit_envelope_local(prog: ShapeScript, child: Body) -> ShapeRef | None:
         return prog.box(jw, jt, jl, align=ALIGN_MIN_Z)
 
     else:  # box
-        return prog.box(
-            dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol
-        )
+        return prog.box(dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol)
 
 
 def emit_child_clearance(
@@ -818,12 +824,14 @@ def compute_script(comp) -> ShapeScript:
     hole_r = 0.00275 / 2.0
     hole_depth = 0.002
     hole_proto = prog.cylinder(hole_r, hole_depth, tag="mounting_hole")
-    for i, (_label, pos) in enumerate([
-        ("hole_bl", (-0.029, -0.0115, 0)),
-        ("hole_br", (0.029, -0.0115, 0)),
-        ("hole_tl", (-0.029, 0.0115, 0)),
-        ("hole_tr", (0.029, 0.0115, 0)),
-    ]):
+    for i, (_label, pos) in enumerate(
+        [
+            ("hole_bl", (-0.029, -0.0115, 0)),
+            ("hole_br", (0.029, -0.0115, 0)),
+            ("hole_tl", (-0.029, 0.0115, 0)),
+            ("hole_tr", (0.029, 0.0115, 0)),
+        ]
+    ):
         hole = prog.instance(hole_proto, i)
         hole = prog.locate(hole, pos=pos)
         pcb = prog.cut(pcb, hole)

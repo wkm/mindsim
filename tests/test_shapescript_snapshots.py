@@ -139,24 +139,24 @@ class TestServoSnapshots:
 class TestBracketSnapshots:
     def test_bracket_solid_sts3215(self, request):
         from botcad.bracket import BracketSpec
-        from botcad.components.servo import STS3215
         from botcad.bracket import bracket_solid as bracket_solid_script
+        from botcad.components.servo import STS3215
 
         prog = bracket_solid_script(STS3215(), BracketSpec())
         _check_snapshot("bracket_solid_sts3215", _render_program(prog), request)
 
     def test_bracket_envelope_sts3215(self, request):
         from botcad.bracket import BracketSpec
-        from botcad.components.servo import STS3215
         from botcad.bracket import bracket_envelope as bracket_envelope_script
+        from botcad.components.servo import STS3215
 
         prog = bracket_envelope_script(STS3215(), BracketSpec())
         _check_snapshot("bracket_envelope_sts3215", _render_program(prog), request)
 
     def test_cradle_solid_sts3215(self, request):
         from botcad.bracket import BracketSpec
-        from botcad.components.servo import STS3215
         from botcad.bracket import cradle_solid as cradle_solid_script
+        from botcad.components.servo import STS3215
 
         prog = cradle_solid_script(STS3215(), BracketSpec())
         _check_snapshot("cradle_solid_sts3215", _render_program(prog), request)
