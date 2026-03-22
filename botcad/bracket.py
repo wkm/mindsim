@@ -30,6 +30,7 @@ from botcad.cad_utils import as_solid as _as_solid
 
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
+    from botcad.shapescript.program import ShapeScript
 
 
 def _cut_fastener_hole(shell, ear, ear_bottom_z: float, wall: float):
@@ -616,9 +617,7 @@ def _bracket_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def bracket_solid(
-    servo: ServoSpec, spec: BracketSpec | None = None
-) -> ShapeScript:
+def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
     """Build a bracket solid for wheel/linear applications as ShapeScript IR.
 
     Wraps ±X, ±Y, and -Z (unpowered horn side). The +Z face is open
@@ -1302,9 +1301,7 @@ def _cradle_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def cradle_solid(
-    servo: ServoSpec, spec: BracketSpec | None = None
-) -> ShapeScript:
+def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
     """Build a shallow-tray cradle as ShapeScript IR.
 
     Outer box - pocket - fastener holes - connector passage.
@@ -1810,9 +1807,7 @@ def _coupler_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
     return _as_solid(shell)
 
 
-def coupler_solid(
-    servo: ServoSpec, spec: BracketSpec | None = None
-) -> ShapeScript:
+def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
     """Build a C-shaped coupler as ShapeScript IR.
 
     Front plate + rear plate + side wall + horn holes + boss clearance,

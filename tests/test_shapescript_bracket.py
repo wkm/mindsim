@@ -10,19 +10,11 @@ import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.bracket import (
-    bracket_envelope as bracket_envelope_script,
-)
-from botcad.bracket import (
-    coupler_solid as coupler_solid_script,
-)
-from botcad.bracket import (
-    cradle_envelope as cradle_envelope_script,
-)
-from botcad.bracket import (
-    cradle_solid as cradle_solid_script,
-)
-from botcad.shapescript.backend_occt import OcctBackend
+from botcad.bracket import bracket_envelope as bracket_envelope_script  # noqa: E402
+from botcad.bracket import coupler_solid as coupler_solid_script  # noqa: E402
+from botcad.bracket import cradle_envelope as cradle_envelope_script  # noqa: E402
+from botcad.bracket import cradle_solid as cradle_solid_script  # noqa: E402
+from botcad.shapescript.backend_occt import OcctBackend  # noqa: E402
 
 
 def _servo():
