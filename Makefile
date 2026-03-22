@@ -57,7 +57,7 @@ lint:
 
 web:
 	pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \
-		"uv run mjpython main.py web --port 8081 --no-open" \
+		"uv run uvicorn mindsim.server:app --host 0.0.0.0 --port 8081 --reload --reload-dir botcad --reload-dir mindsim" \
 		"while ! curl -sf http://localhost:8081/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --open /viewer/"
 
 test-viewer:
