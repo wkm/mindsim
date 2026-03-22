@@ -13,6 +13,16 @@ Vec3 = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
 
 
+@dataclass(frozen=True)
+class Appearance:
+    """Visual properties for rendering. Emitters read this, never compute colors."""
+
+    color: RGBA
+    metallic: float = 0.0  # 0=plastic, 1=metal
+    roughness: float = 0.7  # surface roughness
+    opacity: float = 1.0  # transparency
+
+
 class BusType(StrEnum):
     """Wire bus protocol type."""
 
