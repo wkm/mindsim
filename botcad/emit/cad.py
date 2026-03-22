@@ -1280,13 +1280,17 @@ def _build_body_solid(
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
 ):
-    """Convenience wrapper — returns only the final solid from _build_body_solid.
+    """Build a body solid by executing its ShapeScript IR.
 
-    Kept for backward compatibility with tests. Production code (build_cad)
-    calls _build_body_solid directly.
+    This is the production path — ShapeScript IR is the single source of truth.
+    _build_body_solid() is kept for debug CadStep visualization only.
     """
-    steps = _build_body_solid(body, parent_joint, wire_segments)
-    return steps[-1].solid if steps else None
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.emit_body import emit_body_ir
+
+    prog = emit_body_ir(body, parent_joint, wire_segments)
+    result = OcctBackend().execute(prog)
+    return result.shapes[prog.output_ref.id]
 
 
 def make_body_solid_with_steps(
