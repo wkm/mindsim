@@ -162,7 +162,7 @@ def regen_component_renders() -> None:
 
 def regen_rom_renders() -> None:
     """Regenerate subassembly ROM validation renders."""
-    from botcad.bracket import BracketSpec, coupler_solid, cradle_solid, servo_solid
+    from botcad.bracket import BracketSpec, coupler_solid_solid as coupler_solid, cradle_solid_solid as cradle_solid, servo_solid
     from botcad.components import STS3215
     from botcad.validation import SolidPart, validate_subassembly
 

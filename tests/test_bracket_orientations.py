@@ -22,7 +22,7 @@ def main():
     from build123d import Align, Box, Location, export_stl
     from PIL import Image, ImageDraw
 
-    from botcad.bracket import bracket_envelope, bracket_solid, servo_solid
+    from botcad.bracket import bracket_envelope_solid as bracket_envelope, bracket_solid_solid as bracket_solid, servo_solid
     from botcad.cad_utils import as_solid
     from botcad.colors import COLOR_BRACKET, COLOR_STRUCTURE_DARK, Color
     from botcad.components import STS3215

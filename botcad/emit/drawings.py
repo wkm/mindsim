@@ -27,9 +27,9 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
 
     from botcad.bracket import (
         BracketSpec,
-        bracket_solid,
-        coupler_solid,
-        cradle_solid,
+        bracket_solid_solid,
+        coupler_solid_solid,
+        cradle_solid_solid,
         servo_solid,
     )
     from botcad.components import STS3215
@@ -43,9 +43,9 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     sx, sy, sz = servo.shaft_offset
 
     servo_body = servo_solid(servo)  # body-centered frame
-    pocket = bracket_solid(servo, spec)  # body-centered frame
-    cradle = cradle_solid(servo, spec)  # body-centered frame
-    coupler = coupler_solid(servo, spec)  # shaft-centered frame
+    pocket = bracket_solid_solid(servo, spec)  # body-centered frame
+    cradle = cradle_solid_solid(servo, spec)  # body-centered frame
+    coupler = coupler_solid_solid(servo, spec)  # shaft-centered frame
 
     # Shift body-centered solids into shaft-centered frame
     to_shaft = Location((-sx, -sy, -sz))
@@ -121,7 +121,7 @@ def emit_drawings(bot, output_dir: Path) -> list[Path]:
     """
     from build123d import Plane
 
-    from botcad.bracket import BracketSpec, bracket_solid, servo_solid
+    from botcad.bracket import BracketSpec, bracket_solid_solid, servo_solid
 
     drawings_dir = output_dir / "drawings"
     drawings_dir.mkdir(exist_ok=True)
@@ -137,7 +137,7 @@ def emit_drawings(bot, output_dir: Path) -> list[Path]:
             spec = BracketSpec()
 
             servo_body = servo_solid(servo)
-            bracket = bracket_solid(servo, spec)
+            bracket = bracket_solid_solid(servo, spec)
 
             body_x, body_y, body_z = servo.effective_body_dims
             shaft_top_z = body_z / 2

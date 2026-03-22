@@ -10,13 +10,11 @@ import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.shapescript.backend_occt import OcctBackend
-from botcad.shapescript.emit_bracket import (
-    bracket_envelope_script,
-    coupler_solid_script,
-    cradle_envelope_script,
-    cradle_solid_script,
-)
+from botcad.bracket import bracket_envelope as bracket_envelope_script  # noqa: E402
+from botcad.bracket import coupler_solid as coupler_solid_script  # noqa: E402
+from botcad.bracket import cradle_envelope as cradle_envelope_script  # noqa: E402
+from botcad.bracket import cradle_solid as cradle_solid_script  # noqa: E402
+from botcad.shapescript.backend_occt import OcctBackend  # noqa: E402
 
 
 def _servo():
@@ -39,7 +37,8 @@ class TestBracketEnvelopeRoundtrip:
     """bracket_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_envelope
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _bracket_envelope_b3d as bracket_envelope
 
         servo = _servo()
         spec = BracketSpec()
@@ -76,7 +75,8 @@ class TestSCS0009BracketEnvelopeRoundtrip:
     """SCS0009 bracket_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_envelope
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _bracket_envelope_b3d as bracket_envelope
         from botcad.components.servo import SCS0009
 
         servo = SCS0009()
@@ -117,7 +117,8 @@ class TestCradleEnvelopeRoundtrip:
     """cradle_envelope via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, cradle_envelope
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _cradle_envelope_b3d as cradle_envelope
 
         servo = _servo()
         spec = BracketSpec()
@@ -154,7 +155,8 @@ class TestCradleSolidRoundtrip:
     """cradle_solid via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, cradle_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _cradle_solid_b3d as cradle_solid
 
         servo = _servo()
         spec = BracketSpec()
@@ -191,7 +193,8 @@ class TestCouplerSolidRoundtrip:
     """coupler_solid via ShapeScript must match direct build123d volume."""
 
     def test_volume_matches(self):
-        from botcad.bracket import BracketSpec, coupler_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _coupler_solid_b3d as coupler_solid
 
         servo = _servo()
         spec = BracketSpec()
@@ -217,9 +220,10 @@ class TestBracketSolidScript:
     """bracket_solid via ShapeScript must match direct build123d volume."""
 
     def test_sts3215_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _bracket_solid_b3d as bracket_solid
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import STS3215
-        from botcad.shapescript.emit_bracket import bracket_solid_script
 
         servo = STS3215()
         spec = BracketSpec()
@@ -236,9 +240,10 @@ class TestBracketSolidScript:
         )
 
     def test_scs0009_volume_matches(self):
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _bracket_solid_b3d as bracket_solid
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import SCS0009
-        from botcad.shapescript.emit_bracket import bracket_solid_script
 
         servo = SCS0009()
         spec = BracketSpec()
@@ -256,8 +261,8 @@ class TestBracketSolidScript:
 
     def test_sts3215_has_shapescript_ops(self):
         """STS3215 bracket should use native ShapeScript ops, not just PrebuiltOp."""
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import STS3215
-        from botcad.shapescript.emit_bracket import bracket_solid_script
         from botcad.shapescript.ops import BoxOp, CutOp, CylinderOp
 
         servo = STS3215()
@@ -271,8 +276,8 @@ class TestBracketSolidScript:
 
     def test_scs0009_has_native_ops(self):
         """SCS0009 bracket should use native Box/Cylinder/Cut ops."""
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import SCS0009
-        from botcad.shapescript.emit_bracket import bracket_solid_script
         from botcad.shapescript.ops import BoxOp, CutOp, CylinderOp
 
         servo = SCS0009()
@@ -285,7 +290,7 @@ class TestBracketSolidScript:
         assert len(prog.ops) > 5
 
     def test_output_ref_set(self):
-        from botcad.shapescript.emit_bracket import bracket_solid_script
+        from botcad.bracket import bracket_solid as bracket_solid_script
 
         servo = _servo()
         prog = bracket_solid_script(servo)
@@ -297,8 +302,8 @@ class TestConnectorPortNative:
 
     def test_bracket_sts3215_no_prebuilt_connector(self):
         """STS3215 bracket connector port should not use PrebuiltOp."""
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import STS3215
-        from botcad.shapescript.emit_bracket import bracket_solid_script
         from botcad.shapescript.ops import PrebuiltOp
 
         servo = STS3215()
@@ -326,9 +331,10 @@ class TestConnectorPortNative:
 
     def test_bracket_sts3215_connector_volume_matches(self):
         """STS3215 bracket with connector port: IR volume matches direct."""
-        from botcad.bracket import BracketSpec, bracket_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _bracket_solid_b3d as bracket_solid
+        from botcad.bracket import bracket_solid as bracket_solid_script
         from botcad.components.servo import STS3215
-        from botcad.shapescript.emit_bracket import bracket_solid_script
 
         servo = STS3215()
         spec = BracketSpec()
@@ -347,7 +353,8 @@ class TestConnectorPortNative:
 
     def test_cradle_sts3215_connector_volume_matches(self):
         """STS3215 cradle with connector port: IR volume matches direct."""
-        from botcad.bracket import BracketSpec, cradle_solid
+        from botcad.bracket import BracketSpec
+        from botcad.bracket import _cradle_solid_b3d as cradle_solid
         from botcad.components.servo import STS3215
 
         servo = STS3215()
