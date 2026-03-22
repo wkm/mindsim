@@ -29,7 +29,7 @@ from botcad.colors import (
 from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
 from botcad.geometry import rotate_vec, rotation_between
-from botcad.skeleton import BaseType, BodyShape
+from botcad.skeleton import BaseType
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -704,16 +704,12 @@ def _body_color(body: Body) -> str:
 
 
 def _body_color_rgb(body: Body) -> tuple[float, float, float]:
-    """Shape-based body color. Shared between CAD and MuJoCo emitters."""
-    from botcad.colors import BP_GRAY5
-
-    if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
-        return COLOR_STRUCTURE_DARK.rgb  # dark gray: wheels
-    if body.shape is BodyShape.TUBE:
-        return BP_GRAY5  # light gray: structural tubes
-    if body.shape is BodyShape.JAW:
-        return COLOR_STRUCTURE_BODY.rgb  # light gray: gripper jaw
-    return COLOR_STRUCTURE_BODY.rgb  # default: printed bracket
+    """Read body color from appearance. Fallback to shape-based default."""
+    if body.appearance is not None:
+        r, g, b, _a = body.appearance.color
+        return (r, g, b)
+    # Fallback for bodies without appearance (shouldn't happen after solve)
+    return COLOR_STRUCTURE_BODY.rgb
 
 
 def _z_to_axis_quat(
