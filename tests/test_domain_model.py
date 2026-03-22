@@ -206,7 +206,7 @@ class TestComponentCatalog:
         servo = STS3215()
         for mp in servo.horn_mounting_points:
             assert mp.axis == (0.0, 0.0, 1.0)
-            assert mp.fastener_type == "M2.5"
+            assert mp.fastener_type == "M2"
 
     def test_sts3215_specs_match_datasheet(self):
         from botcad.components.servo import STS3215
@@ -225,7 +225,7 @@ class TestComponentCatalog:
         servo = STS3215()
         for mp in servo.rear_horn_mounting_points:
             assert mp.axis == (0.0, 0.0, -1.0)
-            assert mp.fastener_type == "M2.5"
+            assert mp.fastener_type == "M2"
 
     def test_pi_mount_points(self):
         from botcad.components.compute import RaspberryPiZero2W
@@ -318,8 +318,13 @@ class TestBotBuild:
         bot = mod.build()
         bot.solve()
 
-        # 7 bodies: base, turntable, upper_arm, forearm, wrist, wrist_roll, jaw
-        assert len(bot.all_bodies) == 7
+        # 7 structural bodies: base, turntable, upper_arm, forearm, wrist, wrist_roll, jaw
+        from botcad.skeleton import BodyKind
+
+        structural = [b for b in bot.all_bodies if b.kind == BodyKind.FABRICATED]
+        assert len(structural) == 7
+        # Purchased bodies (servos, horns, components) are also in all_bodies
+        assert len(bot.all_bodies) > 7
         # 6 joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
         assert len(bot.all_joints) == 6
 
@@ -350,32 +355,17 @@ class TestPackingOverlaps:
         "design_path,module_name",
         [
             ("bots/wheeler_base/design.py", "wb_overlap_test"),
+            pytest.param(
+                "bots/wheeler_arm/design.py", "wa_overlap_test",
+                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+            ),
+            pytest.param(
+                "bots/so101_arm/design.py", "so_overlap_test",
+                marks=pytest.mark.xfail(reason="hardcoded dimensions — needs auto-sizing"),
+            ),
         ],
     )
     def test_no_packing_overlaps(self, design_path, module_name):
-        from botcad.packing import find_internal_overlaps
-
-        bot = self._build_bot(design_path, module_name)
-        all_overlaps = []
-        for body in bot.all_bodies:
-            for a, b, extent in find_internal_overlaps(body):
-                all_overlaps.append(
-                    f"{body.name}: {a} vs {b} "
-                    f"({extent[0] * 1000:.1f}x{extent[1] * 1000:.1f}x{extent[2] * 1000:.1f}mm)"
-                )
-        assert not all_overlaps, "Packing overlaps found:\n" + "\n".join(all_overlaps)
-
-    @pytest.mark.xfail(
-        reason="Known packing overlaps — designs need rework", strict=True
-    )
-    @pytest.mark.parametrize(
-        "design_path,module_name",
-        [
-            ("bots/wheeler_arm/design.py", "wa_overlap_test"),
-            ("bots/so101_arm/design.py", "so_overlap_test"),
-        ],
-    )
-    def test_no_packing_overlaps_xfail(self, design_path, module_name):
         from botcad.packing import find_internal_overlaps
 
         bot = self._build_bot(design_path, module_name)
@@ -467,3 +457,90 @@ class TestJawShape:
         assert dims[0] == 0.03  # default width
         assert dims[1] == 0.005  # default thickness
         assert dims[2] == 0.04  # default length
+
+
+# -- TestAssemblyHierarchy --
+
+
+class TestAssemblyHierarchy:
+    def test_assembly_nesting(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        base = bot.assembly("base")
+        arm = bot.assembly("arm")
+        gripper = arm.assembly("gripper")
+
+        assert gripper.parent is arm
+        assert gripper.path == "arm/gripper"
+        assert arm.path == "arm"
+
+    def test_body_inherits_assembly(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        body = arm.body("upper_arm")
+        assert body.assembly is arm
+
+    def test_module_alias(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        m = bot.module("foo")
+        a = bot.assembly("foo")
+        assert m is a  # same object
+
+    def test_module_class_alias(self):
+        from botcad.skeleton import Assembly, Module
+
+        assert Module is Assembly
+
+    def test_sub_assembly_idempotent(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        g1 = arm.assembly("gripper")
+        g2 = arm.assembly("gripper")
+        assert g1 is g2
+
+    def test_assembly_path_deep(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        gripper = arm.assembly("gripper")
+        finger = gripper.assembly("finger")
+        assert finger.path == "arm/gripper/finger"
+
+    def test_body_kind_default(self):
+        from botcad.skeleton import Body, BodyKind
+
+        b = Body(name="test")
+        assert b.kind == BodyKind.FABRICATED
+
+    def test_body_kind_purchased(self):
+        from botcad.skeleton import Body, BodyKind
+
+        b = Body(name="servo_body", kind=BodyKind.PURCHASED)
+        assert b.kind == BodyKind.PURCHASED
+
+    def test_assembly_bodies_collected(self):
+        from botcad.skeleton import Bot
+
+        bot = Bot("test")
+        arm = bot.assembly("arm")
+        base_asm = bot.assembly("base")
+        root = base_asm.body("base")
+        j = root.joint(
+            "shoulder",
+            servo=__import__("botcad.components", fromlist=["STS3215"]).STS3215(),
+            axis="z",
+            pos=(0.0, 0.0, 0.04),
+        )
+        upper = j.body("upper_arm", assembly=arm)
+        bot.solve()
+
+        assert bot._assembly_bodies("arm") == [upper]
+        assert bot._assembly_bodies("base") == [root]

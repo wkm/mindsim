@@ -45,12 +45,21 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 | base | `meshes/base.stl` | box | 130.0 x 80.0 x 45.0 |
 | left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
+| servo_left_wheel | `meshes/servo_left_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_left_wheel | `meshes/horn_left_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_right_wheel | `meshes/servo_right_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_right_wheel | `meshes/horn_right_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_battery | `meshes/comp_base_battery.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_camera | `meshes/comp_base_camera.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_pi | `meshes/comp_base_pi.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_left_rim_wheel | `meshes/comp_left_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_right_rim_wheel | `meshes/comp_right_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
 
 ## Assembly Sequence
 
 1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–2 as listed above.
 
-2. **Print structural parts** — Print all 3 body shells from the STL files listed above.
+2. **Print structural parts** — Print all 12 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
    - Mount LiPo2S-1000 (battery) at bottom position

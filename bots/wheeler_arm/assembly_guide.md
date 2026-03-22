@@ -57,12 +57,29 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 | upper_arm | `meshes/upper_arm.stl` | tube | 36.0 x 36.0 x 147.5 |
 | forearm | `meshes/forearm.stl` | tube | 32.0 x 32.0 x 100.0 |
 | hand | `meshes/hand.stl` | box | 40.0 x 40.0 x 30.0 |
+| servo_left_wheel | `meshes/servo_left_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_left_wheel | `meshes/horn_left_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_right_wheel | `meshes/servo_right_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_right_wheel | `meshes/horn_right_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_shoulder_yaw | `meshes/servo_shoulder_yaw.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_shoulder_yaw | `meshes/horn_shoulder_yaw.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_pi | `meshes/comp_base_pi.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_battery | `meshes/comp_base_battery.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_left_rim_wheel | `meshes/comp_left_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_right_rim_wheel | `meshes/comp_right_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_shoulder_pitch | `meshes/servo_shoulder_pitch.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_shoulder_pitch | `meshes/horn_shoulder_pitch.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_elbow | `meshes/servo_elbow.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_elbow | `meshes/horn_elbow.stl` | box | 50.0 x 50.0 x 50.0 |
+| servo_wrist | `meshes/servo_wrist.stl` | box | 50.0 x 50.0 x 50.0 |
+| horn_wrist | `meshes/horn_wrist.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_hand_camera | `meshes/comp_hand_camera.stl` | box | 50.0 x 50.0 x 50.0 |
 
 ## Assembly Sequence
 
 1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–6 as listed above.
 
-2. **Print structural parts** — Print all 7 body shells from the STL files listed above.
+2. **Print structural parts** — Print all 24 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
    - Mount RaspberryPiZero2W (pi) at center position using 4x M2.5

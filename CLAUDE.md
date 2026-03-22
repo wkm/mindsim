@@ -35,6 +35,21 @@ make validate
 - **Commit logs are a journal.** Explain _why_, not just _what_.
 - Work with the user on improvement. Emit logs from interactions that will help you understand what a user did and what happened when they report a bug. Don't commit these logs.
 
+## ShapeScript (Intermediate Representation)
+
+The CAD pipeline uses ShapeScript, an intermediate representation between parametric design code and build123d/OCCT. It enables caching, swappable backends, and step-by-step visual debugging.
+
+```bash
+uv run mjpython main.py view --bot wheeler_arm              # Uses ShapeScript by default
+uv run python main.py shapescript-debug --bot wheeler_arm --body base  # Step-by-step Rerun debugger
+SHAPESCRIPT=0 uv run mjpython main.py view --bot wheeler_arm # Bypass ShapeScript (legacy direct path)
+```
+
+- **Default:** ShapeScript is enabled by default. Set `SHAPESCRIPT=0` to fall back to the direct build123d path.
+- **Debug:** `shapescript-debug` subcommand builds a body via ShapeScript and launches Rerun with per-op mesh snapshots.
+- **Architecture:** `emit_body_ir()` translates `_make_body_solid()` logic into typed ShapeScript ops (`botcad/shapescript/ops.py`). `OcctBackend` executes the ShapeScript against build123d. Bracket/component solids are injected as `PrebuiltOp`.
+- **Key files:** `botcad/shapescript/emit_body.py`, `botcad/shapescript/backend_occt.py`, `botcad/shapescript/program.py`, `botcad/shapescript/ops.py`
+
 ## Development
 
 ## Workflow Preferences

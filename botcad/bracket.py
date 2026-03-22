@@ -525,9 +525,11 @@ def horn_disc_params(
             max_r = r
     radius = max_r + material_margin
 
-    # Thickness: Z span from shaft face to top of horn screws
+    # Thickness: Z span from shaft face to top of horn screws.
+    # Minimum 2mm — when all mounting points are at the same Z (on the horn
+    # face), the span is 0 but the physical disc is ~2mm thick.
     max_z = max(mp.pos[2] for mp in servo.horn_mounting_points)
-    thickness = max_z - sz
+    thickness = max(max_z - sz, 0.002)
 
     center_z = sz + thickness / 2
 

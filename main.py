@@ -579,6 +579,10 @@ _bots_json: bytes | None = None
 _cad_steps_cache: dict[tuple[str, str], list] = {}
 _cad_steps_lock = threading.Lock()
 
+# Component ShapeScript steps cache: component_name → list[CadStep]
+_component_steps_cache: dict[str, list] = {}
+_component_steps_lock = threading.Lock()
+
 # Bot object cache: bot_name → (bot, cad_model)
 _bot_cache: dict[str, tuple] = {}
 _bot_cache_lock = threading.Lock()
@@ -643,16 +647,117 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
     wire_segs = cad.body_wire_segments.get(body_name)
     wire_segs_tuple = tuple(wire_segs) if wire_segs else None
 
-    from botcad.emit.cad import make_body_solid_with_steps
+    use_shapescript = os.environ.get("SHAPESCRIPT", "1") == "1"
 
     t0 = time.monotonic()
     print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
-    steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+
+    if use_shapescript:
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+        from botcad.shapescript.emit_body import emit_body_ir
+
+        prog = emit_body_ir(target, parent_joint, wire_segs_tuple)
+        result = OcctBackend().execute(prog)
+        steps = shapescript_to_cad_steps(prog, result)
+    else:
+        from botcad.emit.cad import make_body_solid_with_steps
+
+        steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
+
     t1 = time.monotonic()
     print(f"[cad-steps]   {len(steps)} steps in {t1 - t0:.1f}s")
 
     with _cad_steps_lock:
         _cad_steps_cache[cache_key] = steps
+    return steps
+
+
+def _get_component_steps(comp_name: str, registry: dict) -> list:
+    """Get cached ShapeScript steps for a component, computing on first access.
+
+    Looks up the component in the registry, finds a matching *_script()
+    emitter in botcad.shapescript.emit_components, executes it, and
+    converts the result to CadStep objects.
+
+    Raises KeyError if no ShapeScript emitter exists for this component.
+    """
+    with _component_steps_lock:
+        if comp_name in _component_steps_cache:
+            return _component_steps_cache[comp_name]
+
+    # Handle "horn:SERVO_NAME" prefix — horn script for a specific servo
+    if comp_name.startswith("horn:"):
+        servo_name = comp_name[5:]
+        if servo_name not in registry:
+            raise KeyError(f"Unknown servo for horn: {servo_name}")
+        _factory, comp, _cat = registry[servo_name]
+        from botcad.shapescript.emit_components import horn_script
+
+        prog = horn_script(comp)
+        if prog is None:
+            raise KeyError(f"No horn for servo: {servo_name}")
+
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+
+        result = OcctBackend().execute(prog)
+        steps = shapescript_to_cad_steps(prog, result)
+        with _component_steps_lock:
+            _component_steps_cache[comp_name] = steps
+        return steps
+
+    if comp_name not in registry:
+        raise KeyError(f"Unknown component: {comp_name}")
+
+    _factory, comp, category = registry[comp_name]
+
+    # Auto-discover emitter: try {category}_script in emit_components
+    from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+    from botcad.shapescript import emit_components
+
+    script_fn = None
+    if isinstance(comp, CameraSpec):
+        script_fn = emit_components.camera_script
+    elif isinstance(comp, BatterySpec):
+        script_fn = emit_components.battery_script
+    elif isinstance(comp, BearingSpec):
+        script_fn = emit_components.bearing_script
+    elif isinstance(comp, ServoSpec):
+        from botcad.shapescript.emit_servo import servo_script
+
+        script_fn = servo_script
+    elif comp.is_wheel:
+        script_fn = emit_components.wheel_component_script
+    else:
+        # Fallback: try {category}_script
+        fn = getattr(emit_components, f"{category}_script", None)
+        if callable(fn):
+            script_fn = fn
+
+    if script_fn is None:
+        raise KeyError(f"No ShapeScript emitter for component: {comp_name}")
+
+    import time
+
+    t0 = time.monotonic()
+    print(f"[shapescript] Building steps for component {comp_name}...")
+
+    prog = script_fn(comp)
+    if prog is None:
+        raise KeyError(f"ShapeScript emitter returned None for: {comp_name}")
+
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+
+    result = OcctBackend().execute(prog)
+    steps = shapescript_to_cad_steps(prog, result)
+
+    t1 = time.monotonic()
+    print(f"[shapescript]   {len(steps)} steps in {t1 - t0:.1f}s")
+
+    with _component_steps_lock:
+        _component_steps_cache[comp_name] = steps
     return steps
 
 
@@ -829,6 +934,24 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         m = re.match(r"^/api/bots/([^/]+)/body/([^/]+)/cad-steps/(\d+)/tool-stl$", path)
         if m:
             self._handle_cad_step_tool_stl(m.group(1), m.group(2), int(m.group(3)))
+            return
+
+        # /api/components/<name>/shapescript
+        m = re.match(r"^/api/components/([^/]+)/shapescript$", path)
+        if m:
+            self._handle_component_shapescript(m.group(1))
+            return
+
+        # /api/components/<name>/shapescript/<idx>/stl
+        m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/stl$", path)
+        if m:
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="solid")
+            return
+
+        # /api/components/<name>/shapescript/<idx>/tool-stl
+        m = re.match(r"^/api/components/([^/]+)/shapescript/(\d+)/tool-stl$", path)
+        if m:
+            self._handle_component_step_stl(m.group(1), int(m.group(2)), attr="tool")
             return
 
         # /api/components/<name>/stl/<part>
@@ -1008,6 +1131,71 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
         self._send_json(json.dumps({"fasteners": fasteners}).encode())
 
+    def _handle_component_shapescript(self, name: str):
+        """Return JSON metadata for ShapeScript construction steps of a component."""
+        try:
+            steps = _get_component_steps(name, self.component_registry)
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"ShapeScript step generation failed: {e}")
+            return
+
+        payload = json.dumps(
+            {
+                "component": name,
+                "steps": [
+                    {
+                        "index": i,
+                        "label": s.label,
+                        "op": s.op,
+                        "has_tool": s.tool is not None,
+                        "script": getattr(s, "script", ""),
+                    }
+                    for i, s in enumerate(steps)
+                ],
+            }
+        ).encode()
+        self._send_json(payload)
+
+    def _handle_component_step_stl(self, name: str, step_idx: int, attr: str):
+        """Serve STL bytes for a component ShapeScript step's solid or tool."""
+        cache_key = (f"compstep_{attr}_{name}", str(step_idx))
+        with _stl_cache_lock:
+            cached = _stl_cache.get(cache_key)
+        if cached:
+            self._send_binary(cached, f"{name}_step{step_idx}_{attr}.stl")
+            return
+
+        try:
+            steps = _get_component_steps(name, self.component_registry)
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"ShapeScript step generation failed: {e}")
+            return
+
+        if step_idx < 0 or step_idx >= len(steps):
+            self.send_error(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
+            return
+
+        solid = getattr(steps[step_idx], attr, None)
+        if solid is None:
+            self.send_error(404, f"Step {step_idx} has no {attr}")
+            return
+
+        try:
+            stl_bytes = _solid_to_stl_bytes(solid)
+        except Exception as e:
+            self.send_error(500, f"STL export failed for step {step_idx} {attr}: {e}")
+            return
+
+        with _stl_cache_lock:
+            _stl_cache[cache_key] = stl_bytes
+        self._send_binary(stl_bytes, f"{name}_step{step_idx}_{attr}.stl")
+
     def _handle_cad_steps_meta(self, bot_name: str, body_name: str):
         """Return JSON metadata for all CAD construction steps of a body."""
         try:
@@ -1032,6 +1220,8 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
                         "label": s.label,
                         "op": s.op,
                         "has_tool": s.tool is not None,
+                        "group": getattr(s, "group", None),
+                        "script": getattr(s, "script", ""),
                     }
                     for i, s in enumerate(steps)
                 ],
@@ -1115,14 +1305,14 @@ def _run_web_viewer(bot_name: str | None, port: int = 8080, no_open: bool = Fals
                 spec = importlib.util.spec_from_file_location("design", design_py)
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-                bot = mod.build()
-                bot.solve()
-                from botcad.emit.viewer import emit_viewer_manifest
-
-                emit_viewer_manifest(bot, bot_dir)
-                print(f"Generated viewer_manifest.json for {bot_name}")
+                bot_obj = mod.build()
+                bot_obj.solve()
+                # Full emit: meshes, MuJoCo XML, BOM, manifest, renders.
+                # ShapeScript cache makes this fast for unchanged bodies.
+                bot_obj.emit()
+                print(f"Regenerated {bot_name} (design.py newer than manifest)")
             except Exception as e:
-                print(f"Warning: could not generate viewer manifest: {e}")
+                print(f"Warning: could not regenerate {bot_name}: {e}")
 
     # Build component registry for API
     print("Building component registry...")
@@ -1316,6 +1506,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Random seed for target placement (only with --regenerate)",
     )
 
+    # shapescript-debug
+    p_irdebug = sub.add_parser(
+        "shapescript-debug", help="Step-by-step ShapeScript debugger (Rerun)"
+    )
+    p_irdebug.add_argument(
+        "--bot", type=str, default=None, help="Bot name (default: wheeler_arm)"
+    )
+    p_irdebug.add_argument(
+        "--body",
+        type=str,
+        default=None,
+        help="Body name to debug (default: first body)",
+    )
+
     return parser
 
 
@@ -1464,6 +1668,9 @@ def main():
         pipeline = pipeline_for_bot(bot_name)
         print(pipeline.describe())
 
+    elif args.command == "shapescript-debug":
+        _run_shapescript_debug(args.bot, args.body)
+
     elif args.command == "replay":
         from viz.replay import run_replay
 
@@ -1477,6 +1684,52 @@ def main():
             regenerate=args.regenerate,
             last_n=args.last,
         )
+
+
+def _run_shapescript_debug(bot_name: str | None, body_name: str | None):
+    """Build a bot via ShapeScript and launch Rerun debugger for a body."""
+    import importlib
+
+    bot_name = bot_name or "wheeler_arm"
+    mod = importlib.import_module(f"bots.{bot_name}.design")
+    bot = mod.build()
+    bot.solve()
+
+    # Find parent joint and wire segments for the target body
+    pj_map = {}
+    for j in bot.all_joints:
+        if j.child is not None:
+            pj_map[j.child.name] = j
+    ws_map: dict[str, list] = {}
+    for r in bot.wire_routes:
+        for seg in r.segments:
+            ws_map.setdefault(seg.body_name, []).append((seg, r.bus_type))
+
+    # Select body
+    if body_name is None:
+        body = bot.all_bodies[0]
+    else:
+        matches = [b for b in bot.all_bodies if b.name == body_name]
+        if not matches:
+            names = [b.name for b in bot.all_bodies]
+            print(f"Body '{body_name}' not found. Available: {names}", file=sys.stderr)
+            sys.exit(1)
+        body = matches[0]
+
+    pj = pj_map.get(body.name)
+    ws = tuple(ws_map.get(body.name, [])) or None
+
+    print(
+        f"Debugging {bot_name}/{body.name} ({len(body.joints)} joints, "
+        f"{len(body.mounts)} mounts)"
+    )
+
+    from botcad.shapescript.debug_rerun import debug_program
+    from botcad.shapescript.emit_body import emit_body_ir
+
+    prog = emit_body_ir(body, pj, ws)
+    print(f"ShapeScript program: {len(prog.ops)} ops")
+    debug_program(prog, spawn_viewer=True)
 
 
 def _validate_rewards(bot_name: str | None):

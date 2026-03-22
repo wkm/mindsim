@@ -44,13 +44,8 @@ export const BP = {
 // ---------------------------------------------------------------------------
 export const RENDER_ORDER = {
   SECTION_VIZ:      -100,
-  STENCIL_BACK:        0,
-  STENCIL_FRONT:       1,
-  STENCIL_CAP:         2,
   SECTION_CONTOUR:  9000,
 };
-export const SECTION_STENCIL_BASE = 100;
-export const SECTION_STENCIL_STRIDE = 10;
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -213,15 +208,18 @@ const EdgeDetectShader = {
  */
 export function createEdgeComposer(renderer, scene, camera) {
   const size = renderer.getSize(new THREE.Vector2());
+  const dpr = renderer.getPixelRatio();
+  const fullW = Math.round(size.x * dpr);
+  const fullH = Math.round(size.y * dpr);
 
-  // Normal render target
-  const normalTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+  // Normal render target — at full device resolution for crisp edges
+  const normalTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
     type: THREE.FloatType,
   });
   const normalMaterial = new THREE.MeshNormalMaterial();
 
-  // Depth render target
-  const depthTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+  // Depth render target — at full device resolution
+  const depthTarget = new THREE.WebGLRenderTarget(fullW, fullH, {
     type: THREE.FloatType,
   });
   const depthMaterial = new THREE.MeshDepthMaterial({
@@ -231,10 +229,11 @@ export function createEdgeComposer(renderer, scene, camera) {
   // Composer: color pass + edge detection pass
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
+  renderPass.clearDepth = true;
   composer.addPass(renderPass);
 
   const edgePass = new ShaderPass(EdgeDetectShader);
-  edgePass.uniforms.resolution.value.copy(size);
+  edgePass.uniforms.resolution.value.set(fullW, fullH);
   edgePass.uniforms.edgeColor.value.set(EDGE_COLOR);
   composer.addPass(edgePass);
 
@@ -242,12 +241,15 @@ export function createEdgeComposer(renderer, scene, camera) {
     composer,
 
     render() {
-      // Hide non-mesh objects (grid, helpers, markers) for edge passes
+      // Hide non-mesh objects and the section viz plane for edge passes.
+      // Hide non-mesh objects AND section cap geometry from edge passes.
+      // Cap triangles create false edges in the normal/depth detection.
       const hidden = [];
       scene.traverse(child => {
         if (child.visible && (child.isGridHelper || child.isLineSegments ||
             child.isLine || child.isSprite || child.isPoints ||
-            child.constructor.name === 'LineSegments2')) {
+            child.constructor.name === 'LineSegments2' ||
+            child.userData._vpSec || child.userData._vpCap)) {
           child.visible = false;
           hidden.push(child);
         }
@@ -279,10 +281,13 @@ export function createEdgeComposer(renderer, scene, camera) {
     },
 
     resize(w, h) {
-      normalTarget.setSize(w, h);
-      depthTarget.setSize(w, h);
+      const pr = renderer.getPixelRatio();
+      const pw = Math.round(w * pr);
+      const ph = Math.round(h * pr);
+      normalTarget.setSize(pw, ph);
+      depthTarget.setSize(pw, ph);
       composer.setSize(w, h);
-      edgePass.uniforms.resolution.value.set(w, h);
+      edgePass.uniforms.resolution.value.set(pw, ph);
     },
   };
 }

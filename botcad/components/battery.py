@@ -64,9 +64,11 @@ def battery_solid(spec: BatterySpec):
         cell_w = length / 2 - 0.001
         cell = Box(w, cell_w, h, align=C)
         cell = _as_solid(cell).fillet(0.003, cell.edges())
-        body = cell.locate(Location((0, -length / 4, 0))).fuse(
-            cell.locate(Location((0, length / 4, 0)))
-        )
+        # Use .moved() not .locate() — .locate() mutates in place and
+        # corrupts the cached cell, causing both halves to overlap.
+        cell_neg = _as_solid(cell.moved(Location((0, -length / 4, 0))))
+        cell_pos = _as_solid(cell.moved(Location((0, length / 4, 0))))
+        body = _as_solid(cell_neg.fuse(cell_pos))
     else:
         body = Box(w, length, h, align=C)
         body = _as_solid(body).fillet(0.003, body.edges())

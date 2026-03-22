@@ -38,7 +38,7 @@ from botcad.bracket import (
 from botcad.cad_utils import as_solid as _as_solid
 from botcad.component import BearingSpec, BusType, CameraSpec
 from botcad.geometry import quat_to_euler
-from botcad.skeleton import BodyShape, BracketStyle
+from botcad.skeleton import BodyKind, BodyShape, BracketStyle
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,6 @@ class CadModel:
 
     body_solids: dict[str, object]  # body_name → build123d Solid
     parent_joint_map: dict[str, Joint]  # body_name → parent Joint
-    world_positions: dict[str, tuple[float, float, float]]  # body_name → (x, y, z)
     rigid_groups: dict[str, list[Body]]  # group_name → [Body, ...]
     body_wire_segments: dict[str, list[tuple]]  # body_name → [(seg, bus_type), ...]
 
@@ -66,7 +65,7 @@ class AssemblyPart:
     """A positioned CAD solid in the assembly, tagged with metadata."""
 
     solid: object  # build123d Solid (positioned in world frame)
-    module: str | None  # fabrication module name, or None
+    assembly: str | None  # assembly name, or None
     kind: str  # "body" | "horn" | "servo"
     label: str  # human-readable identifier
 
@@ -79,6 +78,37 @@ class CadStep:
     solid: object  # build123d Solid at this stage
     op: str  # "create" | "cut" | "union"
     tool: object | None = None  # cutting/union tool solid (placed in body frame)
+    group: str | None = None  # CallOp sub-program key, for viewer grouping
+    script: str = ""  # ShapeScript code line, e.g. "cut_3 = Cut(box_0, loc_2)"
+
+
+def _solid_to_brep_bytes(solid) -> bytes:
+    """Serialize a build123d Solid to BREP format bytes."""
+    import tempfile
+
+    from build123d import export_brep
+
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=True) as tmp:
+        export_brep(solid, tmp.name)
+        return Path(tmp.name).read_bytes()
+
+
+def _solid_from_brep_bytes(brep_bytes: bytes):
+    """Deserialize a build123d Solid from BREP format bytes."""
+    import tempfile
+
+    from build123d import import_brep
+
+    with tempfile.NamedTemporaryFile(suffix=".brep", delete=True) as tmp:
+        Path(tmp.name).write_bytes(brep_bytes)
+        return import_brep(tmp.name)
+
+
+def _restore_mass_from_cache(body: Body, cached: dict) -> None:
+    """Restore mass properties from cache instead of recomputing from solid."""
+    body.solved_mass = cached["mass"]
+    body.solved_com = cached["com"]
+    body.solved_inertia = cached["inertia"]
 
 
 def _update_mass_from_solid(body: Body, solid) -> None:
@@ -262,6 +292,50 @@ def make_component_solid(component: Component):
     )
 
 
+def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
+    """Get or create the ShapeScript program for any body (fabricated or purchased)."""
+    from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+
+    if body.kind == BodyKind.FABRICATED:
+        from botcad.shapescript.emit_body import emit_body_ir
+
+        pj = parent_joint_map.get(body.name)
+        wire_segs = tuple(body_wire_segments.get(body.name, []))
+        return emit_body_ir(body, pj, wire_segs or None)
+
+    # Purchased body — route to the appropriate script emitter
+    comp = body._component
+    if comp is None:
+        return None
+
+    from botcad.shapescript import emit_components
+
+    if isinstance(comp, ServoSpec):
+        if body.name.startswith("horn_"):
+            return emit_components.horn_script(comp)
+        from botcad.shapescript.emit_servo import servo_script
+
+        return servo_script(comp)
+    elif isinstance(comp, CameraSpec):
+        return emit_components.camera_script(comp)
+    elif isinstance(comp, BatterySpec):
+        return emit_components.battery_script(comp)
+    elif isinstance(comp, BearingSpec):
+        return emit_components.bearing_script(comp)
+    elif comp.is_wheel:
+        return emit_components.wheel_component_script(comp)
+    else:
+        # Try category-based lookup
+        # Component category is derived from the module it came from
+        fn = getattr(emit_components, "compute_script", None)
+        if callable(fn):
+            try:
+                return fn(comp)
+            except Exception:
+                pass
+    return None
+
+
 def build_cad(bot: Bot) -> CadModel:
     """Build all body solids and refine mass/inertia from actual geometry.
 
@@ -274,8 +348,9 @@ def build_cad(bot: Bot) -> CadModel:
         if joint.child is not None:
             parent_joint_map[joint.child.name] = joint
 
-    # Compute world-frame position for each body (rest pose, all joints at 0)
-    world_positions = _compute_world_positions(bot)
+    # World-frame positions are now computed during bot.solve() and stored
+    # on each Body as body.world_pos / body.world_quat.  No need to
+    # recompute here.
 
     # Group bodies into rigid parts (separated at servo joints)
     rigid_groups = _collect_rigid_groups(bot)
@@ -289,27 +364,121 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
+    import os
+
+    use_shapescript = os.environ.get("SHAPESCRIPT", "1") == "1"
 
     body_solids: dict[str, object] = {}
+    if use_shapescript:
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.cache import DiskCache
+
+        ir_backend = OcctBackend()
+        cache = DiskCache()
+        cache_hits = 0
+
+    # Build geometry for ALL bodies — fabricated and purchased.
+    # Fabricated bodies use emit_body_ir (complex structural geometry).
+    # Purchased bodies use component-specific script emitters.
     n = len(bot.all_bodies)
     for i, body in enumerate(bot.all_bodies):
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
-        pj = parent_joint_map.get(body.name)
-        wire_segs = tuple(body_wire_segments.get(body.name, []))
-        steps = _build_body_solid(body, pj, wire_segs or None)
-        solid = steps[-1].solid if steps else None
+
+        if use_shapescript:
+            prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
+            if prog is None:
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (no script)")
+                continue
+
+            body.shapescript = prog
+            cached = cache.get(prog)
+            if cached is not None:
+                solid = _solid_from_brep_bytes(cached["brep"])
+                if body.kind == BodyKind.FABRICATED:
+                    _restore_mass_from_cache(body, cached)
+                cache_hits += 1
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (cached)")
+            else:
+                result = ir_backend.execute(prog)
+                solid = result.shapes[prog.output_ref.id]
+                if solid is not None:
+                    if body.kind == BodyKind.FABRICATED:
+                        _update_mass_from_solid(body, solid)
+                    cache_data = {"brep": _solid_to_brep_bytes(solid)}
+                    if body.kind == BodyKind.FABRICATED:
+                        cache_data.update(
+                            {
+                                "mass": body.solved_mass,
+                                "com": body.solved_com,
+                                "inertia": body.solved_inertia,
+                            }
+                        )
+                    cache.put(prog, cache_data)
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s")
+        else:
+            if body.kind != BodyKind.FABRICATED:
+                dt = time.monotonic() - t0
+                print(f" {dt:.1f}s (skip non-shapescript)")
+                continue
+            pj = parent_joint_map.get(body.name)
+            wire_segs = tuple(body_wire_segments.get(body.name, []))
+            steps = _build_body_solid(body, pj, wire_segs or None)
+            solid = steps[-1].solid if steps else None
+            if solid is not None:
+                _update_mass_from_solid(body, solid)
+            dt = time.monotonic() - t0
+            print(f" {dt:.1f}s")
+
         if solid is not None:
             body_solids[body.name] = solid
-            _update_mass_from_solid(body, solid)
-        dt = time.monotonic() - t0
-        print(f" {dt:.1f}s")
+            if not body.mesh_file:
+                body.mesh_file = f"{body.name}.stl"
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
+
+    if use_shapescript:
+        print(f"[build_cad] {cache_hits}/{n} cache hits")
+
+    # --- Clearance validation ---
+    if bot._clearance_constraints:
+        import warnings
+
+        from botcad.clearance import validate_clearances
+
+        clearance_results = validate_clearances(bot, body_solids)
+        bot.clearance_results = clearance_results
+
+        violations = [r for r in clearance_results if not r.satisfied]
+        if violations:
+            for v in violations:
+                if v.intersects:
+                    msg = (
+                        f"Intersection: {v.body_a} \u2194 {v.body_b} "
+                        f"({v.label}): overlap {v.intersection_volume * 1e9:.1f} mm\u00b3"
+                    )
+                else:
+                    msg = (
+                        f"Clearance violation: {v.body_a} \u2194 {v.body_b} "
+                        f"({v.label}): {v.distance * 1000:.1f}mm "
+                        f"(min {v.min_distance * 1000:.1f}mm)"
+                    )
+                warnings.warn(msg, stacklevel=2)
+
+        # Print summary
+        for r in clearance_results:
+            status = "\u2713" if r.satisfied else "\u2717"
+            if r.intersects:
+                detail = f"INTERSECT overlap={r.intersection_volume * 1e9:.1f}mm\u00b3"
+            else:
+                detail = f"{r.distance * 1000:.2f}mm gap"
+            print(f"  {status} {r.body_a} \u2194 {r.body_b}: {detail} ({r.label})")
 
     return CadModel(
         body_solids=body_solids,
         parent_joint_map=parent_joint_map,
-        world_positions=world_positions,
         rigid_groups=rigid_groups,
         body_wire_segments=body_wire_segments,
     )
@@ -325,7 +494,6 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     meshes_dir.mkdir(parents=True, exist_ok=True)
 
     body_solids = cad.body_solids
-    world_positions = cad.world_positions
     rigid_groups = cad.rigid_groups
 
     # --- Per-body STLs (for MuJoCo sim) ---
@@ -392,13 +560,13 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             for mp in mount.component.mounting_points:
                 _export_hardware(mp)
 
-    # --- Per-horn STLs ---
+    # --- Per-horn STLs (oriented to joint axis) ---
     for body in bot.all_bodies:
         for joint in body.joints:
-            if not joint.servo.continuous:
-                horn = _horn_solid(joint.servo)
-                if horn:
-                    export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
+            horn = _horn_solid(joint.servo)
+            if horn:
+                horn = _orient_z_to_axis(horn, joint.axis)
+                export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
     # --- Per-wire STLs ---
     from botcad.component import BusType
@@ -425,7 +593,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     parts: list[AssemblyPart] = []
     for group_name, bodies in rigid_groups.items():
         group_root = bodies[0]
-        group_root_pos = world_positions[group_root.name]
+        group_root_pos = group_root.world_pos
 
         # Union all body solids in this rigid group
         group_solid = None
@@ -435,7 +603,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
                 continue
 
             # Offset relative to group root
-            body_pos = world_positions[body.name]
+            body_pos = body.world_pos
             rel = (
                 body_pos[0] - group_root_pos[0],
                 body_pos[1] - group_root_pos[1],
@@ -459,18 +627,22 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=positioned,
-                    module=group_root.module.name if group_root.module else None,
+                    assembly=group_root.assembly.name if group_root.assembly else None,
                     kind="body",
                     label=group_name,
                 )
             )
 
     # --- Horn discs (purchased parts, not in body STLs) ---
+    # Use the purchased horn Body's world_pos/world_quat set during solve().
+
+    horn_bodies = {
+        b.name: b
+        for b in bot.all_bodies
+        if b.kind == BodyKind.PURCHASED and b.name.startswith("horn_")
+    }
     for body in bot.all_bodies:
-        body_world_pos = world_positions[body.name]
         for joint in body.joints:
-            if joint.servo.continuous:
-                continue
             params = horn_disc_params(joint.servo)
             if params is None:
                 continue
@@ -478,16 +650,15 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             if solid is None:
                 continue
 
+            horn_body = horn_bodies.get(f"horn_{joint.name}")
+            if horn_body is None:
+                continue
+
             # Orient disc Z-axis to joint axis
             solid = _orient_z_to_axis(solid, joint.axis)
 
-            # Joint world position + half-thickness offset along axis
-            jx = body_world_pos[0] + joint.pos[0]
-            jy = body_world_pos[1] + joint.pos[1]
-            jz = body_world_pos[2] + joint.pos[2]
-            ax, ay, az = joint.axis
-            offset = params.thickness / 2
-            pos = (jx + ax * offset, jy + ay * offset, jz + az * offset)
+            # Position from the purchased horn body's world transform
+            pos = horn_body.world_pos
 
             solid.color = Color(*COLOR_STRUCTURE_HORN_DISC.rgb)
             solid.label = f"{joint.name}_horn"
@@ -495,7 +666,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=positioned,
-                    module=body.module.name if body.module else None,
+                    assembly=body.assembly.name if body.assembly else None,
                     kind="horn",
                     label=f"{joint.name}_horn",
                 )
@@ -503,17 +674,22 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
 
     # --- Servo solids (purchased parts, shown seated in brackets) ---
     # servo_solid() is @lru_cache'd — same geometry returned for all STS3215s.
+    # Use purchased servo Body's world_pos/world_quat set during solve().
+    servo_bodies = {
+        b.name: b
+        for b in bot.all_bodies
+        if b.kind == BodyKind.PURCHASED and b.name.startswith("servo_")
+    }
     servo_count = 0
     for body in bot.all_bodies:
-        body_world = world_positions[body.name]
         for joint in body.joints:
             servo = joint.servo
-            center = joint.solved_servo_center
-            euler = quat_to_euler(joint.solved_servo_quat)
+            servo_body = servo_bodies.get(f"servo_{joint.name}")
+            if servo_body is None:
+                continue
+            euler = quat_to_euler(servo_body.world_quat)
 
-            solid = servo_solid(servo).moved(
-                Location(body_world) * Location(center, euler)
-            )
+            solid = servo_solid(servo).moved(Location(servo_body.world_pos, euler))
             solid = _as_solid(solid)
 
             solid.color = Color(*COLOR_STRUCTURE_DARK.rgb)
@@ -521,7 +697,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             parts.append(
                 AssemblyPart(
                     solid=solid,
-                    module=None,
+                    assembly=None,
                     kind="servo",
                     label=f"servo_{joint.name}",
                 )
@@ -589,10 +765,14 @@ def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
     Currently every body-to-body connection goes through a servo joint, so
     each body is its own group. When the skeleton DSL supports rigid
     attachments (bodies without joints), this will group them.
+
+    Only fabricated bodies are grouped — purchased parts have separate meshes.
     """
+
     groups: dict[str, list[Body]] = {}
     for body in bot.all_bodies:
-        groups[body.name] = [body]
+        if body.kind == BodyKind.FABRICATED:
+            groups[body.name] = [body]
     return groups
 
 
@@ -1345,8 +1525,10 @@ def _make_wheel_solid(radius: float, width: float):
     tread_depth = 0.0008  # 0.8mm deep
     for i in range(n_treads):
         angle = i * (360 / n_treads)
-        tread = Box(tread_depth * 2, tire_w + 0.001, tread_w, align=C)
-        tread = tread.locate(Location((radius, 0, 0), (0, angle, 0)))
+        tread = Box(tread_depth * 2, tread_w, tire_w + 0.001, align=C)
+        # Position at radius, then rotate around Z (wheel axle)
+        tread = tread.moved(Location((radius, 0, 0)))
+        tread = tread.moved(Location((0, 0, 0), (0, 0, angle)))
         tire = tire - tread
 
     # --- Rim ring (plastic, tire seats on this) ---
@@ -1421,18 +1603,31 @@ def _make_wheel_solid(radius: float, width: float):
 
 @lru_cache(maxsize=32)
 def _horn_solid(servo):
-    """Build a horn disc cylinder from servo specs."""
-    from build123d import Align, Cylinder
+    """Build a horn disc with mounting holes and center bore."""
+    from build123d import Align, Cylinder, Location
 
     params = horn_disc_params(servo)
     if params is None:
         return None
 
-    return Cylinder(
-        params.radius,
-        params.thickness,
-        align=(Align.CENTER, Align.CENTER, Align.CENTER),
-    )
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    horn = Cylinder(params.radius, params.thickness, align=C)
+
+    # Center bore for spline shaft
+    if servo.shaft_boss_radius > 0:
+        bore = Cylinder(servo.shaft_boss_radius, params.thickness + 0.001, align=C)
+        horn = horn - bore
+
+    # Mounting screw holes
+    sx, sy = servo.shaft_offset[0], servo.shaft_offset[1]
+    for mp in servo.horn_mounting_points:
+        hx = mp.pos[0] - sx
+        hy = mp.pos[1] - sy
+        hole = Cylinder(mp.diameter / 2, params.thickness + 0.001, align=C)
+        hole = hole.moved(Location((hx, hy, 0)))
+        horn = horn - hole
+
+    return horn
 
 
 def _axis_to_quat(
@@ -1543,20 +1738,24 @@ def _make_bearing_solid(bearing: BearingSpec):
     return _as_solid(outer - inner)
 
 
-def emit_cad_for_module(
-    bot: Bot, module_name: str, output_dir: Path, parts: list[AssemblyPart]
+def emit_cad_for_assembly(
+    bot: Bot, assembly_name: str, output_dir: Path, parts: list[AssemblyPart]
 ) -> None:
-    """Export a per-module STEP file containing only parts in the named module."""
+    """Export a per-assembly STEP file containing only parts in the named assembly."""
     from build123d import Compound, export_step
 
-    module_parts = [p.solid for p in parts if p.module == module_name]
+    asm_parts = [p.solid for p in parts if p.assembly == assembly_name]
 
-    if module_parts:
-        assembly = Compound(label=f"{bot.name}_{module_name}", children=module_parts)
-        filename = f"assembly_{module_name}.step"
+    if asm_parts:
+        compound = Compound(label=f"{bot.name}_{assembly_name}", children=asm_parts)
+        filename = f"assembly_{assembly_name}.step"
         export_step(
-            assembly,
+            compound,
             str(output_dir / filename),
             timestamp="2026-01-01T00:00:00",
         )
-        print(f"CAD: wrote {filename} ({len(module_parts)} parts)")
+        print(f"CAD: wrote {filename} ({len(asm_parts)} parts)")
+
+
+# Backward-compatible alias
+emit_cad_for_module = emit_cad_for_assembly
