@@ -429,6 +429,92 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> Shape
     return prog
 
 
+def _emit_connector_port_ir(
+    prog,
+    servo: ServoSpec,
+    spec: BracketSpec,
+    wall_center: tuple[float, float, float],
+    exit_axis: tuple[float, float, float],
+):
+    """Emit native ShapeScript ops for a connector passage through a bracket wall.
+
+    Computes a bounding box over all wire port connector envelopes + clearance,
+    then emits a single Box + locate positioned at wall_center. Returns a ShapeRef
+    for the cut solid, or None if no connectors are present.
+    """
+    from botcad.connectors import connector_spec
+
+    ports = []
+    for wp in servo.wire_ports:
+        if wp.connector_type:
+            try:
+                cspec = connector_spec(wp.connector_type)
+                ports.append((wp, cspec))
+            except KeyError:
+                pass
+
+    if not ports:
+        return None
+
+    tol = spec.tolerance
+    wall = spec.wall
+    ax, ay, az = exit_axis
+
+    clearance = tol + 0.001  # per side
+
+    if abs(ax) > 0.5:
+        y_coords: list[float] = []
+        z_coords: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            y_coords.extend([wp.pos[1] - hw, wp.pos[1] + hw])
+            z_coords.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(y_coords) - min(y_coords)
+        cut_h = max(z_coords) - min(z_coords)
+        center_y = (max(y_coords) + min(y_coords)) / 2
+        center_z = (max(z_coords) + min(z_coords)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(passage_depth, cut_w, cut_h, tag="connector_port")
+        cut_pos = (wall_center[0], center_y, center_z)
+    elif abs(az) > 0.5:
+        x_coords: list[float] = []
+        y_coords2: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            y_coords2.extend([wp.pos[1] - hh, wp.pos[1] + hh])
+        cut_w = max(x_coords) - min(x_coords)
+        cut_h = max(y_coords2) - min(y_coords2)
+        center_x = (max(x_coords) + min(x_coords)) / 2
+        center_y = (max(y_coords2) + min(y_coords2)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(cut_w, cut_h, passage_depth, tag="connector_port")
+        cut_pos = (center_x, center_y, wall_center[2])
+    else:
+        x_coords2: list[float] = []
+        z_coords2: list[float] = []
+        for wp, cspec in ports:
+            bx, by, bz = cspec.body_dimensions
+            hw = max(bx, by) / 2 + clearance
+            hh = max(min(bx, by), bz) / 2 + clearance
+            x_coords2.extend([wp.pos[0] - hw, wp.pos[0] + hw])
+            z_coords2.extend([wp.pos[2] - hh, wp.pos[2] + hh])
+        cut_w = max(x_coords2) - min(x_coords2)
+        cut_h = max(z_coords2) - min(z_coords2)
+        center_x = (max(x_coords2) + min(x_coords2)) / 2
+        center_z = (max(z_coords2) + min(z_coords2)) / 2
+        passage_depth = wall + tol + 0.004
+        cut = prog.box(cut_w, passage_depth, cut_h, tag="connector_port")
+        cut_pos = (center_x, wall_center[1], center_z)
+
+    cut = prog.locate(cut, pos=cut_pos)
+    return cut
+
+
 @lru_cache(maxsize=32)
 def _bracket_solid_b3d(servo: ServoSpec, spec: BracketSpec | None = None):
     """Build a bracket solid via direct build123d (legacy).
@@ -538,7 +624,6 @@ def bracket_solid(
     Wraps ±X, ±Y, and -Z (unpowered horn side). The +Z face is open
     with a clearance hole for the powered horn disc + shaft boss.
     """
-    from botcad.shapescript.emit_bracket import _emit_connector_port
     from botcad.shapescript.ops import ALIGN_MIN_Z
     from botcad.shapescript.program import ShapeScript
 
@@ -589,7 +674,7 @@ def bracket_solid(
 
         # -- Connector passage (-Z face) --
         if servo.connector_pos is not None:
-            port = _emit_connector_port(
+            port = _emit_connector_port_ir(
                 prog,
                 servo,
                 spec,
@@ -680,7 +765,7 @@ def bracket_solid(
         # -- Connector port / cable slot --
         if servo.connector_pos is not None:
             wall_x = -outer_x / 2
-            port = _emit_connector_port(
+            port = _emit_connector_port_ir(
                 prog,
                 servo,
                 spec,
@@ -1224,7 +1309,6 @@ def cradle_solid(
 
     Outer box - pocket - fastener holes - connector passage.
     """
-    from botcad.shapescript.emit_bracket import _emit_connector_port
     from botcad.shapescript.ops import ALIGN_MIN_Z
     from botcad.shapescript.program import ShapeScript
 
@@ -1293,7 +1377,7 @@ def cradle_solid(
 
     # -- Connector passage --
     if servo.connector_pos is not None:
-        port = _emit_connector_port(
+        port = _emit_connector_port_ir(
             prog,
             servo,
             spec,

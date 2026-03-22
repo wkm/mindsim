@@ -143,7 +143,7 @@ def emit_body_ir(
         euler = quat_to_euler(quat)
 
         # Sub-program produces coupler in servo-local frame; locate moves it.
-        from botcad.shapescript.emit_bracket import coupler_solid_script
+        from botcad.bracket import coupler_solid as coupler_solid_script
 
         coupler_key = f"coupler_{servo.name}"
         if coupler_key not in prog.sub_programs:
@@ -157,11 +157,17 @@ def emit_body_ir(
     # ── 4. Bracket footprint cut + bracket union (cad.py:845-865) ──
     # Brackets are sub-programs: defined once per servo type, called at each joint.
 
-    from botcad.shapescript.emit_bracket import (
-        bracket_envelope_script,
-        bracket_solid_script,
-        cradle_envelope_script,
-        cradle_solid_script,
+    from botcad.bracket import (
+        bracket_envelope as bracket_envelope_script,
+    )
+    from botcad.bracket import (
+        bracket_solid as bracket_solid_script,
+    )
+    from botcad.bracket import (
+        cradle_envelope as cradle_envelope_script,
+    )
+    from botcad.bracket import (
+        cradle_solid as cradle_solid_script,
     )
 
     for joint in body.joints:
