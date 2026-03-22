@@ -1248,6 +1248,7 @@ export class Viewport3D {
 
   // ── Content bounding box ──
   _bbox() {
+    this._scene.updateMatrixWorld(true);
     const box = new THREE.Box3(); let has = false;
     // Scan named groups
     for (const g of Object.values(this._groups)) {
