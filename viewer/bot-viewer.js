@@ -9,13 +9,15 @@
  */
 
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { JointMode } from './joint-mode.js';
 import { AssemblyMode } from './assembly-mode.js';
 import { IKMode } from './ik-mode.js';
 import { ExploreMode } from './explore-mode.js';
 import { FocusController } from './focus-controller.js';
-import { Viewport3D } from './viewport3d.js';
 import { GEOM_GROUP_STRUCTURAL } from './utils.js';
+import { SectionCutter } from './section-cutter.js';
+import { tintColor } from './presentation.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,121 +39,86 @@ export async function initBotViewer(botName) {
   let _namesArray = null;
   const _textDecoder = new TextDecoder('utf-8');
 
-  // Three.js — delegated to Viewport3D
+  // Three.js
   const container = document.getElementById('canvas-container');
-
-  // Restore persisted tree panel width or use default
-  const TREE_MIN_WIDTH = 200;
-  const TREE_MAX_WIDTH = 500;
-  let treePanelWidth = TREE_PANEL_WIDTH;
-  try {
-    const saved = localStorage.getItem('mindsim-tree-panel-width');
-    if (saved) {
-      const w = parseInt(saved, 10);
-      if (w >= TREE_MIN_WIDTH && w <= TREE_MAX_WIDTH) treePanelWidth = w;
-    }
-  } catch { /* ignore */ }
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xF5F8FA);
 
   function getTreePanelWidth() {
     const treePanel = document.getElementById('tree-panel');
-    return (treePanel && treePanel.style.display !== 'none') ? treePanelWidth : 0;
+    return (treePanel && treePanel.style.display !== 'none') ? TREE_PANEL_WIDTH : 0;
   }
 
-  // Apply initial tree panel width
-  const treePanelEl = document.getElementById('tree-panel');
-  if (treePanelEl) treePanelEl.style.width = treePanelWidth + 'px';
-
-  // ── Resizable tree panel ──
-  function initTreeResize() {
-    const panel = document.getElementById('tree-panel');
-    if (!panel) return;
-
-    const handle = document.createElement('div');
-    handle.className = 'tree-resize-handle';
-    panel.appendChild(handle);
-
-    let dragging = false;
-    let startX = 0;
-    let startWidth = 0;
-
-    handle.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      dragging = true;
-      startX = e.clientX;
-      startWidth = treePanelWidth;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!dragging) return;
-      const dx = e.clientX - startX;
-      const newWidth = Math.max(TREE_MIN_WIDTH, Math.min(TREE_MAX_WIDTH, startWidth + dx));
-      treePanelWidth = newWidth;
-      panel.style.width = newWidth + 'px';
-      updateCanvasLayout();
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      try { localStorage.setItem('mindsim-tree-panel-width', String(treePanelWidth)); } catch { /* ignore */ }
-    });
+  function getCanvasWidth() {
+    return window.innerWidth - SIDE_PANEL_WIDTH - getTreePanelWidth();
   }
-  initTreeResize();
 
-  // Position container between tree panel and side panel
-  container.style.left = getTreePanelWidth() + 'px';
-  container.style.right = SIDE_PANEL_WIDTH + 'px';
-
-  const viewport = new Viewport3D(container, {
-    cameraType: 'orthographic',
-    grid: true,
-  });
-  const scene = viewport.scene;
-  const camera = viewport.camera;
-  const renderer = viewport.renderer;
-  const controls = viewport.controls;
-
-  // Bot-viewer starts at a specific camera position
-  camera.position.set(0.4, 0.45, 0.55);
-  controls.target.set(0, 0.2, 0);
-  controls.update();
-
-  /** Update container bounds and let Viewport3D handle resize. */
+  /** Update renderer + camera to fit the visible canvas area between panels. */
   function updateCanvasLayout() {
     const left = getTreePanelWidth();
+    const w = getCanvasWidth();
+    const h = window.innerHeight;
     container.style.left = left + 'px';
     container.style.right = SIDE_PANEL_WIDTH + 'px';
-    viewport.resize();
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
   }
 
+  const camera = new THREE.PerspectiveCamera(
+    45, getCanvasWidth() / window.innerHeight, 0.01, 10
+  );
+  camera.position.set(0.4, 0.45, 0.55);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, stencil: true });
+  renderer.localClippingEnabled = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  container.appendChild(renderer.domElement);
+  updateCanvasLayout();
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0.2, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+  controls.update();
+
+  // Lighting — bright enough to read geometry clearly
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+  dirLight.position.set(2, 4, 3);
+  dirLight.castShadow = true;
+  scene.add(dirLight);
+  const fillLight = new THREE.DirectionalLight(0xccccff, 0.5);
+  fillLight.position.set(-2, 1, -2);
+  scene.add(fillLight);
+
+  // Ground grid
+  scene.add(new THREE.GridHelper(2, 40, 0xBFCCD6, 0xCED9E0));
+
   // ---------------------------------------------------------------------------
-  // Coordinate helpers — MuJoCo is Z-up, Three.js viewport is Z-up, no swizzle needed
+  // Coordinate swizzle helpers (MuJoCo Y-up → Three.js Y-up with Z-flip)
   // ---------------------------------------------------------------------------
   function getPosition(buffer, index, target) {
     return target.set(
       buffer[index * 3 + 0],
-      buffer[index * 3 + 1],
-      buffer[index * 3 + 2]
+      buffer[index * 3 + 2],
+      -buffer[index * 3 + 1]
     );
   }
 
   function getQuaternion(buffer, index, target) {
-    // MuJoCo quaternion layout: [w, x, y, z]
-    // Three.js Quaternion constructor: (x, y, z, w)
     return target.set(
-      buffer[index * 4 + 1],
+      -buffer[index * 4 + 1],
+      -buffer[index * 4 + 3],
       buffer[index * 4 + 2],
-      buffer[index * 4 + 3],
-      buffer[index * 4 + 0]
+      -buffer[index * 4 + 0]
     );
   }
 
   function toMujocoPos(v) {
-    return v;  // identity — same coordinate system
+    return v.set(v.x, -v.z, v.y);
   }
 
   // ---------------------------------------------------------------------------
@@ -212,12 +179,15 @@ export async function initBotViewer(botName) {
   // Build Three.js scene from MuJoCo model
   // ---------------------------------------------------------------------------
   function buildScene() {
-    mujocoRoot = viewport.addGroup('mujoco');
+    mujocoRoot = new THREE.Group();
     mujocoRoot.name = 'MuJoCo Root';
+    scene.add(mujocoRoot);
 
     const meshCache = {};
 
     for (let g = 0; g < model.ngeom; g++) {
+      if (model.geom_group[g] >= 3) continue;
+
       const b = model.geom_bodyid[g];
       const type = model.geom_type[g];
       const size = [
@@ -240,18 +210,11 @@ export async function initBotViewer(botName) {
       } else if (type === mjtGeom.mjGEOM_SPHERE.value) {
         geometry = new THREE.SphereGeometry(size[0], 16, 16);
       } else if (type === mjtGeom.mjGEOM_CAPSULE.value) {
-        // MuJoCo capsule extends along Z; Three.js CapsuleGeometry extends along Y.
-        // Rotate -90° around X to align Y→Z.
         geometry = new THREE.CapsuleGeometry(size[0], size[1] * 2.0, 12, 12);
-        geometry.rotateX(-Math.PI / 2);
       } else if (type === mjtGeom.mjGEOM_CYLINDER.value) {
-        // MuJoCo cylinder extends along Z; Three.js CylinderGeometry extends along Y.
-        // Rotate -90° around X to align Y→Z.
         geometry = new THREE.CylinderGeometry(size[0], size[0], size[1] * 2.0, 16);
-        geometry.rotateX(-Math.PI / 2);
       } else if (type === mjtGeom.mjGEOM_BOX.value) {
-        // MuJoCo box size = [half_x, half_y, half_z]; Three.js BoxGeometry(x, y, z)
-        geometry = new THREE.BoxGeometry(size[0] * 2, size[1] * 2, size[2] * 2);
+        geometry = new THREE.BoxGeometry(size[0] * 2, size[2] * 2, size[1] * 2);
       } else if (type === mjtGeom.mjGEOM_MESH.value) {
         const meshID = model.geom_dataid[g];
         if (!(meshID in meshCache)) {
@@ -260,7 +223,11 @@ export async function initBotViewer(botName) {
             model.mesh_vertadr[meshID] * 3,
             (model.mesh_vertadr[meshID] + model.mesh_vertnum[meshID]) * 3
           );
-          // No vertex swizzle — MuJoCo meshes are Z-up, matching our viewport
+          for (let v = 0; v < vertBuf.length; v += 3) {
+            const tmp = vertBuf[v + 1];
+            vertBuf[v + 1] = vertBuf[v + 2];
+            vertBuf[v + 2] = -tmp;
+          }
           const faceBuf = model.mesh_face.subarray(
             model.mesh_faceadr[meshID] * 3,
             (model.mesh_faceadr[meshID] + model.mesh_facenum[meshID]) * 3
@@ -424,10 +391,43 @@ export async function initBotViewer(botName) {
     await loadMuJoCo();
     buildScene();
 
+    // Section cutter — cross-section view with per-body colored caps
+    const sectionCutter = new SectionCutter(scene, renderer);
+
+    // Provide all structural meshes across all bodies
+    sectionCutter.setMeshProvider(() => {
+      const meshes = [];
+      for (const [, group] of Object.entries(bodies)) {
+        group.traverse(child => {
+          if (child.isMesh && child.geometry && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
+            meshes.push(child);
+          }
+        });
+      }
+      return meshes;
+    });
+
+    // Cap color = tinted version of the mesh's body color
+    sectionCutter.setCapColorFn((mesh) => {
+      if (mesh.material && mesh.material.color) {
+        return tintColor(mesh.material.color, 0.7);
+      }
+      return null;
+    });
+
+    // Bind to bot-viewer-specific section UI elements
+    sectionCutter.bindUI({
+      toggle: document.getElementById('bot-section-toggle'),
+      controls: document.getElementById('bot-section-controls'),
+      axisButtons: document.querySelectorAll('#bot-section-controls [data-section-axis]'),
+      slider: document.getElementById('bot-section-slider'),
+      flipBtn: document.getElementById('bot-section-flip'),
+    });
+
     const manifest = await fetchManifest();
 
     const ctx = {
-      mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls, viewport,
+      mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls,
       syncTransforms, getPosition, getQuaternion, toMujocoPos, getMujocoName,
       botName,
     };
@@ -450,10 +450,14 @@ export async function initBotViewer(botName) {
     switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
-    viewport.animate(() => {
+    function animate() {
+      controls.update();
       initialFocus.update();  // drive initial camera animation
       if (currentMode && currentMode.update) currentMode.update();
-    });
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate();
 
     window.addEventListener('resize', () => updateCanvasLayout());
 

@@ -17,31 +17,18 @@ const componentParam = params.get('component');
 const cadstepsParam = params.get('cadsteps');
 
 if (cadstepsParam) {
-  // CAD steps debugger — hide landing, show top bar (side panel managed by cad-steps-mode)
+  // CAD steps debugger — hide landing, show side panel + canvas
   document.getElementById('landing').style.display = 'none';
   document.getElementById('top-bar').style.display = '';
-  document.getElementById('side-panel').style.display = 'none';
+  document.getElementById('side-panel').style.display = '';
   document.getElementById('mode-tabs').style.display = 'none';
-  const cadParts = cadstepsParam.split(':');
-  const fromBot = params.get('from');
+  const cadBotName = cadstepsParam.split(':')[0];
   const botNameEl = document.getElementById('bot-name');
-  if (cadParts[0] === 'component') {
-    botNameEl.textContent = `${cadParts[1]} — ShapeScript`;
-    botNameEl.style.cursor = 'pointer';
-    botNameEl.addEventListener('click', () => {
-      if (fromBot) {
-        window.location.href = `?bot=${encodeURIComponent(fromBot)}`;
-      } else {
-        window.location.href = `?component=${encodeURIComponent(cadParts[1])}`;
-      }
-    });
-  } else {
-    botNameEl.textContent = `${cadParts[0]} — ShapeScript`;
-    botNameEl.style.cursor = 'pointer';
-    botNameEl.addEventListener('click', () => {
-      window.location.href = `?bot=${encodeURIComponent(cadParts[0])}`;
-    });
-  }
+  botNameEl.textContent = `${cadBotName} — CAD Steps`;
+  botNameEl.style.cursor = 'pointer';
+  botNameEl.addEventListener('click', () => {
+    window.location.href = `?bot=${encodeURIComponent(cadBotName)}`;
+  });
   import('./cad-steps-mode.js').then(m => m.initCadSteps(cadstepsParam));
 
 } else if (botName) {
@@ -51,6 +38,7 @@ if (cadstepsParam) {
   document.getElementById('top-bar').style.display = '';
   document.getElementById('side-panel').style.display = '';
   document.getElementById('bot-name').textContent = botName;
+  document.getElementById('bot-tools-group').style.display = '';
   import('./bot-viewer.js').then(m => m.initBotViewer(botName));
 
 } else if (componentParam) {
