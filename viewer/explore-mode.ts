@@ -27,7 +27,6 @@ export class ExploreMode {
   _raycaster: any;
   _mouse: any;
   _hoveredBodyId: any;
-  _hoverEmissives: Map<any, any>;
   _onPointerMove: any;
   _onPointerDown: any;
   _onPointerUp: any;
@@ -55,7 +54,6 @@ export class ExploreMode {
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
     this._hoveredBodyId = null;
-    this._hoverEmissives = new Map(); // mesh -> original emissive hex
 
     // Bind event handlers (stored for cleanup on deactivate)
     this._onPointerMove = this._handlePointerMove.bind(this);
@@ -125,10 +123,8 @@ export class ExploreMode {
   onNodeClick(nodeId, nodeData) {
     // If isolated and selecting a different node, restore visibility first
     if (this._isolated) {
-      const { bodies, model } = this.ctx;
-      for (let b = 1; b < model.nbody; b++) {
-        if (bodies[b]) bodies[b].visible = true;
-      }
+      this.ctx.botScene.showAll();
+      this.ctx.syncScene();
       this._isolated = false;
     }
 
@@ -202,7 +198,8 @@ export class ExploreMode {
     if (type === 'body') {
       const bodyId = this.bodyNameToId[rest[0]];
       if (bodyId !== undefined) {
-        this.focus.ghost([bodyId]);
+        this.ctx.botScene.ghostAllExcept([bodyId]);
+        this.ctx.syncScene();
         const bbox = this.focus.getBodyBoundingBox(bodyId);
         this.viz.showBodyOverlay(nodeData, bbox);
       }
@@ -212,14 +209,16 @@ export class ExploreMode {
         const parentBodyId = this.bodyNameToId[nodeData.parent_body];
         const keepIds = [childBodyId];
         if (parentBodyId !== undefined) keepIds.push(parentBodyId);
-        this.focus.ghost(keepIds);
+        this.ctx.botScene.ghostAllExcept(keepIds);
+        this.ctx.syncScene();
         const bbox = this.focus.getBodyBoundingBox(childBodyId);
         this.viz.showJointOverlay(nodeData, bbox);
       }
     } else if (type === 'mount') {
       const bodyId = this.bodyNameToId[rest[0]];
       if (bodyId !== undefined) {
-        this.focus.ghost([bodyId]);
+        this.ctx.botScene.ghostAllExcept([bodyId]);
+        this.ctx.syncScene();
         const bbox = this.focus.getBodyBoundingBox(bodyId);
         const center = bbox.getCenter(new THREE.Vector3());
         if (nodeData.component_type === 'camera') this.viz.showCameraOverlay(nodeData, center);
@@ -231,14 +230,16 @@ export class ExploreMode {
       const parentBody = nodeData.parent_body;
       const bodyId = this.bodyNameToId[parentBody];
       if (bodyId !== undefined) {
-        this.focus.ghost([bodyId]);
+        this.ctx.botScene.ghostAllExcept([bodyId]);
+        this.ctx.syncScene();
         this.viz.clear();
       }
     } else if (type === 'assembly') {
       // Keep all assembly bodies visible
       const bodyIds = this._resolveAssemblyBodyIds(nodeData);
       if (bodyIds.length > 0) {
-        this.focus.ghost(bodyIds);
+        this.ctx.botScene.ghostAllExcept(bodyIds);
+        this.ctx.syncScene();
         this.viz.clear();
       }
     }
@@ -246,90 +247,74 @@ export class ExploreMode {
 
   // ── Body visibility controls (driven by tree node actions) ──
 
-  /** Set a single body's Three.js group visibility. */
+  /** Set a single body's visibility via BotScene. */
   _setBodyVisible(bodyName, visible) {
     const bodyId = this.bodyNameToId[bodyName];
     if (bodyId === undefined) return;
-    const group = this.ctx.bodies[bodyId];
-    if (group) group.visible = visible;
+    this.ctx.botScene.setBodyVisible(bodyId, visible);
+    this.ctx.syncScene();
+    this._syncTreeVisualState();
   }
 
-  /** Hide all bodies except the named one. */
+  /** Hide all bodies except the named one via BotScene. */
   _isolateBody(bodyName) {
-    for (const [name, id] of Object.entries(this.bodyNameToId) as [string, any][]) {
-      const group = this.ctx.bodies[id];
-      if (!group) continue;
-      if (name === bodyName) {
-        group.visible = true;
-      } else if (id === 0) {
-        // Body 0 (world) is the parent of all others in the scene graph.
-        // Hide its own meshes but keep the group visible so children render.
-        group.visible = true;
-        group.traverse((ch: any) => {
-          if (ch.isMesh) ch.visible = false;
-        });
-      } else {
-        group.visible = false;
-      }
-    }
+    const bodyId = this.bodyNameToId[bodyName];
+    if (bodyId === undefined) return;
+    this.ctx.botScene.isolate(bodyId);
+    this.ctx.syncScene();
+    this._syncTreeVisualState();
   }
 
-  /** Restore all bodies to visible. */
+  /** Restore all bodies to visible via BotScene. */
   _showAllBodies() {
-    for (const id of Object.values(this.bodyNameToId) as any[]) {
-      const group = this.ctx.bodies[id];
-      if (!group) continue;
-      group.visible = true;
-      // Restore any meshes hidden during isolation (e.g., body 0)
-      group.traverse((ch) => {
-        if (ch.isMesh) ch.visible = true;
-      });
-    }
+    this.ctx.botScene.showAll();
+    this.ctx.syncScene();
+    this._syncTreeVisualState();
   }
 
   /** Isolate the currently focused node — hide everything else. */
   isolateCurrent() {
     if (!this.focusedNodeId) return;
     const [type, ...rest] = this.focusedNodeId.split(':');
-    // Remove ghosting so isolated bodies render at full opacity
-    this.focus.unghost();
 
     if (type === 'body') {
-      this._isolateBody(rest[0]);
+      const bodyId = this.bodyNameToId[rest[0]];
+      if (bodyId === undefined) return;
+      this.ctx.botScene.isolate(bodyId);
     } else if (type === 'joint' && this.focusedData) {
       // Show parent + child bodies
-      const keep = new Set();
-      if (this.focusedData.child_body) keep.add(this.focusedData.child_body);
-      if (this.focusedData.parent_body) keep.add(this.focusedData.parent_body);
-      for (const [name, id] of Object.entries(this.bodyNameToId) as [string, any][]) {
-        const group = this.ctx.bodies[id];
-        if (!group) continue;
-        if (keep.has(name)) {
-          group.visible = true;
-        } else if (id === 0) {
-          // Keep body 0 visible (it's the scene graph parent) but hide its meshes
-          group.visible = true;
-          group.traverse((ch: any) => {
-            if (ch.isMesh) ch.visible = false;
-          });
-        } else {
-          group.visible = false;
-        }
+      const keepIds: number[] = [];
+      if (this.focusedData.child_body) {
+        const id = this.bodyNameToId[this.focusedData.child_body];
+        if (id !== undefined) keepIds.push(id);
       }
+      if (this.focusedData.parent_body) {
+        const id = this.bodyNameToId[this.focusedData.parent_body];
+        if (id !== undefined) keepIds.push(id);
+      }
+      if (keepIds.length === 0) return;
+      this.ctx.botScene.isolateMultiple(keepIds);
     } else if (type === 'mount' && this.focusedData) {
-      this._isolateBody(this.focusedData.parent_body || rest[0]);
+      const bodyName = this.focusedData.parent_body || rest[0];
+      const bodyId = this.bodyNameToId[bodyName];
+      if (bodyId === undefined) return;
+      this.ctx.botScene.isolate(bodyId);
     } else {
       return; // can't isolate assemblies etc.
     }
+    this.ctx.syncScene();
     this._isolated = true;
     this._updateIsolateButton();
+    this._syncTreeVisualState();
   }
 
   /** Restore all bodies and re-apply ghost dimming. */
   showAll() {
-    this._showAllBodies();
+    this.ctx.botScene.showAll();
+    this.ctx.syncScene();
     this._isolated = false;
     this._updateIsolateButton();
+    this._syncTreeVisualState();
     if (this.focusedNodeId) {
       this._applyIsolation(this.focusedNodeId, this.focusedData);
     }
@@ -340,13 +325,43 @@ export class ExploreMode {
     if (btn) btn.textContent = this._isolated ? 'Show All' : 'Isolate';
   }
 
+  /** Push BotScene visibility state to the component tree for DOM styling. */
+  _syncTreeVisualState() {
+    if (!this.tree) return;
+    const hiddenBodies = new Set<string>();
+    let isolatedBody: string | null = null;
+    const botScene = this.ctx.botScene;
+    const isolatedIds = botScene.isolatedIds();
+
+    for (const body of botScene.bodies) {
+      if (!body.visible && body.id !== 0) {
+        hiddenBodies.add(body.name);
+      }
+    }
+
+    // Determine which body is isolated (for target icon highlight)
+    if (isolatedIds.size > 0) {
+      for (const id of isolatedIds) {
+        const bodyState = botScene.bodies[id];
+        if (bodyState && bodyState.id !== 0) {
+          isolatedBody = bodyState.name;
+          break;
+        }
+      }
+    }
+
+    this.tree.updateVisualState(hiddenBodies, isolatedBody);
+  }
+
   unfocus() {
-    this.focus.unghost();
+    this.ctx.botScene.unghost();
+    this.ctx.syncScene();
     this.viz.clear();
     if (this._isolated) this.showAll();
     this.focusedNodeId = null;
     this.focusedData = null;
     if (this.tree) this.tree.clearFocus();
+    this._syncTreeVisualState();
   }
 
   _showWelcomeProperties() {
@@ -675,24 +690,16 @@ export class ExploreMode {
     return hits.length > 0 ? hits[0].object : null;
   }
 
-  /** Apply emissive highlight to all structural meshes of a body. */
+  /** Apply emissive highlight to a body via BotScene. */
   _highlightBody(bodyId) {
-    const group = this.ctx.bodies[bodyId];
-    if (!group) return;
-    group.traverse((child) => {
-      if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL && child.material?.emissive) {
-        this._hoverEmissives.set(child, child.material.emissive.getHex());
-        child.material.emissive.setHex(0x666666);
-      }
-    });
+    this.ctx.botScene.setHovered(bodyId);
+    this.ctx.syncScene();
   }
 
-  /** Remove emissive highlight from all previously highlighted meshes. */
+  /** Remove emissive highlight via BotScene. */
   _clearHover() {
-    for (const [mesh, origHex] of this._hoverEmissives) {
-      if (mesh.material?.emissive) mesh.material.emissive.setHex(origHex);
-    }
-    this._hoverEmissives.clear();
+    this.ctx.botScene.setHovered(null);
+    this.ctx.syncScene();
     this._hoveredBodyId = null;
     this.ctx.renderer.domElement.style.cursor = '';
   }

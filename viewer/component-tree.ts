@@ -73,8 +73,6 @@ export class ComponentTree {
   onIsolate: ((bodyName: string) => void) | null;
   onShowAll: (() => void) | null;
   focusedNodeId: string | null;
-  _bodyVisibility: Record<string, string>;
-  _isolatedBody: string | null;
   _filters: Record<string, boolean>;
   _searchQuery: string;
   _searchTimeout: any;
@@ -96,11 +94,6 @@ export class ComponentTree {
     this.onIsolate = options.onIsolate || null;
     this.onShowAll = options.onShowAll || null;
     this.focusedNodeId = null;
-
-    // Visibility state per body: 'visible' | 'hidden'
-    this._bodyVisibility = {};
-    // Currently isolated body name (null = none)
-    this._isolatedBody = null;
 
     // Category filter state
     this._filters = {
@@ -222,7 +215,9 @@ export class ComponentTree {
     showAllBtn.className = 'tree-show-all-btn';
     showAllBtn.textContent = 'Show All';
     showAllBtn.title = 'Reset visibility — show all bodies';
-    showAllBtn.addEventListener('click', () => this._showAll());
+    showAllBtn.addEventListener('click', () => {
+      if (this.onShowAll) this.onShowAll();
+    });
     topRow.appendChild(showAllBtn);
 
     toolbar.appendChild(topRow);
@@ -282,61 +277,18 @@ export class ComponentTree {
   }
 
   /**
-   * Toggle a body's visibility in 3D and update tree styling.
+   * Update tree node styling based on external visibility state.
+   * Called by ExploreMode after syncScene() with the current state from BotScene.
+   *
+   * @param hiddenBodies - set of body names that are currently hidden
+   * @param isolatedBody - name of the currently isolated body, or null
    */
-  _toggleBodyVisibility(bodyName) {
-    if (!bodyName) return;
-    // If isolated, un-isolate first
-    if (this._isolatedBody) {
-      this._showAll();
-      return;
-    }
-    const current = this._bodyVisibility[bodyName] !== 'hidden';
-    this._bodyVisibility[bodyName] = current ? 'hidden' : 'visible';
-    this._updateTreeVisualState();
-    if (this.onToggleVisibility) this.onToggleVisibility(bodyName, !current);
-  }
-
-  /**
-   * Isolate a body — hide everything else, show only this one.
-   * Click again to un-isolate.
-   */
-  _isolateBody(bodyName) {
-    if (!bodyName) return;
-    if (this._isolatedBody === bodyName) {
-      // Un-isolate
-      this._showAll();
-      return;
-    }
-    this._isolatedBody = bodyName;
-    // Mark all bodies hidden except this one
-    for (const b of this.manifest.bodies) {
-      this._bodyVisibility[b.name] = b.name === bodyName ? 'visible' : 'hidden';
-    }
-    this._updateTreeVisualState();
-    if (this.onIsolate) this.onIsolate(bodyName);
-  }
-
-  /**
-   * Show all bodies — reset visibility state.
-   */
-  _showAll() {
-    this._isolatedBody = null;
-    this._bodyVisibility = {};
-    this._updateTreeVisualState();
-    if (this.onShowAll) this.onShowAll();
-  }
-
-  /**
-   * Update tree node styling based on visibility state.
-   * Hidden bodies get dimmed text; isolated body gets a highlight.
-   */
-  _updateTreeVisualState() {
+  updateVisualState(hiddenBodies: Set<string>, isolatedBody: string | null): void {
     if (!this._treeRoot) return;
     const bodyNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-body-name]');
     for (const node of bodyNodes) {
       const name = node.dataset.bodyName;
-      const hidden = this._bodyVisibility[name!] === 'hidden';
+      const hidden = hiddenBodies.has(name!);
       node.classList.toggle('body-hidden', hidden);
 
       // Update eye icon within this node's header
@@ -349,7 +301,7 @@ export class ComponentTree {
       // Update target icon state
       const targetBtn = node.querySelector(':scope > .tree-node-header .tree-vis-target');
       if (targetBtn) {
-        targetBtn.classList.toggle('isolated', this._isolatedBody === name);
+        targetBtn.classList.toggle('isolated', isolatedBody === name);
       }
     }
   }
@@ -737,7 +689,9 @@ export class ComponentTree {
       eyeBtn.title = 'Hide body';
       eyeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this._toggleBodyVisibility(bodyName);
+        // Determine current visibility from DOM state
+        const isHidden = node.classList.contains('body-hidden');
+        if (this.onToggleVisibility) this.onToggleVisibility(bodyName, isHidden);
       });
       actions.appendChild(eyeBtn);
 
@@ -748,7 +702,13 @@ export class ComponentTree {
       targetBtn.title = 'Isolate body';
       targetBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this._isolateBody(bodyName);
+        // Check if already isolated via DOM state
+        const isIsolated = targetBtn.classList.contains('isolated');
+        if (isIsolated) {
+          if (this.onShowAll) this.onShowAll();
+        } else {
+          if (this.onIsolate) this.onIsolate(bodyName);
+        }
       });
       actions.appendChild(targetBtn);
 

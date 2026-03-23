@@ -1,8 +1,8 @@
 /**
- * Focus Controller — camera animation + mesh ghosting for explore mode.
+ * Focus Controller — camera animation for explore mode.
  *
- * Smoothly animates the camera to frame a selected body, and dims
- * all other meshes to draw attention to the focused one.
+ * Smoothly animates the camera to frame a selected body or the entire bot.
+ * Visual state (ghosting, visibility) is handled by BotScene + sync().
  */
 
 import * as THREE from 'three';
@@ -14,8 +14,6 @@ const _camDir = new THREE.Vector3();
 
 export class FocusController {
   ctx: any;
-  ghosted: boolean;
-  _savedMaterials: Map<any, any>;
   _animating: boolean;
   _animStart: number;
   _animDuration: number;
@@ -26,8 +24,6 @@ export class FocusController {
 
   constructor(ctx: any) {
     this.ctx = ctx;
-    this.ghosted = false;
-    this._savedMaterials = new Map(); // mesh → { opacity, transparent, emissive }
     this._animating = false;
     this._animStart = 0;
     this._animDuration = 0;
@@ -128,44 +124,6 @@ export class FocusController {
     this._animStart = performance.now() / 1000;
     this._animDuration = duration;
     this._animating = true;
-  }
-
-  /**
-   * Ghost (dim) all meshes except those belonging to the specified body IDs.
-   * @param {number[]} keepBodyIds - body IDs to keep fully visible
-   */
-  ghost(keepBodyIds) {
-    const keepSet = new Set(keepBodyIds);
-    this.unghost(); // restore first
-
-    this.ctx.mujocoRoot.traverse((obj) => {
-      if (!obj.isMesh || !obj.material) return;
-      if (keepSet.has(obj.bodyID)) return;
-
-      this._savedMaterials.set(obj, {
-        opacity: obj.material.opacity,
-        transparent: obj.material.transparent,
-        emissive: obj.material.emissive ? obj.material.emissive.getHex() : 0,
-      });
-      obj.material.opacity = 0.06;
-      obj.material.transparent = true;
-    });
-    this.ghosted = true;
-  }
-
-  /**
-   * Restore all ghosted meshes to their original material state.
-   */
-  unghost() {
-    for (const [mesh, saved] of this._savedMaterials) {
-      if (mesh.material) {
-        mesh.material.opacity = saved.opacity;
-        mesh.material.transparent = saved.transparent;
-        if (mesh.material.emissive) mesh.material.emissive.setHex(saved.emissive);
-      }
-    }
-    this._savedMaterials.clear();
-    this.ghosted = false;
   }
 
   /**
