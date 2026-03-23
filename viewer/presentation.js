@@ -47,6 +47,11 @@ export const RENDER_ORDER = {
   SECTION_CONTOUR:  9000,
 };
 
+// Stencil constants for per-body section caps.
+// Each body gets a unique stencil ref (BASE + i) and render order band.
+export const SECTION_STENCIL_BASE = 100;
+export const SECTION_STENCIL_STRIDE = 10;
+
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
