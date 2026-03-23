@@ -235,7 +235,19 @@ export class ExploreMode {
   _isolateBody(bodyName) {
     for (const [name, id] of Object.entries(this.bodyNameToId)) {
       const group = this.ctx.bodies[id];
-      if (group) group.visible = (name === bodyName);
+      if (!group) continue;
+      if (name === bodyName) {
+        group.visible = true;
+      } else if (id === 0) {
+        // Body 0 (world) is the parent of all others in the scene graph.
+        // Hide its own meshes but keep the group visible so children render.
+        group.visible = true;
+        group.traverse(ch => {
+          if (ch.isMesh) ch.visible = false;
+        });
+      } else {
+        group.visible = false;
+      }
     }
   }
 
@@ -243,7 +255,10 @@ export class ExploreMode {
   _showAllBodies() {
     for (const id of Object.values(this.bodyNameToId)) {
       const group = this.ctx.bodies[id];
-      if (group) group.visible = true;
+      if (!group) continue;
+      group.visible = true;
+      // Restore any meshes hidden during isolation (e.g., body 0)
+      group.traverse(ch => { if (ch.isMesh) ch.visible = true; });
     }
   }
 
@@ -263,7 +278,16 @@ export class ExploreMode {
       if (this.focusedData.parent_body) keep.add(this.focusedData.parent_body);
       for (const [name, id] of Object.entries(this.bodyNameToId)) {
         const group = this.ctx.bodies[id];
-        if (group) group.visible = keep.has(name);
+        if (!group) continue;
+        if (keep.has(name)) {
+          group.visible = true;
+        } else if (id === 0) {
+          // Keep body 0 visible (it's the scene graph parent) but hide its meshes
+          group.visible = true;
+          group.traverse(ch => { if (ch.isMesh) ch.visible = false; });
+        } else {
+          group.visible = false;
+        }
       }
     } else if (type === 'mount' && this.focusedData) {
       this._isolateBody(this.focusedData.parent_body || rest[0]);
@@ -624,7 +648,7 @@ export class ExploreMode {
     group.traverse(child => {
       if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL && child.material?.emissive) {
         this._hoverEmissives.set(child, child.material.emissive.getHex());
-        child.material.emissive.setHex(0x333333);
+        child.material.emissive.setHex(0x666666);
       }
     });
   }
