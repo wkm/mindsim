@@ -17,9 +17,10 @@ make validate
 
 ## Principles
 
-- Heavily rely on subagents to get information and keep the primary context clean. Prefer plans for any changes which are substantial. Part of planning is the commit and testing strategy to validate changes. Validate a change yourself, and then as part of the final description of your work include a brief note on why you think the change is correct and how I can help validate it myself.
+- Subagent use: Heavily rely on subagents to get information and keep the primary context clean. Subagents which do non-trivial code changes should use their own worktree.
+- Make plans for any substantial changes. The plan should include the commit and testing strategy to validate changes. Validate changes yourself before saying something is done. As part of the final description of your work include a brief note on why you think the change is correct and how I can help validate it myself.
 - Use the internet to research things and don't just rely on your training data. We're working in a new, rapidly evolving area.
-- Simple is beautiful. Prefer composable modules.
+- Simple is beautiful. Prefer composable modules. Prefer having one way to do things in the code. Complex operations should be easy to understand. Create intermediate representations that can be printed and debugged. Prefer declarative types that are operated on.
 - The parametric skeleton is the **single source of truth**. One design produces everything — simulation, printable parts, assembly instructions, and training environments.
 - **Derive from geometry, don't approximate.** When build123d/OCCT can compute a property (mass, COM, inertia, surface area) from actual CAD solid geometry, use it. The CAD solid is ground truth. Heuristic estimates are fallbacks, not the primary path.
 - **Sim fidelity matters.** Geometry, mass, and actuation should match physical reality. CAD geometry = sim geometry — MuJoCo references the same STLs you'd send to a slicer.
@@ -54,11 +55,12 @@ SHAPESCRIPT=0 uv run mjpython main.py view --bot wheeler_arm # Bypass ShapeScrip
 
 ## Workflow Preferences
 
-- **Subagent-centric**: Keep the main session clean and interactive. Delegate any non-trivial implementation, research, or multi-file changes to background subagents. The main session is for discussion, coordination, and quick answers.
+- **Subagent-centric**: Keep the main session clean and interactive. Delegate any non-trivial implementation, research, or multi-file changes to background subagents. The main session is for discussion, coordination, and quick answers. Subagents which change code get their own worktree.
 - **Commit after every change**: Always commit with a descriptive message after completing a unit of work.
-- **Parallel agents**: Launch multiple independent agents concurrently whenever possible.
+- **Parallel agents**: Launch multiple independent agents concurrently whenever possible. 
 - **Build verification**: Agents should verify their changes before reporting completion.
 - **Run `make validate` after every major step** — lint + tests + render regeneration. Review render diffs before committing.
 - **Worktrees for experiments:** `make wt-new NAME=foo` → `exp/YYMMDD-foo` branch. Track in `EXPERIMENTS.md`.
 - **Bot changes require `NEW_BOT_CHECKLIST.md`.**
 - **TUI changes require snapshot tests:** `uv run pytest tests/test_tui_snapshots.py -v`
+- **Merge** branches instead of rebasing. Be skeptical of cherry-picking from parallel work.
