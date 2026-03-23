@@ -82,8 +82,8 @@ _LAYER_COLORS: dict[str, tuple[int, int, int]] = {
     "bracket": (206, 217, 224),
     "cradle": (206, 217, 224),
     "coupler": (245, 86, 86),
-    "bracket_envelope": (245, 86, 86),
-    "cradle_envelope": (245, 86, 86),
+    "bracket_insertion_channel": (245, 86, 86),
+    "cradle_insertion_channel": (245, 86, 86),
     "fasteners": (212, 168, 67),
 }
 
@@ -157,8 +157,8 @@ def _component_layers(comp) -> list[str]:
             "bracket",
             "cradle",
             "coupler",
-            "bracket_envelope",
-            "cradle_envelope",
+            "bracket_insertion_channel",
+            "cradle_insertion_channel",
         ]
         if horn_disc_params(comp) is not None:
             layers.insert(1, "horn")
@@ -312,14 +312,14 @@ def _generate_solid(comp, part: str):
                 # Coupler is built in shaft-centered frame; shift to servo local frame
                 sx, sy, _sz = comp.shaft_offset
                 solid = raw.moved(Location((sx, sy, 0)))
-        elif part == "bracket_envelope":
-            from botcad.bracket import bracket_envelope_solid
+        elif part == "bracket_insertion_channel":
+            from botcad.bracket import bracket_insertion_channel_solid
 
-            solid = bracket_envelope_solid(comp, spec)
-        elif part == "cradle_envelope":
-            from botcad.bracket import cradle_envelope_solid
+            solid = bracket_insertion_channel_solid(comp, spec)
+        elif part == "cradle_insertion_channel":
+            from botcad.bracket import cradle_insertion_channel_solid
 
-            solid = cradle_envelope_solid(comp, spec)
+            solid = cradle_insertion_channel_solid(comp, spec)
 
     if solid is not None:
         with _solid_cache_lock:

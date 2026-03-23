@@ -122,8 +122,15 @@ class BracketSpec:
     coupler_thickness: float = 0.010  # 10mm plate thickness for PLA rigidity
 
 
-def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
-    """Return the bracket's outer box as ShapeScript IR.
+def bracket_insertion_channel(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScript:
+    """Return the bracket insertion channel as ShapeScript IR.
+
+    The insertion channel is the volume subtracted from the parent body
+    shell to create a path for servo insertion during assembly. It is NOT
+    an enclosure around the servo or bracket. Its cross-section perpendicular
+    to the insertion axis must clear the servo's cross-section on those axes.
 
     Used by the CAD emitter to cut the bracket footprint from the parent
     body shell. The insertion channel extends 5x the bracket height above.
@@ -140,7 +147,7 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> Shape
     wall = spec.wall
 
     if servo.name == "SCS0009":
-        # SCS0009: U-shaped tray — envelope uses ear tab geometry
+        # SCS0009: U-shaped tray — insertion channel uses ear tab geometry
         ear_ext = 0.00465
         ear_thick = 0.0025
         ear_top_z = body_z / 2 - 0.00775
@@ -165,7 +172,7 @@ def bracket_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> Shape
         outer_z = outer_top_z - ear_bottom_z
         outer_center_z = (outer_top_z + ear_bottom_z) / 2
 
-    outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_envelope")
+    outer = prog.box(outer_x, outer_y, outer_z, tag="bracket_insertion_channel")
     outer = prog.locate(outer, pos=(0, 0, outer_center_z))
 
     prog.output_ref = outer
@@ -590,8 +597,15 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScri
     return prog
 
 
-def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
-    """Cradle envelope as ShapeScript IR.
+def cradle_insertion_channel(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScript:
+    """Cradle insertion channel as ShapeScript IR.
+
+    The insertion channel is the volume subtracted from the parent body
+    shell to create a path for servo insertion during assembly. It is NOT
+    an enclosure around the servo or bracket. Its cross-section perpendicular
+    to the insertion axis must clear the servo's cross-section on those axes.
 
     Covers the cradle footprint plus a 5x insertion channel in +X.
     """
@@ -623,10 +637,10 @@ def cradle_envelope(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeS
     outer_lz = outer_top_z - outer_bottom_z
     outer_cz = (outer_top_z + outer_bottom_z) / 2
 
-    envelope = prog.box(cradle_lx, outer_ly, outer_lz, tag="cradle_envelope")
-    envelope = prog.locate(envelope, pos=(cradle_cx, 0, outer_cz))
+    channel = prog.box(cradle_lx, outer_ly, outer_lz, tag="cradle_insertion_channel")
+    channel = prog.locate(channel, pos=(cradle_cx, 0, outer_cz))
 
-    prog.output_ref = envelope
+    prog.output_ref = channel
     return prog
 
 
@@ -976,9 +990,9 @@ def _exec_ir(prog: ShapeScript):
     return result.shapes[prog.output_ref.id]
 
 
-def bracket_envelope_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Execute bracket_envelope IR and return a Solid."""
-    return _exec_ir(bracket_envelope(servo, spec))
+def bracket_insertion_channel_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute bracket_insertion_channel IR and return a Solid."""
+    return _exec_ir(bracket_insertion_channel(servo, spec))
 
 
 def bracket_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):
@@ -986,9 +1000,9 @@ def bracket_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):
     return _exec_ir(bracket_solid(servo, spec))
 
 
-def cradle_envelope_solid(servo: ServoSpec, spec: BracketSpec | None = None):
-    """Execute cradle_envelope IR and return a Solid."""
-    return _exec_ir(cradle_envelope(servo, spec))
+def cradle_insertion_channel_solid(servo: ServoSpec, spec: BracketSpec | None = None):
+    """Execute cradle_insertion_channel IR and return a Solid."""
+    return _exec_ir(cradle_insertion_channel(servo, spec))
 
 
 def cradle_solid_solid(servo: ServoSpec, spec: BracketSpec | None = None):

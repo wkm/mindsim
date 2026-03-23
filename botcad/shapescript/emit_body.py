@@ -156,13 +156,13 @@ def emit_body_ir(
     # Brackets are sub-programs: defined once per servo type, called at each joint.
 
     from botcad.bracket import (
-        bracket_envelope as bracket_envelope_script,
+        bracket_insertion_channel as bracket_insertion_channel_script,
     )
     from botcad.bracket import (
         bracket_solid as bracket_solid_script,
     )
     from botcad.bracket import (
-        cradle_envelope as cradle_envelope_script,
+        cradle_insertion_channel as cradle_insertion_channel_script,
     )
     from botcad.bracket import (
         cradle_solid as cradle_solid_script,
@@ -178,13 +178,15 @@ def emit_body_ir(
             env_key = f"cradle_env_{servo.name}"
             brk_key = f"cradle_{servo.name}"
             if env_key not in prog.sub_programs:
-                prog.sub_programs[env_key] = cradle_envelope_script(servo, bracket_spec)
+                prog.sub_programs[env_key] = cradle_insertion_channel_script(
+                    servo, bracket_spec
+                )
                 prog.sub_programs[brk_key] = cradle_solid_script(servo, bracket_spec)
         else:
             env_key = f"bracket_env_{servo.name}"
             brk_key = f"bracket_{servo.name}"
             if env_key not in prog.sub_programs:
-                prog.sub_programs[env_key] = bracket_envelope_script(
+                prog.sub_programs[env_key] = bracket_insertion_channel_script(
                     servo, bracket_spec
                 )
                 prog.sub_programs[brk_key] = bracket_solid_script(servo, bracket_spec)

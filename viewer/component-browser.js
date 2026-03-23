@@ -43,8 +43,8 @@ const LAYER_META = {
   bracket:          { label: 'Bracket',          colorHex: 0xCED9E0, opts: {} },
   cradle:           { label: 'Cradle',           colorHex: 0xCED9E0, opts: {} },
   coupler:          { label: 'Coupler',          colorHex: 0xF55656, opts: {} },
-  bracket_envelope: { label: 'Bracket Envelope', colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
-  cradle_envelope:  { label: 'Cradle Envelope',  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
+  bracket_insertion_channel: { label: 'Bracket Insertion Channel', colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
+  cradle_insertion_channel:  { label: 'Cradle Insertion Channel',  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
   fasteners:        { label: 'Fasteners',        colorHex: 0xD4A843, opts: {} },
 };
 const ALL_LAYER_IDS = Object.keys(LAYER_META);

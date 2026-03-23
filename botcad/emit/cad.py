@@ -1158,8 +1158,8 @@ def _build_body_solid(
             )
         )
 
-    # --- 4. Cut bracket envelopes, then union finished brackets ---
-    # Each is a separate step so the envelope cut and bracket union are
+    # --- 4. Cut bracket insertion channels, then union finished brackets ---
+    # Each is a separate step so the insertion channel cut and bracket union are
     # independently visible in the debug viewer.
     for joint in body.joints:
         servo = joint.servo
@@ -1167,21 +1167,24 @@ def _build_body_solid(
         euler = quat_to_euler(joint.solved_servo_quat)
 
         if joint.bracket_style is BracketStyle.COUPLER:
-            from botcad.bracket import cradle_envelope_solid, cradle_solid_solid
+            from botcad.bracket import (
+                cradle_insertion_channel_solid,
+                cradle_solid_solid,
+            )
 
-            envelope = cradle_envelope_solid(servo, bracket_spec)
-            envelope = envelope.moved(Location(center, euler))
+            channel = cradle_insertion_channel_solid(servo, bracket_spec)
+            channel = channel.moved(Location(center, euler))
             cradle = cradle_solid_solid(servo, bracket_spec)
             cradle = cradle.moved(Location(center, euler))
-            tool_envelope = _ensure_solid(envelope)
-            shell = _bool_cut(shell, envelope)
+            tool_channel = _ensure_solid(channel)
+            shell = _bool_cut(shell, channel)
             shell = _ensure_solid(shell)
             _record(
                 CadStep(
-                    f"Cut cradle envelope ({servo.name})",
+                    f"Cut cradle insertion channel ({servo.name})",
                     shell,
                     "cut",
-                    tool=tool_envelope,
+                    tool=tool_channel,
                 )
             )
             tool_cradle = _ensure_solid(cradle)
@@ -1195,20 +1198,23 @@ def _build_body_solid(
                 )
             )
         else:
-            from botcad.bracket import bracket_envelope_solid, bracket_solid_solid
+            from botcad.bracket import (
+                bracket_insertion_channel_solid,
+                bracket_solid_solid,
+            )
 
-            envelope = bracket_envelope_solid(servo, bracket_spec)
-            envelope = envelope.moved(Location(center, euler))
+            channel = bracket_insertion_channel_solid(servo, bracket_spec)
+            channel = channel.moved(Location(center, euler))
             bracket = bracket_solid_solid(servo, bracket_spec)
             bracket = bracket.moved(Location(center, euler))
-            tool_envelope = _ensure_solid(envelope)
-            shell = shell - envelope
+            tool_channel = _ensure_solid(channel)
+            shell = shell - channel
             _record(
                 CadStep(
-                    f"Cut bracket envelope ({servo.name})",
+                    f"Cut bracket insertion channel ({servo.name})",
                     _ensure_solid(shell),
                     "cut",
-                    tool=tool_envelope,
+                    tool=tool_channel,
                 )
             )
             tool_bracket = _ensure_solid(bracket)

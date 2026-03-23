@@ -180,10 +180,12 @@ class TestWheelerSymmetry:
         assert abs(lc[1] - rc[1]) < 1e-6, f"Y differs: {lc[1]} vs {rc[1]}"
         assert abs(lc[2] - rc[2]) < 1e-6, f"Z differs: {lc[2]} vs {rc[2]}"
 
-    def test_bracket_envelopes_mirror_in_body(self):
-        """Left and right servo envelope cuts should be symmetric in X."""
+    def test_bracket_insertion_channels_mirror_in_body(self):
+        """Left and right servo insertion channel cuts should be symmetric in X."""
         from botcad.bracket import BracketSpec
-        from botcad.bracket import bracket_envelope_solid as bracket_envelope
+        from botcad.bracket import (
+            bracket_insertion_channel_solid as bracket_insertion_channel,
+        )
         from botcad.geometry import quat_to_euler
 
         bot = _build_bot("wheeler_base")
@@ -200,9 +202,9 @@ class TestWheelerSymmetry:
                 joint.pos,
             )
             euler = quat_to_euler(quat)
-            envelope = bracket_envelope(servo, spec)
-            envelope = envelope.locate(b3d.Location(center, euler))
-            bboxes[joint.name] = envelope.bounding_box()
+            channel = bracket_insertion_channel(servo, spec)
+            channel = channel.locate(b3d.Location(center, euler))
+            bboxes[joint.name] = channel.bounding_box()
 
         lbb = bboxes["left_wheel"]
         rbb = bboxes["right_wheel"]

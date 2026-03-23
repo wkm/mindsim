@@ -10,9 +10,13 @@ import pytest
 
 b3d = pytest.importorskip("build123d")
 
-from botcad.bracket import bracket_envelope as bracket_envelope_script  # noqa: E402
+from botcad.bracket import (  # noqa: E402
+    bracket_insertion_channel as bracket_insertion_channel_script,
+)
 from botcad.bracket import coupler_solid as coupler_solid_script  # noqa: E402
-from botcad.bracket import cradle_envelope as cradle_envelope_script  # noqa: E402
+from botcad.bracket import (  # noqa: E402
+    cradle_insertion_channel as cradle_insertion_channel_script,
+)
 from botcad.bracket import cradle_solid as cradle_solid_script  # noqa: E402
 from botcad.shapescript.backend_occt import OcctBackend  # noqa: E402
 
@@ -33,35 +37,35 @@ def _exec(prog):
     return OcctBackend().execute(prog)
 
 
-class TestBracketEnvelopeIR:
-    """bracket_envelope ShapeScript produces valid geometry."""
+class TestBracketInsertionChannelIR:
+    """bracket_insertion_channel ShapeScript produces valid geometry."""
 
     def test_has_native_ops(self):
-        """STS3215 bracket_envelope should use native Box + LocateOp, not PrebuiltOp."""
+        """STS3215 bracket_insertion_channel should use native Box + LocateOp."""
         from botcad.shapescript.ops import BoxOp, LocateOp
 
         servo = _servo()
-        prog = bracket_envelope_script(servo)
+        prog = bracket_insertion_channel_script(servo)
         op_types = {type(op) for op in prog.ops}
         assert BoxOp in op_types
         assert LocateOp in op_types
 
     def test_output_ref_set(self):
         servo = _servo()
-        prog = bracket_envelope_script(servo)
+        prog = bracket_insertion_channel_script(servo)
         assert prog.output_ref is not None
 
 
-class TestSCS0009BracketEnvelopeIR:
-    """SCS0009 bracket_envelope ShapeScript produces valid geometry."""
+class TestSCS0009BracketInsertionChannelIR:
+    """SCS0009 bracket_insertion_channel ShapeScript produces valid geometry."""
 
     def test_has_native_ops(self):
-        """SCS0009 bracket_envelope should use native Box + LocateOp, not PrebuiltOp."""
+        """SCS0009 bracket_insertion_channel should use native Box + LocateOp."""
         from botcad.components.servo import SCS0009
         from botcad.shapescript.ops import BoxOp, LocateOp
 
         servo = SCS0009()
-        prog = bracket_envelope_script(servo)
+        prog = bracket_insertion_channel_script(servo)
         op_types = {type(op) for op in prog.ops}
         assert BoxOp in op_types
         assert LocateOp in op_types
@@ -70,26 +74,26 @@ class TestSCS0009BracketEnvelopeIR:
         from botcad.components.servo import SCS0009
 
         servo = SCS0009()
-        prog = bracket_envelope_script(servo)
+        prog = bracket_insertion_channel_script(servo)
         assert prog.output_ref is not None
 
 
-class TestCradleEnvelopeIR:
-    """cradle_envelope ShapeScript produces valid geometry."""
+class TestCradleInsertionChannelIR:
+    """cradle_insertion_channel ShapeScript produces valid geometry."""
 
     def test_has_native_ops(self):
-        """cradle_envelope should use native Box + LocateOp, not PrebuiltOp."""
+        """cradle_insertion_channel should use native Box + LocateOp."""
         from botcad.shapescript.ops import BoxOp, LocateOp
 
         servo = _servo()
-        prog = cradle_envelope_script(servo)
+        prog = cradle_insertion_channel_script(servo)
         op_types = {type(op) for op in prog.ops}
         assert BoxOp in op_types
         assert LocateOp in op_types
 
     def test_output_ref_set(self):
         servo = _servo()
-        prog = cradle_envelope_script(servo)
+        prog = cradle_insertion_channel_script(servo)
         assert prog.output_ref is not None
 
 

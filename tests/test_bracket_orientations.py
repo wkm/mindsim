@@ -22,7 +22,9 @@ def main():
     from build123d import Align, Box, Location, export_stl
     from PIL import Image, ImageDraw
 
-    from botcad.bracket import bracket_envelope_solid as bracket_envelope
+    from botcad.bracket import (
+        bracket_insertion_channel_solid as bracket_insertion_channel,
+    )
     from botcad.bracket import bracket_solid_solid as bracket_solid
     from botcad.bracket import servo_solid
     from botcad.cad_utils import as_solid
@@ -72,7 +74,7 @@ def main():
         )
 
         # Build body with just this one bracket
-        env = bracket_envelope(servo).locate(Location(center, euler))
+        env = bracket_insertion_channel(servo).locate(Location(center, euler))
         brk = bracket_solid(servo).locate(Location(center, euler))
         shell = (hub_base - env) + brk
 
@@ -111,7 +113,7 @@ def main():
     for name, axis, pos in axes:
         center, quat = servo_placement(shaft_offset, shaft_axis, axis, pos)
         euler = quat_to_euler(quat)
-        env = bracket_envelope(servo).locate(Location(center, euler))
+        env = bracket_insertion_channel(servo).locate(Location(center, euler))
         brk = bracket_solid(servo).locate(Location(center, euler))
         shell = (shell - env) + brk
 

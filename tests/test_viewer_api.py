@@ -140,8 +140,8 @@ class TestComponentLayers:
             "bracket",
             "cradle",
             "coupler",
-            "bracket_envelope",
-            "cradle_envelope",
+            "bracket_insertion_channel",
+            "cradle_insertion_channel",
         }
         for name, (_factory, comp, _cat) in component_registry.items():
             if isinstance(comp, ServoSpec):
