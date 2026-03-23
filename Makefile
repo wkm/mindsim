@@ -54,6 +54,8 @@ validate: lint test renders
 lint:
 	uv run ruff check --fix .
 	uv run ruff format .
+	pnpm exec biome check --write viewer/
+	pnpm exec tsc --noEmit
 
 web:
 	pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \

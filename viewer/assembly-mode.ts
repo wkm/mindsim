@@ -5,11 +5,22 @@
  * Falls back to auto-generating steps from the MuJoCo model if no manifest.
  */
 
-import { GEOM_GROUP_STRUCTURAL, GEOM_GROUP_DETAIL, GEOM_GROUP_WIRE } from './utils.js';
-import { FocusController } from './focus-controller.js';
+import { FocusController } from './focus-controller.ts';
+import { GEOM_GROUP_DETAIL, GEOM_GROUP_STRUCTURAL, GEOM_GROUP_WIRE } from './utils.ts';
 
 export class AssemblyMode {
-  constructor(ctx) {
+  ctx: any;
+  steps: any[];
+  currentStep: number;
+  subProgress: number;
+  active: boolean;
+  allGeomMeshes: any[];
+  rootBodyMeshes: any[];
+  focus: FocusController;
+  bodyNameToId: Record<string, number>;
+  bodyGeoms: Record<number, any[]>;
+
+  constructor(ctx: any) {
     this.ctx = ctx;
     this.steps = [];
     this.currentStep = 0;
@@ -39,7 +50,7 @@ export class AssemblyMode {
   cacheGeomMeshes() {
     this.allGeomMeshes = [];
     this.rootBodyMeshes = [];
-    this.ctx.mujocoRoot.traverse(obj => {
+    this.ctx.mujocoRoot.traverse((obj) => {
       if (obj.isMesh && obj.geomName !== undefined) {
         this.allGeomMeshes.push(obj);
         if (obj.bodyID === 1) this.rootBodyMeshes.push(obj);
@@ -74,7 +85,7 @@ export class AssemblyMode {
       // If no geom name lists, populate from the body's geoms
       if (!step.structural && step.bodyId !== undefined) {
         const geoms = this.bodyGeoms[step.bodyId] || [];
-        step.structural = geoms.map(g => g.name);
+        step.structural = geoms.map((g) => g.name);
         step.details = [];
         step.wires = [];
       }
@@ -89,7 +100,9 @@ export class AssemblyMode {
         this.steps = manifest.assembly_steps;
         return;
       }
-    } catch { /* fall through to auto-generate */ }
+    } catch {
+      /* fall through to auto-generate */
+    }
     this.steps = this.autoGenerateSteps();
   }
 
@@ -103,9 +116,9 @@ export class AssemblyMode {
       const bodyName = getMujocoName(model.name_bodyadr, b);
       const geoms = this.bodyGeoms[b] || [];
 
-      const structural = geoms.filter(g => g.group === GEOM_GROUP_STRUCTURAL).map(g => g.name);
-      const details = geoms.filter(g => g.group === GEOM_GROUP_DETAIL).map(g => g.name);
-      const wires = geoms.filter(g => g.group === GEOM_GROUP_WIRE).map(g => g.name);
+      const structural = geoms.filter((g) => g.group === GEOM_GROUP_STRUCTURAL).map((g) => g.name);
+      const details = geoms.filter((g) => g.group === GEOM_GROUP_DETAIL).map((g) => g.name);
+      const wires = geoms.filter((g) => g.group === GEOM_GROUP_WIRE).map((g) => g.name);
 
       let jointName = '';
       for (let j = 0; j < model.njnt; j++) {
@@ -119,7 +132,9 @@ export class AssemblyMode {
         title: bodyName,
         description: jointName ? `Attach via joint: ${jointName}` : 'Base structure',
         bodyId: b,
-        structural, details, wires,
+        structural,
+        details,
+        wires,
       });
     }
 
@@ -159,12 +174,12 @@ export class AssemblyMode {
 
     panel.innerHTML = html;
 
-    document.getElementById('asm-step-slider').addEventListener('input', (e) => {
-      this.goToStep(parseInt(e.target.value));
+    document.getElementById('asm-step-slider')!.addEventListener('input', (e) => {
+      this.goToStep(parseInt((e.target as HTMLInputElement).value, 10));
     });
 
-    document.getElementById('asm-sub-slider').addEventListener('input', (e) => {
-      this.subProgress = parseFloat(e.target.value);
+    document.getElementById('asm-sub-slider')!.addEventListener('input', (e) => {
+      this.subProgress = parseFloat((e.target as HTMLInputElement).value);
       this.applyStep(this.currentStep, this.subProgress);
     });
 
@@ -182,8 +197,8 @@ export class AssemblyMode {
   goToStep(idx) {
     this.currentStep = idx;
     this.subProgress = 1.0;
-    document.getElementById('asm-step-slider').value = idx;
-    document.getElementById('asm-sub-slider').value = 1;
+    (document.getElementById('asm-step-slider') as HTMLInputElement).value = String(idx);
+    (document.getElementById('asm-sub-slider') as HTMLInputElement).value = '1';
     this.applyStep(idx, 1.0);
 
     // Focus camera on the step's body
@@ -213,9 +228,7 @@ export class AssemblyMode {
     for (let i = 0; i <= stepIdx; i++) {
       const s = this.steps[i];
       if (!s) continue;
-      const names = s.structural
-        ? [...s.structural, ...s.details, ...s.wires]
-        : (s.allGeomNames || []);
+      const names = s.structural ? [...s.structural, ...s.details, ...s.wires] : s.allGeomNames || [];
       for (const n of names) {
         if (i < stepIdx) visibleGeomNames.add(n);
         else currentStepGeomNames.add(n);

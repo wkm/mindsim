@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 // MuJoCo geom group constants
 export const GEOM_GROUP_STRUCTURAL = 0;
-export const GEOM_GROUP_DETAIL = 1;     // servos, screws, components
+export const GEOM_GROUP_DETAIL = 1; // servos, screws, components
 export const GEOM_GROUP_WIRE = 2;
 
 /**
@@ -17,10 +17,10 @@ export function clearGroup(group) {
   while (group.children.length > 0) {
     const child = group.children[0];
     group.remove(child);
-    child.traverse(obj => {
+    child.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
         else obj.material.dispose();
       }
     });
@@ -33,7 +33,7 @@ export function clearGroup(group) {
  * @returns {string}
  */
 export function radToDegStr(rad) {
-  return (rad * 180 / Math.PI).toFixed(1);
+  return ((rad * 180) / Math.PI).toFixed(1);
 }
 
 /**

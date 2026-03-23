@@ -19,32 +19,35 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 // Blueprint.js palette (hex values matching CSS custom properties)
 // ---------------------------------------------------------------------------
 export const BP = {
-  DARK_GRAY1:  0x182026,
-  DARK_GRAY3:  0x293742,
-  DARK_GRAY5:  0x394B59,
-  GRAY1:       0x5C7080,
-  GRAY3:       0x8A9BA8,
-  GRAY4:       0xA7B6C2,
-  GRAY5:       0xBFCCD6,
-  LIGHT_GRAY1: 0xCED9E0,
-  LIGHT_GRAY5: 0xF5F8FA,
-  BLUE1:       0x0E5A8A,
-  BLUE3:       0x137CBD,
-  BLUE4:       0x2B95D6,
-  BLUE5:       0x48AFF0,
-  GREEN3:      0x0F9960,
-  GREEN4:      0x15B371,
-  RED3:        0xDB3737,
-  RED4:        0xF55656,
-  GOLD3:       0xD99E0B,
+  DARK_GRAY1: 0x182026,
+  DARK_GRAY3: 0x293742,
+  DARK_GRAY5: 0x394b59,
+  GRAY1: 0x5c7080,
+  GRAY3: 0x8a9ba8,
+  GRAY4: 0xa7b6c2,
+  GRAY5: 0xbfccd6,
+  LIGHT_GRAY1: 0xced9e0,
+  LIGHT_GRAY5: 0xf5f8fa,
+  BLUE1: 0x0e5a8a,
+  BLUE3: 0x137cbd,
+  BLUE4: 0x2b95d6,
+  BLUE5: 0x48aff0,
+  GREEN3: 0x0f9960,
+  GREEN4: 0x15b371,
+  RED3: 0xdb3737,
+  RED4: 0xf55656,
+  GOLD3: 0xd99e0b,
 };
 
 // ---------------------------------------------------------------------------
 // Render order — controls Three.js draw order for layered effects.
 // ---------------------------------------------------------------------------
 export const RENDER_ORDER = {
-  SECTION_VIZ:      -100,
-  SECTION_CONTOUR:  9000,
+  SECTION_VIZ: -100,
+  SECTION_CONTOUR: 9000,
+  STENCIL_BACK: 0,
+  STENCIL_FRONT: 1,
+  STENCIL_CAP: 2,
 };
 
 // Stencil constants for per-body section caps.
@@ -57,14 +60,16 @@ export const SECTION_STENCIL_STRIDE = 10;
 // ---------------------------------------------------------------------------
 
 /** Convert a numeric hex color (e.g. 0xFF0000) to a CSS hex string ('#ff0000'). */
-export function hexStr(n) { return '#' + n.toString(16).padStart(6, '0'); }
+export function hexStr(n: number) {
+  return `#${n.toString(16).padStart(6, '0')}`;
+}
 
 // ---------------------------------------------------------------------------
 // Edge rendering constants
 // ---------------------------------------------------------------------------
 export const EDGE_COLOR = BP.DARK_GRAY1;
 export const EDGE_OPACITY = 0.85;
-export const EDGE_THICKNESS = 1.0;  // edge line thickness (shader parameter)
+export const EDGE_THICKNESS = 1.0; // edge line thickness (shader parameter)
 
 // ---------------------------------------------------------------------------
 // Default material parameters
@@ -82,11 +87,9 @@ const DEFAULT_METALNESS = 0.1;
  * Blends `tintFraction` of the entity color onto a light base,
  * producing a pastel/technical-drawing look where edges remain visible.
  */
-export function tintColor(entityColor, tintFraction = 0.5, baseHex = BP.LIGHT_GRAY5) {
+export function tintColor(entityColor: any, tintFraction = 0.5, baseHex = BP.LIGHT_GRAY5) {
   const base = new THREE.Color(baseHex);
-  const entity = entityColor instanceof THREE.Color
-    ? entityColor
-    : new THREE.Color(entityColor);
+  const entity = entityColor instanceof THREE.Color ? entityColor : new THREE.Color(entityColor);
   return base.lerp(entity, tintFraction);
 }
 
@@ -94,8 +97,8 @@ export function tintColor(entityColor, tintFraction = 0.5, baseHex = BP.LIGHT_GR
 // Material creation
 // ---------------------------------------------------------------------------
 
-export function createMaterial(color, opts = {}) {
-  const params = {
+export function createMaterial(color: any, opts: any = {}) {
+  const params: any = {
     color,
     roughness: DEFAULT_ROUGHNESS,
     metalness: DEFAULT_METALNESS,
@@ -111,7 +114,7 @@ export function createMaterial(color, opts = {}) {
   return new THREE.MeshPhysicalMaterial(params);
 }
 
-export function createToolMaterial(color, opacity = 0.3) {
+export function createToolMaterial(color: any, opacity = 0.3) {
   return createMaterial(color, { transparent: true, opacity });
 }
 
@@ -119,7 +122,7 @@ export function createToolMaterial(color, opacity = 0.3) {
  * Create a mesh with material. Edge rendering is handled by the
  * post-processing pipeline, not per-mesh geometry.
  */
-export function addMeshWithEdges(geometry, color, group, opts = {}) {
+export function addMeshWithEdges(geometry: THREE.BufferGeometry, color: any, group: THREE.Group, opts: any = {}) {
   const material = createMaterial(color, opts);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = !opts.wireframe;
@@ -141,9 +144,9 @@ export function addMeshWithEdges(geometry, color, group, opts = {}) {
 /** Edge detection shader — operates on normal+depth render target. */
 const EdgeDetectShader = {
   uniforms: {
-    tDiffuse:  { value: null },     // color pass
-    tNormal:   { value: null },     // normal pass
-    tDepth:    { value: null },     // depth pass
+    tDiffuse: { value: null }, // color pass
+    tNormal: { value: null }, // normal pass
+    tDepth: { value: null }, // depth pass
     resolution: { value: new THREE.Vector2() },
     edgeColor: { value: new THREE.Color(EDGE_COLOR) },
     edgeOpacity: { value: EDGE_OPACITY },
@@ -211,7 +214,7 @@ const EdgeDetectShader = {
  * @param {THREE.Camera} camera
  * @returns {{ composer: EffectComposer, resize: (w,h) => void, render: () => void }}
  */
-export function createEdgeComposer(renderer, scene, camera) {
+export function createEdgeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
   const size = renderer.getSize(new THREE.Vector2());
   const dpr = renderer.getPixelRatio();
   const fullW = Math.round(size.x * dpr);
@@ -249,12 +252,19 @@ export function createEdgeComposer(renderer, scene, camera) {
       // Hide non-mesh objects and the section viz plane for edge passes.
       // Hide non-mesh objects AND section cap geometry from edge passes.
       // Cap triangles create false edges in the normal/depth detection.
-      const hidden = [];
-      scene.traverse(child => {
-        if (child.visible && (child.isGridHelper || child.isLineSegments ||
-            child.isLine || child.isSprite || child.isPoints ||
+      const hidden: THREE.Object3D[] = [];
+      scene.traverse((child: any) => {
+        if (
+          child.visible &&
+          (child.isGridHelper ||
+            child.isLineSegments ||
+            child.isLine ||
+            child.isSprite ||
+            child.isPoints ||
             child.constructor.name === 'LineSegments2' ||
-            child.userData._vpSec || child.userData._vpCap)) {
+            child.userData._vpSec ||
+            child.userData._vpCap)
+        ) {
           child.visible = false;
           hidden.push(child);
         }

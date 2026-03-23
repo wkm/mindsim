@@ -10,25 +10,22 @@
  */
 
 import * as THREE from 'three';
-import { Earcut } from 'three/src/extras/Earcut.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import {
-  BP, RENDER_ORDER,
-  tintColor, createEdgeComposer,
-} from './presentation.js';
-import { MeasureTool } from './measure-tool.js';
+import { Earcut } from 'three/src/extras/Earcut.js';
+import { MeasureTool } from './measure-tool.ts';
+import { BP, createEdgeComposer, RENDER_ORDER } from './presentation.ts';
 
 const VIEW_PRESETS = {
-  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso',    key: '1' },
-  front:  { dir: new THREE.Vector3(0, -1, 0),               up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '2' },
-  top:    { dir: new THREE.Vector3(0, 0, 1),                 up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '3' },
-  right:  { dir: new THREE.Vector3(1, 0, 0),                 up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '4' },
-  back:   { dir: new THREE.Vector3(0, 1, 0),                 up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: '5' },
-  bottom: { dir: new THREE.Vector3(0, 0, -1),                up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '6' },
-  left:   { dir: new THREE.Vector3(-1, 0, 0),                up: new THREE.Vector3(0, 0, 1), label: 'Left',   key: '7' },
+  iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
+  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front', key: '2' },
+  top: { dir: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0), label: 'Top', key: '3' },
+  right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Right', key: '4' },
+  back: { dir: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Back', key: '5' },
+  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '6' },
+  left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '7' },
 };
 const KEY_TO_PRESET = {};
 for (const [name, p] of Object.entries(VIEW_PRESETS)) KEY_TO_PRESET[p.key] = name;
@@ -55,12 +52,12 @@ const ICONS = {
 // ── Cube face mapping: face index → preset name ──
 // THREE.BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
 const CUBE_FACE_MAP = [
-  { preset: 'right',  label: 'Right',  key: '4', normal: new THREE.Vector3(1, 0, 0) },   // +X
-  { preset: 'left',   label: 'Left',   key: '7', normal: new THREE.Vector3(-1, 0, 0) },  // -X
-  { preset: 'back',   label: 'Back',   key: '5', normal: new THREE.Vector3(0, 1, 0) },   // +Y
-  { preset: 'front',  label: 'Front',  key: '2', normal: new THREE.Vector3(0, -1, 0) },  // -Y
-  { preset: 'top',    label: 'Top',    key: '3', normal: new THREE.Vector3(0, 0, 1) },   // +Z
-  { preset: 'bottom', label: 'Bottom', key: '6', normal: new THREE.Vector3(0, 0, -1) },  // -Z
+  { preset: 'right', label: 'Right', key: '4', normal: new THREE.Vector3(1, 0, 0) }, // +X
+  { preset: 'left', label: 'Left', key: '7', normal: new THREE.Vector3(-1, 0, 0) }, // -X
+  { preset: 'back', label: 'Back', key: '5', normal: new THREE.Vector3(0, 1, 0) }, // +Y
+  { preset: 'front', label: 'Front', key: '2', normal: new THREE.Vector3(0, -1, 0) }, // -Y
+  { preset: 'top', label: 'Top', key: '3', normal: new THREE.Vector3(0, 0, 1) }, // +Z
+  { preset: 'bottom', label: 'Bottom', key: '6', normal: new THREE.Vector3(0, 0, -1) }, // -Z
 ];
 
 // Blueprint palette grays for cube faces — subtle gradient top-to-bottom
@@ -75,40 +72,105 @@ const CUBE_FACE_COLORS = [
 
 // ── Edge/corner click zones for the orientation cube ──
 // Edges: average of two adjacent face normals → 45-degree view
-const CUBE_EDGES = [
+const _CUBE_EDGES = [
   // Top edges
-  { n: new THREE.Vector3(1, 0, 1).normalize(),  label: 'Right-Top' },
+  { n: new THREE.Vector3(1, 0, 1).normalize(), label: 'Right-Top' },
   { n: new THREE.Vector3(-1, 0, 1).normalize(), label: 'Left-Top' },
-  { n: new THREE.Vector3(0, 1, 1).normalize(),  label: 'Back-Top' },
+  { n: new THREE.Vector3(0, 1, 1).normalize(), label: 'Back-Top' },
   { n: new THREE.Vector3(0, -1, 1).normalize(), label: 'Front-Top' },
   // Bottom edges
-  { n: new THREE.Vector3(1, 0, -1).normalize(),  label: 'Right-Bottom' },
+  { n: new THREE.Vector3(1, 0, -1).normalize(), label: 'Right-Bottom' },
   { n: new THREE.Vector3(-1, 0, -1).normalize(), label: 'Left-Bottom' },
-  { n: new THREE.Vector3(0, 1, -1).normalize(),  label: 'Back-Bottom' },
+  { n: new THREE.Vector3(0, 1, -1).normalize(), label: 'Back-Bottom' },
   { n: new THREE.Vector3(0, -1, -1).normalize(), label: 'Front-Bottom' },
   // Horizontal edges
-  { n: new THREE.Vector3(1, -1, 0).normalize(),  label: 'Right-Front' },
+  { n: new THREE.Vector3(1, -1, 0).normalize(), label: 'Right-Front' },
   { n: new THREE.Vector3(-1, -1, 0).normalize(), label: 'Left-Front' },
-  { n: new THREE.Vector3(1, 1, 0).normalize(),   label: 'Right-Back' },
-  { n: new THREE.Vector3(-1, 1, 0).normalize(),  label: 'Left-Back' },
+  { n: new THREE.Vector3(1, 1, 0).normalize(), label: 'Right-Back' },
+  { n: new THREE.Vector3(-1, 1, 0).normalize(), label: 'Left-Back' },
 ];
 
 // Corners: isometric views with Z-bias matching VIEW_PRESETS.iso (1, -1, 0.8)
 // The 0.8 Z factor gives a slightly top-down perspective that matches the `1` key preset.
-const CUBE_CORNERS = [
-  { n: new THREE.Vector3(1, -1, 0.8).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(-1, -1, 0.8).normalize(),  label: 'Iso' },
-  { n: new THREE.Vector3(1, 1, 0.8).normalize(),    label: 'Iso' },
-  { n: new THREE.Vector3(-1, 1, 0.8).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(1, -1, -0.8).normalize(),  label: 'Iso' },
+const _CUBE_CORNERS = [
+  { n: new THREE.Vector3(1, -1, 0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(-1, -1, 0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, 0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, 0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(1, -1, -0.8).normalize(), label: 'Iso' },
   { n: new THREE.Vector3(-1, -1, -0.8).normalize(), label: 'Iso' },
-  { n: new THREE.Vector3(1, 1, -0.8).normalize(),   label: 'Iso' },
-  { n: new THREE.Vector3(-1, 1, -0.8).normalize(),  label: 'Iso' },
+  { n: new THREE.Vector3(1, 1, -0.8).normalize(), label: 'Iso' },
+  { n: new THREE.Vector3(-1, 1, -0.8).normalize(), label: 'Iso' },
 ];
 
 export class Viewport3D {
+  _container: any;
+  _groups: any;
+  _animCb: any;
+  _animating: boolean;
+  _disposed: boolean;
+  _activeTool: any;
+  _cameraType: string;
+  _lerpActive: boolean;
+  _lerpS: any;
+  _lerpE: any;
+  _lerpDur: number;
+  _lerpT0: number;
+  _secOn: boolean;
+  _secAxis: string;
+  _secFrac: number;
+  _secFlipped: boolean;
+  _secPlane: any;
+  _secViz: any;
+  _capGroup: any;
+  _contourLineMat: any;
+  _ghostedMeshes: Map<any, any>;
+  _followMode: boolean;
+  _followTarget: any;
+  _followRadius: number;
+  _followBadge: any;
+  _onFollowChange: any;
+  _sectionCapColorFn: any;
+  _scene: any;
+  _cam: any;
+  _ctrl: any;
+  _ren: any;
+  _edgeC: any;
+  _meas: any;
+  _gridHelper: any;
+  _overlay: any;
+  _cubeCanvas: any;
+  _cubeRen: any;
+  _cubeScene: any;
+  _cubeCam: any;
+  _cubeMesh: any;
+  _cubeFaceTextures: any;
+  _cubeContainer: any;
+  _cubeRaycaster: any;
+  _cubeHoveredFace: number;
+  _cubeTooltip: any;
+  _cubeHoverInfo: any;
+  _toolStrip: any;
+  _selectBtn: any;
+  _measBtn: any;
+  _secBtn: any;
+  _secPopover: any;
+  _secAxisBtns: any;
+  _secSlider: any;
+  _settingsBtn: any;
+  _settingsPopover: any;
+  _perspBtn: any;
+  _orthoBtn: any;
+  _edgeCb: any;
+  _gridCb: any;
+  _onResize: any;
+  _onKey: any;
+  _updateSecPopoverPos: any;
+  _updateSettingsPopoverPos: any;
+  _hatchTextures: any;
+
   /** @param {HTMLElement} container  @param {Object} [options] */
-  constructor(container, options = {}) {
+  constructor(container: any, options: any = {}) {
     this._container = container;
     this._groups = {};
     this._animCb = null;
@@ -134,9 +196,9 @@ export class Viewport3D {
     this._ghostedMeshes = new Map(); // mesh → { opacity, transparent }
     // Follow mode
     this._followMode = false;
-    this._followTarget = null;  // Vector3 — center of followed geometry
-    this._followRadius = 0;     // bounding sphere radius for exit threshold
-    this._followBadge = null;   // DOM element for "Following" indicator
+    this._followTarget = null; // Vector3 — center of followed geometry
+    this._followRadius = 0; // bounding sphere radius for exit threshold
+    this._followBadge = null; // DOM element for "Following" indicator
     this._onFollowChange = null; // callback when follow mode changes
     // Section cap callback — lets external code provide per-group cap colors
     this._sectionCapColorFn = null;
@@ -148,23 +210,38 @@ export class Viewport3D {
     window.addEventListener('resize', this._onResize);
   }
 
-  get scene()    { return this._scene; }
-  get camera()   { return this._cam; }
-  get controls() { return this._ctrl; }
-  get renderer() { return this._ren; }
+  get scene() {
+    return this._scene;
+  }
+  get camera() {
+    return this._cam;
+  }
+  get controls() {
+    return this._ctrl;
+  }
+  get renderer() {
+    return this._ren;
+  }
 
   addGroup(name) {
-    const g = new THREE.Group(); g.name = name;
-    this._scene.add(g); this._groups[name] = g; return g;
+    const g = new THREE.Group();
+    g.name = name;
+    this._scene.add(g);
+    this._groups[name] = g;
+    return g;
   }
-  getGroup(name) { return this._groups[name] || null; }
+  getGroup(name) {
+    return this._groups[name] || null;
+  }
 
   /**
    * Set a callback that returns a cap color for a given group name.
    * Signature: (groupName: string) => THREE.Color | number | null
    * If null is returned, a default darker tint is used.
    */
-  setSectionCapColorFn(fn) { this._sectionCapColorFn = fn; }
+  setSectionCapColorFn(fn) {
+    this._sectionCapColorFn = fn;
+  }
 
   /** Zoom to fit all visible geometry (F key). */
   zoomToFit() {
@@ -177,19 +254,28 @@ export class Viewport3D {
     this.frameOnBox(geometry.boundingBox);
   }
   frameOnBox(box3, animate = true) {
-    const center = new THREE.Vector3(), size = new THREE.Vector3();
-    box3.getCenter(center); box3.getSize(size);
+    const center = new THREE.Vector3(),
+      size = new THREE.Vector3();
+    box3.getCenter(center);
+    box3.getSize(size);
     const d = Math.max(size.x, size.y, size.z) * 2.5;
     const pos = new THREE.Vector3(center.x + d * 0.6, center.y - d * 0.6, center.z + d * 0.8);
     const up = new THREE.Vector3(0, 0, 1);
     if (this._cameraType === 'orthographic') {
       this._fitOrthoFrustum(box3);
     }
-    if (animate && this._animating) { this._startLerp(pos, center, up); }
-    else { this._cam.position.copy(pos); this._cam.up.copy(up); this._ctrl.target.copy(center); this._ctrl.update(); }
+    if (animate && this._animating) {
+      this._startLerp(pos, center, up);
+    } else {
+      this._cam.position.copy(pos);
+      this._cam.up.copy(up);
+      this._ctrl.target.copy(center);
+      this._ctrl.update();
+    }
   }
   setViewPreset(name) {
-    const p = VIEW_PRESETS[name]; if (!p) return;
+    const p = VIEW_PRESETS[name];
+    if (!p) return;
 
     // If already at this angle, zoom to fit instead of re-animating
     const currentDir = new THREE.Vector3();
@@ -205,13 +291,19 @@ export class Viewport3D {
     const sz = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
     const d = Math.max(sz.x, sz.y, sz.z) * 2.5;
     // In follow mode, maintain focus on the followed target instead of bbox center
-    const target = (this._followMode && this._followTarget) ? this._followTarget.clone() : c;
+    const target = this._followMode && this._followTarget ? this._followTarget.clone() : c;
     const pos = target.clone().addScaledVector(p.dir, d);
     if (this._cameraType === 'orthographic' && box) {
       this._fitOrthoFrustum(box);
     }
     if (this._animating) this._startLerp(pos, target, p.up.clone());
-    else { this._cam.position.copy(pos); this._cam.up.copy(p.up); this._ctrl.target.copy(target); this._cam.lookAt(target); this._ctrl.update(); }
+    else {
+      this._cam.position.copy(pos);
+      this._cam.up.copy(p.up);
+      this._ctrl.target.copy(target);
+      this._cam.lookAt(target);
+      this._ctrl.update();
+    }
   }
 
   /**
@@ -219,12 +311,12 @@ export class Viewport3D {
    * @param {THREE.Vector3} dir — normalized direction the camera looks FROM
    * @param {THREE.Vector3} [up] — up vector (defaults to Z-up or Y-up for top/bottom)
    */
-  setViewFromDirection(dir, up) {
+  setViewFromDirection(dir: any, up?: any) {
     const box = this._bbox();
     const c = box ? box.getCenter(new THREE.Vector3()) : new THREE.Vector3();
     const sz = box ? box.getSize(new THREE.Vector3()) : new THREE.Vector3(0.1, 0.1, 0.1);
     const d = Math.max(sz.x, sz.y, sz.z) * 2.5;
-    const target = (this._followMode && this._followTarget) ? this._followTarget.clone() : c;
+    const target = this._followMode && this._followTarget ? this._followTarget.clone() : c;
     const pos = target.clone().addScaledVector(dir, d);
     // Pick a sensible up vector: Z-up unless we're looking straight along Z
     if (!up) {
@@ -235,7 +327,13 @@ export class Viewport3D {
       this._fitOrthoFrustum(box);
     }
     if (this._animating) this._startLerp(pos, target, up.clone());
-    else { this._cam.position.copy(pos); this._cam.up.copy(up); this._ctrl.target.copy(target); this._cam.lookAt(target); this._ctrl.update(); }
+    else {
+      this._cam.position.copy(pos);
+      this._cam.up.copy(up);
+      this._ctrl.target.copy(target);
+      this._cam.lookAt(target);
+      this._ctrl.update();
+    }
   }
 
   // ── Follow mode ──
@@ -250,9 +348,13 @@ export class Viewport3D {
     if (this._onFollowChange) this._onFollowChange(enabled);
   }
 
-  isFollowMode() { return this._followMode; }
+  isFollowMode() {
+    return this._followMode;
+  }
 
-  onFollowChange(cb) { this._onFollowChange = cb; }
+  onFollowChange(cb) {
+    this._onFollowChange = cb;
+  }
 
   /**
    * Called by the step debugger when the step changes while in follow mode.
@@ -275,7 +377,8 @@ export class Viewport3D {
     if (this._followMode) {
       if (!this._followBadge) {
         this._followBadge = document.createElement('div');
-        this._followBadge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(145,121,242,0.8);color:white;font:500 11px system-ui,-apple-system,sans-serif;padding:2px 10px;border-radius:10px;pointer-events:none;z-index:60;transition:opacity 0.2s;';
+        this._followBadge.style.cssText =
+          'position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(145,121,242,0.8);color:white;font:500 11px system-ui,-apple-system,sans-serif;padding:2px 10px;border-radius:10px;pointer-events:none;z-index:60;transition:opacity 0.2s;';
         this._followBadge.textContent = 'Following';
         this._overlay.appendChild(this._followBadge);
       }
@@ -283,7 +386,9 @@ export class Viewport3D {
       this._followBadge.style.display = '';
     } else if (this._followBadge) {
       this._followBadge.style.opacity = '0';
-      setTimeout(() => { if (this._followBadge && !this._followMode) this._followBadge.style.display = 'none'; }, 200);
+      setTimeout(() => {
+        if (this._followBadge && !this._followMode) this._followBadge.style.display = 'none';
+      }, 200);
     }
   }
 
@@ -338,22 +443,24 @@ export class Viewport3D {
     while (group.children.length > 0) {
       const child = group.children[0];
       group.remove(child);
-      child.traverse(obj => {
+      child.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
           else obj.material.dispose();
         }
       });
     }
   }
 
-  enableMeasureTool()  {
-    this._meas.enable(); this._ctrl.enabled = false;
+  enableMeasureTool() {
+    this._meas.enable();
+    this._ctrl.enabled = false;
     this._setActiveTool('measure');
   }
   disableMeasureTool() {
-    this._meas.disable(); this._ctrl.enabled = true;
+    this._meas.disable();
+    this._ctrl.enabled = true;
     if (this._activeTool === 'measure') this._setActiveTool(null);
     // Clear all measurements when deactivating the tool
     if (this._meas.clearAll) this._meas.clearAll();
@@ -361,10 +468,13 @@ export class Viewport3D {
   }
 
   enableSectionPlane(axis = 'z', frac = 0.5) {
-    this._secOn = true; this._secAxis = axis; this._secFrac = frac;
+    this._secOn = true;
+    this._secAxis = axis;
+    this._secFrac = frac;
     this._setActiveTool('section');
     this._secPopover.style.display = '';
-    this._hiliteAxis(); this._secSlider.value = String(Math.round(frac * 100));
+    this._hiliteAxis();
+    this._secSlider.value = String(Math.round(frac * 100));
     this._applySection();
   }
   disableSectionPlane() {
@@ -373,13 +483,19 @@ export class Viewport3D {
     this._secPopover.style.display = 'none';
     if (this._secViz) this._secViz.visible = false;
     this._clearSectionCaps();
-    this._scene.traverse(ch => { if (ch.material) ch.material.clippingPlanes = []; });
+    this._scene.traverse((ch) => {
+      if (ch.material) ch.material.clippingPlanes = [];
+    });
   }
 
   /** Whether section plane is currently active. */
-  get sectionEnabled() { return this._secOn; }
+  get sectionEnabled() {
+    return this._secOn;
+  }
   /** The current section THREE.Plane (read-only). */
-  get sectionPlane() { return this._secPlane; }
+  get sectionPlane() {
+    return this._secPlane;
+  }
 
   /**
    * Trigger a section plane rebuild (e.g. after layer visibility changes).
@@ -388,9 +504,16 @@ export class Viewport3D {
     if (this._secOn) this._applySection();
   }
 
-  animate(cb) { this._animCb = cb || null; if (!this._animating) { this._animating = true; this._tick(); } }
+  animate(cb) {
+    this._animCb = cb || null;
+    if (!this._animating) {
+      this._animating = true;
+      this._tick();
+    }
+  }
   resize() {
-    const w = this._container.clientWidth, h = this._container.clientHeight;
+    const w = this._container.clientWidth,
+      h = this._container.clientHeight;
     if (!w || !h) return;
     if (this._cameraType === 'orthographic') {
       // Maintain vertical extent, adjust horizontal by aspect
@@ -400,9 +523,11 @@ export class Viewport3D {
       this._cam.right = halfH * aspect;
       this._cam.updateProjectionMatrix();
     } else {
-      this._cam.aspect = w / h; this._cam.updateProjectionMatrix();
+      this._cam.aspect = w / h;
+      this._cam.updateProjectionMatrix();
     }
-    this._ren.setSize(w, h); if (this._edgeC) this._edgeC.resize(w, h);
+    this._ren.setSize(w, h);
+    if (this._edgeC) this._edgeC.resize(w, h);
     if (this._contourLineMat) {
       this._contourLineMat.resolution.set(w, h);
     }
@@ -411,7 +536,9 @@ export class Viewport3D {
     this._disposed = true;
     window.removeEventListener('resize', this._onResize);
     window.removeEventListener('keydown', this._onKey);
-    this._meas.disable(); this._ctrl.dispose(); this._ren.dispose();
+    this._meas.disable();
+    this._ctrl.dispose();
+    this._ren.dispose();
     if (this._cubeRen) this._cubeRen.dispose();
     if (this._overlay) this._overlay.remove();
     if (this._cubeCanvas) this._cubeCanvas.remove();
@@ -426,9 +553,10 @@ export class Viewport3D {
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
     const pad = maxDim * 0.15;
-    const w = this._container.clientWidth || 1, h = this._container.clientHeight || 1;
+    const w = this._container.clientWidth || 1,
+      h = this._container.clientHeight || 1;
     const aspect = w / h;
-    const halfH = (maxDim / 2) + pad;
+    const halfH = maxDim / 2 + pad;
     const halfW = halfH * aspect;
     this._cam.left = -halfW;
     this._cam.right = halfW;
@@ -446,16 +574,15 @@ export class Viewport3D {
     const oldPos = this._cam.position.clone();
     const oldUp = this._cam.up.clone();
     const target = this._ctrl.target.clone();
-    const w = this._container.clientWidth || 1, h = this._container.clientHeight || 1;
+    const w = this._container.clientWidth || 1,
+      h = this._container.clientHeight || 1;
 
     if (type === 'orthographic') {
       // Compute ortho frustum from perspective view distance
       const dist = oldPos.distanceTo(target);
       const halfH = dist * Math.tan(THREE.MathUtils.degToRad(this._cam.fov / 2));
       const aspect = w / h;
-      this._cam = new THREE.OrthographicCamera(
-        -halfH * aspect, halfH * aspect, halfH, -halfH, 0.0001, 10,
-      );
+      this._cam = new THREE.OrthographicCamera(-halfH * aspect, halfH * aspect, halfH, -halfH, 0.0001, 10);
     } else {
       // Compute perspective position from ortho frustum
       const halfH = this._cam.top;
@@ -492,18 +619,16 @@ export class Viewport3D {
 
   // ── Scene init ──
   _initScene(opts) {
-    const c = this._container, w = c.clientWidth || 800, h = c.clientHeight || 600;
+    const c = this._container,
+      w = c.clientWidth || 800,
+      h = c.clientHeight || 600;
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0xF5F8FA);
+    this._scene.background = new THREE.Color(0xf5f8fa);
 
     if (this._cameraType === 'orthographic') {
       const aspect = w / h;
       const frustum = 0.06;
-      this._cam = new THREE.OrthographicCamera(
-        -frustum * aspect, frustum * aspect,
-        frustum, -frustum,
-        0.0001, 10,
-      );
+      this._cam = new THREE.OrthographicCamera(-frustum * aspect, frustum * aspect, frustum, -frustum, 0.0001, 10);
       this._cam.position.set(0.06, -0.06, 0.05);
     } else {
       this._cam = new THREE.PerspectiveCamera(45, w / h, 0.0001, 10);
@@ -511,25 +636,36 @@ export class Viewport3D {
     }
     this._cam.up.set(0, 0, 1);
 
-    const rendererOpts = { antialias: true };
+    const rendererOpts: any = { antialias: true };
     if (this._cameraType !== 'orthographic') rendererOpts.logarithmicDepthBuffer = true;
     this._ren = new THREE.WebGLRenderer(rendererOpts);
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this._ren.setSize(w, h); this._ren.shadowMap.enabled = true;
-    this._ren.shadowMap.type = THREE.PCFShadowMap; this._ren.localClippingEnabled = true;
+    this._ren.setSize(w, h);
+    this._ren.shadowMap.enabled = true;
+    this._ren.shadowMap.type = THREE.PCFShadowMap;
+    this._ren.localClippingEnabled = true;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
-    this._ctrl.enableDamping = true; this._ctrl.dampingFactor = 0.1;
+    this._ctrl.enableDamping = true;
+    this._ctrl.dampingFactor = 0.1;
     // Trackpad: two-finger drag = rotate (not pan), pinch = zoom
     this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
     // Lighting
     this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.6); dir.position.set(0.3, 0.5, 0.4); this._scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.5); fill.position.set(-0.3, -0.2, -0.4); this._scene.add(fill);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+    dir.position.set(0.3, 0.5, 0.4);
+    this._scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    fill.position.set(-0.3, -0.2, -0.4);
+    this._scene.add(fill);
     this._gridHelper = null;
-    if (opts.grid) { this._gridHelper = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0); this._gridHelper.rotation.x = Math.PI / 2; this._scene.add(this._gridHelper); }
+    if (opts.grid) {
+      this._gridHelper = new THREE.GridHelper(0.3, 30, 0xced9e0, 0xe8edf0);
+      this._gridHelper.rotation.x = Math.PI / 2;
+      this._scene.add(this._gridHelper);
+    }
     if (opts.edges) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     this._meas = new MeasureTool(this._cam, this._scene, c);
   }
@@ -538,7 +674,8 @@ export class Viewport3D {
   _initOverlay() {
     const ov = document.createElement('div');
     ov.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;';
-    this._container.appendChild(ov); this._overlay = ov;
+    this._container.appendChild(ov);
+    this._overlay = ov;
 
     this._initOrientationCube();
     this._initToolStrip();
@@ -587,18 +724,19 @@ export class Viewport3D {
     // THREE.BoxGeometry UV layout in our Z-up coordinate system requires compensation:
     // Rotation values in radians applied via ctx.rotate around canvas center.
     const CUBE_FACE_ROTATION = [
-      -Math.PI / 2,  // +X (Right): UV text appears rotated 90° CW, counter-rotate
-      Math.PI / 2,   // -X (Left):  UV text appears rotated 90° CCW, rotate CW
-      Math.PI,        // +Y (Back):  UV text appears upside down, rotate 180°
-      0,              // -Y (Front): text reads correctly
-      0,              // +Z (Top):   text reads correctly from above
-      Math.PI,        // -Z (Bottom): text appears upside down, rotate 180°
+      -Math.PI / 2, // +X (Right): UV text appears rotated 90° CW, counter-rotate
+      Math.PI / 2, // -X (Left):  UV text appears rotated 90° CCW, rotate CW
+      Math.PI, // +Y (Back):  UV text appears upside down, rotate 180°
+      0, // -Y (Front): text reads correctly
+      0, // +Z (Top):   text reads correctly from above
+      Math.PI, // -Z (Bottom): text appears upside down, rotate 180°
     ];
 
     // Create face materials with canvas textures — cleaner labels
     const materials = CUBE_FACE_MAP.map((face, i) => {
       const texCanvas = document.createElement('canvas');
-      texCanvas.width = 128; texCanvas.height = 128;
+      texCanvas.width = 128;
+      texCanvas.height = 128;
       const ctx = texCanvas.getContext('2d');
       // Fill with face color
       ctx.fillStyle = CUBE_FACE_COLORS[i];
@@ -618,7 +756,8 @@ export class Viewport3D {
       // Crisp smaller text
       ctx.fillStyle = '#5C7080';
       ctx.font = '500 18px system-ui, -apple-system, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillText(face.label, 64, 64);
       if (rot) ctx.restore();
       const tex = new THREE.CanvasTexture(texCanvas);
@@ -642,7 +781,7 @@ export class Viewport3D {
 
     // Soft edge wireframe
     const edges = new THREE.EdgesGeometry(geo, 20);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x394B59, linewidth: 1, transparent: true, opacity: 0.4 });
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x394b59, linewidth: 1, transparent: true, opacity: 0.4 });
     const wireframe = new THREE.LineSegments(edges, lineMat);
     this._cubeMesh.add(wireframe);
 
@@ -655,7 +794,8 @@ export class Viewport3D {
 
     // Tooltip
     this._cubeTooltip = document.createElement('div');
-    this._cubeTooltip.style.cssText = 'position:absolute;pointer-events:none;background:rgba(28,33,39,0.9);color:#E8EDF0;font:500 12px system-ui,-apple-system,sans-serif;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;z-index:60;';
+    this._cubeTooltip.style.cssText =
+      'position:absolute;pointer-events:none;background:rgba(28,33,39,0.9);color:#E8EDF0;font:500 12px system-ui,-apple-system,sans-serif;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;z-index:60;';
     this._overlay.appendChild(this._cubeTooltip);
 
     // Events
@@ -673,7 +813,9 @@ export class Viewport3D {
     const geo = new THREE.BoxGeometry(w, h, d, segments + 1, segments + 1, segments + 1);
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
-    const halfW = w / 2, halfH = h / 2, halfD = d / 2;
+    const halfW = w / 2,
+      halfH = h / 2,
+      halfD = d / 2;
 
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
@@ -686,12 +828,9 @@ export class Viewport3D {
         const scale = radius / dist;
         if (scale < 1) {
           // Pull vertex inward to round the corner/edge
-          if (Math.abs(v.x) > halfW - radius)
-            v.x = Math.sign(v.x) * ((halfW - radius) + dx * scale);
-          if (Math.abs(v.y) > halfH - radius)
-            v.y = Math.sign(v.y) * ((halfH - radius) + dy * scale);
-          if (Math.abs(v.z) > halfD - radius)
-            v.z = Math.sign(v.z) * ((halfD - radius) + dz * scale);
+          if (Math.abs(v.x) > halfW - radius) v.x = Math.sign(v.x) * (halfW - radius + dx * scale);
+          if (Math.abs(v.y) > halfH - radius) v.y = Math.sign(v.y) * (halfH - radius + dy * scale);
+          if (Math.abs(v.z) > halfD - radius) v.z = Math.sign(v.z) * (halfD - radius + dz * scale);
         }
       }
       pos.setXYZ(i, v.x, v.y, v.z);
@@ -704,7 +843,7 @@ export class Viewport3D {
     const rect = this._cubeCanvas.getBoundingClientRect();
     const mouse = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this._cubeRaycaster.setFromCamera(mouse, this._cubeCam);
     const hits = this._cubeRaycaster.intersectObject(this._cubeMesh);
@@ -723,12 +862,14 @@ export class Viewport3D {
     const cornerThreshold = 0.32;
 
     // How many axes are close to the surface (above threshold)?
-    const nearSurface = [abs.x, abs.y, abs.z].filter(v => v > edgeThreshold).length;
+    const nearSurface = [abs.x, abs.y, abs.z].filter((v) => v > edgeThreshold).length;
 
     if (nearSurface >= 3) {
       // Corner: all three axes are significant — use preset corner directions
       // that match VIEW_PRESETS.iso Z-bias (0.8) for consistent views
-      const sx = Math.sign(point.x), sy = Math.sign(point.y), sz = Math.sign(point.z);
+      const sx = Math.sign(point.x),
+        sy = Math.sign(point.y),
+        sz = Math.sign(point.z);
       const dir = new THREE.Vector3(sx, sy, sz * 0.8).normalize();
       return { type: 'corner', dir };
     } else if (nearSurface >= 2 && sorted[1] > cornerThreshold) {
@@ -741,7 +882,9 @@ export class Viewport3D {
       return { type: 'edge', dir };
     } else {
       // Face center
-      const fi = Math.floor(hit.faceIndex / ((this._cubeMesh.geometry.index ? this._cubeMesh.geometry.index.count / 3 : 1) / 6));
+      const _fi = Math.floor(
+        hit.faceIndex / ((this._cubeMesh.geometry.index ? this._cubeMesh.geometry.index.count / 3 : 1) / 6),
+      );
       // Use a simpler approach: find the dominant axis
       let maxAxis = 0;
       if (abs.y > abs.x && abs.y > abs.z) maxAxis = 1;
@@ -841,7 +984,9 @@ export class Viewport3D {
     const baseR = parseInt(info.baseColor.slice(1, 3), 16);
     const baseG = parseInt(info.baseColor.slice(3, 5), 16);
     const baseB = parseInt(info.baseColor.slice(5, 7), 16);
-    const hoverR = 0xBC, hoverG = 0xC7, hoverB = 0xCF;
+    const hoverR = 0xbc,
+      hoverG = 0xc7,
+      hoverB = 0xcf;
     const r = Math.round(baseR + (hoverR - baseR) * t);
     const g = Math.round(baseG + (hoverG - baseG) * t);
     const b = Math.round(baseB + (hoverB - baseB) * t);
@@ -861,12 +1006,13 @@ export class Viewport3D {
       ctx.translate(-64, -64);
     }
     // Text — darker on hover for better contrast
-    const textR = Math.round(0x5C + (0x18 - 0x5C) * t);
+    const textR = Math.round(0x5c + (0x18 - 0x5c) * t);
     const textG = Math.round(0x70 + (0x20 - 0x70) * t);
     const textB = Math.round(0x80 + (0x26 - 0x80) * t);
     ctx.fillStyle = `rgb(${textR},${textG},${textB})`;
     ctx.font = '500 18px system-ui, -apple-system, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText(info.label, 64, 64);
     if (rot) ctx.restore();
     mat.map.needsUpdate = true;
@@ -895,9 +1041,9 @@ export class Viewport3D {
   _buildCubeAxisArrows() {
     const AXIS_LEN = 0.95;
     const AXIS_CFG = [
-      { dir: [1, 0, 0], color: 0xDB3737, label: 'X' },
-      { dir: [0, 1, 0], color: 0x0F9960, label: 'Y' },
-      { dir: [0, 0, 1], color: 0x2B95D6, label: 'Z' },
+      { dir: [1, 0, 0], color: 0xdb3737, label: 'X' },
+      { dir: [0, 1, 0], color: 0x0f9960, label: 'Y' },
+      { dir: [0, 0, 1], color: 0x2b95d6, label: 'Z' },
     ];
     // Anchor point: corner of the cube
     const origin = new THREE.Vector3(-0.55, -0.55, -0.55);
@@ -931,12 +1077,14 @@ export class Viewport3D {
 
       // Sprite label just past the arrowhead tip
       const labelCanvas = document.createElement('canvas');
-      labelCanvas.width = 64; labelCanvas.height = 64;
+      labelCanvas.width = 64;
+      labelCanvas.height = 64;
       const ctx = labelCanvas.getContext('2d');
       ctx.clearRect(0, 0, 64, 64);
-      ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+      ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
       ctx.font = 'bold 42px system-ui, -apple-system, sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillText(label, 32, 32);
       const spriteTex = new THREE.CanvasTexture(labelCanvas);
       spriteTex.colorSpace = THREE.SRGBColorSpace;
@@ -958,11 +1106,13 @@ export class Viewport3D {
   // ── Vertical Tool Strip (left edge) ──
   _initToolStrip() {
     const strip = document.createElement('div');
-    strip.style.cssText = 'position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.85);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;z-index:51;';
+    strip.style.cssText =
+      'position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.85);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;z-index:51;';
     this._overlay.appendChild(strip);
     this._toolStrip = strip;
 
-    const toolBtnCSS = 'width:36px;height:36px;border:none;border-radius:6px;background:transparent;color:#CED9E0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
+    const toolBtnCSS =
+      'width:36px;height:36px;border:none;border-radius:6px;background:transparent;color:#CED9E0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
 
     // Select tool
     this._selectBtn = document.createElement('button');
@@ -1011,44 +1161,59 @@ export class Viewport3D {
 
     // Section popover (appears to the right of tool strip)
     this._secPopover = document.createElement('div');
-    this._secPopover.style.cssText = 'position:absolute;left:52px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.92);border-radius:8px;padding:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.25);font:12px system-ui,-apple-system,sans-serif;color:#CED9E0;min-width:120px;z-index:52;';
+    this._secPopover.style.cssText =
+      'position:absolute;left:52px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.92);border-radius:8px;padding:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.25);font:12px system-ui,-apple-system,sans-serif;color:#CED9E0;min-width:120px;z-index:52;';
 
     // Axis selector
     const axLabel = document.createElement('div');
-    axLabel.style.cssText = 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:6px;';
+    axLabel.style.cssText =
+      'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:6px;';
     axLabel.textContent = 'Axis';
     this._secPopover.appendChild(axLabel);
 
     const axRow = document.createElement('div');
     axRow.style.cssText = 'display:flex;gap:3px;margin-bottom:8px;';
     this._secAxisBtns = {};
-    const axisBtnCSS = 'width:32px;height:26px;border:1px solid rgba(206,217,224,0.2);border-radius:4px;background:transparent;color:#CED9E0;font:600 11px system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.12s;';
+    const axisBtnCSS =
+      'width:32px;height:26px;border:1px solid rgba(206,217,224,0.2);border-radius:4px;background:transparent;color:#CED9E0;font:600 11px system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.12s;';
     for (const ax of ['x', 'y', 'z']) {
       const b = document.createElement('button');
       b.style.cssText = axisBtnCSS;
       b.textContent = ax.toUpperCase();
-      b.addEventListener('click', () => { this._secAxis = ax; this._hiliteAxis(); this._applySection(); });
-      axRow.appendChild(b); this._secAxisBtns[ax] = b;
+      b.addEventListener('click', () => {
+        this._secAxis = ax;
+        this._hiliteAxis();
+        this._applySection();
+      });
+      axRow.appendChild(b);
+      this._secAxisBtns[ax] = b;
     }
     // Flip button
     const flipBtn = document.createElement('button');
-    flipBtn.style.cssText = axisBtnCSS + 'width:auto;padding:0 8px;';
+    flipBtn.style.cssText = `${axisBtnCSS}width:auto;padding:0 8px;`;
     flipBtn.textContent = 'Flip';
-    flipBtn.addEventListener('click', () => { this._secFlipped = !this._secFlipped; this._applySection(); });
+    flipBtn.addEventListener('click', () => {
+      this._secFlipped = !this._secFlipped;
+      this._applySection();
+    });
     axRow.appendChild(flipBtn);
 
     this._secPopover.appendChild(axRow);
 
     // Slider
     const sliderLabel = document.createElement('div');
-    sliderLabel.style.cssText = 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:4px;';
+    sliderLabel.style.cssText =
+      'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:4px;';
     sliderLabel.textContent = 'Position';
     this._secPopover.appendChild(sliderLabel);
 
     this._secSlider = document.createElement('input');
     Object.assign(this._secSlider, { type: 'range', min: '0', max: '100', value: '50' });
     this._secSlider.style.cssText = 'width:100%;margin:0;cursor:pointer;accent-color:#137CBD;';
-    this._secSlider.addEventListener('input', () => { this._secFrac = parseFloat(this._secSlider.value) / 100; this._applySection(); });
+    this._secSlider.addEventListener('input', () => {
+      this._secFrac = parseFloat(this._secSlider.value) / 100;
+      this._applySection();
+    });
     this._secPopover.appendChild(this._secSlider);
 
     // Attach popover next to strip
@@ -1076,10 +1241,12 @@ export class Viewport3D {
 
     // Settings popover
     this._settingsPopover = document.createElement('div');
-    this._settingsPopover.style.cssText = 'position:absolute;left:52px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.92);border-radius:8px;padding:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.25);font:12px system-ui,-apple-system,sans-serif;color:#CED9E0;min-width:140px;z-index:52;';
+    this._settingsPopover.style.cssText =
+      'position:absolute;left:52px;top:50%;transform:translateY(-50%);pointer-events:auto;background:rgba(28,33,39,0.92);border-radius:8px;padding:10px;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.25);font:12px system-ui,-apple-system,sans-serif;color:#CED9E0;min-width:140px;z-index:52;';
 
     const settingsTitle = document.createElement('div');
-    settingsTitle.style.cssText = 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:8px;';
+    settingsTitle.style.cssText =
+      'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#8A9BA8;margin-bottom:8px;';
     settingsTitle.textContent = 'Settings';
     this._settingsPopover.appendChild(settingsTitle);
 
@@ -1093,7 +1260,8 @@ export class Viewport3D {
 
     const camToggle = document.createElement('div');
     camToggle.style.cssText = 'display:flex;border:1px solid rgba(206,217,224,0.2);border-radius:4px;overflow:hidden;';
-    const camBtnCSS = 'border:none;padding:2px 8px;font:500 10px system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.12s;';
+    const camBtnCSS =
+      'border:none;padding:2px 8px;font:500 10px system-ui,-apple-system,sans-serif;cursor:pointer;transition:all 0.12s;';
     this._perspBtn = document.createElement('button');
     this._perspBtn.textContent = 'Persp';
     this._perspBtn.style.cssText = camBtnCSS;
@@ -1109,8 +1277,14 @@ export class Viewport3D {
       this._orthoBtn.style.color = !isPersp ? '#E8EDF0' : '#738694';
     };
 
-    this._perspBtn.addEventListener('click', () => { if (this._cameraType !== 'perspective') this._switchCamera('perspective'); updateCamBtns(); });
-    this._orthoBtn.addEventListener('click', () => { if (this._cameraType !== 'orthographic') this._switchCamera('orthographic'); updateCamBtns(); });
+    this._perspBtn.addEventListener('click', () => {
+      if (this._cameraType !== 'perspective') this._switchCamera('perspective');
+      updateCamBtns();
+    });
+    this._orthoBtn.addEventListener('click', () => {
+      if (this._cameraType !== 'orthographic') this._switchCamera('orthographic');
+      updateCamBtns();
+    });
     camToggle.appendChild(this._perspBtn);
     camToggle.appendChild(this._orthoBtn);
     camRow.appendChild(camToggle);
@@ -1128,7 +1302,9 @@ export class Viewport3D {
       if (this._edgeCb.checked) {
         if (!this._edgeC) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
       } else {
-        if (this._edgeC) { this._edgeC = null; }
+        if (this._edgeC) {
+          this._edgeC = null;
+        }
       }
     });
     edgeRow.appendChild(this._edgeCb);
@@ -1144,12 +1320,12 @@ export class Viewport3D {
     this._gridCb = document.createElement('input');
     this._gridCb.type = 'checkbox';
     // Grid reference is set during _initScene if opts.grid was true
-    this._gridCb.checked = !!(this._gridHelper && this._gridHelper.visible);
+    this._gridCb.checked = !!this._gridHelper?.visible;
     this._gridCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
     this._gridCb.addEventListener('change', () => {
       if (this._gridCb.checked) {
         if (!this._gridHelper) {
-          this._gridHelper = new THREE.GridHelper(0.3, 30, 0xCED9E0, 0xE8EDF0);
+          this._gridHelper = new THREE.GridHelper(0.3, 30, 0xced9e0, 0xe8edf0);
           this._gridHelper.rotation.x = Math.PI / 2;
           this._scene.add(this._gridHelper);
         }
@@ -1194,11 +1370,16 @@ export class Viewport3D {
 
   _addToolTooltip(btn, text) {
     const tip = document.createElement('div');
-    tip.style.cssText = 'position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);pointer-events:none;background:rgba(28,33,39,0.9);color:#E8EDF0;font:500 12px system-ui,-apple-system,sans-serif;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;z-index:60;';
+    tip.style.cssText =
+      'position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);pointer-events:none;background:rgba(28,33,39,0.9);color:#E8EDF0;font:500 12px system-ui,-apple-system,sans-serif;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;z-index:60;';
     tip.textContent = text;
     btn.appendChild(tip);
-    btn.addEventListener('mouseenter', () => { tip.style.display = ''; });
-    btn.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    btn.addEventListener('mouseenter', () => {
+      tip.style.display = '';
+    });
+    btn.addEventListener('mouseleave', () => {
+      tip.style.display = 'none';
+    });
   }
 
   _setActiveTool(tool) {
@@ -1207,7 +1388,8 @@ export class Viewport3D {
     const inactiveCSS = 'background:transparent;color:#CED9E0;';
 
     // Update button styles (preserve base styles)
-    const base = 'width:36px;height:36px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
+    const base =
+      'width:36px;height:36px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
     this._selectBtn.style.cssText = base + (tool === null ? activeCSS : inactiveCSS);
     this._measBtn.style.cssText = base + (tool === 'measure' ? activeCSS : inactiveCSS);
     this._secBtn.style.cssText = base + (tool === 'section' ? activeCSS : inactiveCSS);
@@ -1217,11 +1399,19 @@ export class Viewport3D {
     this._onKey = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       if (e.ctrlKey || e.metaKey) return;
-      if (KEY_TO_PRESET[e.key]) { e.preventDefault(); this.setViewPreset(KEY_TO_PRESET[e.key]); }
-      else if (e.key === 'f') { e.preventDefault(); this.zoomToFit(); }
-      else if (e.key === 'm') { e.preventDefault(); this._measBtn.click(); }
-      else if (e.key === 's') { e.preventDefault(); this._secBtn.click(); }
-      else if (e.key === 'Escape') {
+      if (KEY_TO_PRESET[e.key]) {
+        e.preventDefault();
+        this.setViewPreset(KEY_TO_PRESET[e.key]);
+      } else if (e.key === 'f') {
+        e.preventDefault();
+        this.zoomToFit();
+      } else if (e.key === 'm') {
+        e.preventDefault();
+        this._measBtn.click();
+      } else if (e.key === 's') {
+        e.preventDefault();
+        this._secBtn.click();
+      } else if (e.key === 'Escape') {
         e.preventDefault();
         if (this._meas.enabled) this.disableMeasureTool();
         else if (this._meas.measurements && this._meas.measurements.length > 0) {
@@ -1239,7 +1429,7 @@ export class Viewport3D {
   }
 
   _hiliteAxis() {
-    for (const [a, b] of Object.entries(this._secAxisBtns)) {
+    for (const [a, b] of Object.entries(this._secAxisBtns) as [string, any][]) {
       b.style.background = a === this._secAxis ? 'rgba(19,124,189,0.3)' : 'transparent';
       b.style.color = a === this._secAxis ? '#2B95D6' : '#CED9E0';
       b.style.borderColor = a === this._secAxis ? 'rgba(43,149,214,0.4)' : 'rgba(206,217,224,0.2)';
@@ -1249,27 +1439,38 @@ export class Viewport3D {
   // ── Content bounding box ──
   _bbox() {
     this._scene.updateMatrixWorld(true);
-    const box = new THREE.Box3(); let has = false;
+    const box = new THREE.Box3();
+    let has = false;
     // Scan named groups
-    for (const g of Object.values(this._groups)) {
+    for (const g of Object.values(this._groups) as any[]) {
       if (!g.visible) continue;
-      g.traverse(ch => {
+      g.traverse((ch: any) => {
         if (ch.isMesh && ch.geometry) {
           ch.geometry.computeBoundingBox();
-          const b = ch.geometry.boundingBox.clone(); b.applyMatrix4(ch.matrixWorld);
-          box.union(b); has = true;
+          const b = ch.geometry.boundingBox.clone();
+          b.applyMatrix4(ch.matrixWorld);
+          box.union(b);
+          has = true;
         }
       });
     }
     // Also scan direct scene children that aren't named groups or viewport internals
-    this._scene.children.forEach(child => {
-      if (child.isGroup && !this._groups[child.name] && child.visible
-          && !child.userData._vpSec && !child.userData._vpCap && child.name !== 'section-caps') {
-        child.traverse(ch => {
+    this._scene.children.forEach((child) => {
+      if (
+        child.isGroup &&
+        !this._groups[child.name] &&
+        child.visible &&
+        !child.userData._vpSec &&
+        !child.userData._vpCap &&
+        child.name !== 'section-caps'
+      ) {
+        child.traverse((ch) => {
           if (ch.isMesh && ch.geometry) {
             ch.geometry.computeBoundingBox();
-            const b = ch.geometry.boundingBox.clone(); b.applyMatrix4(ch.matrixWorld);
-            box.union(b); has = true;
+            const b = ch.geometry.boundingBox.clone();
+            b.applyMatrix4(ch.matrixWorld);
+            box.union(b);
+            has = true;
           }
         });
       }
@@ -1279,18 +1480,24 @@ export class Viewport3D {
 
   // ── Camera lerp ──
   _startLerp(pos, tgt, up) {
-    this._lerpS.pos.copy(this._cam.position); this._lerpS.tgt.copy(this._ctrl.target); this._lerpS.up.copy(this._cam.up);
-    this._lerpE.pos.copy(pos); this._lerpE.tgt.copy(tgt); this._lerpE.up.copy(up);
-    this._lerpT0 = performance.now(); this._lerpActive = true;
+    this._lerpS.pos.copy(this._cam.position);
+    this._lerpS.tgt.copy(this._ctrl.target);
+    this._lerpS.up.copy(this._cam.up);
+    this._lerpE.pos.copy(pos);
+    this._lerpE.tgt.copy(tgt);
+    this._lerpE.up.copy(up);
+    this._lerpT0 = performance.now();
+    this._lerpActive = true;
   }
   _tickLerp() {
     if (!this._lerpActive) return;
     let t = Math.min((performance.now() - this._lerpT0) / this._lerpDur, 1);
-    t = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    t = 1 - (1 - t) ** 3; // ease-out cubic
     this._cam.position.lerpVectors(this._lerpS.pos, this._lerpE.pos, t);
     this._ctrl.target.lerpVectors(this._lerpS.tgt, this._lerpE.tgt, t);
     this._cam.up.lerpVectors(this._lerpS.up, this._lerpE.up, t).normalize();
-    this._cam.lookAt(this._ctrl.target); this._ctrl.update();
+    this._cam.lookAt(this._ctrl.target);
+    this._ctrl.update();
     if (t >= 1) this._lerpActive = false;
   }
 
@@ -1301,15 +1508,21 @@ export class Viewport3D {
       const ai = AXIS_IDX[this._secAxis];
       const sign = this._secFlipped ? 1 : -1;
       const pos = box.min.getComponent(ai) + (box.max.getComponent(ai) - box.min.getComponent(ai)) * this._secFrac;
-      const n = new THREE.Vector3(); n.setComponent(ai, sign);
-      this._secPlane.normal.copy(n); this._secPlane.constant = -sign * pos;
+      const n = new THREE.Vector3();
+      n.setComponent(ai, sign);
+      this._secPlane.normal.copy(n);
+      this._secPlane.constant = -sign * pos;
       this._showSecViz(box, ai, pos);
     }
     const clips = [this._secPlane];
-    this._scene.traverse(ch => {
+    this._scene.traverse((ch) => {
       if (ch.material && !ch.userData._vpSec && !ch.userData._vpCap) {
-        if (ch.isLineSegments && !ch.material._vpClip) { ch.material = ch.material.clone(); ch.material._vpClip = true; }
-        ch.material.clippingPlanes = clips; ch.material.clipShadows = true;
+        if (ch.isLineSegments && !ch.material._vpClip) {
+          ch.material = ch.material.clone();
+          ch.material._vpClip = true;
+        }
+        ch.material.clippingPlanes = clips;
+        ch.material.clipShadows = true;
         // Polygon offset on solid meshes to prevent z-fighting with contour lines
         if (ch.isMesh && !ch.isLineSegments) {
           ch.material.polygonOffset = true;
@@ -1326,7 +1539,7 @@ export class Viewport3D {
   _showSecViz(box, ai, pos) {
     if (!this._secViz) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x2B95D6,
+        color: 0x2b95d6,
         transparent: true,
         opacity: 0.06,
         side: THREE.DoubleSide,
@@ -1335,11 +1548,16 @@ export class Viewport3D {
       });
       this._secViz = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
       this._secViz.renderOrder = 9999; // render after all body geometry
-      this._secViz.userData._vpSec = true; this._secViz.raycast = () => {}; this._scene.add(this._secViz);
+      this._secViz.userData._vpSec = true;
+      this._secViz.raycast = () => {};
+      this._scene.add(this._secViz);
     }
-    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3()),
+      sz = box.getSize(new THREE.Vector3());
     this._secViz.scale.set(Math.max(sz.x, sz.y, sz.z) * 1.5, Math.max(sz.x, sz.y, sz.z) * 1.5, 1);
-    this._secViz.visible = true; c.setComponent(ai, pos); this._secViz.position.copy(c);
+    this._secViz.visible = true;
+    c.setComponent(ai, pos);
+    this._secViz.position.copy(c);
     this._secViz.rotation.set(0, 0, 0);
     if (ai === 0) this._secViz.rotation.y = Math.PI / 2;
     else if (ai === 1) this._secViz.rotation.x = Math.PI / 2;
@@ -1367,20 +1585,26 @@ export class Viewport3D {
 
     // Collect meshes from named groups AND from ungrouped scene children
     const sources = [];
-    for (const [groupName, group] of Object.entries(this._groups)) {
+    for (const [groupName, group] of Object.entries(this._groups) as [string, any][]) {
       if (!group.visible) continue;
       sources.push({ name: groupName, node: group });
     }
     // Also scan direct scene children that aren't groups or viewport internals
-    this._scene.children.forEach(child => {
-      if (child.isGroup && !this._groups[child.name] && child.visible
-          && !child.userData._vpSec && !child.userData._vpCap && child.name !== 'section-caps') {
+    this._scene.children.forEach((child) => {
+      if (
+        child.isGroup &&
+        !this._groups[child.name] &&
+        child.visible &&
+        !child.userData._vpSec &&
+        !child.userData._vpCap &&
+        child.name !== 'section-caps'
+      ) {
         sources.push({ name: child.name || 'scene', node: child });
       }
     });
 
     for (const { name: groupName, node } of sources) {
-      node.traverse(child => {
+      node.traverse((child) => {
         if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
           allMeshes.push({ mesh: child, groupName });
           if (!layerMeshes[groupName]) layerMeshes[groupName] = [];
@@ -1415,10 +1639,10 @@ export class Viewport3D {
         }
         if (capColor == null) {
           const firstMat = allMeshes[0]?.mesh?.material;
-          const baseHex = firstMat?.color ? firstMat.color.getHex() : 0xCED9E0;
+          const baseHex = firstMat?.color ? firstMat.color.getHex() : 0xced9e0;
           // Darken the body color (blend toward dark gray, not white)
           const base = new THREE.Color(baseHex);
-          capColor = base.clone().lerp(new THREE.Color(0x394B59), 0.5);
+          capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
         }
 
         const hatchTex = this._createHatchTexture(capColor);
@@ -1444,7 +1668,8 @@ export class Viewport3D {
     if (allSegments.length > 0) {
       const lineGeom = new LineSegmentsGeometry();
       lineGeom.setPositions(allSegments);
-      const w = this._ren.domElement.width, h = this._ren.domElement.height;
+      const w = this._ren.domElement.width,
+        h = this._ren.domElement.height;
       const lineMat = new LineMaterial({
         color: BP.DARK_GRAY3,
         linewidth: 3,
@@ -1472,7 +1697,9 @@ export class Viewport3D {
 
     const index = geom.index;
     const matrix = mesh.matrixWorld;
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const a = new THREE.Vector3(),
+      b = new THREE.Vector3(),
+      c = new THREE.Vector3();
 
     const triCount = index ? index.count / 3 : posAttr.count / 3;
 
@@ -1495,10 +1722,7 @@ export class Viewport3D {
       if (dc * da < 0) crossings.push(this._planeEdgeIntersect(c, a, dc, da));
 
       if (crossings.length === 2) {
-        out.push(
-          crossings[0].x, crossings[0].y, crossings[0].z,
-          crossings[1].x, crossings[1].y, crossings[1].z,
-        );
+        out.push(crossings[0].x, crossings[0].y, crossings[0].z, crossings[1].x, crossings[1].y, crossings[1].z);
       }
     }
   }
@@ -1517,8 +1741,8 @@ export class Viewport3D {
     const segs = [];
     for (let i = 0; i < flatSegments.length; i += 6) {
       segs.push([
-        new THREE.Vector3(flatSegments[i], flatSegments[i+1], flatSegments[i+2]),
-        new THREE.Vector3(flatSegments[i+3], flatSegments[i+4], flatSegments[i+5]),
+        new THREE.Vector3(flatSegments[i], flatSegments[i + 1], flatSegments[i + 2]),
+        new THREE.Vector3(flatSegments[i + 3], flatSegments[i + 4], flatSegments[i + 5]),
       ]);
     }
 
@@ -1589,34 +1813,37 @@ export class Viewport3D {
     // Project all polygons to 2D, deduplicate near-coincident vertices,
     // compute signed area to classify outer vs holes
     const DEDUP_EPS = 1e-7;
-    const projected = polygons.map(polygon => {
-      const pts2d = polygon.map(p => {
-        const rel = p.clone().sub(planePoint);
-        return [rel.dot(u), rel.dot(v)];
-      });
-      // Remove near-duplicate consecutive vertices
-      const cleaned2d = [pts2d[0]];
-      const cleaned3d = [polygon[0]];
-      for (let i = 1; i < pts2d.length; i++) {
-        const prev = cleaned2d[cleaned2d.length - 1];
-        const dx = pts2d[i][0] - prev[0], dy = pts2d[i][1] - prev[1];
-        if (dx * dx + dy * dy > DEDUP_EPS * DEDUP_EPS) {
-          cleaned2d.push(pts2d[i]);
-          cleaned3d.push(polygon[i]);
+    const projected = polygons
+      .map((polygon) => {
+        const pts2d = polygon.map((p) => {
+          const rel = p.clone().sub(planePoint);
+          return [rel.dot(u), rel.dot(v)];
+        });
+        // Remove near-duplicate consecutive vertices
+        const cleaned2d = [pts2d[0]];
+        const cleaned3d = [polygon[0]];
+        for (let i = 1; i < pts2d.length; i++) {
+          const prev = cleaned2d[cleaned2d.length - 1];
+          const dx = pts2d[i][0] - prev[0],
+            dy = pts2d[i][1] - prev[1];
+          if (dx * dx + dy * dy > DEDUP_EPS * DEDUP_EPS) {
+            cleaned2d.push(pts2d[i]);
+            cleaned3d.push(polygon[i]);
+          }
         }
-      }
-      if (cleaned2d.length < 3) return null;
+        if (cleaned2d.length < 3) return null;
 
-      // Signed area (shoelace formula)
-      let area = 0;
-      for (let i = 0; i < cleaned2d.length; i++) {
-        const j = (i + 1) % cleaned2d.length;
-        area += cleaned2d[i][0] * cleaned2d[j][1];
-        area -= cleaned2d[j][0] * cleaned2d[i][1];
-      }
-      area /= 2;
-      return { polygon: cleaned3d, pts2d: cleaned2d, area };
-    }).filter(Boolean);
+        // Signed area (shoelace formula)
+        let area = 0;
+        for (let i = 0; i < cleaned2d.length; i++) {
+          const j = (i + 1) % cleaned2d.length;
+          area += cleaned2d[i][0] * cleaned2d[j][1];
+          area -= cleaned2d[j][0] * cleaned2d[i][1];
+        }
+        area /= 2;
+        return { polygon: cleaned3d, pts2d: cleaned2d, area };
+      })
+      .filter(Boolean);
 
     if (projected.length === 0) return null;
 
@@ -1630,7 +1857,8 @@ export class Viewport3D {
     // Even nesting depth (0, 2, 4...) = outer. Odd (1, 3...) = hole.
     const roles = projected.map((poly, i) => {
       let depth = 0;
-      for (let j = 0; j < i; j++) { // only check larger polygons
+      for (let j = 0; j < i; j++) {
+        // only check larger polygons
         if (this._pointInPolygon2D(poly.pts2d[0], projected[j].pts2d)) {
           depth++;
         }
@@ -1639,9 +1867,8 @@ export class Viewport3D {
     });
 
     // Group: each outer gets the holes at depth = outer.depth + 1 that are inside it
-    const outers = roles.filter(r => r.isOuter);
-    const allHoles = roles.filter(r => !r.isOuter);
-
+    const outers = roles.filter((r) => r.isOuter);
+    const allHoles = roles.filter((r) => !r.isOuter);
 
     // Triangulate each outer with its holes
     const positions = [];
@@ -1656,9 +1883,8 @@ export class Viewport3D {
       }
 
       // Find holes directly inside this outer (depth == outer.depth + 1, contained by this outer)
-      const myHoles = allHoles.filter(h =>
-        h.depth === outer.depth + 1 &&
-        this._pointInPolygon2D(h.pts2d[0], outer.pts2d)
+      const myHoles = allHoles.filter(
+        (h) => h.depth === outer.depth + 1 && this._pointInPolygon2D(h.pts2d[0], outer.pts2d),
       );
 
       // Ensure CW winding for holes
@@ -1705,7 +1931,7 @@ export class Viewport3D {
     // based on camera zoom so hatching has consistent screen-space density.
     const uvs = [];
     for (let i = 0; i < positions.length; i += 3) {
-      const p = new THREE.Vector3(positions[i], positions[i+1], positions[i+2]);
+      const p = new THREE.Vector3(positions[i], positions[i + 1], positions[i + 2]);
       const rel = p.clone().sub(planePoint);
       uvs.push(rel.dot(u), rel.dot(v));
     }
@@ -1721,7 +1947,7 @@ export class Viewport3D {
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       const [xi, yi] = polygon[i];
       const [xj, yj] = polygon[j];
-      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
         inside = !inside;
       }
     }
@@ -1744,14 +1970,14 @@ export class Viewport3D {
     const ctx = canvas.getContext('2d');
 
     // Solid fill in the body color (darker tint)
-    const c = (color instanceof THREE.Color) ? color : new THREE.Color(color);
-    const cssColor = '#' + c.getHexString();
+    const c = color instanceof THREE.Color ? color : new THREE.Color(color);
+    const cssColor = `#${c.getHexString()}`;
     ctx.fillStyle = cssColor;
     ctx.fillRect(0, 0, size, size);
 
     // Diagonal hatch lines — lighter for contrast against the dark fill
     const lighter = c.clone().lerp(new THREE.Color(0xffffff), 0.65);
-    ctx.strokeStyle = '#' + lighter.getHexString();
+    ctx.strokeStyle = `#${lighter.getHexString()}`;
     ctx.lineWidth = lineWidth;
 
     // Draw 45-degree lines that tile seamlessly.
@@ -1788,7 +2014,7 @@ export class Viewport3D {
     } else {
       // Perspective: approximate from distance to target
       const dist = this._cam.position.distanceTo(this._ctrl.target);
-      const vFov = this._cam.fov * Math.PI / 180;
+      const vFov = (this._cam.fov * Math.PI) / 180;
       worldPerPx = (2 * dist * Math.tan(vFov / 2)) / this._ren.domElement.clientHeight;
     }
 
@@ -1810,7 +2036,7 @@ export class Viewport3D {
 
   _clearSectionCaps() {
     if (this._capGroup) {
-      this._capGroup.traverse(child => {
+      this._capGroup.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (child.material.map) child.material.map.dispose();
@@ -1828,7 +2054,8 @@ export class Viewport3D {
   _tick() {
     if (this._disposed) return;
     requestAnimationFrame(() => this._tick());
-    this._tickLerp(); this._ctrl.update();
+    this._tickLerp();
+    this._ctrl.update();
     // Follow mode drift detection — exit if user pans/zooms significantly
     if (this._followMode && this._followTarget && !this._lerpActive) {
       const drift = this._ctrl.target.distanceTo(this._followTarget);
@@ -1852,6 +2079,7 @@ export class Viewport3D {
     this._syncOrientationCube();
     // Keep section popover positioned
     if (this._secOn && this._updateSecPopoverPos) this._updateSecPopoverPos();
-    if (this._settingsPopover && this._settingsPopover.style.display !== 'none' && this._updateSettingsPopoverPos) this._updateSettingsPopoverPos();
+    if (this._settingsPopover && this._settingsPopover.style.display !== 'none' && this._updateSettingsPopoverPos)
+      this._updateSettingsPopoverPos();
   }
 }

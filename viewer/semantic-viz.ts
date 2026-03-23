@@ -6,10 +6,14 @@
  */
 
 import * as THREE from 'three';
-import { clearGroup, createArcGeometry, orientToAxis, createTextSprite } from './utils.js';
+import { clearGroup, createArcGeometry, createTextSprite, orientToAxis } from './utils.ts';
 
 export class SemanticViz {
-  constructor(ctx) {
+  ctx: any;
+  group: any;
+  active: boolean;
+
+  constructor(ctx: any) {
     this.ctx = ctx;
     this.group = new THREE.Group();
     this.group.name = 'SemanticOverlays';
@@ -59,7 +63,7 @@ export class SemanticViz {
       const rangeGeo = createArcGeometry(arcRadius, lo, hi, 48);
       const rangeArc = new THREE.Line(
         rangeGeo,
-        new THREE.LineBasicMaterial({ color: 0x0A6640, transparent: true, opacity: 0.6, linewidth: 2 })
+        new THREE.LineBasicMaterial({ color: 0x0a6640, transparent: true, opacity: 0.6, linewidth: 2 }),
       );
       orientToAxis(rangeArc, swizzled);
       rangeArc.position.copy(center);
@@ -67,7 +71,7 @@ export class SemanticViz {
     }
 
     // Axis arrow
-    const arrow = new THREE.ArrowHelper(swizzled, center, 0.08, 0x0A6640, 0.018, 0.01);
+    const arrow = new THREE.ArrowHelper(swizzled, center, 0.08, 0x0a6640, 0.018, 0.01);
     this.group.add(arrow);
 
     // Text labels for servo specs
@@ -77,7 +81,7 @@ export class SemanticViz {
       const rangeDeg = jointData.range_deg;
       if (rangeDeg) labels.push(`ROM: ${rangeDeg[0]}° to ${rangeDeg[1]}°`);
       labels.push(`Torque: ${specs.stall_torque_nm.toFixed(2)} N·m`);
-      const rpmApprox = (specs.no_load_speed_rad_s * 60 / (2 * Math.PI)).toFixed(0);
+      const rpmApprox = ((specs.no_load_speed_rad_s * 60) / (2 * Math.PI)).toFixed(0);
       labels.push(`Speed: ${rpmApprox} RPM`);
 
       const labelPos = center.clone().add(new THREE.Vector3(0.03, 0.025, 0));
@@ -109,7 +113,7 @@ export class SemanticViz {
     const boxEdges = new THREE.EdgesGeometry(boxGeo);
     const wireBox = new THREE.LineSegments(
       boxEdges,
-      new THREE.LineBasicMaterial({ color: 0x0E5A8A, transparent: true, opacity: 0.5 })
+      new THREE.LineBasicMaterial({ color: 0x0e5a8a, transparent: true, opacity: 0.5 }),
     );
     wireBox.position.copy(center);
     this.group.add(wireBox);
@@ -160,7 +164,7 @@ export class SemanticViz {
     this.clear();
     if (!mountData) return;
 
-    const fovRad = (mountData.fov_deg || 72) * Math.PI / 180;
+    const fovRad = ((mountData.fov_deg || 72) * Math.PI) / 180;
     const coneLength = 0.12;
     const coneRadius = Math.tan(fovRad / 2) * coneLength;
 
@@ -169,7 +173,7 @@ export class SemanticViz {
     coneGeo.rotateX(Math.PI); // point forward
     const cone = new THREE.Mesh(
       coneGeo,
-      new THREE.MeshBasicMaterial({ color: 0x7157D9, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0x7157d9, transparent: true, opacity: 0.15, side: THREE.DoubleSide }),
     );
     cone.position.copy(position);
     this.group.add(cone);
@@ -178,7 +182,7 @@ export class SemanticViz {
     const wireGeo = new THREE.EdgesGeometry(coneGeo);
     const wire = new THREE.LineSegments(
       wireGeo,
-      new THREE.LineBasicMaterial({ color: 0x7157D9, transparent: true, opacity: 0.4 })
+      new THREE.LineBasicMaterial({ color: 0x7157d9, transparent: true, opacity: 0.4 }),
     );
     wire.position.copy(position);
     this.group.add(wire);
@@ -187,7 +191,7 @@ export class SemanticViz {
     if (mountData.resolution) {
       const label = createTextSprite(
         `${mountData.resolution[0]}×${mountData.resolution[1]}  FOV ${mountData.fov_deg}°`,
-        { fontSize: 11, color: '#7157D9' }
+        { fontSize: 11, color: '#7157D9' },
       );
       label.position.copy(position).y += 0.018;
       label.scale.set(0.047, 0.008, 1);
@@ -206,10 +210,7 @@ export class SemanticViz {
 
     // Rotation direction arrow (circular)
     const arcGeo = createArcGeometry(0.04, 0, Math.PI * 1.5, 24);
-    const arc = new THREE.Line(
-      arcGeo,
-      new THREE.LineBasicMaterial({ color: 0x008075, linewidth: 2 })
-    );
+    const arc = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x008075, linewidth: 2 }));
     arc.position.copy(position);
     this.group.add(arc);
 

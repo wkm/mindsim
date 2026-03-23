@@ -26,35 +26,35 @@ const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><path d="M
 const TARGET_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="currentColor" fill="none" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
 
 const ICONS = {
-  assembly:  { symbol: '\u25b8', color: '#5C7080' },    // right triangle — gray
-  body:      { symbol: '\u25a0', color: '#2B95D6' },    // filled square — blue
-  servo:     { symbol: '\u25a0', color: '#182026' },    // filled square — dark gray
-  horn:      { symbol: '\u25a0', color: '#E8E8E8' },    // filled square — light gray
-  mount:     { symbol: '\u25a0', color: '#0F9960' },    // filled square — green
-  battery:   { symbol: '\u25a0', color: '#0F9960' },    // filled square — green (mount)
-  camera:    { symbol: '\u25a0', color: '#0F9960' },    // filled square — green (mount)
-  compute:   { symbol: '\u25a0', color: '#0F9960' },    // filled square — green (mount)
-  component: { symbol: '\u25a0', color: '#0F9960' },    // filled square — green (mount)
-  wheel:     { symbol: '\u25a0', color: '#0F9960' },    // filled square — green (mount)
-  fastener:  { symbol: '\u25a0', color: '#D4A843' },    // filled square — gold
-  wire:      { symbol: '\u25a0', color: '#9179F2' },    // filled square — purple
-  joint:     { symbol: '\u25cf', color: '#0A6640' },    // filled circle — green
+  assembly: { symbol: '\u25b8', color: '#5C7080' }, // right triangle — gray
+  body: { symbol: '\u25a0', color: '#2B95D6' }, // filled square — blue
+  servo: { symbol: '\u25a0', color: '#182026' }, // filled square — dark gray
+  horn: { symbol: '\u25a0', color: '#E8E8E8' }, // filled square — light gray
+  mount: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green
+  battery: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
+  camera: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
+  compute: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
+  component: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
+  wheel: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
+  fastener: { symbol: '\u25a0', color: '#D4A843' }, // filled square — gold
+  wire: { symbol: '\u25a0', color: '#9179F2' }, // filled square — purple
+  joint: { symbol: '\u25cf', color: '#0A6640' }, // filled circle — green
 };
 
 /** Map category filter keys to display labels and icon colors. */
 const CATEGORY_CHIPS = [
-  { key: 'body',     label: 'Bodies',     color: '#2B95D6' },
-  { key: 'servo',    label: 'Servos',     color: '#182026' },
-  { key: 'mount',    label: 'Components', color: '#0F9960' },
-  { key: 'fastener', label: 'Fasteners',  color: '#D4A843' },
-  { key: 'wire',     label: 'Wires',      color: '#9179F2' },
+  { key: 'body', label: 'Bodies', color: '#2B95D6' },
+  { key: 'servo', label: 'Servos', color: '#182026' },
+  { key: 'mount', label: 'Components', color: '#0F9960' },
+  { key: 'fastener', label: 'Fasteners', color: '#D4A843' },
+  { key: 'wire', label: 'Wires', color: '#9179F2' },
 ];
 
 /** Map icon types to filter categories for data-category. */
 function iconTypeToCategory(iconType) {
   if (iconType === 'body') return 'body';
   if (iconType === 'servo') return 'servo';
-  if (iconType === 'horn') return 'servo';       // horns group with servos
+  if (iconType === 'horn') return 'servo'; // horns group with servos
   if (iconType === 'fastener') return 'fastener';
   if (iconType === 'wire') return 'wire';
   if (iconType === 'joint') return 'joint';
@@ -64,18 +64,29 @@ function iconTypeToCategory(iconType) {
 }
 
 export class ComponentTree {
-  /**
-   * @param {HTMLElement} container
-   * @param {Object} manifest - parsed viewer_manifest.json
-   * @param {function} onSelect - callback(nodeId, nodeData)
-   * @param {object} [options]
-   * @param {function} [options.onShapeScript] - callback(url) for ShapeScript navigation
-   * @param {function} [options.onDoubleClick] - callback(nodeId, nodeData) for double-click
-   * @param {function} [options.onToggleVisibility] - callback(bodyName, visible) for 3D visibility
-   * @param {function} [options.onIsolate] - callback(bodyName) for isolating a body
-   * @param {function} [options.onShowAll] - callback() to reset all visibility
-   */
-  constructor(container, manifest, onSelect, options = {}) {
+  container: HTMLElement;
+  manifest: any;
+  onSelect: (nodeId: string, data: any) => void;
+  onShapeScript: ((url: string) => void) | null;
+  onDoubleClick: ((nodeId: string, data: any) => void) | null;
+  onToggleVisibility: ((bodyName: string, visible: boolean) => void) | null;
+  onIsolate: ((bodyName: string) => void) | null;
+  onShowAll: (() => void) | null;
+  focusedNodeId: string | null;
+  _bodyVisibility: Record<string, string>;
+  _isolatedBody: string | null;
+  _filters: Record<string, boolean>;
+  _searchQuery: string;
+  _searchTimeout: any;
+  _searchInput: HTMLInputElement | null;
+  _treeRoot: HTMLDivElement | null;
+  bodiesByName: Record<string, any>;
+  jointsByName: Record<string, any>;
+  childJointsOf: Record<string, any[]>;
+  partsByBody: Record<string, any[]>;
+  partsByJoint: Record<string, any[]>;
+
+  constructor(container: HTMLElement, manifest: any, onSelect: (nodeId: string, data: any) => void, options: any = {}) {
     this.container = container;
     this.manifest = manifest;
     this.onSelect = onSelect;
@@ -97,8 +108,8 @@ export class ComponentTree {
       servo: true,
       mount: true,
       horn: true,
-      fastener: false,  // off by default
-      wire: false,       // off by default
+      fastener: false, // off by default
+      wire: false, // off by default
     };
 
     this._searchQuery = '';
@@ -118,9 +129,9 @@ export class ComponentTree {
     }
 
     // Index parts by parent_body
-    this.partsByBody = {};   // bodyName -> [part]
-    this.partsByJoint = {};  // jointName -> [part]
-    for (const p of (manifest.parts || [])) {
+    this.partsByBody = {}; // bodyName -> [part]
+    this.partsByJoint = {}; // jointName -> [part]
+    for (const p of manifest.parts || []) {
       const bodyName = p.parent_body;
       if (!this.partsByBody[bodyName]) this.partsByBody[bodyName] = [];
       this.partsByBody[bodyName].push(p);
@@ -152,7 +163,7 @@ export class ComponentTree {
         this._treeRoot.appendChild(this._buildAssemblyNode(asm));
       }
     } else {
-      const root = this.manifest.bodies.find(b => b.parent === null);
+      const root = this.manifest.bodies.find((b) => b.parent === null);
       if (!root) return;
       this._treeRoot.appendChild(this._buildBodyNode(root));
     }
@@ -322,14 +333,14 @@ export class ComponentTree {
    */
   _updateTreeVisualState() {
     if (!this._treeRoot) return;
-    const bodyNodes = this._treeRoot.querySelectorAll('.tree-node[data-body-name]');
+    const bodyNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-body-name]');
     for (const node of bodyNodes) {
       const name = node.dataset.bodyName;
-      const hidden = this._bodyVisibility[name] === 'hidden';
+      const hidden = this._bodyVisibility[name!] === 'hidden';
       node.classList.toggle('body-hidden', hidden);
 
       // Update eye icon within this node's header
-      const eyeBtn = node.querySelector(':scope > .tree-node-header .tree-vis-eye');
+      const eyeBtn = node.querySelector(':scope > .tree-node-header .tree-vis-eye') as HTMLElement | null;
       if (eyeBtn) {
         eyeBtn.innerHTML = hidden ? EYE_OFF_ICON : EYE_ICON;
         eyeBtn.title = hidden ? 'Show body' : 'Hide body';
@@ -347,20 +358,20 @@ export class ComponentTree {
 
   _applyFilters() {
     if (!this._treeRoot) return;
-    const nodes = this._treeRoot.querySelectorAll('.tree-node[data-category]');
+    const nodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-category]');
     for (const node of nodes) {
-      const cat = node.dataset.category;
+      const cat = node.dataset.category!;
       // Categories not in the filter map are always shown (assembly, joint)
       if (cat in this._filters) {
         node.style.display = this._filters[cat] ? '' : 'none';
       }
     }
     // Hide chevrons on nodes where all children are now hidden
-    const parents = this._treeRoot.querySelectorAll('.tree-node-children');
+    const parents = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node-children');
     for (const childrenEl of parents) {
-      const visibleKids = [...childrenEl.children].filter(c => c.style.display !== 'none');
+      const visibleKids = [...childrenEl.children].filter((c) => (c as HTMLElement).style.display !== 'none');
       const header = childrenEl.parentElement?.querySelector(':scope > .tree-node-header');
-      const chevron = header?.querySelector('.tree-chevron');
+      const chevron = header?.querySelector('.tree-chevron') as HTMLElement | null;
       if (chevron) {
         chevron.style.display = visibleKids.length > 0 ? '' : 'none';
       }
@@ -370,7 +381,7 @@ export class ComponentTree {
   _applySearch() {
     if (!this._treeRoot) return;
     const q = this._searchQuery;
-    const allNodes = this._treeRoot.querySelectorAll('.tree-node');
+    const allNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node');
 
     if (!q) {
       // Clear search — restore all, re-apply category filters
@@ -402,7 +413,7 @@ export class ComponentTree {
         if (parent.classList.contains('tree-node')) {
           parent.classList.remove('search-hidden');
           // Expand parent so the match is visible
-          const children = parent.querySelector(':scope > .tree-node-children');
+          const children = parent.querySelector(':scope > .tree-node-children') as HTMLElement | null;
           if (children) children.style.display = 'block';
           const chevron = parent.querySelector(':scope > .tree-node-header .tree-chevron');
           if (chevron) {
@@ -443,8 +454,8 @@ export class ComponentTree {
 
       const asmBodySet = new Set(bodyNames);
       const rootBodies = bodyNames
-        .map(n => this.bodiesByName[n])
-        .filter(b => b && (b.parent === null || !asmBodySet.has(b.parent)));
+        .map((n) => this.bodiesByName[n])
+        .filter((b) => b && (b.parent === null || !asmBodySet.has(b.parent)));
 
       for (const body of rootBodies) {
         childrenEl.appendChild(this._buildBodyNode(body, asmBodySet));
@@ -459,11 +470,15 @@ export class ComponentTree {
     const parts = this.partsByBody[body.name] || [];
     const childJoints = this.childJointsOf[body.name] || [];
 
-    const mountedComps = parts.filter(p =>
-      p.category !== 'servo' && p.category !== 'horn' &&
-      p.category !== 'fastener' && p.category !== 'wire' && !p.joint
+    const mountedComps = parts.filter(
+      (p) =>
+        p.category !== 'servo' &&
+        p.category !== 'horn' &&
+        p.category !== 'fastener' &&
+        p.category !== 'wire' &&
+        !p.joint,
     );
-    const wires = parts.filter(p => p.category === 'wire');
+    const wires = parts.filter((p) => p.category === 'wire');
 
     const servosByJoint = {};
     for (const p of parts) {
@@ -473,18 +488,26 @@ export class ComponentTree {
       }
     }
 
-    const mountFasteners = parts.filter(p => p.category === 'fastener' && !p.joint);
+    const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
 
-    const hasChildren = mountedComps.length > 0 || Object.keys(servosByJoint).length > 0 ||
-      wires.length > 0 || childJoints.length > 0 || mountFasteners.length > 0;
+    const hasChildren =
+      mountedComps.length > 0 ||
+      Object.keys(servosByJoint).length > 0 ||
+      wires.length > 0 ||
+      childJoints.length > 0 ||
+      mountFasteners.length > 0;
 
     const labelText = body.name;
     const data = { ...body, _type: 'body' };
-    const shapescriptUrl = body.kind === 'fabricated'
-      ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-      : null;
+    const shapescriptUrl =
+      body.kind === 'fabricated'
+        ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+        : null;
 
-    const node = this._createNode(nodeId, labelText, 'body', data, hasChildren, shapescriptUrl, { startExpanded: true, bodyName: body.name });
+    const node = this._createNode(nodeId, labelText, 'body', data, hasChildren, shapescriptUrl, {
+      startExpanded: true,
+      bodyName: body.name,
+    });
 
     if (hasChildren) {
       const childrenEl = node.querySelector('.tree-node-children');
@@ -498,17 +521,22 @@ export class ComponentTree {
           ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
           : null;
 
-        const compFasteners = mountFasteners.filter(f => f.mount_label === comp.mount_label);
+        const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
         const hasCompChildren = compFasteners.length > 0;
 
-        const compNode = this._createNode(compNodeId, comp.name, iconType, compData, hasCompChildren, compSsUrl, { startExpanded: false, bodyName: body.name });
+        const compNode = this._createNode(compNodeId, comp.name, iconType, compData, hasCompChildren, compSsUrl, {
+          startExpanded: false,
+          bodyName: body.name,
+        });
         if (hasCompChildren) {
           const compChildrenEl = compNode.querySelector('.tree-node-children');
           const grouped = this._groupFasteners(compFasteners);
           for (const group of grouped) {
             const fNodeId = `fastener-group:${comp.id}:${group.key}`;
             const fData = { ...group, _type: 'fastener-group' };
-            const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, { bodyName: body.name });
+            const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
+              bodyName: body.name,
+            });
             compChildrenEl.appendChild(fNode);
           }
         }
@@ -518,9 +546,9 @@ export class ComponentTree {
       // 2. Servo groups per joint
       for (const joint of childJoints) {
         const jointParts = servosByJoint[joint.name] || [];
-        const servos = jointParts.filter(p => p.category === 'servo');
-        const horns = jointParts.filter(p => p.category === 'horn');
-        const fasteners = jointParts.filter(p => p.category === 'fastener');
+        const servos = jointParts.filter((p) => p.category === 'servo');
+        const horns = jointParts.filter((p) => p.category === 'horn');
+        const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
         for (const servo of servos) {
           const servoNodeId = `part:${servo.id}`;
@@ -530,7 +558,15 @@ export class ComponentTree {
             ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
             : null;
           const servoHasChildren = horns.length > 0 || fasteners.length > 0;
-          const servoNode = this._createNode(servoNodeId, servoLabel, 'servo', servoData, servoHasChildren, servoSsUrl, { startExpanded: true, bodyName: body.name });
+          const servoNode = this._createNode(
+            servoNodeId,
+            servoLabel,
+            'servo',
+            servoData,
+            servoHasChildren,
+            servoSsUrl,
+            { startExpanded: true, bodyName: body.name },
+          );
 
           if (servoHasChildren) {
             const servoChildrenEl = servoNode.querySelector('.tree-node-children');
@@ -541,7 +577,9 @@ export class ComponentTree {
               const hornSsUrl = horn.shapescript_component
                 ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
                 : null;
-              const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl, { bodyName: body.name });
+              const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl, {
+                bodyName: body.name,
+              });
               servoChildrenEl.appendChild(hornNode);
             }
 
@@ -549,7 +587,9 @@ export class ComponentTree {
             for (const group of grouped) {
               const fNodeId = `fastener-group:${joint.name}:${group.key}`;
               const fData = { ...group, _type: 'fastener-group' };
-              const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, { bodyName: body.name });
+              const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
+                bodyName: body.name,
+              });
               servoChildrenEl.appendChild(fNode);
             }
           }
@@ -562,7 +602,10 @@ export class ComponentTree {
         const jointData = { ...joint, _type: 'joint' };
         const childBody = this.bodiesByName[joint.child_body];
         const hasJointChild = !!childBody;
-        const jointNode = this._createNode(jointNodeId, `${joint.name}`, 'joint', jointData, hasJointChild, null, { startExpanded: true, bodyName: body.name });
+        const jointNode = this._createNode(jointNodeId, `${joint.name}`, 'joint', jointData, hasJointChild, null, {
+          startExpanded: true,
+          bodyName: body.name,
+        });
 
         // Add arrow indicator
         const header = jointNode.querySelector('.tree-node-header');
@@ -583,16 +626,19 @@ export class ComponentTree {
       if (wires.length > 0) {
         const wireGroupId = `wire-group:${body.name}`;
         const wireGroupData = { wires, _type: 'wire-group', parent_body: body.name };
-        const wireGroupNode = this._createNode(
-          wireGroupId, `Wires`, 'wire', wireGroupData, true, null,
-          { startExpanded: false, countBadge: wires.length, bodyName: body.name }
-        );
+        const wireGroupNode = this._createNode(wireGroupId, `Wires`, 'wire', wireGroupData, true, null, {
+          startExpanded: false,
+          countBadge: wires.length,
+          bodyName: body.name,
+        });
 
         const wireChildrenEl = wireGroupNode.querySelector('.tree-node-children');
         for (const wire of wires) {
           const wireNodeId = `part:${wire.id}`;
           const wireData = { ...wire, _type: 'part' };
-          const wireNode = this._createNode(wireNodeId, wire.name, 'wire', wireData, false, null, { bodyName: body.name });
+          const wireNode = this._createNode(wireNodeId, wire.name, 'wire', wireData, false, null, {
+            bodyName: body.name,
+          });
           wireChildrenEl.appendChild(wireNode);
         }
         childrenEl.appendChild(wireGroupNode);
@@ -605,21 +651,29 @@ export class ComponentTree {
   /**
    * Group identical fasteners: "4x M2 SHC" instead of 4 separate nodes.
    */
-  _groupFasteners(fasteners) {
-    const groups = {};
+  _groupFasteners(fasteners: any[]): any[] {
+    const groups: Record<string, any> = {};
     for (const f of fasteners) {
       const key = f.name;
       if (!groups[key]) groups[key] = { key, name: f.name, count: 0, items: [] };
       groups[key].count++;
       groups[key].items.push(f);
     }
-    return Object.values(groups).map(g => ({
+    return Object.values(groups).map((g: any) => ({
       ...g,
       label: g.count > 1 ? `${g.count}\u00d7 ${g.name}` : g.name,
     }));
   }
 
-  _createNode(nodeId, label, iconType, data, hasChildren, shapescriptUrl = null, opts = {}) {
+  _createNode(
+    nodeId: string,
+    label: string,
+    iconType: string,
+    data: any,
+    hasChildren: boolean,
+    shapescriptUrl: string | null = null,
+    opts: any = {},
+  ) {
     const { startExpanded = true, countBadge = null, bodyName = null } = opts;
     const category = iconTypeToCategory(iconType);
 
@@ -638,9 +692,10 @@ export class ComponentTree {
       chevron.className = 'tree-chevron';
       chevron.innerHTML = CHEVRON_RIGHT;
       chevron.classList.toggle('expanded', startExpanded);
-      const toggleFn = (e) => {
+      const toggleFn = (e: Event) => {
         e.stopPropagation();
-        const children = node.querySelector(':scope > .tree-node-children');
+        const children = node.querySelector(':scope > .tree-node-children') as HTMLElement | null;
+        if (!children) return;
         const expanded = children.style.display !== 'none';
         children.style.display = expanded ? 'none' : 'block';
         chevron.classList.toggle('expanded', !expanded);
@@ -720,16 +775,17 @@ export class ComponentTree {
       this.onSelect(nodeId, data);
     });
 
-
     // Click header text to toggle children too
     if (hasChildren) {
       labelEl.addEventListener('click', (e) => {
         // Only toggle if the label itself is clicked, not propagated from a child
         e.stopPropagation();
-        const children = node.querySelector(':scope > .tree-node-children');
+        const children = node.querySelector(':scope > .tree-node-children') as HTMLElement | null;
+        if (!children) return;
         const expanded = children.style.display !== 'none';
         children.style.display = expanded ? 'none' : 'block';
-        chevron.classList.toggle('expanded', !expanded);
+        const chevronEl = node.querySelector(':scope > .tree-node-header .tree-chevron');
+        if (chevronEl) chevronEl.classList.toggle('expanded', !expanded);
         this.setFocused(nodeId);
         this.onSelect(nodeId, data);
       });

@@ -10,38 +10,57 @@
  */
 
 import * as THREE from 'three';
-import { BP, hexStr } from './presentation.js';
+import { BP, hexStr } from './presentation.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const SNAP_SCREEN_PX = 12;        // snap radius in screen pixels
-const ARROW_SIZE = 6;             // arrowhead size in SVG pixels
+const SNAP_SCREEN_PX = 12; // snap radius in screen pixels
+const ARROW_SIZE = 6; // arrowhead size in SVG pixels
 const DIM_COLOR = hexStr(BP.BLUE1);
 const DIM_FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-const EXTENSION_GAP = 4;          // gap between geometry and extension line start
-const EXTENSION_OVERSHOOT = 6;    // how far extension line extends past dim line
-const DIM_OFFSET = 20;            // offset of dim line from geometry (screen px)
+const EXTENSION_GAP = 4; // gap between geometry and extension line start
+const EXTENSION_OVERSHOOT = 6; // how far extension line extends past dim line
+const DIM_OFFSET = 20; // offset of dim line from geometry (screen px)
 
 // ---------------------------------------------------------------------------
 // MeasureTool class
 // ---------------------------------------------------------------------------
 export class MeasureTool {
+  camera: any;
+  scene: any;
+  container: any;
+  enabled: boolean;
+  measurements: any[];
+  _nextId: number;
+  _firstPoint: any;
+  _hoverPoint: any;
+  _raycaster: any;
+  _mouse: any;
+  _edgeVertexCache: Map<any, any>;
+  _svg: any;
+  _snapIndicator: any;
+  _rubberLine: any;
+  _onMouseMove: any;
+  _onClick: any;
+  _onKeyDown: any;
+  _axisLocked: boolean;
+
   /**
    * @param {THREE.Camera} camera
    * @param {THREE.Scene} scene
    * @param {HTMLElement} container — the canvas container element
    */
-  constructor(camera, scene, container) {
+  constructor(camera: any, scene: any, container: any) {
     this.camera = camera;
     this.scene = scene;
     this.container = container;
     this.enabled = false;
 
-    this.measurements = [];     // array of { p1: Vector3, p2: Vector3, id: number }
+    this.measurements = []; // array of { p1: Vector3, p2: Vector3, id: number }
     this._nextId = 0;
-    this._firstPoint = null;    // Vector3 or null (state machine)
-    this._hoverPoint = null;    // current snap candidate
+    this._firstPoint = null; // Vector3 or null (state machine)
+    this._hoverPoint = null; // current snap candidate
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
 
@@ -50,7 +69,8 @@ export class MeasureTool {
 
     // Create SVG overlay
     this._svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    this._svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:90;overflow:visible';
+    this._svg.style.cssText =
+      'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:90;overflow:visible';
     this._svg.setAttribute('id', 'measure-overlay');
     container.appendChild(this._svg);
 
@@ -119,7 +139,7 @@ export class MeasureTool {
     for (const child of this._svg.children) {
       if (child !== this._rubberLine) toRemove.push(child);
     }
-    toRemove.forEach(el => el.remove());
+    toRemove.forEach((el) => el.remove());
 
     const rect = this.container.getBoundingClientRect();
     const w = rect.width;
@@ -138,9 +158,7 @@ export class MeasureTool {
       this._rubberLine.setAttribute('x2', s2.x);
       this._rubberLine.setAttribute('y2', s2.y);
       // Axis color when constrained
-      const color = this._axisLocked
-        ? this._axisConstraintColor(this._firstPoint, this._hoverPoint)
-        : DIM_COLOR;
+      const color = this._axisLocked ? this._axisConstraintColor(this._firstPoint, this._hoverPoint) : DIM_COLOR;
       this._rubberLine.setAttribute('stroke', color);
       this._rubberLine.style.display = '';
     }
@@ -167,12 +185,14 @@ export class MeasureTool {
     if (hit) {
       this._hoverPoint = hit;
       const screen = this._toScreen(hit, rect.width, rect.height);
-      this._snapIndicator.style.left = screen.x + 'px';
-      this._snapIndicator.style.top = screen.y + 'px';
+      this._snapIndicator.style.left = `${screen.x}px`;
+      this._snapIndicator.style.top = `${screen.y}px`;
       this._snapIndicator.style.display = '';
       // Color hint: blue for normal, axis color when constrained
       const constrained = this._firstPoint && e.shiftKey;
-      this._snapIndicator.style.borderColor = constrained ? this._axisConstraintColor(this._firstPoint, hit) : DIM_COLOR;
+      this._snapIndicator.style.borderColor = constrained
+        ? this._axisConstraintColor(this._firstPoint, hit)
+        : DIM_COLOR;
     } else {
       this._hoverPoint = null;
       this._snapIndicator.style.display = 'none';
@@ -233,11 +253,11 @@ export class MeasureTool {
 
     const result = origin.clone();
     if (dx >= dy && dx >= dz) {
-      result.x = point.x;  // X axis
+      result.x = point.x; // X axis
     } else if (dy >= dx && dy >= dz) {
-      result.y = point.y;  // Y axis
+      result.y = point.y; // Y axis
     } else {
-      result.z = point.z;  // Z axis
+      result.z = point.z; // Z axis
     }
     return result;
   }
@@ -261,7 +281,7 @@ export class MeasureTool {
     // First raycast to find which mesh we're near
     this._raycaster.setFromCamera(this._mouse, this.camera);
     const meshes = [];
-    this.scene.traverse(child => {
+    this.scene.traverse((child) => {
       if (child.isMesh && child.visible && child.parent?.visible !== false) {
         meshes.push(child);
       }
@@ -390,7 +410,7 @@ export class MeasureTool {
 
     // Distance in mm (geometry is in meters)
     const dist3d = p1.distanceTo(p2) * 1000;
-    const label = dist3d < 1 ? dist3d.toFixed(2) + ' mm' : dist3d.toFixed(1) + ' mm';
+    const label = dist3d < 1 ? `${dist3d.toFixed(2)} mm` : `${dist3d.toFixed(1)} mm`;
 
     // Determine offset direction (perpendicular to the line between points)
     const dx = s2.x - s1.x;
@@ -412,10 +432,22 @@ export class MeasureTool {
 
     // Extension lines (from geometry point to dimension line, with gap)
     const overFrac = 1 + EXTENSION_OVERSHOOT / off;
-    this._svgLine(g, s1.x + nx * EXTENSION_GAP, s1.y + ny * EXTENSION_GAP,
-                      s1.x + nx * off * overFrac, s1.y + ny * off * overFrac, '0.5');
-    this._svgLine(g, s2.x + nx * EXTENSION_GAP, s2.y + ny * EXTENSION_GAP,
-                      s2.x + nx * off * overFrac, s2.y + ny * off * overFrac, '0.5');
+    this._svgLine(
+      g,
+      s1.x + nx * EXTENSION_GAP,
+      s1.y + ny * EXTENSION_GAP,
+      s1.x + nx * off * overFrac,
+      s1.y + ny * off * overFrac,
+      '0.5',
+    );
+    this._svgLine(
+      g,
+      s2.x + nx * EXTENSION_GAP,
+      s2.y + ny * EXTENSION_GAP,
+      s2.x + nx * off * overFrac,
+      s2.y + ny * off * overFrac,
+      '0.5',
+    );
 
     // Dimension line with arrows
     this._svgLine(g, d1.x, d1.y, d2.x, d2.y, '1');
@@ -426,13 +458,13 @@ export class MeasureTool {
 
     // Label (centered on dimension line)
     const mid = { x: (d1.x + d2.x) / 2, y: (d1.y + d2.y) / 2 };
-    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     // Keep text readable (not upside down)
-    const textAngle = (angle > 90 || angle < -90) ? angle + 180 : angle;
+    const textAngle = angle > 90 || angle < -90 ? angle + 180 : angle;
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', mid.x);
-    text.setAttribute('y', mid.y - 4);
+    text.setAttribute('x', String(mid.x));
+    text.setAttribute('y', String(mid.y - 4));
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('fill', DIM_COLOR);
     text.setAttribute('style', `font: ${DIM_FONT}`);
@@ -446,10 +478,10 @@ export class MeasureTool {
     // Measure text and add background (after adding to DOM for measurement)
     this._svg.appendChild(g);
     const bbox = text.getBBox();
-    bg.setAttribute('x', bbox.x - 3);
-    bg.setAttribute('y', bbox.y - 1);
-    bg.setAttribute('width', bbox.width + 6);
-    bg.setAttribute('height', bbox.height + 2);
+    bg.setAttribute('x', String(bbox.x - 3));
+    bg.setAttribute('y', String(bbox.y - 1));
+    bg.setAttribute('width', String(bbox.width + 6));
+    bg.setAttribute('height', String(bbox.height + 2));
     bg.setAttribute('fill', 'rgba(245,248,250,0.85)');
     bg.setAttribute('rx', '2');
     bg.setAttribute('transform', text.getAttribute('transform'));

@@ -8,11 +8,9 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { clearGroup, orientToAxis } from './utils.js';
-import {
-  BP, hexStr, tintColor, createMaterial, addMeshWithEdges,
-} from './presentation.js';
-import { Viewport3D } from './viewport3d.js';
+import { addMeshWithEdges, BP, createMaterial, hexStr, tintColor } from './presentation.ts';
+import { clearGroup, orientToAxis } from './utils.ts';
+import { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -24,51 +22,86 @@ const SIDE_PANEL_WIDTH = 320;
 // View presets — camera direction (from center) and up vector
 // ---------------------------------------------------------------------------
 const VIEW_PRESETS = {
-  iso:    { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso',    key: '1' },
-  front:  { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front',  key: '2' },
-  back:   { dir: new THREE.Vector3(0, 1, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Back',   key: '3' },
-  top:    { dir: new THREE.Vector3(0, 0, 1),  up: new THREE.Vector3(0, 1, 0), label: 'Top',    key: '4' },
+  iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
+  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front', key: '2' },
+  back: { dir: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Back', key: '3' },
+  top: { dir: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0), label: 'Top', key: '4' },
   bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '5' },
-  right:  { dir: new THREE.Vector3(1, 0, 0),  up: new THREE.Vector3(0, 0, 1), label: 'Right',  key: '6' },
-  left:   { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left',   key: '7' },
+  right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Right', key: '6' },
+  left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '7' },
 };
 
 // ---------------------------------------------------------------------------
 // Layer definitions
 // ---------------------------------------------------------------------------
 const LAYER_META = {
-  body:             { label: 'Body',             colorHex: null,     opts: {} },
-  servo:            { label: 'Servo',            colorHex: 0x182026, opts: {} },
-  horn:             { label: 'Horn',             colorHex: 0xE8E8E8, opts: {} },
-  bracket:          { label: 'Bracket',          colorHex: 0xCED9E0, opts: {} },
-  cradle:           { label: 'Cradle',           colorHex: 0xCED9E0, opts: {} },
-  coupler:          { label: 'Coupler',          colorHex: 0xF55656, opts: {} },
-  bracket_insertion_channel: { label: 'Bracket Insertion Channel', colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
-  cradle_insertion_channel:  { label: 'Cradle Insertion Channel',  colorHex: 0xF55656, opts: { transparent: true, opacity: 0.25 } },
-  fasteners:        { label: 'Fasteners',        colorHex: 0xD4A843, opts: {} },
+  body: { label: 'Body', colorHex: null, opts: {} },
+  servo: { label: 'Servo', colorHex: 0x182026, opts: {} },
+  horn: { label: 'Horn', colorHex: 0xe8e8e8, opts: {} },
+  bracket: { label: 'Bracket', colorHex: 0xced9e0, opts: {} },
+  cradle: { label: 'Cradle', colorHex: 0xced9e0, opts: {} },
+  coupler: { label: 'Coupler', colorHex: 0xf55656, opts: {} },
+  bracket_insertion_channel: {
+    label: 'Bracket Insertion Channel',
+    colorHex: 0xf55656,
+    opts: { transparent: true, opacity: 0.25 },
+  },
+  cradle_insertion_channel: {
+    label: 'Cradle Insertion Channel',
+    colorHex: 0xf55656,
+    opts: { transparent: true, opacity: 0.25 },
+  },
+  fasteners: { label: 'Fasteners', colorHex: 0xd4a843, opts: {} },
 };
 const ALL_LAYER_IDS = Object.keys(LAYER_META);
-const AXIS_INDEX = { x: 0, y: 1, z: 2 };
+const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
 
 // ---------------------------------------------------------------------------
 // ComponentBrowser class
 // ---------------------------------------------------------------------------
 class ComponentBrowser {
+  components: any[];
+  currentComponent: any;
+  stlLoader: STLLoader;
+  stlCache: Record<string, any>;
+  layerGroups: Record<string, any>;
+  activePreset: string;
+  sectionEnabled: boolean;
+  sectionAxis: string;
+  sectionFlipped: boolean;
+  sectionFraction: number;
+  stepsMode: boolean;
+  stepsData: any;
+  stepsCurrentIdx: number;
+  stepsStlCache: Record<number, any>;
+  stepsToolStlCache: Record<number, any>;
+  stepsGroup: THREE.Group;
+  stepsToolGroup: THREE.Group;
+  showStepTool: boolean;
+  viewport: any;
+  scene: any;
+  camera: any;
+  renderer: any;
+  controls: any;
+  _markerGroup: THREE.Group | null;
+  _markers: Record<string, any[]>;
+  _stepsHasFramed: boolean;
+  _lastSvgText: string;
+  _lastSvgName: string;
+  _gizmoSvg: HTMLElement | null;
+  _gizmoAxes: any[];
+
   constructor() {
     this.components = [];
     this.currentComponent = null;
     this.stlLoader = new STLLoader();
-    this.stlCache = {};       // url → BufferGeometry
-    this.layerGroups = {};    // layer id → THREE.Group
+    this.stlCache = {};
+    this.layerGroups = {};
     this.activePreset = 'iso';
-
-    // Section plane state (drives Viewport3D section)
     this.sectionEnabled = false;
     this.sectionAxis = 'z';
     this.sectionFlipped = false;
     this.sectionFraction = 0.5;
-
-    // ShapeScript steps state
     this.stepsMode = false;
     this.stepsData = null;
     this.stepsCurrentIdx = 0;
@@ -79,6 +112,13 @@ class ComponentBrowser {
     this.stepsToolGroup = new THREE.Group();
     this.stepsToolGroup.name = 'shapescript-tool';
     this.showStepTool = true;
+    this._markerGroup = null;
+    this._markers = {};
+    this._stepsHasFramed = false;
+    this._lastSvgText = '';
+    this._lastSvgName = '';
+    this._gizmoSvg = null;
+    this._gizmoAxes = [];
   }
 
   async init() {
@@ -95,8 +135,8 @@ class ComponentBrowser {
 
   _setupViewport() {
     const container = document.getElementById('canvas-container');
-    container.style.left = SIDEBAR_WIDTH + 'px';
-    container.style.right = SIDE_PANEL_WIDTH + 'px';
+    container.style.left = `${SIDEBAR_WIDTH}px`;
+    container.style.right = `${SIDE_PANEL_WIDTH}px`;
 
     this.viewport = new Viewport3D(container, {
       cameraType: 'orthographic',
@@ -125,15 +165,16 @@ class ComponentBrowser {
     this.viewport.setSectionCapColorFn((groupName) => {
       const meta = LAYER_META[groupName];
       if (!meta) return null;
-      const entityColor = meta.colorHex !== null
-        ? meta.colorHex
-        : (this.currentComponent
+      const entityColor =
+        meta.colorHex !== null
+          ? meta.colorHex
+          : this.currentComponent
             ? new THREE.Color(
                 this.currentComponent.color[0],
                 this.currentComponent.color[1],
                 this.currentComponent.color[2],
               )
-            : 0xCED9E0);
+            : 0xced9e0;
       return tintColor(entityColor, 0.6);
     });
 
@@ -170,7 +211,7 @@ class ComponentBrowser {
           dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
         });
         document.addEventListener('click', (e) => {
-          if (!dropdownBtn.contains(e.target) && !dropdown.contains(e.target)) {
+          if (!dropdownBtn.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
             dropdown.style.display = 'none';
           }
         });
@@ -232,8 +273,9 @@ class ComponentBrowser {
       if (btn) {
         btn.addEventListener('click', () => {
           this.sectionAxis = axis;
-          document.querySelectorAll('[data-section-axis]').forEach(b =>
-            b.classList.toggle('active', b.dataset.sectionAxis === axis));
+          document
+            .querySelectorAll('[data-section-axis]')
+            .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.sectionAxis === axis));
           this._updateSectionPlane();
         });
       }
@@ -242,7 +284,7 @@ class ComponentBrowser {
     const slider = document.getElementById('section-slider');
     if (slider) {
       slider.addEventListener('input', () => {
-        this.sectionFraction = parseFloat(slider.value) / 100;
+        this.sectionFraction = parseFloat((slider as HTMLInputElement).value) / 100;
         this._updateSectionPlane();
       });
     }
@@ -258,11 +300,16 @@ class ComponentBrowser {
 
     // Keyboard shortcuts
     const keyMap = {
-      '1': 'iso', '2': 'front', '3': 'back', '4': 'top',
-      '5': 'bottom', '6': 'right', '7': 'left',
+      '1': 'iso',
+      '2': 'front',
+      '3': 'back',
+      '4': 'top',
+      '5': 'bottom',
+      '6': 'right',
+      '7': 'left',
     };
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
       const ctrl = e.ctrlKey || e.metaKey;
 
       if (!ctrl && keyMap[e.key]) {
@@ -286,7 +333,7 @@ class ComponentBrowser {
     });
   }
 
-  _setViewPreset(key) {
+  _setViewPreset(key: string) {
     const preset = VIEW_PRESETS[key];
     if (!preset) return;
 
@@ -294,7 +341,7 @@ class ComponentBrowser {
     this.viewport.setViewPreset(key);
 
     // Lock rotation for axis-aligned views, allow for iso
-    this.controls.enableRotate = (key === 'iso');
+    this.controls.enableRotate = key === 'iso';
 
     // Fit ortho frustum to visible geometry
     const box = this._getVisibleBBox();
@@ -304,7 +351,7 @@ class ComponentBrowser {
   }
 
   /** Orbit or pan the camera via arrow keys. */
-  _arrowKeyNav(key, shift) {
+  _arrowKeyNav(key: string, shift: boolean) {
     const ORBIT_STEP = Math.PI / 12;
     const target = this.controls.target;
     const pos = this.camera.position;
@@ -318,11 +365,12 @@ class ComponentBrowser {
       right.setFromMatrixColumn(this.camera.matrixWorld, 0);
       up.setFromMatrixColumn(this.camera.matrixWorld, 1);
 
-      let dx = 0, dy = 0;
-      if (key === 'ArrowLeft')  dx = -panStep;
+      let dx = 0,
+        dy = 0;
+      if (key === 'ArrowLeft') dx = -panStep;
       if (key === 'ArrowRight') dx = panStep;
-      if (key === 'ArrowUp')    dy = panStep;
-      if (key === 'ArrowDown')  dy = -panStep;
+      if (key === 'ArrowUp') dy = panStep;
+      if (key === 'ArrowDown') dy = -panStep;
 
       const move = right.multiplyScalar(dx).add(up.multiplyScalar(dy));
       target.add(move);
@@ -351,8 +399,8 @@ class ComponentBrowser {
   _updatePresetButtons() {
     const dropdown = document.getElementById('view-dropdown');
     if (dropdown) {
-      dropdown.querySelectorAll('[data-view]').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === this.activePreset);
+      dropdown.querySelectorAll('[data-view]').forEach((btn) => {
+        btn.classList.toggle('active', (btn as HTMLElement).dataset.view === this.activePreset);
       });
     }
   }
@@ -368,7 +416,7 @@ class ComponentBrowser {
     for (const id of ALL_LAYER_IDS) {
       const group = this.layerGroups[id];
       if (!group.visible) continue;
-      group.traverse(child => {
+      group.traverse((child) => {
         if (child.isMesh) {
           child.geometry.computeBoundingBox();
           const childBox = child.geometry.boundingBox.clone();
@@ -403,8 +451,8 @@ class ComponentBrowser {
 
   _updateLayout() {
     const container = document.getElementById('canvas-container');
-    container.style.left = SIDEBAR_WIDTH + 'px';
-    container.style.right = SIDE_PANEL_WIDTH + 'px';
+    container.style.left = `${SIDEBAR_WIDTH}px`;
+    container.style.right = `${SIDE_PANEL_WIDTH}px`;
 
     requestAnimationFrame(() => {
       this.viewport.resize();
@@ -441,14 +489,15 @@ class ComponentBrowser {
     let html = '<h3>Layers</h3>';
     html += '<div class="layer-controls">';
 
-    for (const id of (comp.layers || [])) {
+    for (const id of comp.layers || []) {
       const meta = LAYER_META[id];
       if (!meta) continue;
 
       const checked = this.layerGroups[id].visible ? 'checked' : '';
-      const colorSwatch = meta.colorHex !== null
-        ? `<span class="layer-swatch" style="background:#${meta.colorHex.toString(16).padStart(6, '0')}"></span>`
-        : `<span class="layer-swatch" style="background:rgb(${Math.round(comp.color[0]*255)},${Math.round(comp.color[1]*255)},${Math.round(comp.color[2]*255)})"></span>`;
+      const colorSwatch =
+        meta.colorHex !== null
+          ? `<span class="layer-swatch" style="background:#${meta.colorHex.toString(16).padStart(6, '0')}"></span>`
+          : `<span class="layer-swatch" style="background:rgb(${Math.round(comp.color[0] * 255)},${Math.round(comp.color[1] * 255)},${Math.round(comp.color[2] * 255)})"></span>`;
 
       html += `<label class="layer-toggle">
         <input type="checkbox" data-layer="${id}" ${checked}>
@@ -461,7 +510,7 @@ class ComponentBrowser {
     return html;
   }
 
-  _updateSidePanel(comp) {
+  _updateSidePanel(comp: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${comp.name}</h2>`;
 
@@ -470,7 +519,7 @@ class ComponentBrowser {
     html += `<h3>General</h3>`;
     html += `<div style="font-size:12px; color:#999; line-height:1.8">`;
     html += `<div>Category: <span style="color:#ccc">${comp.category}</span></div>`;
-    html += `<div>Dimensions: <span style="color:#ccc">${comp.dimensions_mm.map(d => d.toFixed(1)).join(' x ')} mm</span></div>`;
+    html += `<div>Dimensions: <span style="color:#ccc">${comp.dimensions_mm.map((d) => d.toFixed(1)).join(' x ')} mm</span></div>`;
     html += `<div>Mass: <span style="color:#ccc">${comp.mass_g.toFixed(1)} g</span></div>`;
     html += `</div>`;
 
@@ -508,21 +557,23 @@ class ComponentBrowser {
 
     panel.innerHTML = html;
 
-    panel.querySelectorAll('input[data-layer]').forEach(cb => {
-      cb.addEventListener('change', () => this._onLayerToggle(cb.dataset.layer, cb.checked));
+    panel.querySelectorAll('input[data-layer]').forEach((cb) => {
+      const el = cb as HTMLInputElement;
+      el.addEventListener('change', () => this._onLayerToggle(el.dataset.layer!, el.checked));
     });
 
     this._createMarkers(comp);
 
-    panel.querySelectorAll('.highlight-item').forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        const type = el.dataset.markerType;
-        const idx = parseInt(el.dataset.markerIdx);
+    panel.querySelectorAll('.highlight-item').forEach((el) => {
+      const hel = el as HTMLElement;
+      hel.addEventListener('mouseenter', () => {
+        const type = hel.dataset.markerType!;
+        const idx = parseInt(hel.dataset.markerIdx!, 10);
         this._highlightMarker(type, idx, true);
       });
-      el.addEventListener('mouseleave', () => {
-        const type = el.dataset.markerType;
-        const idx = parseInt(el.dataset.markerIdx);
+      hel.addEventListener('mouseleave', () => {
+        const type = hel.dataset.markerType!;
+        const idx = parseInt(hel.dataset.markerIdx!, 10);
         this._highlightMarker(type, idx, false);
       });
     });
@@ -532,7 +583,7 @@ class ComponentBrowser {
   // 3D markers (mounting points, wire ports)
   // -----------------------------------------------------------------------
 
-  _createMarkers(comp) {
+  _createMarkers(comp: any) {
     if (this._markerGroup) {
       clearGroup(this._markerGroup);
       this.scene.remove(this._markerGroup);
@@ -544,12 +595,20 @@ class ComponentBrowser {
     this._markers = { mp: [], wp: [] };
 
     const markerMat = new THREE.MeshPhysicalMaterial({
-      color: 0x4488ff, transparent: true, opacity: 0.4,
-      roughness: 0.3, metalness: 0.1,
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.4,
+      roughness: 0.3,
+      metalness: 0.1,
     });
     const highlightMat = new THREE.MeshPhysicalMaterial({
-      color: 0x44ff88, transparent: false, opacity: 1.0,
-      roughness: 0.3, metalness: 0.1, emissive: 0x22aa44, emissiveIntensity: 0.5,
+      color: 0x44ff88,
+      transparent: false,
+      opacity: 1.0,
+      roughness: 0.3,
+      metalness: 0.1,
+      emissive: 0x22aa44,
+      emissiveIntensity: 0.5,
     });
 
     for (const mp of comp.mounting_points) {
@@ -566,12 +625,20 @@ class ComponentBrowser {
     }
 
     const wpMat = new THREE.MeshPhysicalMaterial({
-      color: 0xff8844, transparent: true, opacity: 0.4,
-      roughness: 0.3, metalness: 0.1,
+      color: 0xff8844,
+      transparent: true,
+      opacity: 0.4,
+      roughness: 0.3,
+      metalness: 0.1,
     });
     const wpHighlightMat = new THREE.MeshPhysicalMaterial({
-      color: 0xffaa22, transparent: false, opacity: 1.0,
-      roughness: 0.3, metalness: 0.1, emissive: 0xcc8800, emissiveIntensity: 0.5,
+      color: 0xffaa22,
+      transparent: false,
+      opacity: 1.0,
+      roughness: 0.3,
+      metalness: 0.1,
+      emissive: 0xcc8800,
+      emissiveIntensity: 0.5,
     });
 
     for (const wp of comp.wire_ports) {
@@ -585,7 +652,7 @@ class ComponentBrowser {
     }
   }
 
-  _highlightMarker(type, idx, on) {
+  _highlightMarker(type: string, idx: number, on: boolean) {
     const markers = this._markers?.[type];
     if (!markers || !markers[idx]) return;
     const mesh = markers[idx];
@@ -598,7 +665,7 @@ class ComponentBrowser {
   // Layer loading
   // -----------------------------------------------------------------------
 
-  async _onLayerToggle(layerId, enabled) {
+  async _onLayerToggle(layerId: string, enabled: boolean) {
     const group = this.layerGroups[layerId];
 
     if (enabled) {
@@ -621,8 +688,8 @@ class ComponentBrowser {
     }
   }
 
-  async loadComponent(name) {
-    const comp = this.components.find(c => c.name === name);
+  async loadComponent(name: string) {
+    const comp = this.components.find((c) => c.name === name);
     if (!comp) return;
 
     this.currentComponent = comp;
@@ -649,7 +716,7 @@ class ComponentBrowser {
       this.layerGroups[id].visible = false;
     }
 
-    const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
+    const defaultLayer = comp.layers?.[0] || 'body';
 
     this._updateSidePanel(comp);
 
@@ -658,7 +725,7 @@ class ComponentBrowser {
     this._fitCameraToVisibleMeshes();
   }
 
-  async _loadLayer(layerId) {
+  async _loadLayer(layerId: string) {
     const group = this.layerGroups[layerId];
     const comp = this.currentComponent;
     const compName = comp.name;
@@ -669,33 +736,34 @@ class ComponentBrowser {
     }
 
     const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
-    const entityColor = meta.colorHex !== null
-      ? meta.colorHex
-      : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
+    const entityColor =
+      meta.colorHex !== null ? meta.colorHex : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
 
     const renderColor = tintColor(entityColor);
 
     await this._addSTLMesh(compName, layerId, renderColor, meta.opts, group);
   }
 
-  async _loadFasteners(compName, group) {
+  async _loadFasteners(compName: string, group: THREE.Group) {
     try {
       const resp = await fetch(`/api/components/${compName}/fasteners`);
       if (!resp.ok) return;
       const data = await resp.json();
 
-      const uniqueUrls = [...new Set(data.fasteners.map(f => f.stl_url))];
-      const geomCache = {};
-      await Promise.all(uniqueUrls.map(async (url) => {
-        const stlResp = await fetch(url);
-        if (!stlResp.ok) return;
-        const buf = await stlResp.arrayBuffer();
-        const geom = this.stlLoader.parse(buf);
-        geom.computeVertexNormals();
-        geomCache[url] = geom;
-      }));
+      const uniqueUrls: string[] = [...new Set(data.fasteners.map((f: any) => f.stl_url))] as string[];
+      const geomCache: Record<string, any> = {};
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const stlResp = await fetch(url);
+          if (!stlResp.ok) return;
+          const buf = await stlResp.arrayBuffer();
+          const geom = this.stlLoader.parse(buf);
+          geom.computeVertexNormals();
+          geomCache[url] = geom;
+        }),
+      );
 
-      const fastenerMat = createMaterial(tintColor(0xD4A843));
+      const fastenerMat = createMaterial(tintColor(0xd4a843));
 
       for (const f of data.fasteners) {
         const srcGeom = geomCache[f.stl_url];
@@ -714,7 +782,7 @@ class ComponentBrowser {
     }
   }
 
-  async _addSTLMesh(componentName, partName, color, opts, group) {
+  async _addSTLMesh(componentName: string, partName: string, color: any, opts: any, group: THREE.Group) {
     const url = `/api/components/${componentName}/stl/${partName}`;
 
     let geometry;
@@ -749,7 +817,7 @@ class ComponentBrowser {
       return;
     }
 
-    const btn = document.getElementById('steps-toggle');
+    const btn = document.getElementById('steps-toggle') as HTMLButtonElement | null;
     if (btn) {
       btn.textContent = 'Loading...';
       btn.disabled = true;
@@ -786,7 +854,8 @@ class ComponentBrowser {
   _showStepsUnavailable() {
     const panel = document.getElementById('side-panel');
     const msg = document.createElement('div');
-    msg.style.cssText = 'color: var(--bp-gray3); font-size: 13px; padding: 12px; background: rgba(206,217,224,0.1); border-radius: 6px; margin-top: 12px;';
+    msg.style.cssText =
+      'color: var(--bp-gray3); font-size: 13px; padding: 12px; background: rgba(206,217,224,0.1); border-radius: 6px; margin-top: 12px;';
     msg.textContent = 'ShapeScript not available for this component';
     msg.id = 'steps-unavailable';
     panel.appendChild(msg);
@@ -826,7 +895,7 @@ class ComponentBrowser {
     if (this._markerGroup) this._markerGroup.visible = true;
     const comp = this.currentComponent;
     if (comp) {
-      const defaultLayer = (comp.layers && comp.layers[0]) || 'body';
+      const defaultLayer = comp.layers?.[0] || 'body';
       this.layerGroups[defaultLayer].visible = true;
     }
 
@@ -874,43 +943,46 @@ class ComponentBrowser {
 
     panel.innerHTML = html;
 
-    const sliderEl = document.getElementById('steps-slider');
-    sliderEl.addEventListener('input', () => this._showComponentStep(parseInt(sliderEl.value)));
+    const sliderEl = document.getElementById('steps-slider') as HTMLInputElement;
+    sliderEl.addEventListener('input', () => this._showComponentStep(parseInt(sliderEl.value, 10)));
 
-    document.getElementById('step-prev').addEventListener('click', () => {
+    document.getElementById('step-prev')!.addEventListener('click', () => {
       if (this.stepsCurrentIdx > 0) {
         sliderEl.value = String(this.stepsCurrentIdx - 1);
         this._showComponentStep(this.stepsCurrentIdx - 1);
       }
     });
-    document.getElementById('step-next').addEventListener('click', () => {
+    document.getElementById('step-next')!.addEventListener('click', () => {
       if (this.stepsCurrentIdx < steps.length - 1) {
         sliderEl.value = String(this.stepsCurrentIdx + 1);
         this._showComponentStep(this.stepsCurrentIdx + 1);
       }
     });
-    document.getElementById('step-tool-toggle').addEventListener('change', (e) => {
-      this.showStepTool = e.target.checked;
+    document.getElementById('step-tool-toggle')!.addEventListener('change', (e) => {
+      this.showStepTool = (e.target as HTMLInputElement).checked;
       this._updateStepToolMesh();
     });
-    document.getElementById('steps-exit').addEventListener('click', () => this._exitStepsMode());
+    document.getElementById('steps-exit')!.addEventListener('click', () => this._exitStepsMode());
 
-    panel.querySelectorAll('.step-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const idx = parseInt(row.dataset.stepIdx);
+    panel.querySelectorAll('.step-row').forEach((row) => {
+      const rowEl = row as HTMLElement;
+      rowEl.addEventListener('click', () => {
+        const idx = parseInt(rowEl.dataset.stepIdx!, 10);
         sliderEl.value = String(idx);
         this._showComponentStep(idx);
       });
-      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(206,217,224,0.5)'; });
-      row.addEventListener('mouseleave', () => {
-        if (parseInt(row.dataset.stepIdx) !== this.stepsCurrentIdx) {
-          row.style.background = '';
+      rowEl.addEventListener('mouseenter', () => {
+        rowEl.style.background = 'rgba(206,217,224,0.5)';
+      });
+      rowEl.addEventListener('mouseleave', () => {
+        if (parseInt(rowEl.dataset.stepIdx!, 10) !== this.stepsCurrentIdx) {
+          rowEl.style.background = '';
         }
       });
     });
   }
 
-  async _showComponentStep(idx) {
+  async _showComponentStep(idx: number) {
     const steps = this.stepsData.steps;
     if (idx < 0 || idx >= steps.length) return;
     this.stepsCurrentIdx = idx;
@@ -927,8 +999,9 @@ class ComponentBrowser {
     const valueEl = document.getElementById('step-value');
     if (valueEl) valueEl.textContent = `${idx + 1} / ${steps.length}`;
 
-    document.querySelectorAll('.step-row').forEach(row => {
-      row.style.background = parseInt(row.dataset.stepIdx) === idx ? 'rgba(19,124,189,0.15)' : '';
+    document.querySelectorAll('.step-row').forEach((row) => {
+      (row as HTMLElement).style.background =
+        parseInt((row as HTMLElement).dataset.stepIdx!, 10) === idx ? 'rgba(19,124,189,0.15)' : '';
     });
 
     const hasPrev = idx > 0 && step.has_tool;
@@ -938,14 +1011,22 @@ class ComponentBrowser {
 
     clearGroup(this.stepsGroup);
     const material = new THREE.MeshPhysicalMaterial({
-      color: 0xCED9E0, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
+      color: 0xced9e0,
+      roughness: 0.5,
+      metalness: 0.1,
+      clearcoat: 0.1,
     });
     this.stepsGroup.add(new THREE.Mesh(geometry, material));
 
     const edges = new THREE.EdgesGeometry(geometry, 28);
-    const lines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({
-      color: 0x000000, transparent: true, opacity: 0.6,
-    }));
+    const lines = new THREE.LineSegments(
+      edges,
+      new THREE.LineBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.6,
+      }),
+    );
     lines.raycast = () => {};
     this.stepsGroup.add(lines);
 
@@ -967,62 +1048,72 @@ class ComponentBrowser {
 
     const name = this.currentComponent.name;
     const geometry = await this._loadStepSTLGeneric(
-      this.stepsToolStlCache, this.stepsCurrentIdx,
-      `/api/components/${name}/shapescript/${this.stepsCurrentIdx}/tool-stl`
+      this.stepsToolStlCache,
+      this.stepsCurrentIdx,
+      `/api/components/${name}/shapescript/${this.stepsCurrentIdx}/tool-stl`,
     );
     if (!geometry) return;
 
     const isCut = step.op === 'cut';
-    const toolColor = isCut ? 0xDB3737 : 0x0F9960;
+    const toolColor = isCut ? 0xdb3737 : 0x0f9960;
     const material = new THREE.MeshPhysicalMaterial({
-      color: toolColor, transparent: true, opacity: 0.35,
-      roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide, depthWrite: false,
+      color: toolColor,
+      transparent: true,
+      opacity: 0.35,
+      roughness: 0.8,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
     this.stepsToolGroup.add(new THREE.Mesh(geometry, material));
 
     const toolEdges = new THREE.EdgesGeometry(geometry, 28);
-    const toolLines = new THREE.LineSegments(toolEdges, new THREE.LineBasicMaterial({
-      color: toolColor, transparent: true, opacity: 0.4,
-    }));
+    const toolLines = new THREE.LineSegments(
+      toolEdges,
+      new THREE.LineBasicMaterial({
+        color: toolColor,
+        transparent: true,
+        opacity: 0.4,
+      }),
+    );
     toolLines.raycast = () => {};
     this.stepsToolGroup.add(toolLines);
   }
 
-  async _loadComponentStepSTL(idx) {
+  async _loadComponentStepSTL(idx: number) {
     const name = this.currentComponent.name;
-    return this._loadStepSTLGeneric(
-      this.stepsStlCache, idx,
-      `/api/components/${name}/shapescript/${idx}/stl`
-    );
+    return this._loadStepSTLGeneric(this.stepsStlCache, idx, `/api/components/${name}/shapescript/${idx}/stl`);
   }
 
-  async _loadStepSTLGeneric(cache, idx, url) {
+  async _loadStepSTLGeneric(cache: Record<number, any>, idx: number, url: string) {
     if (idx < 0) return null;
     if (cache[idx]) return cache[idx];
 
     return new Promise((resolve) => {
-      this.stlLoader.load(url, (geometry) => {
-        geometry.computeVertexNormals();
-        cache[idx] = geometry;
-        resolve(geometry);
-      }, undefined, () => resolve(null));
+      this.stlLoader.load(
+        url,
+        (geometry) => {
+          geometry.computeVertexNormals();
+          cache[idx] = geometry;
+          resolve(geometry);
+        },
+        undefined,
+        () => resolve(null),
+      );
     });
   }
 
-  _prefetchComponentStep(idx) {
+  _prefetchComponentStep(idx: number) {
     const steps = this.stepsData?.steps;
     if (!steps || idx < 0 || idx >= steps.length) return;
     if (!this.stepsStlCache[idx]) this._loadComponentStepSTL(idx);
     if (steps[idx]?.has_tool && !this.stepsToolStlCache[idx]) {
       const name = this.currentComponent.name;
-      this._loadStepSTLGeneric(
-        this.stepsToolStlCache, idx,
-        `/api/components/${name}/shapescript/${idx}/tool-stl`
-      );
+      this._loadStepSTLGeneric(this.stepsToolStlCache, idx, `/api/components/${name}/shapescript/${idx}/tool-stl`);
     }
   }
 
-  _stepsFrameCamera(geometry) {
+  _stepsFrameCamera(geometry: THREE.BufferGeometry) {
     geometry.computeBoundingBox();
     const box = geometry.boundingBox;
     const center = box.getCenter(new THREE.Vector3());
@@ -1088,7 +1179,7 @@ class ComponentBrowser {
       this.viewport._secOn = false;
       if (this.viewport._secViz) this.viewport._secViz.visible = false;
       this.viewport._clearSectionCaps();
-      this.viewport.scene.traverse(ch => {
+      this.viewport.scene.traverse((ch) => {
         if (ch.material) ch.material.clippingPlanes = [];
       });
     }
@@ -1102,7 +1193,7 @@ class ComponentBrowser {
     if (sectionBtn) sectionBtn.classList.remove('active');
     const flipBtn = document.querySelector('#section-flip');
     if (flipBtn) flipBtn.classList.remove('active');
-    const controls = document.querySelector('#section-controls');
+    const controls = document.querySelector('#section-controls') as HTMLElement | null;
     if (controls) controls.style.display = 'none';
     this._updateSectionPlane();
   }
@@ -1115,7 +1206,7 @@ class ComponentBrowser {
     const comp = this.currentComponent;
     if (!comp) return;
 
-    const layers = ALL_LAYER_IDS.filter(id => this.layerGroups[id].visible);
+    const layers = ALL_LAYER_IDS.filter((id) => this.layerGroups[id].visible);
     if (layers.length === 0) return;
 
     this.camera.updateMatrixWorld();
@@ -1127,14 +1218,14 @@ class ComponentBrowser {
     const preset = VIEW_PRESETS[this.activePreset];
     const viewLabel = preset ? preset.label : 'Custom';
 
-    const body = {
+    const body: any = {
       view_dir: [dir.x, dir.y, dir.z],
       view_up: [up.x, up.y, up.z],
       layers,
       annotate: {
         component: comp.name,
         view: viewLabel,
-        layers: layers.map(id => LAYER_META[id]?.label || id),
+        layers: layers.map((id) => LAYER_META[id]?.label || id),
         dimensions_mm: comp.dimensions_mm,
         mass_g: comp.mass_g,
       },
@@ -1144,7 +1235,8 @@ class ComponentBrowser {
       const box = this._getVisibleBBox();
       if (box) {
         const axisIdx = AXIS_INDEX[this.sectionAxis];
-        const pos = box.min.getComponent(axisIdx) +
+        const pos =
+          box.min.getComponent(axisIdx) +
           (box.max.getComponent(axisIdx) - box.min.getComponent(axisIdx)) * this.sectionFraction;
         body.section = {
           axis: this.sectionAxis,
@@ -1155,7 +1247,7 @@ class ComponentBrowser {
       }
     }
 
-    const btn = document.querySelector('#render-svg');
+    const btn = document.querySelector('#render-svg') as HTMLButtonElement;
     const origText = btn.textContent;
     btn.textContent = 'Rendering...';
     btn.disabled = true;
@@ -1181,7 +1273,7 @@ class ComponentBrowser {
     }
   }
 
-  _showSVGModal(svgText, componentName, viewLabel) {
+  _showSVGModal(svgText: string, componentName: string, viewLabel: string) {
     const modal = document.getElementById('svg-modal');
     const title = document.getElementById('svg-modal-title');
     const body = document.getElementById('svg-modal-body');
@@ -1194,11 +1286,13 @@ class ComponentBrowser {
 
     modal.style.display = 'flex';
 
-    const close = () => { modal.style.display = 'none'; };
-    document.querySelector('#svg-modal .modal-backdrop').onclick = close;
-    document.getElementById('svg-modal-close').onclick = close;
+    const close = () => {
+      modal.style.display = 'none';
+    };
+    (document.querySelector('#svg-modal .modal-backdrop') as HTMLElement).onclick = close;
+    document.getElementById('svg-modal-close')!.onclick = close;
 
-    document.getElementById('svg-modal-download').onclick = () => {
+    document.getElementById('svg-modal-download')!.onclick = () => {
       const blob = new Blob([this._lastSvgText], { type: 'image/svg+xml' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1215,9 +1309,9 @@ class ComponentBrowser {
   _setupAxisGizmo() {
     this._gizmoSvg = document.getElementById('axis-gizmo');
     this._gizmoAxes = [
-      { dir: new THREE.Vector3(1, 0, 0), color: hexStr(BP.RED3),   label: '+X', neg: '-X' },
+      { dir: new THREE.Vector3(1, 0, 0), color: hexStr(BP.RED3), label: '+X', neg: '-X' },
       { dir: new THREE.Vector3(0, 1, 0), color: hexStr(BP.GREEN3), label: '+Y', neg: '-Y' },
-      { dir: new THREE.Vector3(0, 0, 1), color: hexStr(BP.BLUE4),  label: '+Z', neg: '-Z' },
+      { dir: new THREE.Vector3(0, 0, 1), color: hexStr(BP.BLUE4), label: '+Z', neg: '-Z' },
     ];
 
     // Drive gizmo updates from the viewport animation loop
@@ -1232,17 +1326,20 @@ class ComponentBrowser {
     const svg = this._gizmoSvg;
     if (!svg) return;
 
-    const cx = 50, cy = 50;
+    const cx = 50,
+      cy = 50;
     const len = 32;
     svg.innerHTML = '';
 
     this.camera.updateMatrixWorld();
     const invMat = this.camera.matrixWorld.clone().invert();
 
-    const projected = this._gizmoAxes.map(axis => {
-      const d = axis.dir.clone().transformDirection(invMat);
-      return { ...axis, d, depth: d.z };
-    }).sort((a, b) => b.depth - a.depth);
+    const projected = this._gizmoAxes
+      .map((axis) => {
+        const d = axis.dir.clone().transformDirection(invMat);
+        return { ...axis, d, depth: d.z };
+      })
+      .sort((a, b) => b.depth - a.depth);
 
     for (const { d, color, label } of projected) {
       const behind = d.z > 0.2;
@@ -1252,41 +1349,41 @@ class ComponentBrowser {
       const sy = -d.y * len;
 
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', cx);
-      line.setAttribute('y1', cy);
-      line.setAttribute('x2', cx + sx);
-      line.setAttribute('y2', cy + sy);
+      line.setAttribute('x1', String(cx));
+      line.setAttribute('y1', String(cy));
+      line.setAttribute('x2', String(cx + sx));
+      line.setAttribute('y2', String(cy + sy));
       line.setAttribute('stroke', color);
-      line.setAttribute('stroke-width', lineW);
+      line.setAttribute('stroke-width', String(lineW));
       line.setAttribute('stroke-linecap', 'round');
-      line.setAttribute('opacity', opacity);
+      line.setAttribute('opacity', String(opacity));
       svg.appendChild(line);
 
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', cx + sx);
-      dot.setAttribute('cy', cy + sy);
-      dot.setAttribute('r', behind ? 3 : 5);
+      dot.setAttribute('cx', String(cx + sx));
+      dot.setAttribute('cy', String(cy + sy));
+      dot.setAttribute('r', String(behind ? 3 : 5));
       dot.setAttribute('fill', color);
-      dot.setAttribute('opacity', opacity);
+      dot.setAttribute('opacity', String(opacity));
       svg.appendChild(dot);
 
       const labelDist = len + 12;
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', cx + d.x * labelDist);
-      text.setAttribute('y', cy - d.y * labelDist);
+      text.setAttribute('x', String(cx + d.x * labelDist));
+      text.setAttribute('y', String(cy - d.y * labelDist));
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('dominant-baseline', 'central');
       text.setAttribute('fill', color);
-      text.setAttribute('opacity', opacity);
+      text.setAttribute('opacity', String(opacity));
       text.setAttribute('style', 'font: 600 11px system-ui, -apple-system, sans-serif');
       text.textContent = label;
       svg.appendChild(text);
     }
 
     const centerDot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    centerDot.setAttribute('cx', cx);
-    centerDot.setAttribute('cy', cy);
-    centerDot.setAttribute('r', 2);
+    centerDot.setAttribute('cx', String(cx));
+    centerDot.setAttribute('cy', String(cy));
+    centerDot.setAttribute('r', String(2));
     centerDot.setAttribute('fill', '#8A9BA8');
     svg.appendChild(centerDot);
   }
@@ -1295,7 +1392,7 @@ class ComponentBrowser {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-export async function initComponentBrowser(componentParam) {
+export async function initComponentBrowser(componentParam: string) {
   const browser = new ComponentBrowser();
   await browser.init();
 

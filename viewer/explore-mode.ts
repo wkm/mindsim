@@ -6,13 +6,34 @@
  */
 
 import * as THREE from 'three';
-import { ComponentTree } from './component-tree.js';
-import { FocusController } from './focus-controller.js';
-import { SemanticViz } from './semantic-viz.js';
-import { GEOM_GROUP_STRUCTURAL } from './utils.js';
+import { ComponentTree } from './component-tree.ts';
+import { FocusController } from './focus-controller.ts';
+import { SemanticViz } from './semantic-viz.ts';
+import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 
 export class ExploreMode {
-  constructor(ctx, manifest) {
+  ctx: any;
+  manifest: any;
+  active: boolean;
+  tree: any;
+  focus: any;
+  viz: any;
+  focusedNodeId: any;
+  focusedData: any;
+  _isolated: boolean;
+  bodyNameToId: any;
+  bodyIdToName: any;
+  bodiesByName: any;
+  _raycaster: any;
+  _mouse: any;
+  _hoveredBodyId: any;
+  _hoverEmissives: Map<any, any>;
+  _onPointerMove: any;
+  _onPointerDown: any;
+  _onPointerUp: any;
+  _pointerDownPos: any;
+
+  constructor(ctx: any, manifest: any) {
     this.ctx = ctx;
     this.manifest = manifest;
     this.active = false;
@@ -65,11 +86,13 @@ export class ExploreMode {
       this.manifest,
       (nodeId, data) => this.onNodeClick(nodeId, data),
       {
-        onShapeScript: (url) => { window.location.href = url; },
+        onShapeScript: (url) => {
+          window.location.href = url;
+        },
         onToggleVisibility: (bodyName, visible) => this._setBodyVisible(bodyName, visible),
         onIsolate: (bodyName) => this._isolateBody(bodyName),
         onShowAll: () => this._showAllBodies(),
-      }
+      },
     );
     this.tree.build();
 
@@ -148,7 +171,7 @@ export class ExploreMode {
   /** Resolve all MuJoCo body IDs for an assembly (for multi-body focus). */
   _resolveAssemblyBodyIds(nodeData) {
     const bodies = nodeData?.bodies || [];
-    return bodies.map(n => this.bodyNameToId[n]).filter(id => id !== undefined);
+    return bodies.map((n) => this.bodyNameToId[n]).filter((id) => id !== undefined);
   }
 
   /** Animate camera to frame the relevant body for a node. */
@@ -233,7 +256,7 @@ export class ExploreMode {
 
   /** Hide all bodies except the named one. */
   _isolateBody(bodyName) {
-    for (const [name, id] of Object.entries(this.bodyNameToId)) {
+    for (const [name, id] of Object.entries(this.bodyNameToId) as [string, any][]) {
       const group = this.ctx.bodies[id];
       if (!group) continue;
       if (name === bodyName) {
@@ -242,7 +265,7 @@ export class ExploreMode {
         // Body 0 (world) is the parent of all others in the scene graph.
         // Hide its own meshes but keep the group visible so children render.
         group.visible = true;
-        group.traverse(ch => {
+        group.traverse((ch: any) => {
           if (ch.isMesh) ch.visible = false;
         });
       } else {
@@ -253,12 +276,14 @@ export class ExploreMode {
 
   /** Restore all bodies to visible. */
   _showAllBodies() {
-    for (const id of Object.values(this.bodyNameToId)) {
+    for (const id of Object.values(this.bodyNameToId) as any[]) {
       const group = this.ctx.bodies[id];
       if (!group) continue;
       group.visible = true;
       // Restore any meshes hidden during isolation (e.g., body 0)
-      group.traverse(ch => { if (ch.isMesh) ch.visible = true; });
+      group.traverse((ch) => {
+        if (ch.isMesh) ch.visible = true;
+      });
     }
   }
 
@@ -276,7 +301,7 @@ export class ExploreMode {
       const keep = new Set();
       if (this.focusedData.child_body) keep.add(this.focusedData.child_body);
       if (this.focusedData.parent_body) keep.add(this.focusedData.parent_body);
-      for (const [name, id] of Object.entries(this.bodyNameToId)) {
+      for (const [name, id] of Object.entries(this.bodyNameToId) as [string, any][]) {
         const group = this.ctx.bodies[id];
         if (!group) continue;
         if (keep.has(name)) {
@@ -284,7 +309,9 @@ export class ExploreMode {
         } else if (id === 0) {
           // Keep body 0 visible (it's the scene graph parent) but hide its meshes
           group.visible = true;
-          group.traverse(ch => { if (ch.isMesh) ch.visible = false; });
+          group.traverse((ch: any) => {
+            if (ch.isMesh) ch.visible = false;
+          });
         } else {
           group.visible = false;
         }
@@ -325,7 +352,8 @@ export class ExploreMode {
   _showWelcomeProperties() {
     const panel = document.getElementById('side-panel');
     let html = '<h2>Explore</h2>';
-    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Click components in the tree to inspect them.</p>';
+    html +=
+      '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Click components in the tree to inspect them.</p>';
 
     // Bot summary
     const m = this.manifest;
@@ -336,9 +364,9 @@ export class ExploreMode {
     html += this._propRow('Joints', m.joints.length);
 
     const parts = m.parts || [];
-    const servos = parts.filter(p => p.category === 'servo');
-    const fasteners = parts.filter(p => p.category === 'fastener');
-    const wires = parts.filter(p => p.category === 'wire');
+    const servos = parts.filter((p) => p.category === 'servo');
+    const fasteners = parts.filter((p) => p.category === 'fastener');
+    const wires = parts.filter((p) => p.category === 'wire');
     html += this._propRow('Servos', servos.length);
     html += this._propRow('Fasteners', fasteners.length);
     html += this._propRow('Wire segments', wires.length);
@@ -371,7 +399,7 @@ export class ExploreMode {
     html += '</div>';
 
     // Child joints
-    const childJoints = this.manifest.joints.filter(j => j.parent_body === body.name);
+    const childJoints = this.manifest.joints.filter((j) => j.parent_body === body.name);
     if (childJoints.length > 0) {
       html += '<h3>Joints</h3>';
       for (const j of childJoints) {
@@ -383,7 +411,7 @@ export class ExploreMode {
     if (body.mounts && body.mounts.length > 0) {
       html += '<h3>Mounted Components</h3>';
       for (const m of body.mounts) {
-        const typeClass = (m.component_type || 'component') + '-chip';
+        const typeClass = `${m.component_type || 'component'}-chip`;
         html += `<div class="prop-chip ${typeClass}">${m.label} <span style="color:#5C7080;">(${m.component_name})</span></div>`;
       }
     }
@@ -400,7 +428,8 @@ export class ExploreMode {
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll(); else this.isolateCurrent();
+      if (this._isolated) this.showAll();
+      else this.isolateCurrent();
     });
   }
 
@@ -411,7 +440,7 @@ export class ExploreMode {
 
     html += '<h3>Kinematics</h3>';
     html += '<div class="prop-grid">';
-    html += this._propRow('Axis', `[${joint.axis.map(v => v.toFixed(1)).join(', ')}]`);
+    html += this._propRow('Axis', `[${joint.axis.map((v) => v.toFixed(1)).join(', ')}]`);
     if (joint.range_deg) {
       html += this._propRow('Range', `${joint.range_deg[0]}\u00b0 to ${joint.range_deg[1]}\u00b0`);
     }
@@ -424,7 +453,7 @@ export class ExploreMode {
     const specs = joint.servo_specs;
     if (specs) {
       html += this._propRow('Torque', `${specs.stall_torque_nm.toFixed(2)} N\u00b7m`);
-      const rpm = (specs.no_load_speed_rad_s * 60 / (2 * Math.PI)).toFixed(0);
+      const rpm = ((specs.no_load_speed_rad_s * 60) / (2 * Math.PI)).toFixed(0);
       html += this._propRow('Speed', `${rpm} RPM`);
       html += this._propRow('Voltage', `${specs.voltage} V`);
       html += this._propRow('Gear ratio', `1:${specs.gear_ratio}`);
@@ -441,7 +470,8 @@ export class ExploreMode {
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll(); else this.isolateCurrent();
+      if (this._isolated) this.showAll();
+      else this.isolateCurrent();
     });
   }
 
@@ -456,7 +486,10 @@ export class ExploreMode {
     html += this._propRow('Name', mount.component_name);
     if (mount.dimensions) {
       const d = mount.dimensions;
-      html += this._propRow('Size', `${(d[0] * 1000).toFixed(1)} \u00d7 ${(d[1] * 1000).toFixed(1)} \u00d7 ${(d[2] * 1000).toFixed(1)} mm`);
+      html += this._propRow(
+        'Size',
+        `${(d[0] * 1000).toFixed(1)} \u00d7 ${(d[1] * 1000).toFixed(1)} \u00d7 ${(d[2] * 1000).toFixed(1)} mm`,
+      );
     }
     html += this._propRow('Mass', `${(mount.mass * 1000).toFixed(1)} g`);
     html += '</div>';
@@ -484,7 +517,8 @@ export class ExploreMode {
 
     panel.innerHTML = html;
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll(); else this.isolateCurrent();
+      if (this._isolated) this.showAll();
+      else this.isolateCurrent();
     });
   }
 
@@ -512,7 +546,7 @@ export class ExploreMode {
       html += '<h3>Servo Specs</h3>';
       html += '<div class="prop-grid">';
       html += this._propRow('Torque', `${specs.stall_torque_nm.toFixed(2)} N\u00b7m`);
-      const rpm = (specs.no_load_speed_rad_s * 60 / (2 * Math.PI)).toFixed(0);
+      const rpm = ((specs.no_load_speed_rad_s * 60) / (2 * Math.PI)).toFixed(0);
       html += this._propRow('Speed', `${rpm} RPM`);
       html += this._propRow('Voltage', `${specs.voltage} V`);
       html += this._propRow('Gear ratio', `1:${specs.gear_ratio}`);
@@ -593,16 +627,16 @@ export class ExploreMode {
   }
 
   _bindPropertyChipClicks(panel) {
-    panel.querySelectorAll('.prop-chip[data-node-id]').forEach(chip => {
+    panel.querySelectorAll('.prop-chip[data-node-id]').forEach((chip) => {
       chip.style.cursor = 'pointer';
       chip.addEventListener('click', () => {
         const nodeId = chip.dataset.nodeId;
         const [type, ...rest] = nodeId.split(':');
         let data;
         if (type === 'body') {
-          data = this.manifest.bodies.find(b => b.name === rest[0]);
+          data = this.manifest.bodies.find((b) => b.name === rest[0]);
         } else if (type === 'joint') {
-          data = this.manifest.joints.find(j => j.name === rest[0]);
+          data = this.manifest.joints.find((j) => j.name === rest[0]);
         }
         if (data) {
           if (this.tree) this.tree.setFocused(nodeId);
@@ -629,8 +663,8 @@ export class ExploreMode {
 
     // Collect all structural meshes from all bodies
     const targets = [];
-    for (const [, group] of Object.entries(this.ctx.bodies)) {
-      group.traverse(child => {
+    for (const [, group] of Object.entries(this.ctx.bodies) as [string, any][]) {
+      group.traverse((child: any) => {
         if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
           targets.push(child);
         }
@@ -645,7 +679,7 @@ export class ExploreMode {
   _highlightBody(bodyId) {
     const group = this.ctx.bodies[bodyId];
     if (!group) return;
-    group.traverse(child => {
+    group.traverse((child) => {
       if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL && child.material?.emissive) {
         this._hoverEmissives.set(child, child.material.emissive.getHex());
         child.material.emissive.setHex(0x666666);

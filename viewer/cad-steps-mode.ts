@@ -15,21 +15,23 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { clearGroup } from './utils.js';
-import { Viewport3D } from './viewport3d.js';
+import { clearGroup } from './utils.ts';
+import { Viewport3D } from './viewport3d.ts';
 
 // Edge rendering — matches bot-viewer.js and component-browser.js
 const EDGE_MATERIAL = new THREE.LineBasicMaterial({
-  color: 0x000000, transparent: true, opacity: 0.6,
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.6,
 });
 const EDGE_THRESHOLD = 28; // degrees — only sharp edges
 
 // Op type → color
-const OP_COLORS = {
-  create: 0x2B95D6,  // blue — new primitive
-  cut:    0xDB3737,  // red — subtraction
-  union:  0x0F9960,  // green — addition
-  locate: 0x9179F2,  // purple — spatial placement
+const _OP_COLORS = {
+  create: 0x2b95d6, // blue — new primitive
+  cut: 0xdb3737, // red — subtraction
+  union: 0x0f9960, // green — addition
+  locate: 0x9179f2, // purple — spatial placement
 };
 
 // ── Styles for the code editor pane ──
@@ -156,7 +158,7 @@ const EDITOR_STYLES = `
   .cs-back-link:hover { color: var(--foreground); }
 `;
 
-export async function initCadSteps(param) {
+export async function initCadSteps(param: string) {
   const parts = param.split(':');
   if (parts.length < 2) {
     console.error('cadsteps param must be bot:body or component:name, got:', param);
@@ -176,7 +178,42 @@ export async function initCadSteps(param) {
 }
 
 class CadStepsViewer {
-  constructor(botName, bodyName, componentName = null) {
+  botName: string | null;
+  bodyName: string | null;
+  componentName: string | null;
+  isComponentMode: boolean;
+  steps: any[];
+  currentStep: number;
+  stlLoader: STLLoader;
+  stlCache: Record<number, any>;
+  toolStlCache: Record<number, any>;
+  viewMode: string;
+  showContext: boolean;
+  showFinal: boolean;
+  _ghostGeometry: any;
+  _leftBasis: number;
+  _hasFramedHolistic: boolean;
+  allBodies: string[];
+  ssServos: string[];
+  ssComponents: string[];
+  fromBot: string | null;
+  viewport: any;
+  meshGroup: any;
+  toolGroup: any;
+  contextGroup: any;
+  ghostGroup: any;
+  layoutEl!: HTMLDivElement;
+  viewportEl!: HTMLDivElement;
+  dividerEl!: HTMLDivElement;
+  editorPaneEl!: HTMLDivElement;
+  stepCountEl!: HTMLSpanElement;
+  slider!: HTMLInputElement;
+  _outcomeBtn!: HTMLButtonElement;
+  _inputsBtn!: HTMLButtonElement;
+  codeScrollEl!: HTMLDivElement;
+  lineEls: HTMLDivElement[];
+
+  constructor(botName: string | null, bodyName: string | null, componentName: string | null = null) {
     this.botName = botName;
     this.bodyName = bodyName;
     this.componentName = componentName;
@@ -184,14 +221,19 @@ class CadStepsViewer {
     this.steps = [];
     this.currentStep = 0;
     this.stlLoader = new STLLoader();
-    this.stlCache = {};      // step index → BufferGeometry
-    this.toolStlCache = {};  // step index → BufferGeometry (tool solid)
-    this.viewMode = 'outcome';  // 'outcome' | 'inputs'
-    this.showContext = true;     // body-so-far overlay
+    this.stlCache = {};
+    this.toolStlCache = {};
+    this.viewMode = 'outcome';
+    this.showContext = true;
     this.showFinal = false;
-    this._ghostGeometry = null;           // cached final-step geometry for ghost
-    this._leftBasis = 60; // percent
-    this._hasFramedHolistic = false;      // true once we've framed on the final body
+    this._ghostGeometry = null;
+    this._leftBasis = 60;
+    this._hasFramedHolistic = false;
+    this.allBodies = [];
+    this.ssServos = [];
+    this.ssComponents = [];
+    this.fromBot = null;
+    this.lineEls = [];
   }
 
   async init() {
@@ -255,7 +297,7 @@ class CadStepsViewer {
     // Left: 3D viewport
     this.viewportEl = document.createElement('div');
     this.viewportEl.className = 'cs-viewport';
-    this.viewportEl.style.flexBasis = this._leftBasis + '%';
+    this.viewportEl.style.flexBasis = `${this._leftBasis}%`;
 
     // Divider
     this.dividerEl = document.createElement('div');
@@ -288,7 +330,7 @@ class CadStepsViewer {
       const totalW = this.layoutEl.clientWidth;
       const newBasis = startLeftBasis + (dx / totalW) * 100;
       this._leftBasis = Math.max(20, Math.min(80, newBasis));
-      this.viewportEl.style.flexBasis = this._leftBasis + '%';
+      this.viewportEl.style.flexBasis = `${this._leftBasis}%`;
       this.viewport.resize();
     };
     const onMouseUp = () => {
@@ -307,7 +349,7 @@ class CadStepsViewer {
     });
     this.meshGroup = this.viewport.addGroup('body');
     this.toolGroup = this.viewport.addGroup('tool');
-    this.contextGroup = this.viewport.addGroup('context');  // body-so-far for create/locate steps
+    this.contextGroup = this.viewport.addGroup('context'); // body-so-far for create/locate steps
     this.ghostGroup = this.viewport.addGroup('ghost');
   }
 
@@ -343,8 +385,7 @@ class CadStepsViewer {
     }
 
     // Body/component switcher dropdown
-    const hasItems = this.allBodies.length > 0 ||
-      this.ssServos.length > 0 || this.ssComponents.length > 0;
+    const _hasItems = this.allBodies.length > 0 || this.ssServos.length > 0 || this.ssComponents.length > 0;
     const totalItems = this.allBodies.length + this.ssServos.length + this.ssComponents.length;
     if (totalItems > 1) {
       const sep = document.createElement('span');
@@ -355,9 +396,7 @@ class CadStepsViewer {
       select.className = 'cs-body-select';
 
       // Current value: "body:name" or "component:name"
-      const currentValue = this.isComponentMode
-        ? `component:${this.componentName}`
-        : `body:${this.bodyName}`;
+      const currentValue = this.isComponentMode ? `component:${this.componentName}` : `body:${this.bodyName}`;
 
       // Helper to add optgroup
       const addGroup = (label, items, prefix) => {
@@ -416,9 +455,11 @@ class CadStepsViewer {
 
     // Segmented control: Outcome | Inputs
     const modeGroup = document.createElement('div');
-    modeGroup.style.cssText = 'display:flex; border:1px solid #30363D; border-radius:4px; overflow:hidden; flex-shrink:0;';
+    modeGroup.style.cssText =
+      'display:flex; border:1px solid #30363D; border-radius:4px; overflow:hidden; flex-shrink:0;';
 
-    const segBtnBase = 'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
+    const segBtnBase =
+      'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
     const segActive = 'background:#30363D; color:#E8EDF0;';
     const segInactive = 'background:transparent; color:#738694;';
 
@@ -450,7 +491,7 @@ class CadStepsViewer {
     contextCb.type = 'checkbox';
     contextCb.checked = true;
     contextCb.addEventListener('change', async (e) => {
-      this.showContext = e.target.checked;
+      this.showContext = (e.target as HTMLInputElement).checked;
       await this._showStep(this.currentStep);
     });
     contextLabel.appendChild(contextCb);
@@ -463,7 +504,7 @@ class CadStepsViewer {
     finalCb.type = 'checkbox';
     finalCb.checked = false;
     finalCb.addEventListener('change', async (e) => {
-      this.showFinal = e.target.checked;
+      this.showFinal = (e.target as HTMLInputElement).checked;
       await this._rebuildGhost();
       await this._showStep(this.currentStep);
     });
@@ -520,11 +561,11 @@ class CadStepsViewer {
       // Parameter hover highlighting
       const contentEl = line.querySelector('.cs-line-content');
       contentEl.addEventListener('mouseover', (e) => {
-        const span = e.target.closest('.ss-param-target');
+        const span = (e.target as HTMLElement).closest('.ss-param-target');
         if (span) span.classList.add('ss-param-hover');
       });
       contentEl.addEventListener('mouseout', (e) => {
-        const span = e.target.closest('.ss-param-target');
+        const span = (e.target as HTMLElement).closest('.ss-param-target');
         if (span) span.classList.remove('ss-param-hover');
       });
 
@@ -566,19 +607,20 @@ class CadStepsViewer {
     });
   }
 
-  _escapeHtml(text) {
+  _escapeHtml(text: string) {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   _updateModeButtons() {
-    const segBtnBase = 'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
+    const segBtnBase =
+      'border:none; padding:3px 10px; font:500 11px system-ui,-apple-system,sans-serif; cursor:pointer; transition:background 0.12s,color 0.12s;';
     const segActive = 'background:#30363D; color:#E8EDF0;';
     const segInactive = 'background:transparent; color:#738694;';
     this._outcomeBtn.style.cssText = segBtnBase + (this.viewMode === 'outcome' ? segActive : segInactive);
     this._inputsBtn.style.cssText = segBtnBase + (this.viewMode === 'inputs' ? segActive : segInactive);
   }
 
-  _highlightScript(script) {
+  _highlightScript(script: string) {
     let s = this._escapeHtml(script);
 
     // Order matters: comments first, then keywords, then refs/numbers.
@@ -603,8 +645,9 @@ class CadStepsViewer {
     s = s.replace(/\b(Box|Cylinder|Sphere)\b/g, (m) => placeholder('ss-prim', m));
 
     // Parameter values (pos=(...), r=..., w=..., l=..., h=...) — wrap as hoverable targets
-    s = s.replace(/((?:pos|rot|r|w|l|h|d)=\([^)]*\)|(?:pos|rot|r|w|l|h|d)=[\d.\-]+)/g,
-      (m) => placeholder('ss-param-target', m));
+    s = s.replace(/((?:pos|rot|r|w|l|h|d)=\([^)]*\)|(?:pos|rot|r|w|l|h|d)=[\d.-]+)/g, (m) =>
+      placeholder('ss-param-target', m),
+    );
 
     // Numbers (remaining, not inside tokens)
     s = s.replace(/\b(\d+\.?\d*)\b/g, (m) => placeholder('ss-num', m));
@@ -622,7 +665,7 @@ class CadStepsViewer {
 
   // ── Scroll sync ──
 
-  _scrollToLine(idx) {
+  _scrollToLine(idx: number) {
     const lineEl = this.lineEls[idx];
     if (!lineEl || !this.codeScrollEl) return;
 
@@ -661,7 +704,7 @@ class CadStepsViewer {
       const resp = await fetch(url);
       if (resp.ok) {
         const manifest = await resp.json();
-        this.allBodies = (manifest.bodies || []).map(b => b.name);
+        this.allBodies = (manifest.bodies || []).map((b) => b.name);
 
         // Collect parts with shapescript_component, grouped by category
         const parts = manifest.parts || [];
@@ -678,17 +721,19 @@ class CadStepsViewer {
           }
         }
       }
-    } catch { /* manifest not available */ }
+    } catch {
+      /* manifest not available */
+    }
   }
 
   // ── Step navigation ──
 
   async _onSliderChange() {
-    const idx = parseInt(this.slider.value);
+    const idx = parseInt(this.slider.value, 10);
     await this._showStep(idx);
   }
 
-  async _showStep(idx) {
+  async _showStep(idx: number) {
     if (idx < 0 || idx >= this.steps.length) return;
     this.currentStep = idx;
     const step = this.steps[idx];
@@ -706,7 +751,8 @@ class CadStepsViewer {
     // Clear mesh groups
     const clearMG = (g) => {
       while (g.children.length > 0) {
-        const c = g.children[0]; g.remove(c);
+        const c = g.children[0];
+        g.remove(c);
         if (c.isLineSegments && c.geometry) c.geometry.dispose();
         if (c.material && c.material !== EDGE_MATERIAL) c.material.dispose();
       }
@@ -715,11 +761,16 @@ class CadStepsViewer {
     clearMG(this.contextGroup);
     clearGroup(this.toolGroup);
 
-    const isBooleanStep = (step.op === 'cut' || step.op === 'union');
+    const isBooleanStep = step.op === 'cut' || step.op === 'union';
 
     const addTransparentMesh = (group, geom, color, opacity) => {
       const mat = new THREE.MeshPhysicalMaterial({
-        color, transparent: true, opacity, roughness: 0.8, depthWrite: false, side: THREE.DoubleSide,
+        color,
+        transparent: true,
+        opacity,
+        roughness: 0.8,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       });
       group.add(new THREE.Mesh(geom, mat));
       const edgeMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: opacity + 0.05 });
@@ -730,9 +781,17 @@ class CadStepsViewer {
     };
 
     const addOpaqueMesh = (group, geom, color) => {
-      group.add(new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
-        color, roughness: 0.5, metalness: 0.1, clearcoat: 0.1,
-      })));
+      group.add(
+        new THREE.Mesh(
+          geom,
+          new THREE.MeshPhysicalMaterial({
+            color,
+            roughness: 0.5,
+            metalness: 0.1,
+            clearcoat: 0.1,
+          }),
+        ),
+      );
       const edges = new THREE.EdgesGeometry(geom, EDGE_THRESHOLD);
       const lines = new THREE.LineSegments(edges, EDGE_MATERIAL);
       lines.raycast = () => {};
@@ -742,25 +801,23 @@ class CadStepsViewer {
     if (this.viewMode === 'inputs' && isBooleanStep && idx > 0) {
       // Inputs mode for cut/fuse: target (before-body) + tool overlay
       const targetGeom = await this._loadStepSTL(idx - 1);
-      if (targetGeom) addTransparentMesh(this.meshGroup, targetGeom, 0xCED9E0, 0.35);
+      if (targetGeom) addTransparentMesh(this.meshGroup, targetGeom, 0xced9e0, 0.35);
       const toolGeom = await this._loadSTL(this.toolStlCache, idx, 'tool-stl');
-      const toolColor = step.op === 'cut' ? 0xDB3737 : 0x0F9960;
+      const toolColor = step.op === 'cut' ? 0xdb3737 : 0x0f9960;
       if (toolGeom) addTransparentMesh(this.meshGroup, toolGeom, toolColor, 0.35);
-
     } else if (this.viewMode === 'inputs' && step.op === 'locate') {
       // Inputs mode for locate: pre-move faint gray + result purple
       const preGeom = await this._loadSTL(this.toolStlCache, idx, 'tool-stl');
       if (preGeom) addTransparentMesh(this.meshGroup, preGeom, 0x738694, 0.3);
       const resultGeom = await this._loadStepSTL(idx);
-      if (resultGeom) addOpaqueMesh(this.meshGroup, resultGeom, 0x9179F2);
-
+      if (resultGeom) addOpaqueMesh(this.meshGroup, resultGeom, 0x9179f2);
     } else {
       // Outcome mode (or inputs on create/call/prebuilt — same thing)
       const geom = await this._loadStepSTL(idx);
       if (!geom) return;
-      let color = 0xCED9E0; // neutral gray for cut/fuse
-      if (step.op === 'create') color = 0x2B95D6;
-      else if (step.op === 'locate') color = 0x9179F2;
+      let color = 0xced9e0; // neutral gray for cut/fuse
+      if (step.op === 'create') color = 0x2b95d6;
+      else if (step.op === 'locate') color = 0x9179f2;
       addOpaqueMesh(this.meshGroup, geom, color);
     }
 
@@ -772,13 +829,20 @@ class CadStepsViewer {
         const ctxGeom = await this._loadStepSTL(ctxIdx);
         if (ctxGeom) {
           const ctxMat = new THREE.MeshPhysicalMaterial({
-            color: 0xCED9E0, transparent: true, opacity: 0.25,
-            roughness: 0.8, depthWrite: false,
+            color: 0xced9e0,
+            transparent: true,
+            opacity: 0.25,
+            roughness: 0.8,
+            depthWrite: false,
           });
           this.contextGroup.add(new THREE.Mesh(ctxGeom, ctxMat));
           const ctxEdges = new THREE.EdgesGeometry(ctxGeom, EDGE_THRESHOLD);
-          this.contextGroup.add(new THREE.LineSegments(ctxEdges,
-            new THREE.LineBasicMaterial({ color: 0x5C7080, transparent: true, opacity: 0.2 })));
+          this.contextGroup.add(
+            new THREE.LineSegments(
+              ctxEdges,
+              new THREE.LineBasicMaterial({ color: 0x5c7080, transparent: true, opacity: 0.2 }),
+            ),
+          );
         }
       }
     }
@@ -802,7 +866,7 @@ class CadStepsViewer {
   }
 
   /** Find the most recent cut/fuse step before `idx` — that's the body-so-far. */
-  _findLastBodyStep(idx) {
+  _findLastBodyStep(idx: number) {
     for (let i = idx - 1; i >= 0; i--) {
       const op = this.steps[i]?.op;
       if (op === 'cut' || op === 'union') return i;
@@ -824,7 +888,7 @@ class CadStepsViewer {
 
     // Ghost solid — very transparent, no depth write
     const ghostMat = new THREE.MeshPhysicalMaterial({
-      color: 0xCED9E0,
+      color: 0xced9e0,
       transparent: true,
       opacity: 0.06,
       roughness: 1.0,
@@ -834,7 +898,7 @@ class CadStepsViewer {
 
     // Ghost edges
     const ghostEdgeMat = new THREE.LineBasicMaterial({
-      color: 0x5C7080,
+      color: 0x5c7080,
       transparent: true,
       opacity: 0.15,
     });
@@ -846,7 +910,7 @@ class CadStepsViewer {
 
   // ── STL loading ──
 
-  async _loadSTL(cache, idx, suffix) {
+  async _loadSTL(cache: Record<number, any>, idx: number, suffix: string) {
     if (idx < 0 || idx >= this.steps.length) return null;
     if (cache[idx]) return cache[idx];
 
@@ -854,17 +918,24 @@ class CadStepsViewer {
       ? `/api/components/${encodeURIComponent(this.componentName)}/shapescript/${idx}/${suffix}`
       : `/api/bots/${this.botName}/body/${this.bodyName}/cad-steps/${idx}/${suffix}`;
     return new Promise((resolve) => {
-      this.stlLoader.load(url, (geometry) => {
-        geometry.computeVertexNormals();
-        cache[idx] = geometry;
-        resolve(geometry);
-      }, undefined, () => resolve(null));
+      this.stlLoader.load(
+        url,
+        (geometry) => {
+          geometry.computeVertexNormals();
+          cache[idx] = geometry;
+          resolve(geometry);
+        },
+        undefined,
+        () => resolve(null),
+      );
     });
   }
 
-  _loadStepSTL(idx) { return this._loadSTL(this.stlCache, idx, 'stl'); }
+  _loadStepSTL(idx: number) {
+    return this._loadSTL(this.stlCache, idx, 'stl');
+  }
 
-  _prefetch(idx) {
+  _prefetch(idx: number) {
     if (idx < 0 || idx >= this.steps.length) return;
     if (!this.stlCache[idx]) this._loadStepSTL(idx);
     if (this.steps[idx]?.has_tool && !this.toolStlCache[idx]) {

@@ -51,7 +51,14 @@ SHAPESCRIPT=0 uv run mjpython main.py view --bot wheeler_arm # Bypass ShapeScrip
 - **Architecture:** `emit_body_ir()` translates `_make_body_solid()` logic into typed ShapeScript ops (`botcad/shapescript/ops.py`). `OcctBackend` executes the ShapeScript against build123d. Bracket/component solids are injected as `PrebuiltOp`.
 - **Key files:** `botcad/shapescript/emit_body.py`, `botcad/shapescript/backend_occt.py`, `botcad/shapescript/program.py`, `botcad/shapescript/ops.py`
 
-## Development
+## TypeScript (Viewer)
+
+The viewer (`viewer/`) is written in TypeScript. See **[TYPESCRIPT_STYLE.md](TYPESCRIPT_STYLE.md)** for the full style guide.
+
+- **Biome** handles lint + format: `pnpm exec biome check --write viewer/`
+- **tsc** handles type checking: `pnpm exec tsc --noEmit`
+- Both run automatically via `make lint`
+- Data model + sync pattern: `BotScene` (pure data) → `sync()` (maps to Three.js) → modes only mutate data
 
 ## Workflow Preferences
 

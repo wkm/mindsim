@@ -6,10 +6,33 @@
  */
 
 import * as THREE from 'three';
-import { clearGroup, createMarker, radToDegStr } from './utils.js';
+import { clearGroup, createMarker, radToDegStr } from './utils.ts';
 
 export class IKMode {
-  constructor(ctx) {
+  ctx: any;
+  active: boolean;
+  anchorBodyId: number | null;
+  targetBodyId: number | null;
+  dragging: boolean;
+  grabDistance: number;
+  raycaster: THREE.Raycaster;
+  mouse: THREE.Vector2;
+  overlayGroup: THREE.Group;
+  _dragTarget: THREE.Vector3;
+  _bodyPos: THREE.Vector3;
+  _mjTarget: THREE.Vector3;
+  _arrowDir: THREE.Vector3;
+  _pendingDragEvt: any;
+  arrow: THREE.ArrowHelper | null;
+  anchorMarker: any;
+  targetMarker: any;
+  savedQpos: Float64Array | null;
+  _jointEls: any[] | null;
+  _onPointerDown: (evt: PointerEvent) => void;
+  _onPointerMove: (evt: PointerEvent) => void;
+  _onPointerUp: (evt: PointerEvent) => void;
+
+  constructor(ctx: any) {
     this.ctx = ctx;
     this.active = false;
     this.anchorBodyId = null;
@@ -154,30 +177,28 @@ export class IKMode {
   }
 
   buildOverlays() {
-    this.arrow = new THREE.ArrowHelper(
-      new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.1, 0xDB3737
-    );
+    this.arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.1, 0xdb3737);
     this.arrow.visible = false;
     this.overlayGroup.add(this.arrow);
 
-    this.anchorMarker = createMarker(0x137CBD);
+    this.anchorMarker = createMarker(0x137cbd);
     this.overlayGroup.add(this.anchorMarker);
 
-    this.targetMarker = createMarker(0xDB3737);
+    this.targetMarker = createMarker(0xdb3737);
     this.overlayGroup.add(this.targetMarker);
   }
 
   clearHighlights() {
-    this.ctx.mujocoRoot.traverse(obj => {
-      if (obj.isMesh && obj.material && obj.material.emissive) {
+    this.ctx.mujocoRoot.traverse((obj) => {
+      if (obj.isMesh && obj.material?.emissive) {
         obj.material.emissive.setHex(0x000000);
       }
     });
   }
 
   highlightBody(bodyId, color) {
-    this.ctx.mujocoRoot.traverse(obj => {
-      if (obj.isMesh && obj.bodyID === bodyId && obj.material && obj.material.emissive) {
+    this.ctx.mujocoRoot.traverse((obj) => {
+      if (obj.isMesh && obj.bodyID === bodyId && obj.material?.emissive) {
         obj.material.emissive.setHex(color);
       }
     });
@@ -189,14 +210,16 @@ export class IKMode {
     const targetEl = document.getElementById('ik-target-name');
 
     if (anchorEl) {
-      anchorEl.textContent = this.anchorBodyId !== null
-        ? getMujocoName(model.name_bodyadr, this.anchorBodyId) || `body ${this.anchorBodyId}`
-        : 'none';
+      anchorEl.textContent =
+        this.anchorBodyId !== null
+          ? getMujocoName(model.name_bodyadr, this.anchorBodyId) || `body ${this.anchorBodyId}`
+          : 'none';
     }
     if (targetEl) {
-      targetEl.textContent = this.targetBodyId !== null
-        ? getMujocoName(model.name_bodyadr, this.targetBodyId) || `body ${this.targetBodyId}`
-        : 'none';
+      targetEl.textContent =
+        this.targetBodyId !== null
+          ? getMujocoName(model.name_bodyadr, this.targetBodyId) || `body ${this.targetBodyId}`
+          : 'none';
     }
   }
 
@@ -241,7 +264,7 @@ export class IKMode {
     this.updateRaycaster(evt);
     const intersects = this.raycaster.intersectObjects(this.ctx.scene.children, true);
     for (const hit of intersects) {
-      let obj = hit.object;
+      let obj: any = hit.object;
       while (obj && obj.bodyID === undefined) obj = obj.parent;
       if (obj && obj.bodyID > 0) {
         return { bodyId: obj.bodyID, distance: hit.distance, point: hit.point };
@@ -310,12 +333,7 @@ export class IKMode {
 
     for (let i = 0; i < data.qfrc_applied.length; i++) data.qfrc_applied[i] = 0;
 
-    mujoco.mj_applyFT(
-      model, data,
-      [fx, fy, fz], [0, 0, 0],
-      [bx, by, bz], bodyId,
-      data.qfrc_applied
-    );
+    mujoco.mj_applyFT(model, data, [fx, fy, fz], [0, 0, 0], [bx, by, bz], bodyId, data.qfrc_applied);
 
     const savedTimestep = model.opt.timestep;
     model.opt.timestep = 0.002;
@@ -334,8 +352,7 @@ export class IKMode {
       this._pendingDragEvt = null;
 
       this.updateRaycaster(evt);
-      this._dragTarget.copy(this.raycaster.ray.origin)
-        .addScaledVector(this.raycaster.ray.direction, this.grabDistance);
+      this._dragTarget.copy(this.raycaster.ray.origin).addScaledVector(this.raycaster.ray.direction, this.grabDistance);
 
       this.solveIK(this._dragTarget);
       this.ctx.syncTransforms();

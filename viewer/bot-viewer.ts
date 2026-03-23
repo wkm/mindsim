@@ -9,14 +9,14 @@
  */
 
 import * as THREE from 'three';
-import { JointMode } from './joint-mode.js';
-import { AssemblyMode } from './assembly-mode.js';
-import { IKMode } from './ik-mode.js';
-import { ExploreMode } from './explore-mode.js';
-import { FocusController } from './focus-controller.js';
-import { Viewport3D } from './viewport3d.js';
-import { SectionCutter } from './section-cutter.js';
-import { GEOM_GROUP_STRUCTURAL } from './utils.js';
+import { AssemblyMode } from './assembly-mode.ts';
+import { ExploreMode } from './explore-mode.ts';
+import { FocusController } from './focus-controller.ts';
+import { IKMode } from './ik-mode.ts';
+import { JointMode } from './joint-mode.ts';
+import { SectionCutter } from './section-cutter.ts';
+import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
+import { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,18 +24,18 @@ import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 const SIDE_PANEL_WIDTH = 320;
 const TREE_PANEL_WIDTH = 280;
 
-export async function initBotViewer(botName) {
+export async function initBotViewer(botName: string) {
   // ---------------------------------------------------------------------------
   // Globals shared across modes
   // ---------------------------------------------------------------------------
-  /** @type {any} */ let mujoco;
-  /** @type {any} */ let model;
-  /** @type {any} */ let data;
-  /** @type {Object<number, THREE.Group>} */ const bodies = {};
-  let mujocoRoot;
+  /** @type {any} */ let mujoco: any;
+  /** @type {any} */ let model: any;
+  /** @type {any} */ let data: any;
+  /** @type {Object<number, THREE.Group>} */ const bodies: Record<number, any> = {};
+  let mujocoRoot: any;
 
   // Cached name decoding (allocated once after model load)
-  let _namesArray = null;
+  let _namesArray: Uint8Array | null = null;
   const _textDecoder = new TextDecoder('utf-8');
 
   // Three.js — delegated to Viewport3D
@@ -51,16 +51,18 @@ export async function initBotViewer(botName) {
       const w = parseInt(saved, 10);
       if (w >= TREE_MIN_WIDTH && w <= TREE_MAX_WIDTH) treePanelWidth = w;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   function getTreePanelWidth() {
     const treePanel = document.getElementById('tree-panel');
-    return (treePanel && treePanel.style.display !== 'none') ? treePanelWidth : 0;
+    return treePanel && treePanel.style.display !== 'none' ? treePanelWidth : 0;
   }
 
   // Apply initial tree panel width
   const treePanelEl = document.getElementById('tree-panel');
-  if (treePanelEl) treePanelEl.style.width = treePanelWidth + 'px';
+  if (treePanelEl) treePanelEl.style.width = `${treePanelWidth}px`;
 
   // ── Resizable tree panel ──
   function initTreeResize() {
@@ -89,7 +91,7 @@ export async function initBotViewer(botName) {
       const dx = e.clientX - startX;
       const newWidth = Math.max(TREE_MIN_WIDTH, Math.min(TREE_MAX_WIDTH, startWidth + dx));
       treePanelWidth = newWidth;
-      panel.style.width = newWidth + 'px';
+      panel.style.width = `${newWidth}px`;
       updateCanvasLayout();
     });
 
@@ -98,14 +100,18 @@ export async function initBotViewer(botName) {
       dragging = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      try { localStorage.setItem('mindsim-tree-panel-width', String(treePanelWidth)); } catch { /* ignore */ }
+      try {
+        localStorage.setItem('mindsim-tree-panel-width', String(treePanelWidth));
+      } catch {
+        /* ignore */
+      }
     });
   }
   initTreeResize();
 
   // Position container between tree panel and side panel
-  container.style.left = getTreePanelWidth() + 'px';
-  container.style.right = SIDE_PANEL_WIDTH + 'px';
+  container.style.left = `${getTreePanelWidth()}px`;
+  container.style.right = `${SIDE_PANEL_WIDTH}px`;
 
   const viewport = new Viewport3D(container, {
     cameraType: 'orthographic',
@@ -124,35 +130,26 @@ export async function initBotViewer(botName) {
   /** Update container bounds and let Viewport3D handle resize. */
   function updateCanvasLayout() {
     const left = getTreePanelWidth();
-    container.style.left = left + 'px';
-    container.style.right = SIDE_PANEL_WIDTH + 'px';
+    container.style.left = `${left}px`;
+    container.style.right = `${SIDE_PANEL_WIDTH}px`;
     viewport.resize();
   }
 
   // ---------------------------------------------------------------------------
   // Coordinate helpers — MuJoCo is Z-up, Three.js viewport is Z-up, no swizzle needed
   // ---------------------------------------------------------------------------
-  function getPosition(buffer, index, target) {
-    return target.set(
-      buffer[index * 3 + 0],
-      buffer[index * 3 + 1],
-      buffer[index * 3 + 2]
-    );
+  function getPosition(buffer: any, index: number, target: THREE.Vector3) {
+    return target.set(buffer[index * 3 + 0], buffer[index * 3 + 1], buffer[index * 3 + 2]);
   }
 
-  function getQuaternion(buffer, index, target) {
+  function getQuaternion(buffer: any, index: number, target: THREE.Quaternion) {
     // MuJoCo quaternion layout: [w, x, y, z]
     // Three.js Quaternion constructor: (x, y, z, w)
-    return target.set(
-      buffer[index * 4 + 1],
-      buffer[index * 4 + 2],
-      buffer[index * 4 + 3],
-      buffer[index * 4 + 0]
-    );
+    return target.set(buffer[index * 4 + 1], buffer[index * 4 + 2], buffer[index * 4 + 3], buffer[index * 4 + 0]);
   }
 
-  function toMujocoPos(v) {
-    return v;  // identity — same coordinate system
+  function toMujocoPos(v: any) {
+    return v; // identity — same coordinate system
   }
 
   // ---------------------------------------------------------------------------
@@ -163,6 +160,7 @@ export async function initBotViewer(botName) {
     loadingText.textContent = 'Loading MuJoCo WASM...';
 
     const { default: load_mujoco } = await import(
+      // @ts-expect-error — dynamic CDN import, no types available
       'https://cdn.jsdelivr.net/npm/mujoco-js@0.0.7/dist/mujoco_wasm.js'
     );
     mujoco = await load_mujoco();
@@ -181,13 +179,15 @@ export async function initBotViewer(botName) {
 
     // Parse XML to find mesh files and fetch them in parallel
     const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
-    const meshFiles = [...xmlDoc.querySelectorAll('mesh[file]')].map(el => el.getAttribute('file'));
+    const meshFiles = [...xmlDoc.querySelectorAll('mesh[file]')].map((el) => el.getAttribute('file'));
 
     loadingText.textContent = `Loading ${meshFiles.length} meshes...`;
-    await Promise.all(meshFiles.map(async (file) => {
-      const buf = new Uint8Array(await (await fetch(`${botDir}/meshes/${file}`)).arrayBuffer());
-      mujoco.FS.writeFile(`/working/meshes/${file}`, buf);
-    }));
+    await Promise.all(
+      meshFiles.map(async (file) => {
+        const buf = new Uint8Array(await (await fetch(`${botDir}/meshes/${file}`)).arrayBuffer());
+        mujoco.FS.writeFile(`/working/meshes/${file}`, buf);
+      }),
+    );
 
     // Load model
     loadingText.textContent = 'Initializing simulation...';
@@ -202,7 +202,7 @@ export async function initBotViewer(botName) {
   // ---------------------------------------------------------------------------
   // Decode MuJoCo name strings (cached array, single TextDecoder)
   // ---------------------------------------------------------------------------
-  function getMujocoName(adrArray, index) {
+  function getMujocoName(adrArray: any, index: number) {
     const start = adrArray[index];
     let end = start;
     while (end < _namesArray.length && _namesArray[end] !== 0) end++;
@@ -216,16 +216,12 @@ export async function initBotViewer(botName) {
     mujocoRoot = viewport.addGroup('mujoco');
     mujocoRoot.name = 'MuJoCo Root';
 
-    const meshCache = {};
+    const meshCache: Record<number, THREE.BufferGeometry> = {};
 
     for (let g = 0; g < model.ngeom; g++) {
       const b = model.geom_bodyid[g];
       const type = model.geom_type[g];
-      const size = [
-        model.geom_size[g * 3 + 0],
-        model.geom_size[g * 3 + 1],
-        model.geom_size[g * 3 + 2],
-      ];
+      const size = [model.geom_size[g * 3 + 0], model.geom_size[g * 3 + 1], model.geom_size[g * 3 + 2]];
 
       if (!(b in bodies)) {
         bodies[b] = new THREE.Group();
@@ -259,12 +255,12 @@ export async function initBotViewer(botName) {
           geometry = new THREE.BufferGeometry();
           const vertBuf = model.mesh_vert.subarray(
             model.mesh_vertadr[meshID] * 3,
-            (model.mesh_vertadr[meshID] + model.mesh_vertnum[meshID]) * 3
+            (model.mesh_vertadr[meshID] + model.mesh_vertnum[meshID]) * 3,
           );
           // No vertex swizzle — MuJoCo meshes are Z-up, matching our viewport
           const faceBuf = model.mesh_face.subarray(
             model.mesh_faceadr[meshID] * 3,
-            (model.mesh_faceadr[meshID] + model.mesh_facenum[meshID]) * 3
+            (model.mesh_faceadr[meshID] + model.mesh_facenum[meshID]) * 3,
           );
           geometry.setAttribute('position', new THREE.BufferAttribute(vertBuf, 3));
           geometry.setIndex(Array.from(faceBuf));
@@ -295,10 +291,10 @@ export async function initBotViewer(botName) {
       const mesh = new THREE.Mesh(geometry, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.bodyID = b;
-      mesh.geomID = g;
-      mesh.geomGroup = model.geom_group[g];
-      mesh.geomName = getMujocoName(model.name_geomadr, g);
+      (mesh as any).bodyID = b;
+      (mesh as any).geomID = g;
+      (mesh as any).geomGroup = model.geom_group[g];
+      (mesh as any).geomName = getMujocoName(model.name_geomadr, g);
 
       bodies[b].add(mesh);
 
@@ -309,19 +305,19 @@ export async function initBotViewer(botName) {
     // Assign distinct Blueprint.js palette colors to mesh-type bodies.
     // Only override the default gray (0.9, 0.9, 0.9); leave detail geoms alone.
     const bodyColors = [
-      null,                              // body 0 = world, skip
-      [0.808, 0.851, 0.878],            // base — BP_LIGHT_GRAY1 (#CED9E0)
-      [0.094, 0.133, 0.157],            // left_rim — BP_DARK_GRAY1 (#182026)
-      [0.094, 0.133, 0.157],            // right_rim — BP_DARK_GRAY1 (#182026)
-      [0.169, 0.584, 0.839],            // turntable — BP_BLUE4 (#2B95D6)
-      [0.655, 0.761, 0.831],            // upper_arm — BP_GRAY4 (#A7B6C2)
-      [0.541, 0.608, 0.659],            // forearm — BP_GRAY3 (#8A9BA8)
-      [0.851, 0.620, 0.043],            // hand — BP_GOLD3 (#D99E0B)
+      null, // body 0 = world, skip
+      [0.808, 0.851, 0.878], // base — BP_LIGHT_GRAY1 (#CED9E0)
+      [0.094, 0.133, 0.157], // left_rim — BP_DARK_GRAY1 (#182026)
+      [0.094, 0.133, 0.157], // right_rim — BP_DARK_GRAY1 (#182026)
+      [0.169, 0.584, 0.839], // turntable — BP_BLUE4 (#2B95D6)
+      [0.655, 0.761, 0.831], // upper_arm — BP_GRAY4 (#A7B6C2)
+      [0.541, 0.608, 0.659], // forearm — BP_GRAY3 (#8A9BA8)
+      [0.851, 0.62, 0.043], // hand — BP_GOLD3 (#D99E0B)
     ];
     for (const [b, group] of Object.entries(bodies)) {
-      const bi = parseInt(b);
+      const bi = parseInt(b, 10);
       if (bi > 0 && bi < bodyColors.length && bodyColors[bi] && group.has_custom_mesh) {
-        group.traverse(child => {
+        group.traverse((child) => {
           if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
             const [r, g, bl] = bodyColors[bi];
             child.material.color.setRGB(r, g, bl);
@@ -332,11 +328,13 @@ export async function initBotViewer(botName) {
 
     // Cell-shaded edge outlines — sharp edges only (threshold angle ~30°)
     const edgeMaterial = new THREE.LineBasicMaterial({
-      color: 0x000000, transparent: true, opacity: 0.6,
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.6,
     });
     for (const [, group] of Object.entries(bodies)) {
       const meshesToEdge = [];
-      group.traverse(child => {
+      group.traverse((child) => {
         if (child.isMesh && child.geometry && child.geomGroup === GEOM_GROUP_STRUCTURAL) meshesToEdge.push(child);
       });
       for (const mesh of meshesToEdge) {
@@ -392,18 +390,20 @@ export async function initBotViewer(botName) {
     try {
       const resp = await fetch(`../bots/${botName}/viewer_manifest.json`);
       if (resp.ok) return await resp.json();
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     return null;
   }
 
   // ---------------------------------------------------------------------------
   // Mode management
   // ---------------------------------------------------------------------------
-  let currentMode = null;
-  let currentModeName = null;
-  const modes = {};
+  let currentMode: any = null;
+  let currentModeName: string | null = null;
+  const modes: Record<string, any> = {};
 
-  function switchMode(modeName) {
+  function switchMode(modeName: string) {
     if (!(modeName in modes)) return;
     if (currentMode) currentMode.deactivate();
     currentMode = modes[modeName];
@@ -413,8 +413,8 @@ export async function initBotViewer(botName) {
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
 
-    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.mode === modeName);
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach((tab) => {
+      tab.classList.toggle('active', (tab as HTMLElement).dataset.mode === modeName);
     });
   }
 
@@ -428,8 +428,21 @@ export async function initBotViewer(botName) {
     const manifest = await fetchManifest();
 
     const ctx = {
-      mujoco, model, data, bodies, mujocoRoot, scene, camera, renderer, controls, viewport,
-      syncTransforms, getPosition, getQuaternion, toMujocoPos, getMujocoName,
+      mujoco,
+      model,
+      data,
+      bodies,
+      mujocoRoot,
+      scene,
+      camera,
+      renderer,
+      controls,
+      viewport,
+      syncTransforms,
+      getPosition,
+      getQuaternion,
+      toMujocoPos,
+      getMujocoName,
       botName,
     };
 
@@ -440,8 +453,8 @@ export async function initBotViewer(botName) {
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
 
-    document.querySelectorAll('#mode-tabs .btn-ghost').forEach(tab => {
-      tab.addEventListener('click', () => switchMode(tab.dataset.mode));
+    document.querySelectorAll('#mode-tabs .btn-ghost').forEach((tab) => {
+      tab.addEventListener('click', () => switchMode((tab as HTMLElement).dataset.mode!));
     });
 
     // Auto-focus camera on the bot before showing the scene
@@ -454,7 +467,7 @@ export async function initBotViewer(botName) {
       const meshes = [];
       for (let b = 0; b < model.nbody; b++) {
         if (!bodies[b] || !bodies[b].visible) continue;
-        bodies[b].traverse(ch => {
+        bodies[b].traverse((ch) => {
           if (ch.isMesh && ch.userData.geomGroup === GEOM_GROUP_STRUCTURAL) meshes.push(ch);
         });
       }
@@ -479,20 +492,19 @@ export async function initBotViewer(botName) {
     document.getElementById('loading').style.display = 'none';
 
     viewport.animate(() => {
-      initialFocus.update();  // drive initial camera animation
-      if (currentMode && currentMode.update) currentMode.update();
+      initialFocus.update(); // drive initial camera animation
+      if (currentMode?.update) currentMode.update();
     });
 
     window.addEventListener('resize', () => updateCanvasLayout());
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
       if (e.key === '1' && currentModeName === 'explore' && modes.explore) {
         modes.explore.refocusCurrent();
       }
     });
-
   } catch (err) {
     console.error('Failed to initialize viewer:', err);
     document.getElementById('loading-text').textContent = `Error: ${err.message}`;

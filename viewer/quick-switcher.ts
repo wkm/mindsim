@@ -5,20 +5,23 @@
  * by name and category. Arrow keys + Enter to navigate, Escape to close.
  */
 
-let items = null;  // [{name, category, url}]
-let filtered = []; // current filtered view
+interface QSItem {
+  name: string;
+  category: string;
+  url: string;
+}
+
+let items: QSItem[] | null = null;
+let filtered: QSItem[] = [];
 let activeIdx = 0;
 
-const overlay = document.getElementById('quick-switcher-overlay');
-const input = document.getElementById('qs-input');
-const results = document.getElementById('qs-results');
+const overlay = document.getElementById('quick-switcher-overlay')!;
+const input = document.getElementById('qs-input') as HTMLInputElement;
+const results = document.getElementById('qs-results')!;
 
 async function ensureItems() {
   if (items) return;
-  const [botsResp, compsResp] = await Promise.all([
-    fetch('/api/bots'),
-    fetch('/api/components'),
-  ]);
+  const [botsResp, compsResp] = await Promise.all([fetch('/api/bots'), fetch('/api/components')]);
   const bots = await botsResp.json();
   const comps = await compsResp.json();
 
@@ -31,13 +34,13 @@ async function ensureItems() {
   }
 }
 
-function fuzzyMatch(query, item) {
+function fuzzyMatch(query: string, item: QSItem) {
   const q = query.toLowerCase();
   return item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
 }
 
-function refilter(query) {
-  filtered = query ? items.filter(item => fuzzyMatch(query, item)) : [...items];
+function refilter(query: string) {
+  filtered = query ? items!.filter((item) => fuzzyMatch(query, item)) : [...items!];
   activeIdx = Math.max(0, Math.min(activeIdx, filtered.length - 1));
   if (!filtered.length) activeIdx = -1;
 }
@@ -48,18 +51,22 @@ function render() {
     return;
   }
 
-  results.innerHTML = filtered.map((item, i) => `
+  results.innerHTML = filtered
+    .map(
+      (item, i) => `
     <li><button class="dropdown-item${i === activeIdx ? ' active' : ''}" data-url="${item.url}">
       <span class="text">${item.name}</span>
       <span class="dropdown-kbd">${item.category}</span>
     </button></li>
-  `).join('');
+  `,
+    )
+    .join('');
 
   const active = results.querySelector('.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
-function navigate(url) {
+function navigate(url: string) {
   window.location.href = url;
 }
 
@@ -67,7 +74,10 @@ function open() {
   overlay.style.display = 'flex';
   input.value = '';
   activeIdx = 0;
-  ensureItems().then(() => { refilter(''); render(); });
+  ensureItems().then(() => {
+    refilter('');
+    render();
+  });
   requestAnimationFrame(() => input.focus());
 }
 
@@ -78,7 +88,10 @@ function close() {
 // Input filtering
 input.addEventListener('input', () => {
   activeIdx = 0;
-  if (items) { refilter(input.value); render(); }
+  if (items) {
+    refilter(input.value);
+    render();
+  }
 });
 
 // Keyboard navigation
@@ -104,8 +117,8 @@ input.addEventListener('keydown', (e) => {
 
 // Delegated click handler on results container
 results.addEventListener('click', (e) => {
-  const item = e.target.closest('.dropdown-item');
-  if (item) navigate(item.dataset.url);
+  const item = (e.target as HTMLElement).closest('.dropdown-item') as HTMLElement | null;
+  if (item) navigate(item.dataset.url!);
 });
 
 // Click outside to close
@@ -114,7 +127,7 @@ overlay.addEventListener('click', (e) => {
 });
 
 // Bot/component name in navbar opens switcher
-document.getElementById('bot-name').addEventListener('click', () => open());
+document.getElementById('bot-name')!.addEventListener('click', () => open());
 
 // Global Ctrl+K / Cmd+K
 document.addEventListener('keydown', (e) => {

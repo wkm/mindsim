@@ -3,14 +3,21 @@
  */
 
 import * as THREE from 'three';
-import { clearGroup, radToDegStr, createArcGeometry, orientToAxis } from './utils.js';
+import { clearGroup, createArcGeometry, orientToAxis, radToDegStr } from './utils.ts';
 
 export class JointMode {
-  constructor(ctx) {
+  ctx: any;
+  sliders: any[];
+  axisArrows: any[];
+  angleArcs: any[];
+  overlayGroup: any;
+  active: boolean;
+
+  constructor(ctx: any) {
     this.ctx = ctx;
     this.sliders = [];
     this.axisArrows = [];
-    this.angleArcs = [];  // { group, curArcGroup, axisDir, rangeMin, rangeMax, color }
+    this.angleArcs = []; // { group, curArcGroup, axisDir, rangeMin, rangeMax, color }
     this.overlayGroup = new THREE.Group();
     this.overlayGroup.name = 'JointOverlays';
     this.active = false;
@@ -38,7 +45,8 @@ export class JointMode {
     const HINGE = mujoco.mjtJoint.mjJNT_HINGE.value;
 
     let html = '<h2>Joint Validation</h2>';
-    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
+    html +=
+      '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Drag sliders to rotate joints. Axis arrows and angle arcs show joint geometry.</p>';
 
     // Blueprint.js palette: red, green, blue, gold, violet, turquoise
     const jointColors = ['#DB3737', '#0F9960', '#137CBD', '#D99E0B', '#7157D9', '#00B3A4'];
@@ -51,7 +59,8 @@ export class JointMode {
       if (!name) continue;
 
       const qposAddr = model.jnt_qposadr[j];
-      let rangeMin = -3.14, rangeMax = 3.14;
+      let rangeMin = -3.14,
+        rangeMax = 3.14;
       if (model.jnt_limited[j]) {
         rangeMin = model.jnt_range[j * 2 + 0];
         rangeMax = model.jnt_range[j * 2 + 1];
@@ -76,7 +85,7 @@ export class JointMode {
 
     for (const s of this.sliders) {
       const el = document.getElementById(s.sliderId);
-      el.addEventListener('input', () => this.onSliderChange(s, parseFloat(el.value)));
+      el!.addEventListener('input', () => this.onSliderChange(s, parseFloat((el as HTMLInputElement).value)));
     }
     document.getElementById('joint-reset-btn').addEventListener('click', () => this.resetAll());
   }
@@ -100,7 +109,7 @@ export class JointMode {
     for (const s of this.sliders) {
       data.qpos[s.qposAddr] = 0;
       const el = document.getElementById(s.sliderId);
-      if (el) el.value = 0;
+      if (el) (el as HTMLInputElement).value = '0';
       this.updateSliderDisplay(s, 0);
     }
     mujoco.mj_forward(model, data);
@@ -149,9 +158,12 @@ export class JointMode {
         const sector = new THREE.Mesh(
           new THREE.ShapeGeometry(sectorShape),
           new THREE.MeshBasicMaterial({
-            color: sectorColor, transparent: true, opacity: 0.18,
-            side: THREE.DoubleSide, depthWrite: false,
-          })
+            color: sectorColor,
+            transparent: true,
+            opacity: 0.18,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          }),
         );
         orientToAxis(sector, axisDir);
         arcGroup.add(sector);
@@ -159,7 +171,7 @@ export class JointMode {
         // Static ROM edge outline
         const rangeArc = new THREE.Line(
           createArcGeometry(arcRadius, s.rangeMin, s.rangeMax, 32),
-          new THREE.LineBasicMaterial({ color: sectorColor, transparent: true, opacity: 0.4 })
+          new THREE.LineBasicMaterial({ color: sectorColor, transparent: true, opacity: 0.4 }),
         );
         orientToAxis(rangeArc, axisDir);
         arcGroup.add(rangeArc);
@@ -170,8 +182,12 @@ export class JointMode {
       arcGroup.add(curArcGroup);
 
       this.angleArcs.push({
-        group: arcGroup, curArcGroup, axisDir: axisDir.clone(),
-        rangeMin: s.rangeMin, rangeMax: s.rangeMax, arcRadius,
+        group: arcGroup,
+        curArcGroup,
+        axisDir: axisDir.clone(),
+        rangeMin: s.rangeMin,
+        rangeMax: s.rangeMax,
+        arcRadius,
       });
     }
 
@@ -203,16 +219,18 @@ export class JointMode {
         const curMax = Math.max(0, currentAngle);
         const limitProximity = Math.max(
           1 - Math.abs(currentAngle - arc.rangeMin) / (totalAngle * 0.2),
-          1 - Math.abs(arc.rangeMax - currentAngle) / (totalAngle * 0.2)
+          1 - Math.abs(arc.rangeMax - currentAngle) / (totalAngle * 0.2),
         );
         let color;
-        if (limitProximity > 0.5) color = 0xDB3737;      // BP_RED3
-        else if (limitProximity > 0) color = 0xD99E0B;  // BP_GOLD3
-        else color = 0x0F9960;                          // BP_GREEN3
+        if (limitProximity > 0.5)
+          color = 0xdb3737; // BP_RED3
+        else if (limitProximity > 0)
+          color = 0xd99e0b; // BP_GOLD3
+        else color = 0x0f9960; // BP_GREEN3
 
         const curArc = new THREE.Line(
           createArcGeometry(arc.arcRadius, curMin, curMax, 16),
-          new THREE.LineBasicMaterial({ color, linewidth: 2 })
+          new THREE.LineBasicMaterial({ color, linewidth: 2 }),
         );
         orientToAxis(curArc, arc.axisDir);
         arc.curArcGroup.add(curArc);
@@ -224,7 +242,7 @@ export class JointMode {
     for (const s of this.sliders) {
       const val = this.ctx.data.qpos[s.qposAddr];
       const el = document.getElementById(s.sliderId);
-      if (el) el.value = val;
+      if (el) (el as HTMLInputElement).value = String(val);
       this.updateSliderDisplay(s, val);
     }
     this.updateOverlays();

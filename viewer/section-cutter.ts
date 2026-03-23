@@ -12,35 +12,43 @@
  */
 
 import * as THREE from 'three';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import {
-  BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE,
-  tintColor,
-} from './presentation.js';
+import { BP, RENDER_ORDER, SECTION_STENCIL_BASE, SECTION_STENCIL_STRIDE, tintColor } from './presentation.ts';
 
 const AXIS_INDEX = { x: 0, y: 1, z: 2 };
 
 export class SectionCutter {
-  /**
-   * @param {THREE.Scene} scene
-   * @param {THREE.WebGLRenderer} renderer — must have stencil: true
-   */
-  constructor(scene, renderer) {
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  enabled: boolean;
+  axis: string;
+  flipped: boolean;
+  fraction: number;
+  plane: THREE.Plane;
+  _meshProvider: () => any[];
+  _capColorFn: ((mesh: any) => any) | null;
+  _capGroup: THREE.Group | null;
+  _sectionViz: THREE.Mesh | null;
+  _sectionRing: THREE.LineSegments | null;
+  _contourLineMat: any;
+  _ui: any;
+
+  constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
     this.renderer = renderer;
 
     // Section plane state
     this.enabled = false;
-    this.axis = 'y';             // default: horizontal cut (Y-up scenes)
+    this.axis = 'y'; // default: horizontal cut (Y-up scenes)
     this.flipped = false;
-    this.fraction = 0.5;         // slider position (0–1 along bbox)
+    this.fraction = 0.5; // slider position (0–1 along bbox)
     this.plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
 
     // Callbacks
     this._meshProvider = () => [];
-    this._capColorFn = null;     // (mesh) => THREE.Color
+    this._capColorFn = null; // (mesh) => THREE.Color
 
     // Internal state
     this._capGroup = null;
@@ -180,7 +188,7 @@ export class SectionCutter {
       const parent = mesh.parent;
       if (!parent || visited.has(parent.uuid)) continue;
       visited.add(parent.uuid);
-      parent.traverse(child => {
+      parent.traverse((child) => {
         if (child.isLineSegments && child.material) {
           if (!child.material._sectionClippable) {
             child.material = child.material.clone();
@@ -217,7 +225,7 @@ export class SectionCutter {
     if (!this._sectionViz) {
       const geom = new THREE.PlaneGeometry(1, 1);
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x2B95D6,
+        color: 0x2b95d6,
         transparent: true,
         opacity: 0.08,
         side: THREE.DoubleSide,
@@ -229,9 +237,14 @@ export class SectionCutter {
       this.scene.add(this._sectionViz);
 
       const ringGeom = new THREE.EdgesGeometry(geom);
-      this._sectionRing = new THREE.LineSegments(ringGeom, new THREE.LineBasicMaterial({
-        color: 0x2B95D6, transparent: true, opacity: 0.4,
-      }));
+      this._sectionRing = new THREE.LineSegments(
+        ringGeom,
+        new THREE.LineBasicMaterial({
+          color: 0x2b95d6,
+          transparent: true,
+          opacity: 0.4,
+        }),
+      );
       this._sectionRing.raycast = () => {};
       this._sectionViz.add(this._sectionRing);
     }
@@ -247,8 +260,9 @@ export class SectionCutter {
     this._sectionViz.position.copy(center);
 
     this._sectionViz.rotation.set(0, 0, 0);
-    if (axisIdx === 0) this._sectionViz.rotation.y = Math.PI / 2;      // X
-    else if (axisIdx === 1) this._sectionViz.rotation.x = Math.PI / 2;  // Y
+    if (axisIdx === 0)
+      this._sectionViz.rotation.y = Math.PI / 2; // X
+    else if (axisIdx === 1) this._sectionViz.rotation.x = Math.PI / 2; // Y
     // Z = default orientation (no rotation needed)
   }
 
@@ -272,12 +286,10 @@ export class SectionCutter {
     this.scene.add(this._capGroup);
 
     const box = this._computeBBox(meshes);
-    const capSize = box
-      ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5
-      : 0.2;
+    const capSize = box ? Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5 : 0.2;
 
     // Group meshes by body (parent group) to give each body its own stencil ref
-    const bodyGroups = new Map();  // parent uuid → { meshes, color }
+    const bodyGroups = new Map(); // parent uuid → { meshes, color }
     for (const mesh of meshes) {
       const key = mesh.parent ? mesh.parent.uuid : 'root';
       if (!bodyGroups.has(key)) {
@@ -304,13 +316,11 @@ export class SectionCutter {
       layerIndex++;
 
       for (const mesh of bodyGroup.meshes) {
-        this._addStencilHelper(mesh, THREE.BackSide, ref, clips,
-          orderBase + RENDER_ORDER.STENCIL_BACK);
-        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips,
-          orderBase + RENDER_ORDER.STENCIL_FRONT);
+        this._addStencilHelper(mesh, THREE.BackSide, ref, clips, orderBase + RENDER_ORDER.STENCIL_BACK);
+        this._addStencilHelper(mesh, THREE.FrontSide, 0, clips, orderBase + RENDER_ORDER.STENCIL_FRONT);
       }
 
-      const capColor = bodyGroup.color || new THREE.Color(0x8A9BA8);
+      const capColor = bodyGroup.color || new THREE.Color(0x8a9ba8);
 
       const capGeom = new THREE.PlaneGeometry(capSize, capSize);
       const capMat = new THREE.MeshBasicMaterial({
@@ -348,10 +358,7 @@ export class SectionCutter {
       const lineMat = new LineMaterial({
         color: BP.DARK_GRAY3,
         linewidth: 3,
-        resolution: new THREE.Vector2(
-          this.renderer.domElement.width,
-          this.renderer.domElement.height,
-        ),
+        resolution: new THREE.Vector2(this.renderer.domElement.width, this.renderer.domElement.height),
         clippingPlanes: clips,
       });
       const contourLines = new LineSegments2(lineGeom, lineMat);
@@ -389,7 +396,7 @@ export class SectionCutter {
 
   _clearCaps() {
     if (this._capGroup) {
-      this._capGroup.traverse(child => {
+      this._capGroup.traverse((child: any) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) child.material.dispose();
       });
@@ -411,7 +418,9 @@ export class SectionCutter {
     const index = geom.index;
     mesh.updateWorldMatrix(true, false);
     const matrix = mesh.matrixWorld;
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    const a = new THREE.Vector3(),
+      b = new THREE.Vector3(),
+      c = new THREE.Vector3();
 
     const triCount = index ? index.count / 3 : posAttr.count / 3;
     for (let i = 0; i < triCount; i++) {
@@ -433,10 +442,7 @@ export class SectionCutter {
       if (dc * da < 0) crossings.push(this._edgeIntersect(c, a, dc, da));
 
       if (crossings.length === 2) {
-        out.push(
-          crossings[0].x, crossings[0].y, crossings[0].z,
-          crossings[1].x, crossings[1].y, crossings[1].z,
-        );
+        out.push(crossings[0].x, crossings[0].y, crossings[0].z, crossings[1].x, crossings[1].y, crossings[1].z);
       }
     }
   }
@@ -451,10 +457,10 @@ export class SectionCutter {
     this._removeViz();
     if (this._sectionViz) {
       this._sectionViz.geometry.dispose();
-      this._sectionViz.material.dispose();
+      (this._sectionViz.material as THREE.Material).dispose();
       if (this._sectionRing) {
         this._sectionRing.geometry.dispose();
-        this._sectionRing.material.dispose();
+        (this._sectionRing.material as THREE.Material).dispose();
       }
       this.scene.remove(this._sectionViz);
       this._sectionViz = null;

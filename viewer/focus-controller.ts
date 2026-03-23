@@ -13,10 +13,18 @@ const _size = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 
 export class FocusController {
-  /**
-   * @param {Object} ctx - viewer context (camera, controls, bodies, mujocoRoot)
-   */
-  constructor(ctx) {
+  ctx: any;
+  ghosted: boolean;
+  _savedMaterials: Map<any, any>;
+  _animating: boolean;
+  _animStart: number;
+  _animDuration: number;
+  _startPos: THREE.Vector3;
+  _endPos: THREE.Vector3;
+  _startTarget: THREE.Vector3;
+  _endTarget: THREE.Vector3;
+
+  constructor(ctx: any) {
     this.ctx = ctx;
     this.ghosted = false;
     this._savedMaterials = new Map(); // mesh → { opacity, transparent, emissive }
@@ -38,7 +46,7 @@ export class FocusController {
     _box.makeEmpty();
     const group = this.ctx.bodies[bodyId];
     if (!group) return _box;
-    group.traverse(child => {
+    group.traverse((child) => {
       if (child.isMesh) {
         child.updateWorldMatrix(true, false);
         const geom = child.geometry;
@@ -56,8 +64,8 @@ export class FocusController {
    */
   getAllBoundingBox() {
     _box.makeEmpty();
-    for (const [, group] of Object.entries(this.ctx.bodies)) {
-      group.traverse(child => {
+    for (const [, group] of Object.entries(this.ctx.bodies) as [string, any][]) {
+      group.traverse((child: any) => {
         if (child.isMesh) {
           child.updateWorldMatrix(true, false);
           const geom = child.geometry;
@@ -130,7 +138,7 @@ export class FocusController {
     const keepSet = new Set(keepBodyIds);
     this.unghost(); // restore first
 
-    this.ctx.mujocoRoot.traverse(obj => {
+    this.ctx.mujocoRoot.traverse((obj) => {
       if (!obj.isMesh || !obj.material) return;
       if (keepSet.has(obj.bodyID)) return;
 
@@ -174,7 +182,7 @@ export class FocusController {
     }
 
     // Smooth ease-out
-    const ease = 1 - Math.pow(1 - t, 3);
+    const ease = 1 - (1 - t) ** 3;
 
     this.ctx.camera.position.lerpVectors(this._startPos, this._endPos, ease);
     this.ctx.controls.target.lerpVectors(this._startTarget, this._endTarget, ease);
