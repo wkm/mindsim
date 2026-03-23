@@ -33,6 +33,7 @@ export class AssemblyMode {
 
   activate() {
     this.active = true;
+    this.ctx.botScene.assembly.active = true;
     this.cacheGeomMeshes();
     this.buildBodyNameMap();
     this.loadManifest().then(() => {
@@ -44,6 +45,7 @@ export class AssemblyMode {
 
   deactivate() {
     this.active = false;
+    this.ctx.botScene.assembly.active = false;
     this.showAll();
   }
 
@@ -282,6 +284,8 @@ export class AssemblyMode {
         mesh.material.transparent = mesh.material.opacity < 1.0;
       }
     }
+    this.ctx.botScene.showAll();
+    this.ctx.syncScene();
   }
 
   update() {

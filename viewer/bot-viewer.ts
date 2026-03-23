@@ -480,11 +480,12 @@ export async function initBotViewer(botName: string) {
     // Section cutter with per-body cap colors
     const sectionCutter = new SectionCutter(scene, renderer);
     sectionCutter.setMeshProvider(() => {
-      const meshes = [];
-      for (let b = 0; b < model.nbody; b++) {
-        if (!bodies[b] || !bodies[b].visible) continue;
-        bodies[b].traverse((ch) => {
-          if (ch.isMesh && ch.userData.geomGroup === GEOM_GROUP_STRUCTURAL) meshes.push(ch);
+      const meshes: any[] = [];
+      for (const bodyId of botScene.visibleBodyIds()) {
+        const group = bodies[bodyId];
+        if (!group) continue;
+        group.traverse((ch: any) => {
+          if (ch.isMesh && ch.geomGroup === GEOM_GROUP_STRUCTURAL) meshes.push(ch);
         });
       }
       return meshes;

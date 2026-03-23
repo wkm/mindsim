@@ -76,6 +76,10 @@ export class IKMode {
     this.buildOverlays();
     this.saveState();
 
+    // Ensure BotScene is in a clean state when entering IK mode
+    this.ctx.botScene.showAll();
+    this.ctx.syncScene();
+
     const el = this.ctx.renderer.domElement;
     el.addEventListener('pointerdown', this._onPointerDown);
     el.addEventListener('pointermove', this._onPointerMove);
@@ -85,12 +89,17 @@ export class IKMode {
   deactivate() {
     this.active = false;
     this.restoreState();
+    this.clearHighlights();
     this.ctx.scene.remove(this.overlayGroup);
     clearGroup(this.overlayGroup);
     this.arrow = null;
     this.anchorMarker = null;
     this.targetMarker = null;
     this._jointEls = null;
+
+    // Restore BotScene to clean state when leaving IK mode
+    this.ctx.botScene.showAll();
+    this.ctx.syncScene();
 
     const el = this.ctx.renderer.domElement;
     el.removeEventListener('pointerdown', this._onPointerDown);
@@ -189,11 +198,16 @@ export class IKMode {
   }
 
   clearHighlights() {
-    this.ctx.mujocoRoot.traverse((obj) => {
+    // Clear IK-specific direct emissive colors (anchor blue, target red)
+    this.ctx.mujocoRoot.traverse((obj: any) => {
       if (obj.isMesh && obj.material?.emissive) {
         obj.material.emissive.setHex(0x000000);
       }
     });
+    // Also clear BotScene hover/selected state
+    this.ctx.botScene.setHovered(null);
+    this.ctx.botScene.setSelected(null);
+    this.ctx.syncScene();
   }
 
   highlightBody(bodyId, color) {
