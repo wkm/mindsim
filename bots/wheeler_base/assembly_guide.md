@@ -42,7 +42,7 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| base | `meshes/base.stl` | box | 114.0 x 94.0 x 50.0 |
+| base | `meshes/base.stl` | box | 126.0 x 106.0 x 54.0 |
 | left_rim | `meshes/left_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | right_rim | `meshes/right_rim.stl` | cylinder | 100.0 x 100.0 x 20.0 |
 | servo_left_wheel | `meshes/servo_left_wheel.stl` | box | 50.0 x 50.0 x 50.0 |

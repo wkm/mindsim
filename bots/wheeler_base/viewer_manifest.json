@@ -9,11 +9,11 @@
       "parent": null,
       "shape": "box",
       "dimensions": [
-        0.114,
-        0.094,
-        0.05
+        0.126,
+        0.106,
+        0.054
       ],
-      "mass": 0.3375,
+      "mass": 0.3829,
       "mounts": [
         {
           "label": "battery",
@@ -255,7 +255,7 @@
       "pos": [
         0.0,
         0.0,
-        -0.0158
+        -0.0178
       ],
       "mass": 0.055,
       "shapescript_component": "LiPo2S-1000"
@@ -270,7 +270,7 @@
       "mesh": "comp_base_camera.stl",
       "pos": [
         0.0,
-        0.034,
+        0.04845,
         0.0
       ],
       "mass": 0.003,
@@ -287,7 +287,7 @@
       "pos": [
         0.0,
         0.0,
-        0.022875
+        0.024875
       ],
       "mass": 0.01,
       "shapescript_component": "RaspberryPiZero2W"

@@ -11,8 +11,8 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 275 | PLA/PETG frame |
-| **Total** | | | **717** | |
+| Structural (printed) | — | — | 272 | PLA/PETG frame |
+| **Total** | | | **714** | |
 
 ## Power Budget
 
@@ -44,5 +44,5 @@
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
 | servo_bus | uart_half_duplex | 55.0 | 0.0 |
-| camera_csi | csi | 56.4 | 10.9 |
+| camera_csi | csi | 56.2 | 10.9 |
 | power | power | 8.5 | 0.0 |
