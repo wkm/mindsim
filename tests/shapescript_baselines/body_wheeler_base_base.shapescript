@@ -87,5 +87,5 @@ cut_35 = Cut(cut_31, loc_34)
   loc_48 = Locate(box_47, pos=(-0.0259, 0.0000, -0.0160))
   cut_49 = Cut(cut_46, loc_48)
 --- sub-program: bracket_env_STS3215 ---
-  box_0 = Box(w=0.0518, l=0.0313, h=0.2466)  # bracket_envelope
+  box_0 = Box(w=0.0518, l=0.0313, h=0.2466)  # bracket_insertion_channel
   loc_1 = Locate(box_0, pos=(0.0000, 0.0000, 0.1012))

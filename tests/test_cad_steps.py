@@ -211,27 +211,29 @@ class TestBracketPositioning:
             f"left tool center_x={left_x:.1f}mm, right tool center_x={right_x:.1f}mm"
         )
 
-    def test_envelope_tools_are_mirrored(self):
-        """Left and right envelope tools should be on opposite X sides."""
+    def test_insertion_channel_tools_are_mirrored(self):
+        """Left and right insertion channel tools should be on opposite X sides."""
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
 
-        envelope_cuts = [
-            s for s in steps if s.op == "cut" and "bracket envelope" in s.label.lower()
+        channel_cuts = [
+            s
+            for s in steps
+            if s.op == "cut" and "bracket insertion channel" in s.label.lower()
         ]
-        assert len(envelope_cuts) >= 2, (
-            f"Expected at least 2 bracket envelope cuts, got {len(envelope_cuts)}"
+        assert len(channel_cuts) >= 2, (
+            f"Expected at least 2 bracket insertion channel cuts, got {len(channel_cuts)}"
         )
 
-        left_x = _bbox_x_center(envelope_cuts[0].tool)
-        right_x = _bbox_x_center(envelope_cuts[1].tool)
+        left_x = _bbox_x_center(channel_cuts[0].tool)
+        right_x = _bbox_x_center(channel_cuts[1].tool)
 
         assert left_x * right_x < 0, (
-            f"Envelope tools should be on opposite X sides: "
+            f"Insertion channel tools should be on opposite X sides: "
             f"left center_x={left_x:.1f}mm, right center_x={right_x:.1f}mm"
         )
 
     def test_no_duplicate_tool_positions(self):
-        """No two bracket/envelope tools should have identical bounding boxes."""
+        """No two bracket/insertion_channel tools should have identical bboxes."""
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
 
         bracket_steps = [

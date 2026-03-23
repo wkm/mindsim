@@ -17,11 +17,7 @@ BOT_DESIGNS = sorted(BOTS_DIR.glob("*/design.py"))
 
 
 def _clear_all_caches():
-    """Clear lru_caches that hold build123d shapes.
-
-    The direct path uses .locate() which mutates cached shapes in-place.
-    We must clear caches between runs to avoid cross-contamination.
-    """
+    """Clear lru_caches that hold build123d shapes."""
     from botcad.emit.cad import _make_body_solid, _make_wheel_solid
 
     for fn in [

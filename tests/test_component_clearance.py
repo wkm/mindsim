@@ -2,8 +2,8 @@
 
 Two categories:
 1. **Clearance**: sub-parts (horn, coupler, bracket) must not intersect each other.
-2. **Containment**: envelopes/cutouts must fully contain the servo body.
-   If (servo - envelope) has volume, the servo won't fit through the cutout.
+2. **Containment**: insertion channels must fully contain the servo body.
+   If (servo - channel) has volume, the servo won't fit through the cutout.
 """
 
 from __future__ import annotations
@@ -174,70 +174,72 @@ class TestServoSubPartClearance:
         )
 
 
-# ── Envelope containment tests ──────────────────────────────────────────────
-# The envelope is the cutout that gets subtracted from the parent body shell.
-# The servo must fit entirely inside it: (servo - envelope) should be empty.
+# ── Insertion channel containment tests ────────────────────────────────────
+# The insertion channel is the cutout subtracted from the parent body shell.
+# The servo must fit entirely inside it: (servo - channel) should be empty.
 
-# Known containment failures: (servo_name, envelope_type) -> reason
+# Known containment failures: (servo_name, channel_type) -> reason
 CONTAINMENT_FAILURES = {
     (
         "SCS0009",
-        "cradle_envelope",
+        "cradle_insertion_channel",
     ): "Cradle generation crashes — negative box dimension from SCS0009 ear geometry",
 }
 
 
-class TestBracketEnvelopeContainment:
-    """Bracket envelope must fully contain the servo body.
+class TestBracketInsertionChannelContainment:
+    """Bracket insertion channel must fully contain the servo body.
 
-    The bracket envelope is the cutout subtracted from the parent body shell
-    for servo insertion. If (servo - bracket_envelope) has remaining volume,
-    the servo won't fit through the cutout during assembly.
+    The bracket insertion channel is the cutout subtracted from the parent
+    body shell for servo insertion. If (servo - channel) has remaining
+    volume, the servo won't fit through the cutout during assembly.
     """
 
     @pytest.mark.parametrize("servo_name", ALL_SERVOS)
-    def test_servo_fits_in_bracket_envelope(self, servo_name):
+    def test_servo_fits_in_bracket_insertion_channel(self, servo_name):
         servo = _make_servo(servo_name)
         servo_body = _solid(servo, "servo")
-        envelope = _solid(servo, "bracket_envelope")
+        channel = _solid(servo, "bracket_insertion_channel")
 
-        remaining = _subtraction_volume(servo_body, envelope)
+        remaining = _subtraction_volume(servo_body, channel)
         servo_vol = abs(servo_body.volume)
         pct = (remaining / servo_vol * 100) if servo_vol > 0 else 0
 
         assert remaining < MAX_INTERSECTION_VOLUME, (
-            f"{servo_name} servo does not fit in bracket_envelope: "
+            f"{servo_name} servo does not fit in bracket_insertion_channel: "
             f"{remaining * 1e9:.1f} mm³ ({pct:.1f}%) sticks out"
         )
 
 
-class TestCradleEnvelopeContainment:
-    """Cradle envelope must contain the servo's lower section.
+class TestCradleInsertionChannelContainment:
+    """Cradle insertion channel must contain the servo's lower section.
 
     The cradle is a shallow tray — it intentionally doesn't enclose the
-    full servo. But the servo-envelope intersection should equal the
-    envelope volume (the envelope should be fully inside the servo's
+    full servo. But the servo-channel intersection should equal the
+    channel volume (the channel should be fully inside the servo's
     bounding region, not sticking out into empty space).
     """
 
     @pytest.mark.parametrize("servo_name", ALL_SERVOS)
-    def test_cradle_envelope_intersects_servo(self, servo_name):
-        xfail_reason = CONTAINMENT_FAILURES.get((servo_name, "cradle_envelope"))
+    def test_cradle_insertion_channel_intersects_servo(self, servo_name):
+        xfail_reason = CONTAINMENT_FAILURES.get(
+            (servo_name, "cradle_insertion_channel")
+        )
         if xfail_reason:
             pytest.xfail(xfail_reason)
 
         servo = _make_servo(servo_name)
         servo_body = _solid_or_none(servo, "servo")
-        envelope = _solid_or_none(servo, "cradle_envelope")
+        channel = _solid_or_none(servo, "cradle_insertion_channel")
 
         if servo_body is None:
             pytest.skip(f"{servo_name} has no servo solid")
-        if envelope is None:
-            pytest.skip(f"{servo_name} has no cradle_envelope solid")
+        if channel is None:
+            pytest.skip(f"{servo_name} has no cradle_insertion_channel solid")
 
-        # The cradle envelope should overlap meaningfully with the servo —
-        # at minimum it must cover the mounting ear region
-        overlap = _intersection_volume(servo_body, envelope)
+        # The cradle insertion channel should overlap meaningfully with the
+        # servo — at minimum it must cover the mounting ear region
+        overlap = _intersection_volume(servo_body, channel)
         assert overlap > 1e-9, (
-            f"{servo_name} cradle_envelope has no overlap with servo body"
+            f"{servo_name} cradle_insertion_channel has no overlap with servo body"
         )

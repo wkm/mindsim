@@ -31,9 +31,9 @@ from botcad.emit.render3d import (
     COLOR_BRACKET,
     COLOR_COUPLER,
     COLOR_CRADLE,
-    COLOR_ENVELOPE,
     COLOR_HORN,
     COLOR_HORN_HOLE,
+    COLOR_INSERTION_CHANNEL,
     COLOR_MOUNTING,
     COLOR_REAR_HOLE,
     COLOR_SERVO_BODY,
@@ -375,12 +375,12 @@ def build_component_scene(component: Component) -> tuple[SceneBuilder, Path]:
 
 
 def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
-    """Build scene showing bracket + servo + envelope + annotations."""
+    """Build scene showing bracket + servo + insertion channel + annotations."""
     from build123d import export_stl
 
     from botcad.bracket import (
         BracketSpec,
-        bracket_envelope_solid,
+        bracket_insertion_channel_solid,
         bracket_solid_solid,
         servo_solid,
     )
@@ -389,13 +389,16 @@ def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     export_stl(bracket_solid_solid(servo, BracketSpec()), str(temp_dir / "bracket.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
     export_stl(
-        bracket_envelope_solid(servo, BracketSpec()), str(temp_dir / "envelope.stl")
+        bracket_insertion_channel_solid(servo, BracketSpec()),
+        str(temp_dir / "insertion_channel.stl"),
     )
 
     scene = SceneBuilder(model_name="bracket_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("bracket", "bracket.stl", COLOR_BRACKET)
     scene.add_mesh("servo", "servo.stl", COLOR_SERVO_BODY)
-    scene.add_mesh("envelope", "envelope.stl", COLOR_ENVELOPE)
+    scene.add_mesh(
+        "insertion_channel", "insertion_channel.stl", COLOR_INSERTION_CHANNEL
+    )
     _add_bracket_annotations(scene, servo)
     _add_horn_annotations(scene, servo)
 
@@ -403,12 +406,12 @@ def build_bracket_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
 
 
 def build_cradle_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
-    """Build scene showing cradle + servo + envelope + annotations."""
+    """Build scene showing cradle + servo + insertion channel + annotations."""
     from build123d import export_stl
 
     from botcad.bracket import (
         BracketSpec,
-        cradle_envelope_solid,
+        cradle_insertion_channel_solid,
         cradle_solid_solid,
         servo_solid,
     )
@@ -417,13 +420,16 @@ def build_cradle_scene(servo: ServoSpec) -> tuple[SceneBuilder, Path]:
     export_stl(cradle_solid_solid(servo, BracketSpec()), str(temp_dir / "cradle.stl"))
     export_stl(servo_solid(servo), str(temp_dir / "servo.stl"))
     export_stl(
-        cradle_envelope_solid(servo, BracketSpec()), str(temp_dir / "envelope.stl")
+        cradle_insertion_channel_solid(servo, BracketSpec()),
+        str(temp_dir / "insertion_channel.stl"),
     )
 
     scene = SceneBuilder(model_name="cradle_debug", width=WIDTH, height=HEIGHT)
     scene.add_mesh("cradle", "cradle.stl", COLOR_CRADLE)
     scene.add_mesh("servo", "servo.stl", COLOR_SERVO_BODY)
-    scene.add_mesh("envelope", "envelope.stl", COLOR_ENVELOPE)
+    scene.add_mesh(
+        "insertion_channel", "insertion_channel.stl", COLOR_INSERTION_CHANNEL
+    )
     _add_bracket_annotations(scene, servo)
 
     return scene, temp_dir
