@@ -21,6 +21,7 @@ from botcad.shapescript.ops import (  # noqa: F401
     Align3,
     BoxOp,
     CallOp,
+    ChamferByFaceOp,
     ChamferOp,
     CopyOp,
     CutOp,
@@ -39,6 +40,7 @@ from botcad.shapescript.ops import (  # noqa: F401
     QueryInertiaOp,
     QueryVolumeOp,
     RadialArrayOp,
+    RegularPolygonExtrudeOp,
     SphereOp,
 )
 from botcad.shapescript.program import ShapeScript
@@ -115,6 +117,39 @@ class OcctBackend:
 
                 case SphereOp(ref=ref, radius=r, tag=tag):
                     s = _to_solid(Sphere(r))
+                    shapes[ref.id] = s
+                    if tag:
+                        tags.declare(tag, ref)
+
+                case RegularPolygonExtrudeOp(
+                    ref=ref, radius=r, sides=n, height=h, align=align, tag=tag
+                ):
+                    from build123d import RegularPolygon, extrude
+
+                    profile = RegularPolygon(r, n)
+                    s = _to_solid(extrude(profile, h))
+                    # Apply alignment (extrude produces z-centered by default)
+                    al = _align(align)
+                    from build123d import Align as _Align
+
+                    default_al = (_Align.CENTER, _Align.CENTER, _Align.CENTER)
+                    if al != default_al:
+                        bb = s.bounding_box()
+                        dx = dy = dz = 0.0
+                        if al[0] == _Align.MIN:
+                            dx = -bb.min.X
+                        elif al[0] == _Align.MAX:
+                            dx = -bb.max.X
+                        if al[1] == _Align.MIN:
+                            dy = -bb.min.Y
+                        elif al[1] == _Align.MAX:
+                            dy = -bb.max.Y
+                        if al[2] == _Align.MIN:
+                            dz = -bb.min.Z
+                        elif al[2] == _Align.MAX:
+                            dz = -bb.max.Z
+                        if dx or dy or dz:
+                            s = s.moved(Location((dx, dy, dz)))
                     shapes[ref.id] = s
                     if tag:
                         tags.declare(tag, ref)
@@ -255,6 +290,23 @@ class OcctBackend:
                             ctags,
                         )
                         shapes[ref.id] = s
+                    tags.propagate_transform(ref, t)
+
+                case ChamferByFaceOp(ref=ref, target=t, axis=axis, end=end, size=size):
+                    from build123d import Axis
+
+                    s = shapes[t.id]
+                    try:
+                        axis_obj = {"x": Axis.X, "y": Axis.Y, "z": Axis.Z}[axis]
+                        faces = s.faces().sort_by(axis_obj)
+                        face = faces[-1] if end == "max" else faces[0]
+                        face_edges = face.edges()
+                        if face_edges:
+                            shapes[ref.id] = s.chamfer(size, None, face_edges)
+                        else:
+                            shapes[ref.id] = s
+                    except Exception:
+                        shapes[ref.id] = s  # chamfer failed, pass through
                     tags.propagate_transform(ref, t)
 
                 # -- Queries --

@@ -285,16 +285,24 @@ class TestFastenerScript:
             f"direct={direct_vol:.6e}, IR={ir_vol:.6e}"
         )
 
-    def test_head_is_prebuilt(self, fastener_params):
-        """Fastener head should be PrebuiltOp (chamfer + recess)."""
+    def test_head_uses_native_ops(self, fastener_params):
+        """Fastener head should use native ops (no PrebuiltOp)."""
         from botcad.shapescript.emit_components import fastener_script
-        from botcad.shapescript.ops import CylinderOp, FuseOp, PrebuiltOp
+        from botcad.shapescript.ops import (
+            ChamferByFaceOp,
+            CylinderOp,
+            FuseOp,
+            PrebuiltOp,
+        )
 
         spec, length = fastener_params
         prog = fastener_script(spec, length)
         op_types = {type(op) for op in prog.ops}
-        assert PrebuiltOp in op_types, "Head should be PrebuiltOp"
+        assert PrebuiltOp not in op_types, "Head should not use PrebuiltOp"
         assert CylinderOp in op_types, "Shank should be native CylinderOp"
+        assert ChamferByFaceOp in op_types, (
+            "Head edge chamfer should use ChamferByFaceOp"
+        )
         assert FuseOp in op_types, "Head + shank fused"
         assert prog.output_ref is not None
 

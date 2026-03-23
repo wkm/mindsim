@@ -5,9 +5,7 @@ _horn_solid(), connector_solid(), receptacle_solid(), fastener_solid(),
 _make_wheel_solid(), _wire_channel(), and _child_clearance_volume()
 into ShapeScript IR programs or inline ops.
 
-Battery cells use FilletAllEdgesOp (native ShapeScript). Fastener heads
-still use PrebuiltOp due to edge-selection chamfers and RegularPolygon
-extrude that ShapeScript doesn't yet support.
+All geometry uses native ShapeScript ops — no PrebuiltOps.
 """
 
 from __future__ import annotations
@@ -435,20 +433,43 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
 def fastener_script(spec: FastenerSpec, length: float) -> ShapeScript:
     """Translate fastener_solid() to ShapeScript ops.
 
-    The head (with chamfer and hex/Phillips recess) uses edge selection and
-    RegularPolygon extrude — wrapped as PrebuiltOp. The shank is a native
-    cylinder op.
+    All geometry uses native ShapeScript ops — no PrebuiltOps.
+    Head chamfer uses ChamferByFaceOp, hex socket uses RegularPolygonExtrudeOp.
     """
+    import math
+
+    from botcad.fasteners import HeadType
     from botcad.shapescript.ops import Align3
 
     prog = ShapeScript()
 
+    head_r = spec.head_diameter / 2
     head_h = spec.head_height
     shank_r = spec.thread_diameter / 2
 
-    # Head with chamfer + socket recess — requires edge selection, use PrebuiltOp
-    head_solid = _build_fastener_head(spec)
-    head = prog.prebuilt(head_solid, tag="fastener_head")
+    # Head cylinder (z="max" so top face is at z=0)
+    head = prog.cylinder(head_r, head_h, align=Align3(z="max"), tag="fastener_head")
+
+    # Chamfer top edge
+    chamfer_size = min(0.2 * head_h, 0.0003)
+    head = prog.chamfer_by_face(head, axis="z", end="max", size=chamfer_size)
+
+    # Socket recess
+    if spec.head_type == HeadType.SOCKET_HEAD_CAP and spec.socket_size > 0:
+        hex_r = spec.socket_size / 2 / math.cos(math.radians(30))
+        recess_depth = spec.head_height * 0.6
+        hex_tool = prog.regular_polygon_extrude(hex_r, 6, recess_depth)
+        hex_tool = prog.locate(hex_tool, pos=(0, 0, -recess_depth))
+        head = prog.cut(head, hex_tool)
+
+    elif spec.head_type == HeadType.PAN_HEAD_PHILLIPS:
+        slot_w = spec.head_diameter * 0.12
+        slot_l = spec.head_diameter * 0.7
+        slot_d = spec.head_height * 0.4
+        slot1 = prog.box(slot_l, slot_w, slot_d, align=Align3(z="max"))
+        slot2 = prog.box(slot_w, slot_l, slot_d, align=Align3(z="max"))
+        head = prog.cut(head, slot1)
+        head = prog.cut(head, slot2)
 
     # Shank (extends from Z=-head_h downward)
     shank = prog.cylinder(shank_r, length, align=Align3(z="max"))
@@ -457,59 +478,6 @@ def fastener_script(spec: FastenerSpec, length: float) -> ShapeScript:
     result = prog.fuse(head, shank)
     prog.output_ref = result
     return prog
-
-
-def _build_fastener_head(spec: FastenerSpec):
-    """Build the fastener head solid via direct build123d (chamfer + recess).
-
-    Extracted so fastener_script can wrap it as PrebuiltOp.
-    """
-    from build123d import (
-        Align,
-        Axis,
-        Box,
-        Cylinder,
-        Location,
-        RegularPolygon,
-        chamfer,
-        extrude,
-    )
-
-    from botcad.fasteners import HeadType
-
-    head_r = spec.head_diameter / 2
-    head_h = spec.head_height
-
-    head = Cylinder(head_r, head_h, align=(Align.CENTER, Align.CENTER, Align.MAX))
-
-    # Chamfer the top edge
-    top_face = head.faces().sort_by(Axis.Z)[-1]
-    chamfer_size = min(0.2 * head_h, 0.0003)
-    head = chamfer(top_face.edges(), chamfer_size)
-
-    if spec.head_type == HeadType.SOCKET_HEAD_CAP and spec.socket_size > 0:
-        import math
-
-        hex_r = spec.socket_size / 2 / math.cos(math.radians(30))
-        recess_depth = spec.head_height * 0.6
-        hex_profile = RegularPolygon(hex_r, 6)
-        hex_solid = extrude(hex_profile, recess_depth)
-        hex_solid = hex_solid.moved(Location((0, 0, -recess_depth)))
-        head = head - hex_solid
-
-    elif spec.head_type == HeadType.PAN_HEAD_PHILLIPS:
-        slot_w = spec.head_diameter * 0.12
-        slot_l = spec.head_diameter * 0.7
-        slot_d = spec.head_height * 0.4
-        slot1 = Box(
-            slot_l, slot_w, slot_d, align=(Align.CENTER, Align.CENTER, Align.MAX)
-        )
-        slot2 = Box(
-            slot_w, slot_l, slot_d, align=(Align.CENTER, Align.CENTER, Align.MAX)
-        )
-        head = head - slot1 - slot2
-
-    return head
 
 
 # ── Wheel / Wire Channel / Clearance Volume emitters ─────────────

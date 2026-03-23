@@ -26,7 +26,7 @@ def shapescript_to_cad_steps(
     - tool: for CutOp/FuseOp, the tool solid
     """
     from botcad.emit.cad import CadStep
-    from botcad.shapescript.ops import (
+    from botcad.shapescript.ops import (  # noqa: F401
         BoxOp,
         CallOp,
         CopyOp,
@@ -36,6 +36,7 @@ def shapescript_to_cad_steps(
         LocateOp,
         PrebuiltOp,
         RadialArrayOp,
+        RegularPolygonExtrudeOp,
         SphereOp,
     )
 
@@ -80,6 +81,12 @@ def shapescript_to_cad_steps(
 
             case PrebuiltOp(ref=_ref, tag=tag):
                 label = "Prebuilt" + (f" ({tag})" if tag else "")
+                steps.append(
+                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                )
+
+            case RegularPolygonExtrudeOp(ref=_ref, tag=tag):
+                label = "Create polygon extrude" + (f" ({tag})" if tag else "")
                 steps.append(
                     CadStep(label=label, solid=solid, op="create", script=script_line)
                 )
@@ -176,9 +183,10 @@ def format_op(op) -> str:
         cut_3 = Cut(box_0, loc_2)
         loc_5 = Locate(cyl_4, pos=(0.01, 0, 0))
     """
-    from botcad.shapescript.ops import (
+    from botcad.shapescript.ops import (  # noqa: F401
         BoxOp,
         CallOp,
+        ChamferByFaceOp,
         ChamferOp,
         CopyOp,
         CutOp,
@@ -190,6 +198,7 @@ def format_op(op) -> str:
         LocateOp,
         PrebuiltOp,
         RadialArrayOp,
+        RegularPolygonExtrudeOp,
         SphereOp,
     )
 
@@ -264,6 +273,18 @@ def format_op(op) -> str:
 
         case ChamferOp(target=t, tags=tags, size=sz):
             return prefix + f"Chamfer({t.id}, tags={tags}, size={sz:.4f})"
+
+        case ChamferByFaceOp(target=t, axis=ax, end=end, size=sz):
+            return (
+                prefix
+                + f"ChamferByFace({t.id}, axis={ax!r}, end={end!r}, size={sz:.4f})"
+            )
+
+        case RegularPolygonExtrudeOp(radius=r, sides=n, height=h, tag=tag):
+            s = f"RegularPolygonExtrude(r={r:.4f}, sides={n}, h={h:.4f})"
+            if tag:
+                s += f"  # {tag}"
+            return prefix + s
 
         case _:
             return prefix + type(op).__name__

@@ -11,6 +11,7 @@ from botcad.shapescript.ops import (
     Align3,
     BoxOp,
     CallOp,
+    ChamferByFaceOp,
     ChamferOp,
     CopyOp,
     CutOp,
@@ -29,6 +30,7 @@ from botcad.shapescript.ops import (
     QueryInertiaOp,
     QueryVolumeOp,
     RadialArrayOp,
+    RegularPolygonExtrudeOp,
     ShapeOp,
     ShapeRef,
     SphereOp,
@@ -100,6 +102,22 @@ class ShapeScript:
     def sphere(self, radius: float, tag: str | None = None) -> ShapeRef:
         ref = self._next_ref("sph")
         self.ops.append(SphereOp(ref=ref, radius=radius, tag=tag))
+        return ref
+
+    def regular_polygon_extrude(
+        self,
+        radius: float,
+        sides: int,
+        height: float,
+        align: Align3 = ALIGN_CENTER,
+        tag: str | None = None,
+    ) -> ShapeRef:
+        ref = self._next_ref("rpx")
+        self.ops.append(
+            RegularPolygonExtrudeOp(
+                ref=ref, radius=radius, sides=sides, height=height, align=align, tag=tag
+            )
+        )
         return ref
 
     def prebuilt(self, solid: object, tag: str | None = None) -> ShapeRef:
@@ -188,6 +206,15 @@ class ShapeScript:
     def chamfer(self, target: ShapeRef, tags: tuple[str, ...], size: float) -> ShapeRef:
         ref = self._next_ref("cham")
         self.ops.append(ChamferOp(ref=ref, target=target, tags=tags, size=size))
+        return ref
+
+    def chamfer_by_face(
+        self, target: ShapeRef, axis: str, end: str, size: float
+    ) -> ShapeRef:
+        ref = self._next_ref("cham")
+        self.ops.append(
+            ChamferByFaceOp(ref=ref, target=target, axis=axis, end=end, size=size)
+        )
         return ref
 
     # ── Patterns ──

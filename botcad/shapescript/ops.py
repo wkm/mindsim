@@ -69,6 +69,18 @@ class SphereOp:
 
 
 @dataclass(frozen=True)
+class RegularPolygonExtrudeOp:
+    """Extrude a regular polygon (circumradius parametrization) into a prism."""
+
+    ref: ShapeRef
+    radius: float  # circumradius
+    sides: int
+    height: float
+    align: Align3 = ALIGN_CENTER
+    tag: str | None = None
+
+
+@dataclass(frozen=True)
 class PrebuiltOp:
     """Injects a pre-built solid into the IR (e.g. from bracket.py factories).
 
@@ -191,6 +203,21 @@ class ChamferOp:
     size: float
 
 
+@dataclass(frozen=True)
+class ChamferByFaceOp:
+    """Chamfer edges of a face selected by axis extremity.
+
+    Selects the face at the max or min extent along the given axis,
+    then chamfers all its edges. Fails gracefully (pass-through) on error.
+    """
+
+    ref: ShapeRef
+    target: ShapeRef
+    axis: str  # "x", "y", or "z"
+    end: str  # "max" or "min"
+    size: float
+
+
 # ── Queries (no ShapeRef — these return values, not shapes) ──
 
 
@@ -236,11 +263,20 @@ class ExportSTEPOp:
 
 # Union of all ops for type narrowing
 PrimitiveOp = (
-    BoxOp | CylinderOp | SphereOp | PrebuiltOp | CallOp | CopyOp | RadialArrayOp
+    BoxOp
+    | CylinderOp
+    | SphereOp
+    | RegularPolygonExtrudeOp
+    | PrebuiltOp
+    | CallOp
+    | CopyOp
+    | RadialArrayOp
 )
 BooleanOp = FuseOp | CutOp
 TransformOp = LocateOp
-ModificationOp = FilletOp | FilletAllEdgesOp | FilletByAxisOp | ChamferOp
+ModificationOp = (
+    FilletOp | FilletAllEdgesOp | FilletByAxisOp | ChamferOp | ChamferByFaceOp
+)
 QueryOp = QueryVolumeOp | QueryCentroidOp | QueryInertiaOp | QueryBBoxOp | QueryAreaOp
 ExportOp = ExportSTLOp | ExportSTEPOp
 ShapeOp = PrimitiveOp | BooleanOp | TransformOp | ModificationOp | QueryOp | ExportOp
