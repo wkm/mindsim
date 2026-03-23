@@ -172,6 +172,9 @@ COLOR_POWER_BATTERY = Color(*BP_BLUE3, 1.0, "battery (blue)")
 # ── Hardware / metal ──
 
 COLOR_METAL_STEEL = Color(*BP_GRAY4, 1.0, "bearing (steel)")  # bearings
+COLOR_METAL_FASTENER = Color(
+    *BP_DARK_GRAY5, 1.0, "fastener (dark steel)"
+)  # screws — dark enough to contrast with body shells
 COLOR_METAL_BRASS = Color(
     *BP_GOLD3, 1.0, "fastener (brass)"
 )  # fasteners, brass fittings

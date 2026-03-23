@@ -11,7 +11,6 @@ Follows existing conventions:
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 from xml.dom import minidom
@@ -554,9 +553,9 @@ def _emit_mounting_hardware(
     purchased Body world_pos). Component screw positions use the purchased
     component Body's world_pos.
     """
-    from botcad.colors import COLOR_METAL_STEEL
+    from botcad.colors import COLOR_METAL_FASTENER
 
-    _SCREW_RGBA = COLOR_METAL_STEEL.with_alpha(0.9).rgba_str
+    _SCREW_RGBA = COLOR_METAL_FASTENER.with_alpha(0.9).rgba_str
 
     def _screw_attribs(name: str, mesh: str, pos: str, axis_quat):
         """Common geom attributes for a fastener, including orientation."""
@@ -647,6 +646,10 @@ def _emit_mounting_hardware(
             mp_pos = body.to_body_frame(mount.rotate_point(mp.pos))
             mp_axis = body.to_body_frame(mount.rotate_point(mp.axis))
             pos = _add_vec3(base_pos, mp_pos)
+            # MountPoint.axis = insertion direction (where shank goes).
+            # Screw STL head is at +Z, so we align +Z with the head
+            # direction = opposite of insertion direction.
+            head_axis = (-mp_axis[0], -mp_axis[1], -mp_axis[2])
             SubElement(
                 body_el,
                 "geom",
@@ -654,12 +657,39 @@ def _emit_mounting_hardware(
                     f"mount_{body.name}_{mount.label}_{mp.label}",
                     f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(pos),
-                    _z_to_axis_quat(mp_axis),
+                    _z_to_axis_quat(head_axis),
                 ),
             )
 
 
 from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
+
+
+def _camera_xyaxes(position: str) -> str:
+    """Compute MuJoCo camera xyaxes for a given mount position.
+
+    MuJoCo cameras look along local -Z with +Y as up.  The xyaxes attribute
+    specifies the camera frame's X and Y axes in world coordinates.
+    We orient the camera to look along the face normal with +Z as world-up
+    (for horizontal mounts) or +Y as world-up (for vertical mounts).
+    """
+    # xyaxes = "x1 x2 x3 y1 y2 y3"
+    # Camera X and Y axes in world frame; camera looks along -Z = -(X×Y)
+    match position:
+        case "front":
+            return "1 0 0 0 0 1"  # look +Y, up +Z
+        case "back":
+            return "-1 0 0 0 0 1"  # look -Y, up +Z
+        case "left":
+            return "0 1 0 0 0 1"  # look -X, up +Z
+        case "right":
+            return "0 -1 0 0 0 1"  # look +X, up +Z
+        case "top":
+            return "1 0 0 0 1 0"  # look +Z, up +Y
+        case "bottom":
+            return "1 0 0 0 -1 0"  # look -Z, up -Y
+        case _:
+            return "1 0 0 0 0 1"  # default: look +Y
 
 
 def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
@@ -688,15 +718,17 @@ def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
                 pos = _relative_pos(cb.world_pos, body.world_pos)
             else:
                 pos = mount.resolved_pos
-            # MuJoCo cameras look along local -Z.  Rotate +90° around X
-            # so -Z maps to +Y (forward) and +Y maps to +Z (up).
+            # MuJoCo cameras look along local -Z with +Y up.
+            # Use xyaxes to orient the camera to look along the mount
+            # face normal with +Z as world-up.
+            xyaxes = _camera_xyaxes(mount.position)
             SubElement(
                 parent_el,
                 "camera",
                 name=f"{mount.label}_cam",
                 fovy=f"{cam.fov_deg:.1f}",
                 pos=_fmt_vec3(pos),
-                euler=f"{math.pi / 2} 0 0",
+                xyaxes=xyaxes,
             )
             return
 

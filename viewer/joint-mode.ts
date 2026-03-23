@@ -3,17 +3,18 @@
  */
 
 import * as THREE from 'three';
+import type { AngleArc, SliderInfo, ViewerContext } from './types.ts';
 import { clearGroup, createArcGeometry, orientToAxis, radToDegStr } from './utils.ts';
 
 export class JointMode {
-  ctx: any;
-  sliders: any[];
-  axisArrows: any[];
-  angleArcs: any[];
-  overlayGroup: any;
+  ctx: ViewerContext;
+  sliders: SliderInfo[];
+  axisArrows: THREE.ArrowHelper[];
+  angleArcs: AngleArc[];
+  overlayGroup: THREE.Group;
   active: boolean;
 
-  constructor(ctx: any) {
+  constructor(ctx: ViewerContext) {
     this.ctx = ctx;
     this.sliders = [];
     this.axisArrows = [];

@@ -42,7 +42,7 @@ def emit_body_ir(
     )
     from botcad.component import BearingSpec, CameraSpec
     from botcad.emit.cad import _ensure_solid
-    from botcad.geometry import quat_to_euler, rotate_vec
+    from botcad.geometry import quat_to_euler
     from botcad.skeleton import BodyShape, BracketStyle
 
     prog = ShapeScript()
@@ -137,9 +137,11 @@ def emit_body_ir(
     bracket_spec = BracketSpec()
     if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
+        # Coupler is built in shaft-centered frame; child body origin = shaft
+        # position (MuJoCo places child at parent_joint.pos).  Place at origin
+        # with servo orientation only.
         quat = parent_joint.solved_servo_quat
-        rotated_offset = rotate_vec(quat, servo.shaft_offset)
-        center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
+        center = (0.0, 0.0, 0.0)
         euler = quat_to_euler(quat)
 
         # Sub-program produces coupler in servo-local frame; locate moves it.

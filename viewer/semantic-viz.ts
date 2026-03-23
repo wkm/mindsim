@@ -6,14 +6,15 @@
  */
 
 import * as THREE from 'three';
+import type { ViewerContext } from './types.ts';
 import { clearGroup, createArcGeometry, createTextSprite, orientToAxis } from './utils.ts';
 
 export class SemanticViz {
-  ctx: any;
-  group: any;
+  ctx: ViewerContext;
+  group: THREE.Group;
   active: boolean;
 
-  constructor(ctx: any) {
+  constructor(ctx: ViewerContext) {
     this.ctx = ctx;
     this.group = new THREE.Group();
     this.group.name = 'SemanticOverlays';
@@ -193,7 +194,7 @@ export class SemanticViz {
         `${mountData.resolution[0]}×${mountData.resolution[1]}  FOV ${mountData.fov_deg}°`,
         { fontSize: 11, color: '#7157D9' },
       );
-      label.position.copy(position).y += 0.018;
+      label.position.copy(position).z += 0.018;
       label.scale.set(0.047, 0.008, 1);
       this.group.add(label);
     }

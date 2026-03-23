@@ -6,10 +6,11 @@
  */
 
 import { FocusController } from './focus-controller.ts';
+import type { ViewerContext } from './types.ts';
 import { GEOM_GROUP_DETAIL, GEOM_GROUP_STRUCTURAL, GEOM_GROUP_WIRE } from './utils.ts';
 
 export class AssemblyMode {
-  ctx: any;
+  ctx: ViewerContext;
   steps: any[];
   currentStep: number;
   subProgress: number;
@@ -18,9 +19,9 @@ export class AssemblyMode {
   rootBodyMeshes: any[];
   focus: FocusController;
   bodyNameToId: Record<string, number>;
-  bodyGeoms: Record<number, any[]>;
+  bodyGeoms: Record<number, { name: string; group: number }[]>;
 
-  constructor(ctx: any) {
+  constructor(ctx: ViewerContext) {
     this.ctx = ctx;
     this.steps = [];
     this.currentStep = 0;
@@ -50,7 +51,7 @@ export class AssemblyMode {
   cacheGeomMeshes() {
     this.allGeomMeshes = [];
     this.rootBodyMeshes = [];
-    this.ctx.mujocoRoot.traverse((obj) => {
+    this.ctx.mujocoRoot.traverse((obj: any) => {
       if (obj.isMesh && obj.geomName !== undefined) {
         this.allGeomMeshes.push(obj);
         if (obj.bodyID === 1) this.rootBodyMeshes.push(obj);

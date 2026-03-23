@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import type { ViewerContext } from './types.ts';
 
 const _box = new THREE.Box3();
 const _center = new THREE.Vector3();
@@ -13,7 +14,7 @@ const _size = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 
 export class FocusController {
-  ctx: any;
+  ctx: ViewerContext;
   _animating: boolean;
   _animStart: number;
   _animDuration: number;
@@ -22,7 +23,7 @@ export class FocusController {
   _startTarget: THREE.Vector3;
   _endTarget: THREE.Vector3;
 
-  constructor(ctx: any) {
+  constructor(ctx: ViewerContext) {
     this.ctx = ctx;
     this._animating = false;
     this._animStart = 0;
@@ -38,11 +39,11 @@ export class FocusController {
    * @param {number} bodyId
    * @returns {THREE.Box3}
    */
-  getBodyBoundingBox(bodyId) {
+  getBodyBoundingBox(bodyId: number): THREE.Box3 {
     _box.makeEmpty();
     const group = this.ctx.bodies[bodyId];
     if (!group) return _box;
-    group.traverse((child) => {
+    group.traverse((child: any) => {
       if (child.isMesh) {
         child.updateWorldMatrix(true, false);
         const geom = child.geometry;
@@ -58,9 +59,9 @@ export class FocusController {
    * Compute world-space bounding box for all bodies (the entire bot).
    * @returns {THREE.Box3}
    */
-  getAllBoundingBox() {
+  getAllBoundingBox(): THREE.Box3 {
     _box.makeEmpty();
-    for (const [, group] of Object.entries(this.ctx.bodies) as [string, any][]) {
+    for (const [, group] of Object.entries(this.ctx.bodies)) {
       group.traverse((child: any) => {
         if (child.isMesh) {
           child.updateWorldMatrix(true, false);
@@ -78,7 +79,7 @@ export class FocusController {
    * Animate camera to frame the entire bot.
    * @param {number} duration - seconds
    */
-  focusOnAll(duration = 0.6) {
+  focusOnAll(duration = 0.6): void {
     const box = this.getAllBoundingBox();
     if (box.isEmpty()) return;
 
@@ -104,7 +105,7 @@ export class FocusController {
    * @param {number} bodyId
    * @param {number} duration - seconds
    */
-  focusOnBody(bodyId, duration = 0.6) {
+  focusOnBody(bodyId: number, duration = 0.6): void {
     const box = this.getBodyBoundingBox(bodyId);
     if (box.isEmpty()) return;
 
@@ -129,7 +130,7 @@ export class FocusController {
   /**
    * Drive camera lerp animation. Call from requestAnimationFrame.
    */
-  update() {
+  update(): void {
     if (!this._animating) return;
 
     const now = performance.now() / 1000;

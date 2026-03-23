@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { BotScene, GHOST_OPACITY } from '../bot-scene.ts';
+import { getBodyAndDescendants } from '../explore-mode.ts';
 
 const BODY_NAMES = ['world', 'base', 'turntable', 'upper_arm', 'forearm', 'hand'];
 
@@ -197,5 +198,45 @@ describe('BotScene.setBodyVisible', () => {
     scene.setBodyVisible(2, false);
     assert.equal(scene.bodies[2].visible, false);
     assert.equal(scene.bodies[1].visible, true);
+  });
+});
+
+// ── getBodyAndDescendants ──
+
+describe('getBodyAndDescendants', () => {
+  // Kinematic tree:  base → turntable → upper_arm → forearm → hand
+  const joints = [
+    { parent_body: 'base', child_body: 'turntable' },
+    { parent_body: 'turntable', child_body: 'upper_arm' },
+    { parent_body: 'upper_arm', child_body: 'forearm' },
+    { parent_body: 'forearm', child_body: 'hand' },
+  ];
+  const nameToId: Record<string, number> = {
+    world: 0,
+    base: 1,
+    turntable: 2,
+    upper_arm: 3,
+    forearm: 4,
+    hand: 5,
+  };
+
+  it('leaf body returns only itself', () => {
+    const ids = getBodyAndDescendants('hand', joints, nameToId);
+    assert.deepEqual(ids, [5]);
+  });
+
+  it('root body returns entire chain', () => {
+    const ids = getBodyAndDescendants('base', joints, nameToId);
+    assert.deepEqual(ids, [1, 2, 3, 4, 5]);
+  });
+
+  it('mid-chain body returns self + descendants', () => {
+    const ids = getBodyAndDescendants('upper_arm', joints, nameToId);
+    assert.deepEqual(ids, [3, 4, 5]);
+  });
+
+  it('unknown body returns empty', () => {
+    const ids = getBodyAndDescendants('nonexistent', joints, nameToId);
+    assert.deepEqual(ids, []);
   });
 });

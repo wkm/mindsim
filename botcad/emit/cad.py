@@ -501,6 +501,7 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
 
     # --- Per-component STLs (for MuJoCo mesh geoms) ---
     # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
+    # Rotations use .moved() (not .locate()) since make_component_solid is @lru_cache'd.
     comp_stl_count = 0
     for body in bot.all_bodies:
         if body.is_wheel_body:
@@ -509,9 +510,14 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
             comp_solid = make_component_solid(mount.component)
             if comp_solid is None:
                 continue
-            # If rotate_z, rotate the solid 90° around Z to match body frame
+            # rotate_z: 90° around Z to swap X/Y (e.g. Pi board front-to-back)
             if mount.rotate_z:
-                comp_solid = comp_solid.locate(Location((0, 0, 0), (0, 0, 90)))
+                comp_solid = comp_solid.moved(Location((0, 0, 0), (0, 0, 90)))
+            # Face-outward rotation: align component +Z with mount face normal
+            # (e.g. camera lens faces forward when front-mounted)
+            face_euler = mount._face_euler_deg
+            if face_euler != (0.0, 0.0, 0.0):
+                comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
             stl_name = f"comp_{body.name}_{mount.label}.stl"
             export_stl(comp_solid, str(meshes_dir / stl_name))
             comp_stl_count += 1
@@ -1137,12 +1143,14 @@ def _build_body_solid(
     bracket_spec = BracketSpec()
     if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
         servo = parent_joint.servo
-        from botcad.geometry import rotate_vec
 
+        # The coupler is built in shaft-centered frame (origin = shaft center).
+        # The child body mesh origin coincides with the joint/shaft position
+        # (MuJoCo places the child at parent_joint.pos, joint anchor at (0,0,0)).
+        # So the coupler goes at the origin — only servo orientation is needed.
         quat = parent_joint.solved_servo_quat
-        rotated_offset = rotate_vec(quat, servo.shaft_offset)
-        center = (-rotated_offset[0], -rotated_offset[1], -rotated_offset[2])
         euler = quat_to_euler(quat)
+        center = (0.0, 0.0, 0.0)
         from botcad.bracket import coupler_solid_solid
 
         coupler = coupler_solid_solid(servo, bracket_spec)

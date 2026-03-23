@@ -6,10 +6,11 @@
  */
 
 import * as THREE from 'three';
+import type { JointReadoutEl, ViewerContext } from './types.ts';
 import { clearGroup, createMarker, radToDegStr } from './utils.ts';
 
 export class IKMode {
-  ctx: any;
+  ctx: ViewerContext;
   active: boolean;
   anchorBodyId: number | null;
   targetBodyId: number | null;
@@ -22,17 +23,17 @@ export class IKMode {
   _bodyPos: THREE.Vector3;
   _mjTarget: THREE.Vector3;
   _arrowDir: THREE.Vector3;
-  _pendingDragEvt: any;
+  _pendingDragEvt: PointerEvent | null;
   arrow: THREE.ArrowHelper | null;
-  anchorMarker: any;
-  targetMarker: any;
+  anchorMarker: THREE.Mesh | null;
+  targetMarker: THREE.Mesh | null;
   savedQpos: Float64Array | null;
-  _jointEls: any[] | null;
+  _jointEls: JointReadoutEl[] | null;
   _onPointerDown: (evt: PointerEvent) => void;
   _onPointerMove: (evt: PointerEvent) => void;
   _onPointerUp: (evt: PointerEvent) => void;
 
-  constructor(ctx: any) {
+  constructor(ctx: ViewerContext) {
     this.ctx = ctx;
     this.active = false;
     this.anchorBodyId = null;
@@ -210,8 +211,8 @@ export class IKMode {
     this.ctx.syncScene();
   }
 
-  highlightBody(bodyId, color) {
-    this.ctx.mujocoRoot.traverse((obj) => {
+  highlightBody(bodyId: number, color: number) {
+    this.ctx.mujocoRoot.traverse((obj: any) => {
       if (obj.isMesh && obj.bodyID === bodyId && obj.material?.emissive) {
         obj.material.emissive.setHex(color);
       }

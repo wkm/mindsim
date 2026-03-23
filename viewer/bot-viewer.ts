@@ -17,6 +17,7 @@ import { IKMode } from './ik-mode.ts';
 import { JointMode } from './joint-mode.ts';
 import { sync } from './scene-sync.ts';
 import { SectionCutter } from './section-cutter.ts';
+import type { ViewerContext, ViewerMode as ViewerModeInterface } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
 
@@ -401,9 +402,9 @@ export async function initBotViewer(botName: string) {
   // ---------------------------------------------------------------------------
   // Mode management
   // ---------------------------------------------------------------------------
-  let currentMode: any = null;
+  let currentMode: ViewerModeInterface | null = null;
   let currentModeName: string | null = null;
-  const modes: Record<string, any> = {};
+  const modes: Record<string, ViewerModeInterface> = {};
 
   function switchMode(modeName: string) {
     if (!(modeName in modes)) return;
@@ -441,7 +442,7 @@ export async function initBotViewer(botName: string) {
       sync(botScene, bodies);
     }
 
-    const ctx = {
+    const ctx: ViewerContext = {
       mujoco,
       model,
       data,
@@ -519,7 +520,7 @@ export async function initBotViewer(botName: string) {
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
       if (e.key === '1' && currentModeName === 'explore' && modes.explore) {
-        modes.explore.refocusCurrent();
+        (modes.explore as ExploreMode).refocusCurrent();
       }
     });
   } catch (err) {

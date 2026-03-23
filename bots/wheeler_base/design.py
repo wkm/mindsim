@@ -29,8 +29,8 @@ def build() -> Bot:
     # Base body — houses electronics + camera.
     # Pi and battery rotated 90° so their long axis runs front-to-back (Y),
     # keeping X extent narrow to clear wheel servos at ±65mm.
-    # Minimum height 45mm to stack battery (bottom) + camera + Pi (top)
-    # without Z-axis overlap.
+    # Camera faces forward (lens +Z rotated to +Y), making it 24mm tall;
+    # extra padding prevents Z-overlap with the bottom battery.
     # No custom_solid — standard pipeline generates the body shell with
     # bracket pockets, component pockets, and wire channels.
     # Let the packing solver determine dimensions from actual component
@@ -38,7 +38,7 @@ def build() -> Bot:
     base = bot.body(
         "base",
         shape=BodyShape.BOX,
-        padding=0.008,
+        padding=0.014,
     )
     base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
     base.mount(OV5647(), position="front", label="camera")

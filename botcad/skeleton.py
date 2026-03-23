@@ -136,11 +136,45 @@ class Mount:
     solved_bbox: Vec3 | None = None  # actual bounding box from ShapeScript execution
 
     @property
+    def face_outward(self) -> bool:
+        """Whether this component should face outward from its mount face.
+
+        Cameras always face outward — their lens axis (+Z in component frame)
+        is rotated to align with the mount face normal.
+        """
+        from botcad.component import CameraSpec
+
+        return isinstance(self.component, CameraSpec)
+
+    @property
+    def _face_euler_deg(self) -> tuple[float, float, float]:
+        """Euler angles (X, Y, Z) in degrees to rotate component +Z to face
+        the mount normal.  Identity when face_outward is False or position
+        is "top"/"center" (already +Z).
+        """
+        if not self.face_outward or not isinstance(self.position, str):
+            return (0.0, 0.0, 0.0)
+        match self.position:
+            case "front":
+                return (-90.0, 0.0, 0.0)
+            case "back":
+                return (90.0, 0.0, 0.0)
+            case "left":
+                return (0.0, -90.0, 0.0)
+            case "right":
+                return (0.0, 90.0, 0.0)
+            case "bottom":
+                return (180.0, 0.0, 0.0)
+            case _:
+                return (0.0, 0.0, 0.0)
+
+    @property
     def placed_dimensions(self) -> Vec3:
         """Component dimensions in the body frame (actual bbox if computed, else declared).
 
         Prefers solved_bbox (derived from ShapeScript geometry) over the
         component's declared dimensions.  X/Y are swapped when rotate_z is set.
+        Face rotation swaps axes as needed (e.g. front-mounted camera swaps Y/Z).
         """
         d = (
             self.solved_bbox
@@ -148,13 +182,43 @@ class Mount:
             else self.component.dimensions
         )
         if self.rotate_z:
-            return (d[1], d[0], d[2])
+            d = (d[1], d[0], d[2])
+        # Face rotation: component +Z aligns with face normal, swapping axes
+        match self._face_euler_deg:
+            case (-90.0, 0.0, 0.0) | (90.0, 0.0, 0.0):
+                # Rx(±90°): Y↔Z swap
+                d = (d[0], d[2], d[1])
+            case (0.0, -90.0, 0.0) | (0.0, 90.0, 0.0):
+                # Ry(±90°): X↔Z swap
+                d = (d[2], d[1], d[0])
+            case (180.0, 0.0, 0.0):
+                pass  # Rx(180°): no size change
         return d
 
     def rotate_point(self, p: Vec3) -> Vec3:
-        """Rotate a component-local point into the body frame."""
+        """Rotate a component-local point into the body frame.
+
+        Applies rotate_z first (if set), then face rotation (if face_outward).
+        """
         if self.rotate_z:
-            return (-p[1], p[0], p[2])
+            p = (-p[1], p[0], p[2])
+        # Face rotation: rotate component +Z to face the mount normal
+        match self._face_euler_deg:
+            case (-90.0, 0.0, 0.0):
+                # Rx(-90°): (x,y,z) → (x, z, -y)
+                p = (p[0], p[2], -p[1])
+            case (90.0, 0.0, 0.0):
+                # Rx(+90°): (x,y,z) → (x, -z, y)
+                p = (p[0], -p[2], p[1])
+            case (0.0, -90.0, 0.0):
+                # Ry(-90°): (x,y,z) → (-z, y, x)
+                p = (-p[2], p[1], p[0])
+            case (0.0, 90.0, 0.0):
+                # Ry(+90°): (x,y,z) → (z, y, -x)
+                p = (p[2], p[1], -p[0])
+            case (180.0, 0.0, 0.0):
+                # Rx(180°): (x,y,z) → (x, -y, -z)
+                p = (p[0], -p[1], -p[2])
         return p
 
 

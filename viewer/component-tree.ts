@@ -63,6 +63,15 @@ function iconTypeToCategory(iconType) {
   return 'mount';
 }
 
+/** Options for ComponentTree constructor. */
+interface ComponentTreeOptions {
+  onShapeScript?: (url: string) => void;
+  onDoubleClick?: (nodeId: string, data: any) => void;
+  onToggleVisibility?: (bodyName: string, visible: boolean) => void;
+  onIsolate?: (bodyName: string) => void;
+  onShowAll?: () => void;
+}
+
 export class ComponentTree {
   container: HTMLElement;
   manifest: any;
@@ -75,7 +84,7 @@ export class ComponentTree {
   focusedNodeId: string | null;
   _filters: Record<string, boolean>;
   _searchQuery: string;
-  _searchTimeout: any;
+  _searchTimeout: ReturnType<typeof setTimeout> | null;
   _searchInput: HTMLInputElement | null;
   _treeRoot: HTMLDivElement | null;
   bodiesByName: Record<string, any>;
@@ -84,7 +93,12 @@ export class ComponentTree {
   partsByBody: Record<string, any[]>;
   partsByJoint: Record<string, any[]>;
 
-  constructor(container: HTMLElement, manifest: any, onSelect: (nodeId: string, data: any) => void, options: any = {}) {
+  constructor(
+    container: HTMLElement,
+    manifest: any,
+    onSelect: (nodeId: string, data: any) => void,
+    options: ComponentTreeOptions = {},
+  ) {
     this.container = container;
     this.manifest = manifest;
     this.onSelect = onSelect;
@@ -281,9 +295,9 @@ export class ComponentTree {
    * Called by ExploreMode after syncScene() with the current state from BotScene.
    *
    * @param hiddenBodies - set of body names that are currently hidden
-   * @param isolatedBody - name of the currently isolated body, or null
+   * @param isolatedBodies - set of body names that are currently isolated
    */
-  updateVisualState(hiddenBodies: Set<string>, isolatedBody: string | null): void {
+  updateVisualState(hiddenBodies: Set<string>, isolatedBodies: Set<string>): void {
     if (!this._treeRoot) return;
     const bodyNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-body-name]');
     for (const node of bodyNodes) {
@@ -301,7 +315,7 @@ export class ComponentTree {
       // Update target icon state
       const targetBtn = node.querySelector(':scope > .tree-node-header .tree-vis-target');
       if (targetBtn) {
-        targetBtn.classList.toggle('isolated', isolatedBody === name);
+        targetBtn.classList.toggle('isolated', isolatedBodies.has(name!));
       }
     }
   }

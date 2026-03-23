@@ -9,31 +9,52 @@ import * as THREE from 'three';
 import { ComponentTree } from './component-tree.ts';
 import { FocusController } from './focus-controller.ts';
 import { SemanticViz } from './semantic-viz.ts';
+import type { ViewerContext } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 
-export class ExploreMode {
-  ctx: any;
-  manifest: any;
-  active: boolean;
-  tree: any;
-  focus: any;
-  viz: any;
-  focusedNodeId: any;
-  focusedData: any;
-  /** Cached raycast targets — invalidated when visibility changes. */
-  _raycastTargets: any[] | null;
-  bodyNameToId: any;
-  bodyIdToName: any;
-  bodiesByName: any;
-  _raycaster: any;
-  _mouse: any;
-  _hoveredBodyId: any;
-  _onPointerMove: any;
-  _onPointerDown: any;
-  _onPointerUp: any;
-  _pointerDownPos: any;
+/**
+ * Find all descendant body IDs for a given body name by walking the
+ * kinematic tree through joints.  Pure function — no DOM or Three.js deps.
+ */
+export function getBodyAndDescendants(
+  bodyName: string,
+  joints: { parent_body: string; child_body: string }[],
+  bodyNameToId: Record<string, number>,
+): number[] {
+  const ids: number[] = [];
+  const id = bodyNameToId[bodyName];
+  if (id !== undefined) ids.push(id);
+  for (const j of joints) {
+    if (j.parent_body === bodyName) {
+      ids.push(...getBodyAndDescendants(j.child_body, joints, bodyNameToId));
+    }
+  }
+  return ids;
+}
 
-  constructor(ctx: any, manifest: any) {
+export class ExploreMode {
+  ctx: ViewerContext;
+  manifest: any; // viewer_manifest.json — deeply nested JSON, kept as any
+  active: boolean;
+  tree: ComponentTree | null;
+  focus: FocusController;
+  viz: SemanticViz;
+  focusedNodeId: string | null;
+  focusedData: any; // node data varies by type (body/joint/mount/part/etc.)
+  /** Cached raycast targets — invalidated when visibility changes. */
+  _raycastTargets: THREE.Mesh[] | null;
+  bodyNameToId: Record<string, number>;
+  bodyIdToName: Record<number, string>;
+  bodiesByName: Record<string, any>;
+  _raycaster: THREE.Raycaster;
+  _mouse: THREE.Vector2;
+  _hoveredBodyId: number | null;
+  _onPointerMove: (e: PointerEvent) => void;
+  _onPointerDown: (e: PointerEvent) => void;
+  _onPointerUp: (e: PointerEvent) => void;
+  _pointerDownPos: THREE.Vector2;
+
+  constructor(ctx: ViewerContext, manifest: any) {
     this.ctx = ctx;
     this.manifest = manifest;
     this.active = false;
@@ -126,7 +147,7 @@ export class ExploreMode {
     canvas.removeEventListener('pointerup', this._onPointerUp);
   }
 
-  onNodeClick(nodeId, nodeData) {
+  onNodeClick(nodeId: string, nodeData: any) {
     // If isolated and selecting a different node, restore visibility first
     if (this.ctx.botScene.isIsolated()) {
       this.ctx.botScene.showAll();
@@ -153,7 +174,7 @@ export class ExploreMode {
   }
 
   /** Resolve a nodeId to its primary MuJoCo body ID. */
-  resolveBodyId(nodeId, nodeData) {
+  resolveBodyId(nodeId: string, nodeData: any): number | undefined {
     const [type, ...rest] = nodeId.split(':');
     if (type === 'body') return this.bodyNameToId[rest[0]];
     if (type === 'joint') return this.bodyNameToId[nodeData?.child_body];
@@ -170,13 +191,13 @@ export class ExploreMode {
   }
 
   /** Resolve all MuJoCo body IDs for an assembly (for multi-body focus). */
-  _resolveAssemblyBodyIds(nodeData) {
+  _resolveAssemblyBodyIds(nodeData: any): number[] {
     const bodies = nodeData?.bodies || [];
     return bodies.map((n) => this.bodyNameToId[n]).filter((id) => id !== undefined);
   }
 
   /** Animate camera to frame the relevant body for a node. */
-  _focusCamera(nodeId, nodeData) {
+  _focusCamera(nodeId: string, nodeData: any) {
     const [type] = nodeId.split(':');
 
     if (type === 'assembly') {
@@ -197,7 +218,7 @@ export class ExploreMode {
   }
 
   /** Ghost non-focused meshes and show semantic overlays. */
-  _applyIsolation(nodeId, nodeData) {
+  _applyIsolation(nodeId: string, nodeData: any) {
     const [type, ...rest] = nodeId.split(':');
 
     if (type === 'body') {
@@ -253,7 +274,7 @@ export class ExploreMode {
   // ── Body visibility controls (driven by tree node actions) ──
 
   /** Set a single body's visibility via BotScene. */
-  _setBodyVisible(bodyName, visible) {
+  _setBodyVisible(bodyName: string, visible: boolean) {
     const bodyId = this.bodyNameToId[bodyName];
     if (bodyId === undefined) return;
     this.ctx.botScene.setBodyVisible(bodyId, visible);
@@ -262,11 +283,16 @@ export class ExploreMode {
     this._syncTreeVisualState();
   }
 
-  /** Hide all bodies except the named one via BotScene. */
-  _isolateBody(bodyName) {
-    const bodyId = this.bodyNameToId[bodyName];
-    if (bodyId === undefined) return;
-    this.ctx.botScene.isolate(bodyId);
+  /** Collect body IDs for a body and all its kinematic descendants. */
+  _getBodyAndDescendants(bodyName: string): number[] {
+    return getBodyAndDescendants(bodyName, this.manifest.joints, this.bodyNameToId);
+  }
+
+  /** Isolate a body and all its kinematic descendants via BotScene. */
+  _isolateBody(bodyName: string) {
+    const bodyIds = this._getBodyAndDescendants(bodyName);
+    if (bodyIds.length === 0) return;
+    this.ctx.botScene.isolateMultiple(bodyIds);
     this.ctx.syncScene();
     this._invalidateRaycastCache();
     this._syncTreeVisualState();
@@ -286,29 +312,33 @@ export class ExploreMode {
     const [type, ...rest] = this.focusedNodeId.split(':');
 
     if (type === 'body') {
-      const bodyId = this.bodyNameToId[rest[0]];
-      if (bodyId === undefined) return;
-      this.ctx.botScene.isolate(bodyId);
+      const bodyIds = this._getBodyAndDescendants(rest[0]);
+      if (bodyIds.length === 0) return;
+      this.ctx.botScene.isolateMultiple(bodyIds);
     } else if (type === 'joint' && this.focusedData) {
-      // Show parent + child bodies
+      // Show parent body + child body and its descendants
       const keepIds: number[] = [];
-      if (this.focusedData.child_body) {
-        const id = this.bodyNameToId[this.focusedData.child_body];
-        if (id !== undefined) keepIds.push(id);
-      }
       if (this.focusedData.parent_body) {
         const id = this.bodyNameToId[this.focusedData.parent_body];
         if (id !== undefined) keepIds.push(id);
+      }
+      if (this.focusedData.child_body) {
+        keepIds.push(...this._getBodyAndDescendants(this.focusedData.child_body));
       }
       if (keepIds.length === 0) return;
       this.ctx.botScene.isolateMultiple(keepIds);
     } else if (type === 'mount' && this.focusedData) {
       const bodyName = this.focusedData.parent_body || rest[0];
-      const bodyId = this.bodyNameToId[bodyName];
-      if (bodyId === undefined) return;
-      this.ctx.botScene.isolate(bodyId);
+      const bodyIds = this._getBodyAndDescendants(bodyName);
+      if (bodyIds.length === 0) return;
+      this.ctx.botScene.isolateMultiple(bodyIds);
+    } else if (type === 'assembly' && this.focusedData) {
+      // Show all bodies in the assembly
+      const bodyIds = this._resolveAssemblyBodyIds(this.focusedData);
+      if (bodyIds.length === 0) return;
+      this.ctx.botScene.isolateMultiple(bodyIds);
     } else {
-      return; // can't isolate assemblies etc.
+      return;
     }
     this.ctx.syncScene();
     this._updateIsolateButton();
@@ -338,7 +368,7 @@ export class ExploreMode {
   _syncTreeVisualState() {
     if (!this.tree) return;
     const hiddenBodies = new Set<string>();
-    let isolatedBody: string | null = null;
+    const isolatedBodies = new Set<string>();
     const botScene = this.ctx.botScene;
     const isolatedIds = botScene.isolatedIds();
 
@@ -348,18 +378,17 @@ export class ExploreMode {
       }
     }
 
-    // Determine which body is isolated (for target icon highlight)
+    // Determine which bodies are isolated (for target icon highlight)
     if (isolatedIds.size > 0) {
       for (const id of isolatedIds) {
         const bodyState = botScene.bodies[id];
         if (bodyState && bodyState.id !== 0) {
-          isolatedBody = bodyState.name;
-          break;
+          isolatedBodies.add(bodyState.name);
         }
       }
     }
 
-    this.tree.updateVisualState(hiddenBodies, isolatedBody);
+    this.tree.updateVisualState(hiddenBodies, isolatedBodies);
   }
 
   unfocus() {
@@ -402,7 +431,7 @@ export class ExploreMode {
     panel.innerHTML = html;
   }
 
-  _buildBodyProperties(body) {
+  _buildBodyProperties(body: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${body.name}</h2>`;
     html += '<span class="prop-badge body-badge">Body</span>';
@@ -457,7 +486,7 @@ export class ExploreMode {
     });
   }
 
-  _buildJointProperties(joint) {
+  _buildJointProperties(joint: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${joint.name}</h2>`;
     html += '<span class="prop-badge joint-badge">Joint</span>';
@@ -499,7 +528,7 @@ export class ExploreMode {
     });
   }
 
-  _buildMountProperties(mount) {
+  _buildMountProperties(mount: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${mount.label}</h2>`;
     const typeLabel = mount.component_type || 'component';
@@ -546,7 +575,7 @@ export class ExploreMode {
     });
   }
 
-  _buildPartProperties(part) {
+  _buildPartProperties(part: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${part.name}</h2>`;
     const catLabel = part.category || 'part';
@@ -586,7 +615,7 @@ export class ExploreMode {
     panel.innerHTML = html;
   }
 
-  _buildFastenerGroupProperties(group) {
+  _buildFastenerGroupProperties(group: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${group.label}</h2>`;
     html += '<span class="prop-badge fastener-badge">fastener</span>';
@@ -600,7 +629,7 @@ export class ExploreMode {
     panel.innerHTML = html;
   }
 
-  _buildWireGroupProperties(group) {
+  _buildWireGroupProperties(group: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>Wires</h2>`;
     html += '<span class="prop-badge wire-badge">wire</span>';
@@ -622,7 +651,7 @@ export class ExploreMode {
     panel.innerHTML = html;
   }
 
-  _buildAssemblyProperties(asm) {
+  _buildAssemblyProperties(asm: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${asm.name}</h2>`;
     html += '<span class="prop-badge" style="background:#30404D;">assembly</span>';
@@ -646,12 +675,12 @@ export class ExploreMode {
     this._bindPropertyChipClicks(panel);
   }
 
-  _propRow(label, value) {
+  _propRow(label: string, value: string | number): string {
     return `<div class="prop-row"><span class="prop-label">${label}</span><span class="prop-value">${value}</span></div>`;
   }
 
-  _bindPropertyChipClicks(panel) {
-    panel.querySelectorAll('.prop-chip[data-node-id]').forEach((chip) => {
+  _bindPropertyChipClicks(panel: HTMLElement) {
+    panel.querySelectorAll<HTMLElement>('.prop-chip[data-node-id]').forEach((chip) => {
       chip.style.cursor = 'pointer';
       chip.addEventListener('click', () => {
         const nodeId = chip.dataset.nodeId;
@@ -675,7 +704,7 @@ export class ExploreMode {
   // ---------------------------------------------------------------------------
 
   /** Update normalized device coords from a pointer event. */
-  _updateMouse(event) {
+  _updateMouse(event: PointerEvent) {
     const rect = this.ctx.renderer.domElement.getBoundingClientRect();
     this._mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this._mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -702,16 +731,16 @@ export class ExploreMode {
   }
 
   /** Raycast and return the first structural mesh hit, or null. */
-  _raycastBody() {
+  _raycastBody(): any | null {
     this._raycaster.setFromCamera(this._mouse, this.ctx.camera);
     const hits = this._raycaster.intersectObjects(this._getRaycastTargets(), false);
     return hits.length > 0 ? hits[0].object : null;
   }
 
-  _handlePointerMove(event) {
+  _handlePointerMove(event: PointerEvent) {
     this._updateMouse(event);
     const hit = this._raycastBody();
-    const hitBodyId = hit ? hit.bodyID : null;
+    const hitBodyId: number | null = hit ? hit.bodyID : null;
 
     if (hitBodyId === this._hoveredBodyId) return;
 
@@ -722,11 +751,11 @@ export class ExploreMode {
     this.ctx.renderer.domElement.style.cursor = hitBodyId != null ? 'pointer' : '';
   }
 
-  _handlePointerDown(event) {
+  _handlePointerDown(event: PointerEvent) {
     this._pointerDownPos.set(event.clientX, event.clientY);
   }
 
-  _handlePointerUp(event) {
+  _handlePointerUp(event: PointerEvent) {
     // Only treat as click if the pointer didn't move much (not a drag/orbit)
     const dx = event.clientX - this._pointerDownPos.x;
     const dy = event.clientY - this._pointerDownPos.y;

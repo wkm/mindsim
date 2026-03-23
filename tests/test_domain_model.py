@@ -93,6 +93,84 @@ class TestMount:
         m = Mount(component=comp, label="test", position="center")
         assert m.resolved_insertion_axis == (0.0, 0.0, 1.0)
 
+    def test_face_outward_true_for_camera(self):
+        from botcad.skeleton import Mount
+
+        cam = CameraSpec(
+            name="test_cam",
+            dimensions=(0.025, 0.024, 0.009),
+            mass=0.003,
+            fov_deg=72.0,
+            resolution=(640, 480),
+        )
+        m = Mount(component=cam, label="cam", position="front")
+        assert m.face_outward is True
+
+    def test_face_outward_false_for_generic(self):
+        from botcad.skeleton import Mount
+
+        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        m = Mount(component=comp, label="test", position="front")
+        assert m.face_outward is False
+
+    def test_camera_front_placed_dims_swap_yz(self):
+        """Front-mounted camera: Y and Z dimensions swap because lens
+        rotates from +Z to +Y."""
+        from botcad.skeleton import Mount
+
+        cam = CameraSpec(
+            name="test_cam",
+            dimensions=(0.025, 0.024, 0.009),
+            mass=0.003,
+            fov_deg=72.0,
+            resolution=(640, 480),
+        )
+        m = Mount(component=cam, label="cam", position="front")
+        # Original dims: (0.025, 0.024, 0.009)
+        # After Rx(-90°) Y↔Z swap: (0.025, 0.009, 0.024)
+        assert m.placed_dimensions == (0.025, 0.009, 0.024)
+
+    def test_camera_front_rotate_point(self):
+        """Rx(-90°) maps (x, y, z) → (x, z, -y)."""
+        from botcad.skeleton import Mount
+
+        cam = CameraSpec(
+            name="test_cam",
+            dimensions=(0.025, 0.024, 0.009),
+            mass=0.003,
+            fov_deg=72.0,
+            resolution=(640, 480),
+        )
+        m = Mount(component=cam, label="cam", position="front")
+        # +Z (lens axis) should map to +Y (forward)
+        assert m.rotate_point((0.0, 0.0, 1.0)) == (0.0, 1.0, 0.0)
+        # Arbitrary point
+        assert m.rotate_point((1.0, 2.0, 3.0)) == (1.0, 3.0, -2.0)
+
+    def test_camera_top_no_rotation(self):
+        """Top-mounted camera: +Z already faces up, no rotation needed."""
+        from botcad.skeleton import Mount
+
+        cam = CameraSpec(
+            name="test_cam",
+            dimensions=(0.025, 0.024, 0.009),
+            mass=0.003,
+            fov_deg=72.0,
+            resolution=(640, 480),
+        )
+        m = Mount(component=cam, label="cam", position="top")
+        assert m.placed_dimensions == (0.025, 0.024, 0.009)
+        assert m.rotate_point((1.0, 2.0, 3.0)) == (1.0, 2.0, 3.0)
+
+    def test_generic_component_no_face_rotation(self):
+        """Non-camera component: no face rotation regardless of position."""
+        from botcad.skeleton import Mount
+
+        comp = Component("test", dimensions=(0.025, 0.024, 0.009), mass=0.001)
+        m = Mount(component=comp, label="test", position="front")
+        assert m.placed_dimensions == (0.025, 0.024, 0.009)
+        assert m.rotate_point((1.0, 2.0, 3.0)) == (1.0, 2.0, 3.0)
+
 
 # ── TestInsertionAxisResolution ──
 
