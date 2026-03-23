@@ -647,7 +647,7 @@ export class ExploreMode {
       chip.addEventListener('click', () => {
         const nodeId = chip.dataset.nodeId;
         const [type, ...rest] = nodeId.split(':');
-        let data;
+        let data: any;
         if (type === 'body') {
           data = this.manifest.bodies.find((b) => b.name === rest[0]);
         } else if (type === 'joint') {

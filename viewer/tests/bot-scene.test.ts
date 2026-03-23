@@ -4,8 +4,8 @@
  * Run with: npx tsx --test viewer/tests/bot-scene.test.ts
  */
 
-import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { BotScene } from '../bot-scene.ts';
 
 const BODY_NAMES = ['world', 'base', 'turntable', 'upper_arm', 'forearm', 'hand'];

@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "strict": false,
     "strictNullChecks": false,
-    "noImplicitAny": false,
+    "noImplicitAny": false /* ~310 lines of errors as of Phase 6; tackle in a dedicated pass */,
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

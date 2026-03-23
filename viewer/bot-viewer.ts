@@ -232,7 +232,7 @@ export async function initBotViewer(botName: string) {
         bodies[b].has_custom_mesh = false;
       }
 
-      let geometry;
+      let geometry: THREE.BufferGeometry | undefined;
       const mjtGeom = mujoco.mjtGeom;
       if (type === mjtGeom.mjGEOM_PLANE.value) {
         continue;

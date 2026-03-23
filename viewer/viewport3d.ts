@@ -446,7 +446,10 @@ export class Viewport3D {
       child.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+          if (Array.isArray(obj.material))
+            obj.material.forEach((m) => {
+              m.dispose();
+            });
           else obj.material.dispose();
         }
       });
@@ -1632,7 +1635,7 @@ export class Viewport3D {
         if (this._secViz) this._secViz.visible = false;
 
         // Cap color — darker than the body for clear contrast
-        let capColor;
+        let capColor: THREE.Color | undefined;
         if (this._sectionCapColorFn) {
           const firstGroupName = Object.keys(layerMeshes)[0];
           capColor = this._sectionCapColorFn(firstGroupName);
@@ -2007,7 +2010,7 @@ export class Viewport3D {
     if (!this._hatchTextures || this._hatchTextures.length === 0) return;
 
     // Compute world-units-per-pixel from camera
-    let worldPerPx;
+    let worldPerPx: number;
     if (this._cameraType === 'orthographic') {
       // Ortho: frustum height / viewport height
       worldPerPx = (this._cam.top - this._cam.bottom) / this._ren.domElement.clientHeight;

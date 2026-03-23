@@ -273,9 +273,9 @@ class ComponentBrowser {
       if (btn) {
         btn.addEventListener('click', () => {
           this.sectionAxis = axis;
-          document
-            .querySelectorAll('[data-section-axis]')
-            .forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.sectionAxis === axis));
+          document.querySelectorAll('[data-section-axis]').forEach((b) => {
+            b.classList.toggle('active', (b as HTMLElement).dataset.sectionAxis === axis);
+          });
           this._updateSectionPlane();
         });
       }
@@ -785,7 +785,7 @@ class ComponentBrowser {
   async _addSTLMesh(componentName: string, partName: string, color: any, opts: any, group: THREE.Group) {
     const url = `/api/components/${componentName}/stl/${partName}`;
 
-    let geometry;
+    let geometry: THREE.BufferGeometry;
     if (this.stlCache[url]) {
       geometry = this.stlCache[url].clone();
     } else {

@@ -139,7 +139,9 @@ export class MeasureTool {
     for (const child of this._svg.children) {
       if (child !== this._rubberLine) toRemove.push(child);
     }
-    toRemove.forEach((el) => el.remove());
+    toRemove.forEach((el) => {
+      el.remove();
+    });
 
     const rect = this.container.getBoundingClientRect();
     const w = rect.width;

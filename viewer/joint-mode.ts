@@ -221,7 +221,7 @@ export class JointMode {
           1 - Math.abs(currentAngle - arc.rangeMin) / (totalAngle * 0.2),
           1 - Math.abs(arc.rangeMax - currentAngle) / (totalAngle * 0.2),
         );
-        let color;
+        let color: number;
         if (limitProximity > 0.5)
           color = 0xdb3737; // BP_RED3
         else if (limitProximity > 0)

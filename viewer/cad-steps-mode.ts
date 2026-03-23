@@ -316,7 +316,7 @@ class CadStepsViewer {
   }
 
   _setupDividerDrag() {
-    let startX, startLeftBasis;
+    let startX: number, startLeftBasis: number;
     const onMouseDown = (e) => {
       e.preventDefault();
       startX = e.clientX;
