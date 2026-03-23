@@ -111,11 +111,6 @@ KNOWN_FAILURES = {
         "coupler",
         "servo",
     ): "1.0 mm³ overlap — coupler intersects SCS0009 servo body",
-    (
-        "SCS0009",
-        "cradle",
-        "servo",
-    ): "Cradle generation crashes — negative box dimension from SCS0009 ear geometry",
 }
 
 
@@ -179,12 +174,7 @@ class TestServoSubPartClearance:
 # The servo must fit entirely inside it: (servo - channel) should be empty.
 
 # Known containment failures: (servo_name, channel_type) -> reason
-CONTAINMENT_FAILURES = {
-    (
-        "SCS0009",
-        "cradle_insertion_channel",
-    ): "Cradle generation crashes — negative box dimension from SCS0009 ear geometry",
-}
+CONTAINMENT_FAILURES: dict[tuple[str, str], str] = {}
 
 
 class TestBracketInsertionChannelContainment:

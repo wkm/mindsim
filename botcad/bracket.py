@@ -523,12 +523,22 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScri
     ear_bottom_z = _ear_bottom_z(servo, wall)
 
     # -- Cradle extent in X --
+    # Single-axis servos (no rear horn) have no coupler, so the cradle
+    # wraps the full body.  Dual-axis servos retract to clear the coupler.
     cradle_min_x = -body_x / 2 - tol - wall
-    sweep_r = coupler_sweep_radius(servo, spec)
-    if sweep_r > 0:
-        cradle_max_x = sx - sweep_r - 0.001
+    has_coupler = bool(servo.rear_horn_mounting_points)
+    if has_coupler:
+        sweep_r = coupler_sweep_radius(servo, spec)
+        if sweep_r > 0:
+            cradle_max_x = sx - sweep_r - 0.001
+        else:
+            cradle_max_x = sx - 0.002
     else:
-        cradle_max_x = sx - 0.002
+        cradle_max_x = body_x / 2 + tol + wall
+    # Safety floor: cradle must have positive X extent
+    min_cradle_lx = 2 * wall
+    if cradle_max_x - cradle_min_x < min_cradle_lx:
+        cradle_max_x = cradle_min_x + min_cradle_lx
     cradle_lx = cradle_max_x - cradle_min_x
     cradle_cx = (cradle_min_x + cradle_max_x) / 2
 
@@ -536,9 +546,16 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScri
     outer_ly = body_y + 2 * (tol + wall)
 
     # -- Cradle extent in Z (shallow tray) --
+    # The tray must encompass the mounting ear shelf.  For STS-series the
+    # ears are below the body; for SG90-style (SCS0009) the ears sit
+    # mid-body.  Use the lower of ear_bottom_z and body bottom as floor.
     grip_margin = 0.004
-    outer_top_z = -body_z / 2 + grip_margin
-    outer_bottom_z = ear_bottom_z
+    body_bottom_z = -body_z / 2
+    outer_bottom_z = min(ear_bottom_z, body_bottom_z - wall)
+    outer_top_z = max(ear_bottom_z, body_bottom_z + grip_margin)
+    min_tray_z = 2 * wall + grip_margin
+    if outer_top_z - outer_bottom_z < min_tray_z:
+        outer_top_z = outer_bottom_z + min_tray_z
     outer_lz = outer_top_z - outer_bottom_z
     outer_cz = (outer_top_z + outer_bottom_z) / 2
 
@@ -632,8 +649,12 @@ def cradle_insertion_channel(
 
     outer_ly = body_y + 2 * (tol + wall)
     grip_margin = 0.004
-    outer_top_z = -body_z / 2 + grip_margin
-    outer_bottom_z = ear_bottom_z
+    body_bottom_z = -body_z / 2
+    outer_bottom_z = min(ear_bottom_z, body_bottom_z - wall)
+    outer_top_z = max(ear_bottom_z, body_bottom_z + grip_margin)
+    min_tray_z = 2 * wall + grip_margin
+    if outer_top_z - outer_bottom_z < min_tray_z:
+        outer_top_z = outer_bottom_z + min_tray_z
     outer_lz = outer_top_z - outer_bottom_z
     outer_cz = (outer_top_z + outer_bottom_z) / 2
 
