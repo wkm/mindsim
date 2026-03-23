@@ -10,8 +10,8 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
-| Structural (printed) | — | — | 234 | PLA/PETG frame |
-| **Total** | | | **632** | |
+| Structural (printed) | — | — | 236 | PLA/PETG frame |
+| **Total** | | | **634** | |
 
 ## Power Budget
 

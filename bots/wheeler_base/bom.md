@@ -11,8 +11,8 @@
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 202 | PLA/PETG frame |
-| **Total** | | | **424** | |
+| Structural (printed) | — | — | 201 | PLA/PETG frame |
+| **Total** | | | **423** | |
 
 ## Power Budget
 
