@@ -308,10 +308,12 @@ def _generate_solid(comp, part: str):
             from botcad.bracket import coupler_solid_solid
 
             raw = coupler_solid_solid(comp, spec)
-            if raw is not None:
-                # Coupler is built in shaft-centered frame; shift to servo local frame
-                sx, sy, _sz = comp.shaft_offset
-                solid = raw.moved(Location((sx, sy, 0)))
+            if raw is not None and comp.rear_horn_mounting_points:
+                # Coupler is built in shaft-centered frame; shift to servo local
+                # frame.  Include the Z component — the shaft sits at the body
+                # top face, not at the body center.
+                sx, sy, sz = comp.shaft_offset
+                solid = raw.moved(Location((sx, sy, sz)))
         elif part == "bracket_insertion_channel":
             from botcad.bracket import bracket_insertion_channel_solid
 
