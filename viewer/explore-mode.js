@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { ComponentTree } from './component-tree.js';
 import { FocusController } from './focus-controller.js';
 import { SemanticViz } from './semantic-viz.js';
+import { GEOM_GROUP_STRUCTURAL } from './utils.js';
 
 export class ExploreMode {
   constructor(ctx, manifest) {
@@ -23,14 +24,32 @@ export class ExploreMode {
 
     // Index manifest data for quick lookup
     this.bodyNameToId = {};
+    this.bodyIdToName = {};
+    this.bodiesByName = {};
+    for (const b of manifest.bodies) this.bodiesByName[b.name] = b;
     this._buildBodyNameMap();
+
+    // Raycasting state
+    this._raycaster = new THREE.Raycaster();
+    this._mouse = new THREE.Vector2();
+    this._hoveredBodyId = null;
+    this._hoverEmissives = new Map(); // mesh -> original emissive hex
+
+    // Bind event handlers (stored for cleanup on deactivate)
+    this._onPointerMove = this._handlePointerMove.bind(this);
+    this._onPointerDown = this._handlePointerDown.bind(this);
+    this._onPointerUp = this._handlePointerUp.bind(this);
+    this._pointerDownPos = new THREE.Vector2();
   }
 
   _buildBodyNameMap() {
     const { model, getMujocoName } = this.ctx;
     for (let b = 0; b < model.nbody; b++) {
       const name = getMujocoName(model.name_bodyadr, b);
-      if (name) this.bodyNameToId[name] = b;
+      if (name) {
+        this.bodyNameToId[name] = b;
+        this.bodyIdToName[b] = name;
+      }
     }
   }
 
@@ -50,14 +69,27 @@ export class ExploreMode {
     // Show initial properties
     this._showWelcomeProperties();
     this.viz.show();
+
+    // Attach 3D viewport interaction handlers
+    const canvas = this.ctx.renderer.domElement;
+    canvas.addEventListener('pointermove', this._onPointerMove);
+    canvas.addEventListener('pointerdown', this._onPointerDown);
+    canvas.addEventListener('pointerup', this._onPointerUp);
   }
 
   deactivate() {
     this.active = false;
+    this._clearHover();
     this.unfocus();
     this.viz.hide();
     const treePanel = document.getElementById('tree-panel');
     if (treePanel) treePanel.style.display = 'none';
+
+    // Remove 3D viewport interaction handlers
+    const canvas = this.ctx.renderer.domElement;
+    canvas.removeEventListener('pointermove', this._onPointerMove);
+    canvas.removeEventListener('pointerdown', this._onPointerDown);
+    canvas.removeEventListener('pointerup', this._onPointerUp);
   }
 
   onNodeClick(nodeId, nodeData) {
@@ -299,6 +331,101 @@ export class ExploreMode {
         }
       });
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3D viewport raycasting — hover highlight + click-to-select
+  // ---------------------------------------------------------------------------
+
+  /** Update normalized device coords from a pointer event. */
+  _updateMouse(event) {
+    const rect = this.ctx.renderer.domElement.getBoundingClientRect();
+    this._mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this._mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  /** Raycast and return the first structural mesh hit, or null. */
+  _raycastBody() {
+    this._raycaster.setFromCamera(this._mouse, this.ctx.camera);
+
+    // Collect all structural meshes from all bodies
+    const targets = [];
+    for (const [, group] of Object.entries(this.ctx.bodies)) {
+      group.traverse(child => {
+        if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
+          targets.push(child);
+        }
+      });
+    }
+
+    const hits = this._raycaster.intersectObjects(targets, false);
+    return hits.length > 0 ? hits[0].object : null;
+  }
+
+  /** Apply emissive highlight to all structural meshes of a body. */
+  _highlightBody(bodyId) {
+    const group = this.ctx.bodies[bodyId];
+    if (!group) return;
+    group.traverse(child => {
+      if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL && child.material?.emissive) {
+        this._hoverEmissives.set(child, child.material.emissive.getHex());
+        child.material.emissive.setHex(0x333333);
+      }
+    });
+  }
+
+  /** Remove emissive highlight from all previously highlighted meshes. */
+  _clearHover() {
+    for (const [mesh, origHex] of this._hoverEmissives) {
+      if (mesh.material?.emissive) mesh.material.emissive.setHex(origHex);
+    }
+    this._hoverEmissives.clear();
+    this._hoveredBodyId = null;
+    this.ctx.renderer.domElement.style.cursor = '';
+  }
+
+  _handlePointerMove(event) {
+    this._updateMouse(event);
+    const hit = this._raycastBody();
+    const hitBodyId = hit ? hit.bodyID : null;
+
+    if (hitBodyId === this._hoveredBodyId) return;
+
+    this._clearHover();
+    if (hitBodyId !== null && hitBodyId !== undefined) {
+      this._hoveredBodyId = hitBodyId;
+      this._highlightBody(hitBodyId);
+      this.ctx.renderer.domElement.style.cursor = 'pointer';
+    }
+  }
+
+  _handlePointerDown(event) {
+    this._pointerDownPos.set(event.clientX, event.clientY);
+  }
+
+  _handlePointerUp(event) {
+    // Only treat as click if the pointer didn't move much (not a drag/orbit)
+    const dx = event.clientX - this._pointerDownPos.x;
+    const dy = event.clientY - this._pointerDownPos.y;
+    if (dx * dx + dy * dy > 25) return; // 5px threshold
+
+    this._updateMouse(event);
+    const hit = this._raycastBody();
+
+    if (hit) {
+      const bodyId = hit.bodyID;
+      const bodyName = this.bodyIdToName[bodyId];
+      const bodyData = bodyName ? this.bodiesByName[bodyName] : null;
+      if (bodyData) {
+        const nodeId = `body:${bodyName}`;
+        if (this.tree) this.tree.setFocused(nodeId);
+        this.onNodeClick(nodeId, bodyData);
+      }
+    } else {
+      // Click on empty space — deselect
+      this.unfocus();
+      this._showWelcomeProperties();
+    }
   }
 
   update() {
