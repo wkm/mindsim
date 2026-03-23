@@ -21,6 +21,7 @@ export class ExploreMode {
     this.viz = new SemanticViz(ctx);
     this.focusedNodeId = null;
     this.focusedData = null;
+    this._isolated = false;
 
     // Index manifest data for quick lookup
     this.bodyNameToId = {};
@@ -99,12 +100,21 @@ export class ExploreMode {
   }
 
   onNodeClick(nodeId, nodeData) {
+    // If isolated and selecting a different node, restore visibility first
+    if (this._isolated) {
+      const { bodies, model } = this.ctx;
+      for (let b = 1; b < model.nbody; b++) {
+        if (bodies[b]) bodies[b].visible = true;
+      }
+      this._isolated = false;
+    }
+
     this.focusedNodeId = nodeId;
     this.focusedData = nodeData;
 
     const [type] = nodeId.split(':');
 
-    // Camera + isolate
+    // Camera + ghost dimming
     this._applyIsolation(nodeId, nodeData);
     this._focusCamera(nodeId, nodeData);
 
@@ -237,9 +247,52 @@ export class ExploreMode {
     }
   }
 
+  /** Isolate the currently focused node — hide everything else. */
+  isolateCurrent() {
+    if (!this.focusedNodeId) return;
+    const [type, ...rest] = this.focusedNodeId.split(':');
+    // Remove ghosting so isolated bodies render at full opacity
+    this.focus.unghost();
+
+    if (type === 'body') {
+      this._isolateBody(rest[0]);
+    } else if (type === 'joint' && this.focusedData) {
+      // Show parent + child bodies
+      const keep = new Set();
+      if (this.focusedData.child_body) keep.add(this.focusedData.child_body);
+      if (this.focusedData.parent_body) keep.add(this.focusedData.parent_body);
+      for (const [name, id] of Object.entries(this.bodyNameToId)) {
+        const group = this.ctx.bodies[id];
+        if (group) group.visible = keep.has(name);
+      }
+    } else if (type === 'mount' && this.focusedData) {
+      this._isolateBody(this.focusedData.parent_body || rest[0]);
+    } else {
+      return; // can't isolate assemblies etc.
+    }
+    this._isolated = true;
+    this._updateIsolateButton();
+  }
+
+  /** Restore all bodies and re-apply ghost dimming. */
+  showAll() {
+    this._showAllBodies();
+    this._isolated = false;
+    this._updateIsolateButton();
+    if (this.focusedNodeId) {
+      this._applyIsolation(this.focusedNodeId, this.focusedData);
+    }
+  }
+
+  _updateIsolateButton() {
+    const btn = document.getElementById('isolate-btn');
+    if (btn) btn.textContent = this._isolated ? 'Show All' : 'Isolate';
+  }
+
   unfocus() {
     this.focus.unghost();
     this.viz.clear();
+    if (this._isolated) this.showAll();
     this.focusedNodeId = null;
     this.focusedData = null;
     if (this.tree) this.tree.clearFocus();
@@ -311,14 +364,20 @@ export class ExploreMode {
       }
     }
 
-    // CAD steps link
+    // Actions row
+    html += '<div style="display:flex;gap:4px;margin-top:8px;">';
+    html += `<button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button>`;
     if (body.kind === 'fabricated') {
       const botName = this.manifest.bot_name;
-      html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="display:inline-block;margin-top:8px;text-decoration:none;">View ShapeScript</a>`;
+      html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="text-decoration:none;">View ShapeScript</a>`;
     }
+    html += '</div>';
 
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
+    document.getElementById('isolate-btn')?.addEventListener('click', () => {
+      if (this._isolated) this.showAll(); else this.isolateCurrent();
+    });
   }
 
   _buildJointProperties(joint) {
@@ -353,8 +412,13 @@ export class ExploreMode {
     html += `<div class="prop-chip body-chip" data-node-id="body:${joint.parent_body}">${joint.parent_body} <span style="color:#5C7080;">(parent)</span></div>`;
     html += `<div class="prop-chip body-chip" data-node-id="body:${joint.child_body}">${joint.child_body} <span style="color:#5C7080;">(child)</span></div>`;
 
+    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button></div>`;
+
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
+    document.getElementById('isolate-btn')?.addEventListener('click', () => {
+      if (this._isolated) this.showAll(); else this.isolateCurrent();
+    });
   }
 
   _buildMountProperties(mount) {
@@ -392,7 +456,12 @@ export class ExploreMode {
       html += '</div>';
     }
 
+    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button></div>`;
+
     panel.innerHTML = html;
+    document.getElementById('isolate-btn')?.addEventListener('click', () => {
+      if (this._isolated) this.showAll(); else this.isolateCurrent();
+    });
   }
 
   _buildPartProperties(part) {
