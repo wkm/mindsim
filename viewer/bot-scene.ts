@@ -10,8 +10,17 @@
  */
 
 // ---------------------------------------------------------------------------
-// State interfaces
+// Constants
 // ---------------------------------------------------------------------------
+
+/** Opacity for ghosted (dimmed) bodies. */
+export const GHOST_OPACITY = 0.06;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type ViewerMode = 'explore' | 'joint' | 'assembly' | 'ik';
 
 export interface BodyState {
   id: number;
@@ -22,35 +31,13 @@ export interface BodyState {
   selected: boolean;
 }
 
-export interface SectionState {
-  enabled: boolean;
-  axis: 'x' | 'y' | 'z';
-  fraction: number;
-  flipped: boolean;
-}
-
-export interface AssemblyState {
-  active: boolean;
-  step: number;
-  stepProgress: number;
-  totalSteps: number;
-}
-
-export interface GeomState {
-  visible: boolean;
-  opacity: number;
-}
-
 // ---------------------------------------------------------------------------
 // BotScene
 // ---------------------------------------------------------------------------
 
 export class BotScene {
   bodies: BodyState[];
-  section: SectionState;
-  assembly: AssemblyState;
-  geoms: Map<string, GeomState>;
-  activeMode: string;
+  activeMode: ViewerMode;
 
   /** Which body IDs are isolated (empty = no isolation). */
   private _isolatedIds: Set<number>;
@@ -68,21 +55,6 @@ export class BotScene {
       });
     }
 
-    this.section = {
-      enabled: false,
-      axis: 'y',
-      fraction: 0.5,
-      flipped: false,
-    };
-
-    this.assembly = {
-      active: false,
-      step: 0,
-      stepProgress: 1.0,
-      totalSteps: 0,
-    };
-
-    this.geoms = new Map();
     this.activeMode = 'explore';
     this._isolatedIds = new Set();
   }
@@ -120,13 +92,8 @@ export class BotScene {
   isolate(bodyId: number): void {
     this._isolatedIds.clear();
     this._isolatedIds.add(bodyId);
-    // Body 0 stays structurally visible but its meshes are hidden
     for (const body of this.bodies) {
-      if (body.id === bodyId) {
-        body.visible = true;
-      } else {
-        body.visible = false;
-      }
+      body.visible = body.id === bodyId;
     }
     // Body 0 group must stay visible for children to render
     if (this.bodies[0]) this.bodies[0].visible = true;
@@ -187,7 +154,7 @@ export class BotScene {
    * Compute the target opacity for a body's meshes.
    *
    * - Invisible → 0
-   * - Ghosted → 0.06
+   * - Ghosted → GHOST_OPACITY
    * - Normal → 1.0
    *
    * Body 0 during isolation: visible=true but not in isolatedIds
@@ -204,7 +171,7 @@ export class BotScene {
     }
 
     if (!body.visible) return 0;
-    if (body.ghosted) return 0.06;
+    if (body.ghosted) return GHOST_OPACITY;
     return 1.0;
   }
 

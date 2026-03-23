@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BotScene } from '../bot-scene.ts';
+import { BotScene, GHOST_OPACITY } from '../bot-scene.ts';
 
 const BODY_NAMES = ['world', 'base', 'turntable', 'upper_arm', 'forearm', 'hand'];
 
@@ -32,11 +32,9 @@ describe('BotScene constructor', () => {
     assert.equal(scene.bodies[3].name, 'upper_arm');
   });
 
-  it('initializes section state', () => {
+  it('initializes activeMode', () => {
     const scene = createScene();
-    assert.equal(scene.section.enabled, false);
-    assert.equal(scene.section.axis, 'y');
-    assert.equal(scene.section.fraction, 0.5);
+    assert.equal(scene.activeMode, 'explore');
   });
 });
 
@@ -132,8 +130,8 @@ describe('BotScene.bodyOpacity', () => {
   it('ghosted body → 0.06', () => {
     const scene = createScene();
     scene.ghostAllExcept([2]);
-    assert.equal(scene.bodyOpacity(3), 0.06);
-    assert.equal(scene.bodyOpacity(0), 0.06);
+    assert.equal(scene.bodyOpacity(3), GHOST_OPACITY);
+    assert.equal(scene.bodyOpacity(0), GHOST_OPACITY);
   });
 
   it('normal body → 1.0', () => {

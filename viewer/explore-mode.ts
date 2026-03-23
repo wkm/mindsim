@@ -20,7 +20,8 @@ export class ExploreMode {
   viz: any;
   focusedNodeId: any;
   focusedData: any;
-  _isolated: boolean;
+  /** Cached raycast targets — invalidated when visibility changes. */
+  _raycastTargets: any[] | null;
   bodyNameToId: any;
   bodyIdToName: any;
   bodiesByName: any;
@@ -41,7 +42,7 @@ export class ExploreMode {
     this.viz = new SemanticViz(ctx);
     this.focusedNodeId = null;
     this.focusedData = null;
-    this._isolated = false;
+    this._raycastTargets = null;
 
     // Index manifest data for quick lookup
     this.bodyNameToId = {};
@@ -107,7 +108,12 @@ export class ExploreMode {
 
   deactivate() {
     this.active = false;
-    this._clearHover();
+    // Clear hover state
+    this.ctx.botScene.setHovered(null);
+    this.ctx.syncScene();
+    this._hoveredBodyId = null;
+    this.ctx.renderer.domElement.style.cursor = '';
+
     this.unfocus();
     this.viz.hide();
     const treePanel = document.getElementById('tree-panel');
@@ -122,10 +128,9 @@ export class ExploreMode {
 
   onNodeClick(nodeId, nodeData) {
     // If isolated and selecting a different node, restore visibility first
-    if (this._isolated) {
+    if (this.ctx.botScene.isIsolated()) {
       this.ctx.botScene.showAll();
       this.ctx.syncScene();
-      this._isolated = false;
     }
 
     this.focusedNodeId = nodeId;
@@ -253,6 +258,7 @@ export class ExploreMode {
     if (bodyId === undefined) return;
     this.ctx.botScene.setBodyVisible(bodyId, visible);
     this.ctx.syncScene();
+    this._invalidateRaycastCache();
     this._syncTreeVisualState();
   }
 
@@ -262,6 +268,7 @@ export class ExploreMode {
     if (bodyId === undefined) return;
     this.ctx.botScene.isolate(bodyId);
     this.ctx.syncScene();
+    this._invalidateRaycastCache();
     this._syncTreeVisualState();
   }
 
@@ -269,6 +276,7 @@ export class ExploreMode {
   _showAllBodies() {
     this.ctx.botScene.showAll();
     this.ctx.syncScene();
+    this._invalidateRaycastCache();
     this._syncTreeVisualState();
   }
 
@@ -303,7 +311,6 @@ export class ExploreMode {
       return; // can't isolate assemblies etc.
     }
     this.ctx.syncScene();
-    this._isolated = true;
     this._updateIsolateButton();
     this._syncTreeVisualState();
   }
@@ -311,18 +318,20 @@ export class ExploreMode {
   /** Restore all bodies and re-apply ghost dimming. */
   showAll() {
     this.ctx.botScene.showAll();
-    this.ctx.syncScene();
-    this._isolated = false;
-    this._updateIsolateButton();
-    this._syncTreeVisualState();
+    // _applyIsolation will call syncScene(), so skip the sync here if re-applying
     if (this.focusedNodeId) {
       this._applyIsolation(this.focusedNodeId, this.focusedData);
+    } else {
+      this.ctx.syncScene();
     }
+    this._invalidateRaycastCache();
+    this._updateIsolateButton();
+    this._syncTreeVisualState();
   }
 
   _updateIsolateButton() {
     const btn = document.getElementById('isolate-btn');
-    if (btn) btn.textContent = this._isolated ? 'Show All' : 'Isolate';
+    if (btn) btn.textContent = this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate';
   }
 
   /** Push BotScene visibility state to the component tree for DOM styling. */
@@ -357,7 +366,7 @@ export class ExploreMode {
     this.ctx.botScene.unghost();
     this.ctx.syncScene();
     this.viz.clear();
-    if (this._isolated) this.showAll();
+    if (this.ctx.botScene.isIsolated()) this.showAll();
     this.focusedNodeId = null;
     this.focusedData = null;
     if (this.tree) this.tree.clearFocus();
@@ -433,7 +442,7 @@ export class ExploreMode {
 
     // Actions row
     html += '<div style="display:flex;gap:4px;margin-top:8px;">';
-    html += `<button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button>`;
+    html += `<button id="isolate-btn" class="btn btn-sm">${this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate'}</button>`;
     if (body.kind === 'fabricated') {
       const botName = this.manifest.bot_name;
       html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="text-decoration:none;">View ShapeScript</a>`;
@@ -443,7 +452,7 @@ export class ExploreMode {
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll();
+      if (this.ctx.botScene.isIsolated()) this.showAll();
       else this.isolateCurrent();
     });
   }
@@ -480,12 +489,12 @@ export class ExploreMode {
     html += `<div class="prop-chip body-chip" data-node-id="body:${joint.parent_body}">${joint.parent_body} <span style="color:#5C7080;">(parent)</span></div>`;
     html += `<div class="prop-chip body-chip" data-node-id="body:${joint.child_body}">${joint.child_body} <span style="color:#5C7080;">(child)</span></div>`;
 
-    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button></div>`;
+    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate'}</button></div>`;
 
     panel.innerHTML = html;
     this._bindPropertyChipClicks(panel);
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll();
+      if (this.ctx.botScene.isIsolated()) this.showAll();
       else this.isolateCurrent();
     });
   }
@@ -528,11 +537,11 @@ export class ExploreMode {
       html += '</div>';
     }
 
-    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this._isolated ? 'Show All' : 'Isolate'}</button></div>`;
+    html += `<div style="margin-top:8px;"><button id="isolate-btn" class="btn btn-sm">${this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate'}</button></div>`;
 
     panel.innerHTML = html;
     document.getElementById('isolate-btn')?.addEventListener('click', () => {
-      if (this._isolated) this.showAll();
+      if (this.ctx.botScene.isIsolated()) this.showAll();
       else this.isolateCurrent();
     });
   }
@@ -672,36 +681,31 @@ export class ExploreMode {
     this._mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
+  /** Build/return cached list of structural meshes for raycasting. */
+  _getRaycastTargets(): any[] {
+    if (!this._raycastTargets) {
+      this._raycastTargets = [];
+      for (const [, group] of Object.entries(this.ctx.bodies) as [string, any][]) {
+        group.traverse((child: any) => {
+          if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
+            this._raycastTargets!.push(child);
+          }
+        });
+      }
+    }
+    return this._raycastTargets;
+  }
+
+  /** Invalidate cached raycast targets (call when visibility changes). */
+  _invalidateRaycastCache() {
+    this._raycastTargets = null;
+  }
+
   /** Raycast and return the first structural mesh hit, or null. */
   _raycastBody() {
     this._raycaster.setFromCamera(this._mouse, this.ctx.camera);
-
-    // Collect all structural meshes from all bodies
-    const targets = [];
-    for (const [, group] of Object.entries(this.ctx.bodies) as [string, any][]) {
-      group.traverse((child: any) => {
-        if (child.isMesh && child.geomGroup === GEOM_GROUP_STRUCTURAL) {
-          targets.push(child);
-        }
-      });
-    }
-
-    const hits = this._raycaster.intersectObjects(targets, false);
+    const hits = this._raycaster.intersectObjects(this._getRaycastTargets(), false);
     return hits.length > 0 ? hits[0].object : null;
-  }
-
-  /** Apply emissive highlight to a body via BotScene. */
-  _highlightBody(bodyId) {
-    this.ctx.botScene.setHovered(bodyId);
-    this.ctx.syncScene();
-  }
-
-  /** Remove emissive highlight via BotScene. */
-  _clearHover() {
-    this.ctx.botScene.setHovered(null);
-    this.ctx.syncScene();
-    this._hoveredBodyId = null;
-    this.ctx.renderer.domElement.style.cursor = '';
   }
 
   _handlePointerMove(event) {
@@ -711,12 +715,11 @@ export class ExploreMode {
 
     if (hitBodyId === this._hoveredBodyId) return;
 
-    this._clearHover();
-    if (hitBodyId !== null && hitBodyId !== undefined) {
-      this._hoveredBodyId = hitBodyId;
-      this._highlightBody(hitBodyId);
-      this.ctx.renderer.domElement.style.cursor = 'pointer';
-    }
+    // Batch: set new hover target in one mutation + one sync
+    this.ctx.botScene.setHovered(hitBodyId);
+    this.ctx.syncScene();
+    this._hoveredBodyId = hitBodyId;
+    this.ctx.renderer.domElement.style.cursor = hitBodyId != null ? 'pointer' : '';
   }
 
   _handlePointerDown(event) {
