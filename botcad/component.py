@@ -89,11 +89,6 @@ class Component:
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
     is_wheel: bool = False  # True for wheel components
 
-    @property
-    def color(self) -> RGBA:
-        """Backward-compatible color accessor."""
-        return self.appearance.color
-
 
 @dataclass(frozen=True)
 class BatterySpec(Component):

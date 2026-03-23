@@ -36,7 +36,7 @@ class Color:
 
     @property
     def rgba(self) -> tuple[float, float, float, float]:
-        """Plain (r, g, b, a) tuple for component.color fields."""
+        """Plain (r, g, b, a) tuple for Appearance.color fields."""
         return (self.r, self.g, self.b, self.a)
 
     def with_alpha(self, a: float) -> Color:

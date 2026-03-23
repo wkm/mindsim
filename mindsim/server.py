@@ -179,7 +179,7 @@ def _component_to_json(comp, category: str) -> dict:
         "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
         "mass_g": round(comp.mass * 1000, 1),
         "is_servo": isinstance(comp, ServoSpec),
-        "color": list(comp.color),
+        "color": list(comp.appearance.color),
         "layers": _component_layers(comp),
     }
     if isinstance(comp, ServoSpec):
@@ -238,7 +238,7 @@ def _layer_color(comp, layer_id: str) -> tuple[int, int, int]:
     """Return RGB color for a component layer."""
     if layer_id in _LAYER_COLORS:
         return _LAYER_COLORS[layer_id]
-    r, g, b = comp.color
+    r, g, b = comp.appearance.color[:3]
     return (int(r * 255), int(g * 255), int(b * 255))
 
 
