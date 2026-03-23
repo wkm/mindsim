@@ -18,5 +18,5 @@
     "types": ["three"]
   },
   "include": ["viewer/**/*.ts"],
-  "exclude": ["node_modules", "viewer/.cdn_cache"]
+  "exclude": ["node_modules", "viewer/.cdn_cache", "viewer/tests/*.test.ts"]
 }

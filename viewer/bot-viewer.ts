@@ -10,10 +10,12 @@
 
 import * as THREE from 'three';
 import { AssemblyMode } from './assembly-mode.ts';
+import { BotScene } from './bot-scene.ts';
 import { ExploreMode } from './explore-mode.ts';
 import { FocusController } from './focus-controller.ts';
 import { IKMode } from './ik-mode.ts';
 import { JointMode } from './joint-mode.ts';
+import { sync } from './scene-sync.ts';
 import { SectionCutter } from './section-cutter.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
@@ -427,6 +429,18 @@ export async function initBotViewer(botName: string) {
 
     const manifest = await fetchManifest();
 
+    // Build body name list for the data model
+    const bodyNames: string[] = [];
+    for (let b = 0; b < model.nbody; b++) {
+      bodyNames.push(getMujocoName(model.name_bodyadr, b) || `body_${b}`);
+    }
+    const botScene = new BotScene(model.nbody, bodyNames);
+
+    /** Apply BotScene state to Three.js. Call after every BotScene mutation. */
+    function syncScene() {
+      sync(botScene, bodies);
+    }
+
     const ctx = {
       mujoco,
       model,
@@ -444,6 +458,8 @@ export async function initBotViewer(botName: string) {
       toMujocoPos,
       getMujocoName,
       botName,
+      botScene,
+      syncScene,
     };
 
     if (manifest) {
