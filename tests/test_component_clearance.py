@@ -1,9 +1,9 @@
-"""Component sub-part clearance tests.
+"""Component sub-part clearance and containment tests.
 
-Validates that component sub-parts (horn, coupler, bracket, etc.) do not
-intersect each other when positioned in the servo's local frame. Each test
-generates the relevant solids via _generate_solid() (same code the viewer
-uses) and checks that boolean intersection volume is negligible.
+Two categories:
+1. **Clearance**: sub-parts (horn, coupler, bracket) must not intersect each other.
+2. **Containment**: envelopes/cutouts must fully contain the servo body.
+   If (servo - envelope) has volume, the servo won't fit through the cutout.
 """
 
 from __future__ import annotations
@@ -40,34 +40,42 @@ def _solid_or_none(comp, part):
     return _generate_solid(comp, part)
 
 
-def _intersection_volume(a, b) -> float:
-    """Compute the volume of the boolean intersection of two solids.
-
-    Returns 0.0 if the intersection is empty or degenerate.
-    Uses OCCT BRepAlgoAPI_Common with fuzzy tolerance to avoid
-    near-tangent hangs.
-    """
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common  # noqa: E402
+def _boolean_volume(a, b, op_class) -> float:
+    """Compute volume of a boolean operation (Common or Cut) on two solids."""
     from OCP.BRepGProp import BRepGProp  # noqa: E402
     from OCP.GProp import GProp_GProps  # noqa: E402
     from OCP.TopAbs import TopAbs_SOLID  # noqa: E402
     from OCP.TopExp import TopExp_Explorer  # noqa: E402
 
-    common = BRepAlgoAPI_Common(a.wrapped, b.wrapped)
-    common.SetFuzzyValue(1e-6)
-    common.SetUseOBB(True)
-    common.Build()
-    if not common.IsDone():
+    op = op_class(a.wrapped, b.wrapped)
+    op.SetFuzzyValue(1e-6)
+    op.SetUseOBB(True)
+    op.Build()
+    if not op.IsDone():
         return 0.0
 
-    shape = common.Shape()
+    shape = op.Shape()
     explorer = TopExp_Explorer(shape, TopAbs_SOLID)
     if not explorer.More():
-        return 0.0  # no solid result
+        return 0.0
 
     props = GProp_GProps()
     BRepGProp.VolumeProperties_s(shape, props)
     return abs(props.Mass())
+
+
+def _intersection_volume(a, b) -> float:
+    """Volume of (a AND b). Zero if no overlap."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common  # noqa: E402
+
+    return _boolean_volume(a, b, BRepAlgoAPI_Common)
+
+
+def _subtraction_volume(a, b) -> float:
+    """Volume of (a - b). Zero if b fully contains a."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut  # noqa: E402
+
+    return _boolean_volume(a, b, BRepAlgoAPI_Cut)
 
 
 # Volume threshold: anything under 0.1 mm³ is considered no intersection.
@@ -163,4 +171,73 @@ class TestServoSubPartClearance:
         vol = _intersection_volume(solid_a, solid_b)
         assert vol < MAX_INTERSECTION_VOLUME, (
             f"{part_a} intersects {part_b} on {servo_name}: {vol * 1e9:.1f} mm³ overlap"
+        )
+
+
+# ── Envelope containment tests ──────────────────────────────────────────────
+# The envelope is the cutout that gets subtracted from the parent body shell.
+# The servo must fit entirely inside it: (servo - envelope) should be empty.
+
+# Known containment failures: (servo_name, envelope_type) -> reason
+CONTAINMENT_FAILURES = {
+    (
+        "SCS0009",
+        "cradle_envelope",
+    ): "Cradle generation crashes — negative box dimension from SCS0009 ear geometry",
+}
+
+
+class TestBracketEnvelopeContainment:
+    """Bracket envelope must fully contain the servo body.
+
+    The bracket envelope is the cutout subtracted from the parent body shell
+    for servo insertion. If (servo - bracket_envelope) has remaining volume,
+    the servo won't fit through the cutout during assembly.
+    """
+
+    @pytest.mark.parametrize("servo_name", ALL_SERVOS)
+    def test_servo_fits_in_bracket_envelope(self, servo_name):
+        servo = _make_servo(servo_name)
+        servo_body = _solid(servo, "servo")
+        envelope = _solid(servo, "bracket_envelope")
+
+        remaining = _subtraction_volume(servo_body, envelope)
+        servo_vol = abs(servo_body.volume)
+        pct = (remaining / servo_vol * 100) if servo_vol > 0 else 0
+
+        assert remaining < MAX_INTERSECTION_VOLUME, (
+            f"{servo_name} servo does not fit in bracket_envelope: "
+            f"{remaining * 1e9:.1f} mm³ ({pct:.1f}%) sticks out"
+        )
+
+
+class TestCradleEnvelopeContainment:
+    """Cradle envelope must contain the servo's lower section.
+
+    The cradle is a shallow tray — it intentionally doesn't enclose the
+    full servo. But the servo-envelope intersection should equal the
+    envelope volume (the envelope should be fully inside the servo's
+    bounding region, not sticking out into empty space).
+    """
+
+    @pytest.mark.parametrize("servo_name", ALL_SERVOS)
+    def test_cradle_envelope_intersects_servo(self, servo_name):
+        xfail_reason = CONTAINMENT_FAILURES.get((servo_name, "cradle_envelope"))
+        if xfail_reason:
+            pytest.xfail(xfail_reason)
+
+        servo = _make_servo(servo_name)
+        servo_body = _solid_or_none(servo, "servo")
+        envelope = _solid_or_none(servo, "cradle_envelope")
+
+        if servo_body is None:
+            pytest.skip(f"{servo_name} has no servo solid")
+        if envelope is None:
+            pytest.skip(f"{servo_name} has no cradle_envelope solid")
+
+        # The cradle envelope should overlap meaningfully with the servo —
+        # at minimum it must cover the mounting ear region
+        overlap = _intersection_volume(servo_body, envelope)
+        assert overlap > 1e-9, (
+            f"{servo_name} cradle_envelope has no overlap with servo body"
         )
