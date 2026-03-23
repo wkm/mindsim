@@ -54,8 +54,10 @@ def _check_clearance(placed_a, placed_b) -> tuple[bool, float, float]:
         int_vol = sum(abs(s.volume) for s in solids) if solids else 0.0
         if hasattr(common, "volume") and not solids:
             int_vol = abs(common.volume) if common.volume else 0.0
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning("Boolean intersection failed: %s", e)
 
     if int_vol > 1e-15:
         return True, int_vol, 0.0

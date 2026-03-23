@@ -80,7 +80,7 @@ def battery_solid(spec: BatterySpec):
     label = Box(
         label_w, label_l, label_t, align=(Align.CENTER, Align.CENTER, Align.MIN)
     )
-    label = label.locate(Location((0, 0, h / 2 - 0.0001)))  # slightly embedded
+    label = label.moved(Location((0, 0, h / 2 - 0.0001)))  # slightly embedded
 
     # 3. Cable exit protrusions (small blocks where wires come out)
     exit_w = 0.012
@@ -90,7 +90,7 @@ def battery_solid(spec: BatterySpec):
     exit_block = Box(
         exit_l, exit_w, exit_h, align=(Align.MIN, Align.CENTER, Align.CENTER)
     )
-    exit_block = exit_block.locate(Location((w / 2 - 0.001, 0, 0)))  # slightly embedded
+    exit_block = exit_block.moved(Location((w / 2 - 0.001, 0, 0)))  # slightly embedded
 
     # Colors
     body.color = COLOR_POWER_BATTERY.rgb

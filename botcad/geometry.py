@@ -230,5 +230,10 @@ def parallel_axis_inertia(
 def _normalize(v: Vec3) -> Vec3:
     mag = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
     if mag < 1e-12:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Normalizing near-zero vector %s, defaulting to Z-up", v
+        )
         return (0.0, 0.0, 1.0)
     return (v[0] / mag, v[1] / mag, v[2] / mag)

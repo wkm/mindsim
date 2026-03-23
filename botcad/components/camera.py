@@ -81,7 +81,7 @@ def camera_solid(spec: CameraSpec):
     # 2. Mounting Holes (Subtract from PCB)
     for mp in spec.mounting_points:
         hole = Cylinder(mp.diameter / 2, pcb_thick + 0.001, align=C)
-        hole = hole.locate(Location(mp.pos))
+        hole = hole.moved(Location(mp.pos))
         pcb = pcb - hole
 
     # 3. Lens Module (Centered at (0, 2.5mm) on the PCB)
@@ -93,7 +93,7 @@ def camera_solid(spec: CameraSpec):
     lens_base = Box(
         base_size, base_size, base_height, align=(Align.CENTER, Align.CENTER, Align.MIN)
     )
-    lens_base = lens_base.locate(Location((0, lens_y_offset, pcb_thick / 2)))
+    lens_base = lens_base.moved(Location((0, lens_y_offset, pcb_thick / 2)))
 
     # Lens barrel
     barrel_r = 0.00325
@@ -101,7 +101,7 @@ def camera_solid(spec: CameraSpec):
     lens_barrel = Cylinder(
         barrel_r, barrel_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
     )
-    lens_barrel = lens_barrel.locate(
+    lens_barrel = lens_barrel.moved(
         Location((0, lens_y_offset, pcb_thick / 2 + base_height))
     )
 
@@ -110,7 +110,7 @@ def camera_solid(spec: CameraSpec):
     conn_h = 0.005
     conn_t = 0.002
     connector = Box(conn_w, conn_t, conn_h, align=(Align.CENTER, Align.MAX, Align.MIN))
-    connector = connector.locate(Location((0, -pcb_h / 2, pcb_thick / 2)))
+    connector = connector.moved(Location((0, -pcb_h / 2, pcb_thick / 2)))
 
     # 5. Composite Solid
     pcb.color = COLOR_ELECTRONICS_DARK.rgb

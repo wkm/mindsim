@@ -101,21 +101,21 @@ def raspberry_pi_zero_solid():
     ]
 
     for loc in holes:
-        cyl = Cylinder(hole_radius, hole_depth, align=C).locate(loc)
+        cyl = Cylinder(hole_radius, hole_depth, align=C).moved(loc)
         pcb = pcb - cyl
 
     # Add component volumes to reach the 5mm bounding box height and provide geometric context
     # HDMI/Power/USB ports on the bottom edge (approximate)
     ports_block = Box(0.040, 0.007, 0.003, align=C)
-    ports_block = ports_block.locate(Location((0, -0.0115, 0.002)))
+    ports_block = ports_block.moved(Location((0, -0.0115, 0.002)))
 
     # GPIO header on the top edge
     gpio_block = Box(0.051, 0.005, 0.003, align=C)
-    gpio_block = gpio_block.locate(Location((0, 0.0125, 0.002)))
+    gpio_block = gpio_block.moved(Location((0, 0.0125, 0.002)))
 
     # Main SoC
     soc_block = Box(0.012, 0.012, 0.0015, align=C)
-    soc_block = soc_block.locate(Location((0, 0, 0.0015)))
+    soc_block = soc_block.moved(Location((0, 0, 0.0015)))
 
     # Union all the parts
     solid = pcb + ports_block + gpio_block + soc_block
