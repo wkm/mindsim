@@ -360,6 +360,24 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
         pocket = prog.locate(pocket, pos=(0, 0, pocket_center_z))
         shell = prog.cut(outer, pocket)
 
+        # -- Mounting flange clearance (below body bottom) --
+        # Servo mounting flanges protrude below the body bottom on ±Y sides.
+        # The pocket only clears the main body cavity; we must also clear
+        # the flange volume so the servo can drop in without interference.
+        if servo.mounting_ears:
+            min_ear_z = min(ear.pos[2] for ear in servo.mounting_ears)
+            flange_top_z = -body_z / 2 + tol
+            flange_bot_z = min_ear_z - tol - 0.001
+            flange_h = flange_top_z - flange_bot_z
+            flange_cz = (flange_top_z + flange_bot_z) / 2
+            flange_lx = body_x + 2 * tol
+            flange_ly = body_y + 2 * tol
+            flange_cut = prog.box(
+                flange_lx, flange_ly, flange_h, tag="flange_clearance"
+            )
+            flange_cut = prog.locate(flange_cut, pos=(0, 0, flange_cz))
+            shell = prog.cut(shell, flange_cut)
+
         # -- Horn clearance hole (+Z face) --
         horn_radius = 0.011
         params = horn_disc_params(servo)
@@ -804,6 +822,26 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
     # -- Key Z coordinates (in shaft frame) --
     front_z = front_holes[0][2]
     rear_z = rear_holes[0][2]
+
+    # Ensure front plate clears shaft boss and horn disc.  The boss protrudes
+    # above the body top face, and the horn disc sits on top of the boss.
+    # In shaft-centered frame the top of the horn disc is at
+    # (boss_height + horn_thickness).  The coupler plate must sit above that.
+    _horn_params = horn_disc_params(servo)
+    if _horn_params is not None:
+        horn_top_shaft = (_horn_params.center_z - sz) + _horn_params.thickness / 2
+        front_z = max(front_z, horn_top_shaft + tol)
+    elif servo.shaft_boss_height > 0:
+        front_z = max(front_z, servo.shaft_boss_height + tol)
+
+    # Ensure rear plate clears mounting flanges.  Flanges protrude below the
+    # body bottom face.  In shaft frame, the bottom of the servo's lowest
+    # feature (ear/flange) determines the clearance boundary.
+    if servo.mounting_ears:
+        min_ear_z_servo = min(ear.pos[2] for ear in servo.mounting_ears)
+        max_ear_d = max(ear.diameter for ear in servo.mounting_ears)
+        lowest_z_shaft = (min_ear_z_servo - max_ear_d / 2 - sz) - tol
+        rear_z = min(rear_z, lowest_z_shaft)
 
     # -- Plate extent in XY --
     body_plus_x = body_x / 2 - sx

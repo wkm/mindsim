@@ -85,32 +85,7 @@ MAX_INTERSECTION_VOLUME = 1e-10
 ALL_SERVOS = ["STS3215", "STS3250", "SCS0009"]
 
 # Known failures: (servo_name, part_a, part_b) -> reason
-KNOWN_FAILURES = {
-    (
-        "STS3215",
-        "coupler",
-        "servo",
-    ): "Coupler Z-positioning in viewer needs shaft_offset Z + boss clearance",
-    (
-        "STS3215",
-        "bracket",
-        "servo",
-    ): "660mm³ overlap — bracket boss clearance hole doesn't fully clear servo shaft boss",
-    (
-        "STS3250",
-        "coupler",
-        "servo",
-    ): "Coupler Z-positioning in viewer needs shaft_offset Z + boss clearance (same geometry as STS3215)",
-    (
-        "STS3250",
-        "bracket",
-        "servo",
-    ): "Same bracket clearance issue as STS3215 (identical form factor)",
-    (
-        "SCS0009",
-        "coupler",
-        "servo",
-    ): "1.0 mm³ overlap — coupler intersects SCS0009 servo body",
+KNOWN_FAILURES: dict[tuple[str, str, str], str] = {
     (
         "SCS0009",
         "cradle",
