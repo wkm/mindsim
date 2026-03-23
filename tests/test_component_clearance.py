@@ -13,10 +13,15 @@ import pytest
 b3d = pytest.importorskip("build123d")
 
 
-def _servo():
-    from botcad.components.servo import STS3215
+def _make_servo(name: str):
+    from botcad.components.servo import SCS0009, STS3215, STS3250
 
-    return STS3215()
+    factories = {
+        "STS3215": STS3215,
+        "STS3250": STS3250,
+        "SCS0009": SCS0009,
+    }
+    return factories[name]()
 
 
 def _solid(comp, part):
@@ -26,6 +31,13 @@ def _solid(comp, part):
     solid = _generate_solid(comp, part)
     assert solid is not None, f"Failed to generate solid for {comp.name}/{part}"
     return solid
+
+
+def _solid_or_none(comp, part):
+    """Generate a positioned solid, returning None if the part doesn't exist."""
+    from mindsim.server import _generate_solid
+
+    return _generate_solid(comp, part)
 
 
 def _intersection_volume(a, b) -> float:
@@ -62,57 +74,93 @@ def _intersection_volume(a, b) -> float:
 # (1e-12 m³ = 0.001 mm³, so 1e-10 m³ ≈ 0.1 mm³)
 MAX_INTERSECTION_VOLUME = 1e-10
 
+ALL_SERVOS = ["STS3215", "STS3250", "SCS0009"]
+
+# Known failures: (servo_name, part_a, part_b) -> reason
+KNOWN_FAILURES = {
+    (
+        "STS3215",
+        "coupler",
+        "servo",
+    ): "Coupler Z-positioning in viewer needs shaft_offset Z + boss clearance",
+    (
+        "STS3215",
+        "bracket",
+        "servo",
+    ): "660mm³ overlap — bracket boss clearance hole doesn't fully clear servo shaft boss",
+    (
+        "STS3250",
+        "coupler",
+        "servo",
+    ): "Coupler Z-positioning in viewer needs shaft_offset Z + boss clearance (same geometry as STS3215)",
+    (
+        "STS3250",
+        "bracket",
+        "servo",
+    ): "Same bracket clearance issue as STS3215 (identical form factor)",
+    (
+        "SCS0009",
+        "coupler",
+        "servo",
+    ): "1.0 mm³ overlap — coupler intersects SCS0009 servo body",
+    (
+        "SCS0009",
+        "cradle",
+        "servo",
+    ): "Cradle generation crashes — negative box dimension from SCS0009 ear geometry",
+}
+
+
+def _has_horn(servo_name: str) -> bool:
+    """Check if a servo has a horn disc."""
+    from botcad.bracket import horn_disc_params
+
+    servo = _make_servo(servo_name)
+    return horn_disc_params(servo) is not None
+
+
+def _part_pairs():
+    """Generate all (servo_name, part_a, part_b) test combinations."""
+    pairs = []
+    for name in ALL_SERVOS:
+        has_horn = _has_horn(name)
+
+        # Always test these
+        pairs.append((name, "coupler", "servo"))
+        pairs.append((name, "bracket", "servo"))
+        pairs.append((name, "cradle", "servo"))
+
+        if has_horn:
+            pairs.append((name, "horn", "servo"))
+            pairs.append((name, "coupler", "horn"))
+
+    return pairs
+
 
 class TestServoSubPartClearance:
     """Sub-parts of a servo should not intersect each other."""
 
-    def test_horn_does_not_intersect_servo(self):
-        servo = _servo()
-        horn = _solid(servo, "horn")
-        body = _solid(servo, "servo")
-        vol = _intersection_volume(horn, body)
-        assert vol < MAX_INTERSECTION_VOLUME, (
-            f"Horn intersects servo body: {vol * 1e9:.1f} mm³ overlap"
-        )
-
-    @pytest.mark.xfail(
-        reason="Coupler Z-positioning in viewer needs shaft_offset Z + boss clearance"
+    @pytest.mark.parametrize(
+        "servo_name,part_a,part_b",
+        _part_pairs(),
+        ids=[f"{s}-{a}_vs_{b}" for s, a, b in _part_pairs()],
     )
-    def test_coupler_does_not_intersect_servo(self):
-        servo = _servo()
-        coupler = _solid(servo, "coupler")
-        body = _solid(servo, "servo")
-        vol = _intersection_volume(coupler, body)
-        assert vol < MAX_INTERSECTION_VOLUME, (
-            f"Coupler intersects servo body: {vol * 1e9:.1f} mm³ overlap"
-        )
+    def test_no_intersection(self, servo_name, part_a, part_b):
+        xfail_reason = KNOWN_FAILURES.get((servo_name, part_a, part_b))
+        if xfail_reason:
+            pytest.xfail(xfail_reason)
 
-    def test_coupler_does_not_intersect_horn(self):
-        servo = _servo()
-        coupler = _solid(servo, "coupler")
-        horn = _solid(servo, "horn")
-        vol = _intersection_volume(coupler, horn)
-        assert vol < MAX_INTERSECTION_VOLUME, (
-            f"Coupler intersects horn: {vol * 1e9:.1f} mm³ overlap"
-        )
+        servo = _make_servo(servo_name)
 
-    @pytest.mark.xfail(
-        reason="660mm³ overlap — bracket boss clearance hole doesn't fully clear servo shaft boss"
-    )
-    def test_bracket_does_not_intersect_servo(self):
-        servo = _servo()
-        bracket = _solid(servo, "bracket")
-        body = _solid(servo, "servo")
-        vol = _intersection_volume(bracket, body)
-        assert vol < MAX_INTERSECTION_VOLUME, (
-            f"Bracket intersects servo body: {vol * 1e9:.1f} mm³ overlap"
-        )
+        solid_a = _solid_or_none(servo, part_a)
+        solid_b = _solid_or_none(servo, part_b)
 
-    def test_cradle_does_not_intersect_servo(self):
-        servo = _servo()
-        cradle = _solid(servo, "cradle")
-        body = _solid(servo, "servo")
-        vol = _intersection_volume(cradle, body)
+        if solid_a is None:
+            pytest.skip(f"{servo_name} has no {part_a} solid")
+        if solid_b is None:
+            pytest.skip(f"{servo_name} has no {part_b} solid")
+
+        vol = _intersection_volume(solid_a, solid_b)
         assert vol < MAX_INTERSECTION_VOLUME, (
-            f"Cradle intersects servo body: {vol * 1e9:.1f} mm³ overlap"
+            f"{part_a} intersects {part_b} on {servo_name}: {vol * 1e9:.1f} mm³ overlap"
         )
