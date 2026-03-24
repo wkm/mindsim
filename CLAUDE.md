@@ -41,14 +41,13 @@ make validate
 The CAD pipeline uses ShapeScript, an intermediate representation between parametric design code and build123d/OCCT. It enables caching, swappable backends, and step-by-step visual debugging.
 
 ```bash
-uv run mjpython main.py view --bot wheeler_arm              # Uses ShapeScript by default
+uv run mjpython main.py view --bot wheeler_arm              # Uses ShapeScript
 uv run python main.py shapescript-debug --bot wheeler_arm --body base  # Step-by-step Rerun debugger
-SHAPESCRIPT=0 uv run mjpython main.py view --bot wheeler_arm # Bypass ShapeScript (legacy direct path)
 ```
 
-- **Default:** ShapeScript is enabled by default. Set `SHAPESCRIPT=0` to fall back to the direct build123d path.
+- ShapeScript is the **only** geometry path. There is no legacy fallback.
 - **Debug:** `shapescript-debug` subcommand builds a body via ShapeScript and launches Rerun with per-op mesh snapshots.
-- **Architecture:** `emit_body_ir()` translates `_make_body_solid()` logic into typed ShapeScript ops (`botcad/shapescript/ops.py`). `OcctBackend` executes the ShapeScript against build123d. Bracket/component solids are injected as `PrebuiltOp`.
+- **Architecture:** `emit_body_ir()` emits typed ShapeScript ops (`botcad/shapescript/ops.py`). `OcctBackend` executes the ShapeScript against build123d.
 - **Key files:** `botcad/shapescript/emit_body.py`, `botcad/shapescript/backend_occt.py`, `botcad/shapescript/program.py`, `botcad/shapescript/ops.py`
 
 ## TypeScript (Viewer)

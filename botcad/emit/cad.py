@@ -26,14 +26,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from botcad.bracket import (
-    BracketSpec,
     horn_disc_params,
     servo_solid,
 )
 from botcad.cad_utils import as_solid as _as_solid
 from botcad.component import BearingSpec, BusType, CameraSpec
 from botcad.geometry import quat_to_euler
-from botcad.skeleton import BodyKind, BodyShape, BracketStyle
+from botcad.skeleton import BodyKind
 
 log = logging.getLogger(__name__)
 
@@ -361,18 +360,14 @@ def build_cad(bot: Bot) -> CadModel:
             )
 
     # Build body solids and refine mass from actual geometry
-    import os
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.cache import DiskCache
 
-    use_shapescript = os.environ.get("SHAPESCRIPT", "1") == "1"
+    ir_backend = OcctBackend()
+    cache = DiskCache()
+    cache_hits = 0
 
     body_solids: dict[str, object] = {}
-    if use_shapescript:
-        from botcad.shapescript.backend_occt import OcctBackend
-        from botcad.shapescript.cache import DiskCache
-
-        ir_backend = OcctBackend()
-        cache = DiskCache()
-        cache_hits = 0
 
     # Build geometry for ALL bodies — fabricated and purchased.
     # Fabricated bodies use emit_body_ir (complex structural geometry).
@@ -382,51 +377,37 @@ def build_cad(bot: Bot) -> CadModel:
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
 
-        if use_shapescript:
-            prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
-            if prog is None:
-                dt = time.monotonic() - t0
-                print(f" {dt:.1f}s (no script)")
-                continue
+        prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
+        if prog is None:
+            dt = time.monotonic() - t0
+            print(f" {dt:.1f}s (no script)")
+            continue
 
-            body.shapescript = prog
-            cached = cache.get(prog)
-            if cached is not None:
-                solid = _solid_from_brep_bytes(cached["brep"])
-                if body.kind == BodyKind.FABRICATED:
-                    _restore_mass_from_cache(body, cached)
-                cache_hits += 1
-                dt = time.monotonic() - t0
-                print(f" {dt:.1f}s (cached)")
-            else:
-                result = ir_backend.execute(prog)
-                solid = result.shapes[prog.output_ref.id]
-                if solid is not None:
-                    if body.kind == BodyKind.FABRICATED:
-                        _update_mass_from_solid(body, solid)
-                    cache_data = {"brep": _solid_to_brep_bytes(solid)}
-                    if body.kind == BodyKind.FABRICATED:
-                        cache_data.update(
-                            {
-                                "mass": body.solved_mass,
-                                "com": body.solved_com,
-                                "inertia": body.solved_inertia,
-                            }
-                        )
-                    cache.put(prog, cache_data)
-                dt = time.monotonic() - t0
-                print(f" {dt:.1f}s")
+        body.shapescript = prog
+        cached = cache.get(prog)
+        if cached is not None:
+            solid = _solid_from_brep_bytes(cached["brep"])
+            if body.kind == BodyKind.FABRICATED:
+                _restore_mass_from_cache(body, cached)
+            cache_hits += 1
+            dt = time.monotonic() - t0
+            print(f" {dt:.1f}s (cached)")
         else:
-            if body.kind != BodyKind.FABRICATED:
-                dt = time.monotonic() - t0
-                print(f" {dt:.1f}s (skip non-shapescript)")
-                continue
-            pj = parent_joint_map.get(body.name)
-            wire_segs = tuple(body_wire_segments.get(body.name, []))
-            steps = _build_body_solid(body, pj, wire_segs or None)
-            solid = steps[-1].solid if steps else None
+            result = ir_backend.execute(prog)
+            solid = result.shapes[prog.output_ref.id]
             if solid is not None:
-                _update_mass_from_solid(body, solid)
+                if body.kind == BodyKind.FABRICATED:
+                    _update_mass_from_solid(body, solid)
+                cache_data = {"brep": _solid_to_brep_bytes(solid)}
+                if body.kind == BodyKind.FABRICATED:
+                    cache_data.update(
+                        {
+                            "mass": body.solved_mass,
+                            "com": body.solved_com,
+                            "inertia": body.solved_inertia,
+                        }
+                    )
+                cache.put(prog, cache_data)
             dt = time.monotonic() - t0
             print(f" {dt:.1f}s")
 
@@ -436,8 +417,7 @@ def build_cad(bot: Bot) -> CadModel:
                 body.mesh_file = f"{body.name}.stl"
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
-    if use_shapescript:
-        print(f"[build_cad] {cache_hits}/{n} cache hits")
+    print(f"[build_cad] {cache_hits}/{n} cache hits")
 
     # --- Clearance validation ---
     if bot._clearance_constraints:
@@ -572,7 +552,6 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
                 export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
     # --- Per-wire STLs ---
-    from botcad.component import BusType
 
     bus_radii = {
         BusType.UART_HALF_DUPLEX: 0.0009,
@@ -821,18 +800,6 @@ def _ensure_solid(shape):
     return Compound(children=kept)
 
 
-def _to_compound(shape):
-    """Ensure shape is a Compound (wrapping ShapeList or bare Solid)."""
-    from build123d import Compound, Solid
-
-    if isinstance(shape, Compound):
-        return shape
-    if isinstance(shape, Solid):
-        return Compound(children=[shape])
-    # ShapeList or other iterable
-    return Compound(children=list(shape))
-
-
 def _bboxes_overlap(a, b) -> bool:
     """Check if the bounding boxes of two shapes overlap."""
     if not (hasattr(a, "bounding_box") and hasattr(b, "bounding_box")):
@@ -971,335 +938,12 @@ def _subprocess_bool_cut(shape, tool, timeout_sec: int):
             Path(f).unlink(missing_ok=True)
 
 
-def _cut_camera_features(shell, mount, body_dims, solved_dims):
-    """Cut lens aperture and ribbon cable exit for a camera mount.
-
-    - Lens aperture: cylinder through the body wall along the insertion axis
-    - Ribbon slot: rectangular cutout for CSI ribbon cable to exit the body
-    """
-    from build123d import Align, Box, Cylinder, Location
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    cd = mount.component.dimensions
-    pos = mount.resolved_pos
-    ins = mount.resolved_insertion_axis  # outward normal of the mounting face
-
-    # Lens aperture — 8mm diameter cylinder punched through the body wall.
-    aperture_r = 0.004  # 4mm radius (covers Pi camera lens module)
-    wall_depth = max(solved_dims) + 0.002  # long enough to cut through any wall
-
-    # Euler angles to rotate cylinder (default Z-axis) to insertion axis
-    ax, ay, az = ins
-    if abs(ax) > 0.5:
-        euler = (0, 90, 0)  # Z→X
-    elif abs(ay) > 0.5:
-        euler = (90, 0, 0)  # Z→Y
-    else:
-        euler = (0, 0, 0)  # already Z
-
-    aperture = Cylinder(aperture_r, wall_depth, align=C)
-    aperture = aperture.locate(Location((0, 0, 0), euler))
-    aperture = aperture.locate(Location(pos))
-    shell = shell - aperture
-
-    # Ribbon cable exit slot — CSI ribbon is ~16mm wide x 1mm thick.
-    ribbon_w = 0.017  # 17mm wide (16mm ribbon + clearance)
-    ribbon_h = 0.002  # 2mm tall (1mm ribbon + clearance)
-
-    # CSI port offset relative to camera center (from wire_ports)
-    csi_ports = [wp for wp in mount.component.wire_ports if wp.bus_type == BusType.CSI]
-    if csi_ports:
-        wp = csi_ports[0]
-        slot_pos = (pos[0] + wp.pos[0], pos[1] + wp.pos[1], pos[2] + wp.pos[2])
-    else:
-        slot_pos = (pos[0], pos[1], pos[2] - cd[1] / 2)
-
-    # Slot oriented so the long dimension cuts through the body wall
-    if abs(ax) > 0.5:
-        ribbon_slot = Box(wall_depth, ribbon_w, ribbon_h, align=C)
-    elif abs(ay) > 0.5:
-        ribbon_slot = Box(ribbon_w, wall_depth, ribbon_h, align=C)
-    else:
-        ribbon_slot = Box(ribbon_w, ribbon_h, wall_depth, align=C)
-
-    ribbon_slot = ribbon_slot.locate(Location(slot_pos))
-    shell = shell - ribbon_slot
-
-    return shell
-
-
-def _build_body_solid(
-    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
-) -> list[CadStep]:
-    """Single implementation of body solid construction.
-
-    Always builds the full step list. Callers that only need the final solid
-    use _make_body_solid() which discards the intermediates.
-
-    Logs each operation to stdout so hangs are diagnosable.
-
-    Mesh origin conventions (matching MuJoCo emitter expectations):
-    - box/sphere/cylinder: centered at origin
-    - tube: offset so z=0 is the joint end, z=+length is the far end
-
-    wire_segments must be a tuple (not list) for lru_cache hashability.
-    """
-
-    from build123d import Align, Box, Cylinder, Location, Sphere
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    dims = body.dimensions
-    steps: list[CadStep] = []
-    _step_t0 = time.monotonic()
-
-    def _record(step: CadStep) -> None:
-        """Append step and log timing."""
-        nonlocal _step_t0
-        dt = time.monotonic() - _step_t0
-        steps.append(step)
-        print(f"    [{len(steps):2d}] {step.label} ({dt:.1f}s)", flush=True)
-        _step_t0 = time.monotonic()
-
-    # --- 1. Outer shell ---
-    # NOTE: .moved() (not .locate()) throughout — .locate() mutates in place,
-    # which corrupts @lru_cache'd shapes from bracket.py.
-    if body.custom_solid is not None:
-        shell = _ensure_solid(body.custom_solid)
-        shape_label = "custom"
-    elif body.shape is BodyShape.CYLINDER:
-        r = body.radius or dims[0] / 2
-        h = body.width or dims[2]
-        if body.is_wheel_body:
-            shell = _make_wheel_solid(r, h)
-            shape_label = "wheel"
-        elif parent_joint is not None:
-            shell = Cylinder(r, h, align=C)
-            shell = shell.moved(Location((0, 0, h / 2)))
-            shape_label = "cylinder"
-        else:
-            shell = Cylinder(r, h, align=C)
-            shape_label = "cylinder"
-        if parent_joint is not None:
-            shell = _orient_z_to_axis(shell, parent_joint.axis, quat=body.frame_quat)
-    elif body.shape is BodyShape.TUBE:
-        r = body.outer_r or dims[0] / 2
-        length = body.length or dims[2]
-        shell = Cylinder(r, length, align=C)
-        shell = shell.moved(Location((0, 0, length / 2)))
-        shape_label = "tube"
-    elif body.shape is BodyShape.SPHERE:
-        r = body.radius or dims[0] / 2
-        shell = Sphere(r)
-        shape_label = "sphere"
-    elif body.shape is BodyShape.JAW:
-        jw = body.jaw_width or dims[0]
-        jt = body.jaw_thickness or dims[1]
-        jl = body.jaw_length or dims[2]
-        knuckle_h = 0.008
-        knuckle = Box(
-            jw, jt * 2, knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
-        )
-        plate = Box(
-            jw, jt, jl - knuckle_h, align=(Align.CENTER, Align.CENTER, Align.MIN)
-        )
-        plate = plate.moved(Location((0, 0, knuckle_h)))
-        shell = knuckle + plate
-        shape_label = "jaw"
-    else:
-        shell = Box(dims[0], dims[1], dims[2], align=C)
-        shape_label = "box"
-
-    _record(CadStep(f"Outer shell ({shape_label})", _ensure_solid(shell), "create"))
-
-    # --- 2. Cut component pockets ---
-    if not body.is_wheel_body:
-        for mount in body.mounts:
-            cd = mount.placed_dimensions
-            if isinstance(mount.component, BearingSpec):
-                tol = 0.0005
-                pocket_r = mount.component.od / 2 + tol / 2
-                pocket_h = mount.component.width + 0.001
-                pocket = Cylinder(pocket_r, pocket_h, align=C)
-            else:
-                pocket = Box(cd[0] + 0.0005, cd[1] + 0.0005, cd[2] + 0.0005, align=C)
-            pocket = pocket.moved(Location(mount.resolved_pos))
-            tool_solid = _ensure_solid(pocket)
-            shell = shell - pocket
-
-            if isinstance(mount.component, CameraSpec):
-                shell = _cut_camera_features(shell, mount, body.dimensions, dims)
-
-            comp_name = getattr(mount.component, "name", type(mount.component).__name__)
-            _record(
-                CadStep(
-                    f"Cut {comp_name} pocket",
-                    _ensure_solid(shell),
-                    "cut",
-                    tool=tool_solid,
-                )
-            )
-
-    # --- 3. Union coupler ---
-    bracket_spec = BracketSpec()
-    if parent_joint is not None and parent_joint.bracket_style is BracketStyle.COUPLER:
-        servo = parent_joint.servo
-
-        # The coupler is built in shaft-centered frame (origin = shaft center).
-        # The child body mesh origin coincides with the joint/shaft position
-        # (MuJoCo places the child at parent_joint.pos, joint anchor at (0,0,0)).
-        # So the coupler goes at the origin — only servo orientation is needed.
-        quat = parent_joint.solved_servo_quat
-        euler = quat_to_euler(quat)
-        center = (0.0, 0.0, 0.0)
-        from botcad.bracket import coupler_solid_solid
-
-        coupler = coupler_solid_solid(servo, bracket_spec)
-        coupler = coupler.moved(Location(center, euler))
-        tool_solid = _ensure_solid(coupler)
-        shell = _as_solid(shell.fuse(coupler))
-        _record(
-            CadStep(
-                f"Union coupler ({servo.name})",
-                _ensure_solid(shell),
-                "union",
-                tool=tool_solid,
-            )
-        )
-
-    # --- 4. Cut bracket insertion channels, then union finished brackets ---
-    # Each is a separate step so the insertion channel cut and bracket union are
-    # independently visible in the debug viewer.
-    for joint in body.joints:
-        servo = joint.servo
-        center = joint.solved_servo_center
-        euler = quat_to_euler(joint.solved_servo_quat)
-
-        if joint.bracket_style is BracketStyle.COUPLER:
-            from botcad.bracket import (
-                cradle_insertion_channel_solid,
-                cradle_solid_solid,
-            )
-
-            channel = cradle_insertion_channel_solid(servo, bracket_spec)
-            channel = channel.moved(Location(center, euler))
-            cradle = cradle_solid_solid(servo, bracket_spec)
-            cradle = cradle.moved(Location(center, euler))
-            tool_channel = _ensure_solid(channel)
-            shell = _bool_cut(shell, channel)
-            shell = _ensure_solid(shell)
-            _record(
-                CadStep(
-                    f"Cut cradle insertion channel ({servo.name})",
-                    shell,
-                    "cut",
-                    tool=tool_channel,
-                )
-            )
-            tool_cradle = _ensure_solid(cradle)
-            shell = _to_compound(shell.fuse(cradle))
-            _record(
-                CadStep(
-                    f"Union cradle ({servo.name})",
-                    _ensure_solid(shell),
-                    "union",
-                    tool=tool_cradle,
-                )
-            )
-        else:
-            from botcad.bracket import (
-                bracket_insertion_channel_solid,
-                bracket_solid_solid,
-            )
-
-            channel = bracket_insertion_channel_solid(servo, bracket_spec)
-            channel = channel.moved(Location(center, euler))
-            bracket = bracket_solid_solid(servo, bracket_spec)
-            bracket = bracket.moved(Location(center, euler))
-            tool_channel = _ensure_solid(channel)
-            shell = shell - channel
-            _record(
-                CadStep(
-                    f"Cut bracket insertion channel ({servo.name})",
-                    _ensure_solid(shell),
-                    "cut",
-                    tool=tool_channel,
-                )
-            )
-            tool_bracket = _ensure_solid(bracket)
-            shell = shell + bracket
-            _record(
-                CadStep(
-                    f"Union bracket ({servo.name})",
-                    _ensure_solid(shell),
-                    "union",
-                    tool=tool_bracket,
-                )
-            )
-
-    # --- 5. Cut child clearance volumes ---
-    for joint in body.joints:
-        if joint.child is not None:
-            clearance = _child_clearance_volume(joint.child, joint)
-            if clearance is not None and _bboxes_overlap(shell, clearance):
-                tool_solid = _ensure_solid(clearance)
-                try:
-                    shell = _bool_cut(shell, clearance)
-                    shell = _ensure_solid(shell)
-                except (TimeoutError, RuntimeError) as exc:
-                    log.warning(
-                        "Skipping child clearance cut (%s): %s", joint.child.name, exc
-                    )
-                    print(
-                        f"    [--] SKIPPED child clearance ({joint.child.name}): {exc}",
-                        flush=True,
-                    )
-                    continue
-                _record(
-                    CadStep(
-                        f"Cut child clearance ({joint.child.name})",
-                        shell,
-                        "cut",
-                        tool=tool_solid,
-                    )
-                )
-
-    # --- 6. Cut wire channels ---
-    if wire_segments:
-        for seg, bus_type in wire_segments:
-            channel = _wire_channel(seg, bus_type)
-            if channel is not None and _bboxes_overlap(shell, channel):
-                tool_solid = _ensure_solid(channel)
-                try:
-                    shell = _bool_cut(shell, channel)
-                    shell = _ensure_solid(shell)
-                except (TimeoutError, RuntimeError) as exc:
-                    log.warning(
-                        "Skipping wire channel cut (%s): %s", bus_type.name, exc
-                    )
-                    print(
-                        f"    [--] SKIPPED wire channel ({bus_type.name}): {exc}",
-                        flush=True,
-                    )
-                    continue
-                _record(
-                    CadStep(
-                        f"Cut wire channel ({bus_type.name})",
-                        shell,
-                        "cut",
-                        tool=tool_solid,
-                    )
-                )
-
-    return steps
-
-
 def _make_body_solid(
     body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
 ):
     """Build a body solid by executing its ShapeScript IR.
 
-    This is the production path — ShapeScript IR is the single source of truth.
-    _build_body_solid() is kept for debug CadStep visualization only.
+    ShapeScript IR is the single source of truth for body geometry.
     """
     from botcad.shapescript.backend_occt import OcctBackend
     from botcad.shapescript.emit_body import emit_body_ir
@@ -1312,196 +956,18 @@ def _make_body_solid(
 def make_body_solid_with_steps(
     body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
 ) -> list[CadStep]:
-    """Build a body solid step-by-step, capturing each intermediate result.
+    """Build a body solid step-by-step via ShapeScript, capturing each intermediate.
 
-    Same code path as build_cad() — both call _build_body_solid().
+    Executes the ShapeScript IR and converts each op into a CadStep for the
+    web viewer's cad-steps debug mode.
     """
-    return _build_body_solid(body, parent_joint, wire_segments)
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.cad_steps import shapescript_to_cad_steps
+    from botcad.shapescript.emit_body import emit_body_ir
 
-
-# Channel radii for wire routing (matches MuJoCo rendering radii)
-_CHANNEL_RADIUS = {
-    BusType.UART_HALF_DUPLEX: 0.0015,  # 1.5mm — servo bus
-    BusType.CSI: 0.003,  # 3mm — CSI ribbon
-    BusType.POWER: 0.002,  # 2mm — power cable
-}
-
-
-def _wire_channel(seg, bus_type: BusType):
-    """Create a cylindrical channel solid along a wire segment.
-
-    The channel uses the full cable radius so the wire fits inside.
-    Returns None for degenerate (too-short) segments.
-    """
-    from build123d import Align, Cylinder, Location
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-
-    dx = seg.end[0] - seg.start[0]
-    dy = seg.end[1] - seg.start[1]
-    dz = seg.end[2] - seg.start[2]
-    length = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if length < 0.001:  # skip sub-millimeter segments
-        return None
-
-    radius = _CHANNEL_RADIUS.get(bus_type, 0.0015)
-
-    mid = (
-        (seg.start[0] + seg.end[0]) / 2,
-        (seg.start[1] + seg.end[1]) / 2,
-        (seg.start[2] + seg.end[2]) / 2,
-    )
-    # Rotate Z-aligned cylinder to match segment direction
-    axis = (dx / length, dy / length, dz / length)
-    ax, ay, az = axis
-
-    if abs(az) > 0.999:
-        if az < 0:
-            quat = _axis_angle_to_quat((1, 0, 0), math.pi)
-        else:
-            quat = (1.0, 0.0, 0.0, 0.0)
-    else:
-        rot_angle = math.acos(max(-1.0, min(1.0, az)))
-        rot_axis_x = -ay
-        rot_axis_y = ax
-        rot_mag = math.sqrt(rot_axis_x**2 + rot_axis_y**2)
-        if rot_mag < 1e-9:
-            quat = (1.0, 0.0, 0.0, 0.0)
-        else:
-            quat = _axis_angle_to_quat(
-                (rot_axis_x / rot_mag, rot_axis_y / rot_mag, 0), rot_angle
-            )
-
-    euler = quat_to_euler(quat)
-    channel = Cylinder(radius, length, align=C)
-    return channel.locate(Location(mid, euler))
-
-
-def _child_outer_envelope_local(child: Body):
-    """Solid outer envelope of a child body in canonical Z-up local frame.
-
-    No rotation is applied — the caller is responsible for placing/orienting
-    the envelope using the joint axis transform (Design/Place/Cut pipeline).
-    """
-    from build123d import Align, Box, Cylinder, Location, Sphere
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    dims = child.dimensions
-
-    # Wheels need generous clearance for print tolerance, wobble, and debris.
-    # Other child bodies just need FDM fit clearance.
-    tol = 0.005 if child.is_wheel_body else 0.0005  # 5mm wheels, 0.5mm otherwise
-
-    if child.shape is BodyShape.CYLINDER:
-        r = (child.radius or dims[0] / 2) + tol
-        nominal_h = child.width or child.height or dims[2]
-        if child.is_wheel_body:
-            # Only extend clearance outboard (away from bracket), not inboard.
-            # Adding width tolerance inboard eats into the servo bracket.
-            h = nominal_h + tol
-            outer = Cylinder(r, h, align=C)
-            # Shift outboard so inboard face stays at -nominal_h/2
-            outer = outer.locate(Location((0, 0, tol / 2)))
-        else:
-            h = nominal_h + 2 * tol
-            outer = Cylinder(r, h, align=C)
-            # Match _make_body_solid: bottom face at origin for child cylinders
-            outer = outer.locate(Location((0, 0, h / 2)))
-        return outer
-
-    elif child.shape is BodyShape.TUBE:
-        r = (child.outer_r or dims[0] / 2) + tol
-        length = (child.length or dims[2]) + tol
-        outer = Cylinder(r, length, align=C)
-        return outer.locate(Location((0, 0, length / 2)))  # z=0 at joint end
-
-    elif child.shape is BodyShape.SPHERE:
-        r = (child.radius or dims[0] / 2) + tol
-        return Sphere(r)
-
-    elif child.shape is BodyShape.JAW:
-        jw = (child.jaw_width or dims[0]) + 2 * tol
-        jt = (child.jaw_thickness or dims[1]) * 2 + 2 * tol  # knuckle is 2x thickness
-        jl = (child.jaw_length or dims[2]) + tol
-        outer = Box(jw, jt, jl, align=(Align.CENTER, Align.CENTER, Align.MIN))
-        return outer
-
-    else:  # box
-        return Box(dims[0] + 2 * tol, dims[1] + 2 * tol, dims[2] + 2 * tol, align=C)
-
-
-def _is_axially_symmetric(child: Body, joint: Joint) -> bool:
-    """Check if child body is rotationally symmetric around the joint axis."""
-    if child.shape is BodyShape.SPHERE:
-        return True
-    if child.shape is BodyShape.CYLINDER:
-        # Cylinder is designed Z-up and placed along joint axis — symmetric.
-        return True
-    return False
-
-
-def _rotate_solid(solid, axis: tuple[float, float, float], angle_rad: float):
-    """Rotate a solid around the given axis by angle_rad."""
-    from build123d import Location
-
-    if abs(angle_rad) < 1e-9:
-        return solid
-    quat = _axis_angle_to_quat(axis, angle_rad)
-    euler = quat_to_euler(quat)
-    return solid.moved(Location((0, 0, 0), euler))
-
-
-def _child_clearance_volume(child: Body, joint: Joint):
-    """Compute the volume swept by a child body through its joint range.
-
-    Follows the Design/Place/Cut pipeline:
-      1. Design: build envelope in canonical Z-up local frame
-      2. Sweep: rotate around local Z (0,0,1) for asymmetric shapes
-      3. Place: single rigid transform using axis orientation + joint position
-
-    For axially symmetric children (cylinders, spheres), the swept volume
-    equals the static envelope. For asymmetric shapes, we union discrete
-    rotations sampled every ~15 degrees through the joint range.
-    """
-    from build123d import Location
-
-    # 1. Design — unrotated, Z-up local frame
-    envelope = _child_outer_envelope_local(child)
-    if envelope is None:
-        return None
-
-    # 2. Sweep — rotate around local Z axis (not joint.axis)
-    if _is_axially_symmetric(child, joint):
-        clearance = envelope
-    else:
-        lo, hi = joint.effective_range
-        if lo == 0.0 and hi == 0.0:  # continuous rotation
-            lo, hi = 0.0, 2 * math.pi
-
-        range_deg = abs(math.degrees(hi - lo))
-        n_samples = max(8, int(range_deg / 15))
-
-        clearance = envelope  # angle=0 (rest pose)
-        for i in range(1, n_samples + 1):
-            angle = lo + (hi - lo) * i / n_samples
-            rotated = _rotate_solid(envelope, (0, 0, 1), angle)
-            clearance = clearance + rotated  # boolean union
-
-    # 3. Place — single rigid transform: orientation from axis, position from joint
-    orient_quat = _axis_to_quat(joint.axis)
-    euler = quat_to_euler(orient_quat)
-
-    if child.is_wheel_body:
-        offset = joint.wheel_outboard_offset()
-        ax, ay, az = joint.axis
-        pos = (
-            joint.pos[0] + ax * offset,
-            joint.pos[1] + ay * offset,
-            joint.pos[2] + az * offset,
-        )
-    else:
-        pos = joint.pos
-    return clearance.moved(Location(pos, euler))
+    prog = emit_body_ir(body, parent_joint, wire_segments)
+    result = OcctBackend().execute(prog)
+    return shapescript_to_cad_steps(prog, result)
 
 
 def _make_wheel_solid(radius: float, width: float):

@@ -1,10 +1,10 @@
 """Tests for the step-by-step CAD debug pipeline.
 
-Validates that _build_body_solid produces correct intermediate steps:
+Validates that make_body_solid_with_steps (ShapeScript path) produces correct
+intermediate steps:
 - Each step's solid is geometrically valid
-- Tool solids are correctly positioned (not aliased by lru_cache)
+- Tool solids are correctly positioned
 - Steps are monotonically ordered (cuts reduce volume, unions increase)
-- Final step matches the production _make_body_solid result
 - Symmetric joints produce mirrored tool positions
 
 Requires build123d.
@@ -118,7 +118,7 @@ class TestCadStepsCorrectness:
         reason="Flaky when run with full suite due to cached state; passes in isolation"
     )
     def test_final_step_matches_production(self):
-        """Final step's solid must match _make_body_solid within tolerance."""
+        """Final step's solid must match build_cad result within tolerance."""
         from botcad.emit.cad import build_cad
 
         bot = _build_bot("wheeler_arm")
@@ -146,29 +146,46 @@ class TestCadStepsCorrectness:
             assert abs(s.solid.volume) > 0, f"Step {i} ({s.label}) has zero volume"
 
     def test_cut_reduces_volume(self):
-        """Cut steps should not increase volume."""
+        """Cut result should be smaller than its target operand.
+
+        With ShapeScript steps, the previous step may be a LocateOp for the
+        tool (not the body). Track the evolving body solid through cut/union
+        results to find the correct comparison baseline.
+        """
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
+        # Track the "body accumulator" — last cut/union result or initial create
+        body_vol = None
         for i, s in enumerate(steps):
-            if s.op == "cut" and i > 0:
-                prev_vol = abs(steps[i - 1].solid.volume)
+            if s.op in ("cut", "union"):
                 curr_vol = abs(s.solid.volume)
-                # Allow tiny OCCT floating-point noise (< 1 mm³)
-                assert curr_vol <= prev_vol + 1e-9, (
-                    f"Step {i} ({s.label}): cut increased volume "
-                    f"{prev_vol * 1e9:.1f} → {curr_vol * 1e9:.1f} mm³"
-                )
+                if s.op == "cut" and body_vol is not None:
+                    assert curr_vol <= body_vol + 1e-9, (
+                        f"Step {i} ({s.label}): cut increased volume "
+                        f"{body_vol * 1e9:.1f} → {curr_vol * 1e9:.1f} mm³"
+                    )
+                body_vol = curr_vol
+            elif s.op == "create" and body_vol is None:
+                # First create is the body shell
+                body_vol = abs(s.solid.volume)
 
     def test_union_increases_volume(self):
-        """Union steps should not decrease volume."""
+        """Union result should be larger than the body before the union.
+
+        Track the evolving body solid through cut/union results.
+        """
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
+        body_vol = None
         for i, s in enumerate(steps):
-            if s.op == "union" and i > 0:
-                prev_vol = abs(steps[i - 1].solid.volume)
+            if s.op in ("cut", "union"):
                 curr_vol = abs(s.solid.volume)
-                assert curr_vol >= prev_vol - 1e-15, (
-                    f"Step {i} ({s.label}): union decreased volume "
-                    f"{prev_vol * 1e9:.1f} → {curr_vol * 1e9:.1f} mm³"
-                )
+                if s.op == "union" and body_vol is not None:
+                    assert curr_vol >= body_vol - 1e-15, (
+                        f"Step {i} ({s.label}): union decreased volume "
+                        f"{body_vol * 1e9:.1f} → {curr_vol * 1e9:.1f} mm³"
+                    )
+                body_vol = curr_vol
+            elif s.op == "create" and body_vol is None:
+                body_vol = abs(s.solid.volume)
 
     def test_tool_solids_have_positive_volume(self):
         """Every tool solid must have positive volume."""
@@ -187,45 +204,49 @@ class TestBracketPositioning:
     """Bracket tools must be at distinct positions for distinct joints."""
 
     def test_wheel_brackets_are_mirrored(self):
-        """Left and right wheel bracket tools should be on opposite X sides."""
+        """Left and right wheel bracket tools should be on opposite X sides.
+
+        With ShapeScript steps, union tools are identified by op type and
+        position rather than labels.
+        """
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
 
-        # Find the bracket union steps (first two union steps)
-        bracket_unions = [
-            s for s in steps if s.op == "union" and "bracket" in s.label.lower()
-        ]
+        # Find union steps with tools (bracket unions)
+        bracket_unions = [s for s in steps if s.op == "union" and s.tool is not None]
         assert len(bracket_unions) >= 2, (
-            f"Expected at least 2 bracket unions, got {len(bracket_unions)}: "
-            f"{[s.label for s in bracket_unions]}"
+            f"Expected at least 2 bracket unions, got {len(bracket_unions)}"
         )
 
-        left = bracket_unions[0]
-        right = bracket_unions[1]
+        # First two union tools should be on opposite X sides (left/right wheel)
+        left_x = _bbox_x_center(bracket_unions[0].tool)
+        right_x = _bbox_x_center(bracket_unions[1].tool)
 
-        left_x = _bbox_x_center(left.tool)
-        right_x = _bbox_x_center(right.tool)
-
-        # They should be on opposite sides of center
         assert left_x * right_x < 0, (
             f"Bracket tools should be on opposite X sides: "
             f"left tool center_x={left_x:.1f}mm, right tool center_x={right_x:.1f}mm"
         )
 
     def test_insertion_channel_tools_are_mirrored(self):
-        """Left and right insertion channel tools should be on opposite X sides."""
+        """Left and right insertion channel tools should be on opposite X sides.
+
+        With ShapeScript steps, bracket envelope cuts are the largest cut tools.
+        """
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
 
-        channel_cuts = [
+        # Find cut steps with large tools (bracket envelopes > 100,000 mm³)
+        large_cuts = [
             s
             for s in steps
-            if s.op == "cut" and "bracket insertion channel" in s.label.lower()
+            if s.op == "cut"
+            and s.tool is not None
+            and abs(s.tool.volume) * 1e9 > 100_000
         ]
-        assert len(channel_cuts) >= 2, (
-            f"Expected at least 2 bracket insertion channel cuts, got {len(channel_cuts)}"
+        assert len(large_cuts) >= 2, (
+            f"Expected at least 2 large cuts (bracket envelopes), got {len(large_cuts)}"
         )
 
-        left_x = _bbox_x_center(channel_cuts[0].tool)
-        right_x = _bbox_x_center(channel_cuts[1].tool)
+        left_x = _bbox_x_center(large_cuts[0].tool)
+        right_x = _bbox_x_center(large_cuts[1].tool)
 
         assert left_x * right_x < 0, (
             f"Insertion channel tools should be on opposite X sides: "
@@ -233,14 +254,19 @@ class TestBracketPositioning:
         )
 
     def test_no_duplicate_tool_positions(self):
-        """No two bracket/insertion_channel tools should have identical bboxes."""
+        """No two large cut/union tools should have identical bboxes (locate mutation check).
+
+        Only checks tools > 10,000 mm³ (brackets/envelopes). Smaller tools
+        like wire channels can legitimately share positions.
+        """
         steps, _, _ = _build_steps_for_body("wheeler_arm", "base")
 
         bracket_steps = [
             s
             for s in steps
             if s.tool is not None
-            and ("bracket" in s.label.lower() or "cradle" in s.label.lower())
+            and s.op in ("cut", "union")
+            and abs(s.tool.volume) * 1e9 > 10_000
         ]
 
         seen_bboxes: list[tuple] = []
