@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from botcad.component import Appearance
-from botcad.materials import ALUMINUM, PLA, TPU, Material
+from botcad.materials import ALUMINUM, MAT_PLA_LIGHT, PLA, TPU, Material
 from botcad.skeleton import Body, BodyShape
 
 
@@ -46,28 +45,18 @@ def test_print_process_wall_thickness():
     assert p.wall_layers * p.nozzle_width == pytest.approx(0.0008)
 
 
-def test_appearance_defaults():
-    a = Appearance(color=(1.0, 0.0, 0.0, 1.0))
-    assert a.metallic == 0.0
-    assert a.roughness == 0.7
-    assert a.opacity == 1.0
+def test_material_visual_defaults():
+    """Material has visual defaults for color, metallic, roughness."""
+    m = Material(name="test", color=(1.0, 0.0, 0.0, 1.0))
+    assert m.metallic == 0.0
+    assert m.roughness == 0.7
+    assert m.opacity == 1.0
 
 
-def test_appearance_is_frozen():
-    import dataclasses
-
-    a = Appearance(color=(1.0, 0.0, 0.0, 1.0))
-    try:
-        a.color = (0.0, 0.0, 0.0, 1.0)  # type: ignore
-        assert False, "Should be frozen"
-    except dataclasses.FrozenInstanceError:
-        pass
-
-
-def test_appearance_with_metallic():
-    a = Appearance(color=(0.8, 0.8, 0.8, 1.0), metallic=1.0, roughness=0.3)
-    assert a.metallic == 1.0
-    assert a.roughness == 0.3
+def test_material_with_metallic():
+    m = Material(name="steel", color=(0.8, 0.8, 0.8, 1.0), metallic=1.0, roughness=0.3)
+    assert m.metallic == 1.0
+    assert m.roughness == 0.3
 
 
 def test_body_defaults_to_pla():
@@ -84,12 +73,19 @@ def test_tpu_differs_from_pla():
     assert TPU.process.infill != PLA.process.infill
 
 
-def test_fabricated_body_gets_appearance_after_solve():
-    """After appearance assignment, fabricated bodies must have non-None appearance."""
+def test_fabricated_body_gets_material_after_solve():
+    """After material assignment, fabricated bodies must have material with color."""
     body = Body(name="test", shape=BodyShape.BOX)
-    # Simulate the appearance assignment logic from solve()
-    from botcad.colors import COLOR_STRUCTURE_BODY
+    body.material = MAT_PLA_LIGHT
+    assert body.material is not None
+    assert len(body.material.color) == 4
 
-    body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
-    assert body.appearance is not None
-    assert len(body.appearance.color) == 4
+
+def test_material_catalog_has_visual_properties():
+    """Catalog materials have both color and roughness set."""
+    from botcad.materials import MAT_FR4_GREEN, MAT_IC_PACKAGE, MAT_NICKEL, MAT_RUBBER
+
+    for mat in [MAT_FR4_GREEN, MAT_IC_PACKAGE, MAT_NICKEL, MAT_RUBBER]:
+        assert len(mat.color) == 4
+        assert 0.0 <= mat.roughness <= 1.0
+        assert mat.name  # has a meaningful name

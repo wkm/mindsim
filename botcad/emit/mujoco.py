@@ -17,7 +17,6 @@ from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from botcad.colors import (
-    COLOR_STRUCTURE_BODY,
     COLOR_STRUCTURE_DARK,
     COLOR_STRUCTURE_HORN_DISC,
     COLOR_WIRE_CSI,
@@ -529,7 +528,7 @@ def _emit_mounted_components(
 
     for mount in body.mounts:
         comp = mount.component
-        r, g, b, a = comp.appearance.color
+        r, g, b, a = comp.default_material.color
         comp_key = f"comp_{body.name}_{mount.label}"
         mesh_name = f"{comp_key}_mesh"
 
@@ -836,12 +835,9 @@ def _body_color(body: Body) -> str:
 
 
 def _body_color_rgb(body: Body) -> tuple[float, float, float]:
-    """Read body color from appearance. Fallback to shape-based default."""
-    if body.appearance is not None:
-        r, g, b, _a = body.appearance.color
-        return (r, g, b)
-    # Fallback for bodies without appearance (shouldn't happen after solve)
-    return COLOR_STRUCTURE_BODY.rgb
+    """Read body color from material. Fallback to shape-based default."""
+    r, g, b, _a = body.material.color
+    return (r, g, b)
 
 
 def _z_to_axis_quat(

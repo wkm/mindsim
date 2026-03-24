@@ -139,7 +139,7 @@ def _update_mass_from_solid(body: Body, solid) -> None:
     else:
         wall_thickness = 0.0008
         infill_fraction = 0.20
-    density = mat.density if mat else 1200.0
+    density = mat.density if mat and mat.density else 1200.0
     wall_volume = solid.area * wall_thickness
     infill_volume = max(0.0, vol - wall_volume) * infill_fraction
     struct_mass = (wall_volume + infill_volume) * density

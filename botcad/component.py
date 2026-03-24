@@ -10,18 +10,30 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from botcad.materials import Material
+
 Vec3 = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
 
 
-@dataclass(frozen=True)
-class Appearance:
-    """Visual properties for rendering. Emitters read this, never compute colors."""
-
-    color: RGBA
-    metallic: float = 0.0  # 0=plastic, 1=metal
-    roughness: float = 0.7  # surface roughness
-    opacity: float = 1.0  # transparency
+# Backward-compat alias — Appearance is replaced by Material.
+# Existing code that constructs Appearance(color=...) should migrate to
+# Material(name=..., color=...).  This shim lets old code keep working
+# during the transition.
+def Appearance(
+    color: RGBA = (0.541, 0.608, 0.659, 1.0),
+    metallic: float = 0.0,
+    roughness: float = 0.7,
+    opacity: float = 1.0,
+) -> Material:
+    """Create a Material from legacy Appearance parameters."""
+    return Material(
+        name="_appearance",
+        color=color,
+        metallic=metallic,
+        roughness=roughness,
+        opacity=opacity,
+    )
 
 
 class ComponentKind(StrEnum):
@@ -193,7 +205,9 @@ class Component:
     kind: ComponentKind = ComponentKind.GENERIC
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
-    appearance: Appearance = Appearance(color=(0.541, 0.608, 0.659, 1.0))
+    default_material: Material = Material(
+        name="_default", color=(0.541, 0.608, 0.659, 1.0)
+    )
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 

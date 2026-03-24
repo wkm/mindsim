@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from botcad.colors import COLOR_POWER_BATTERY, COLOR_STRUCTURE_DARK
-from botcad.component import Appearance, BatterySpec, BusType, WirePort
+from botcad.component import BatterySpec, BusType, WirePort
+from botcad.materials import MAT_LIPO_WRAP
 
 
 def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
@@ -40,7 +41,7 @@ def LiPo2S(capacity_mah: int = 1000) -> BatterySpec:
                 connector_type="jst_xh_3pin",
             ),
         ),
-        appearance=Appearance(color=COLOR_POWER_BATTERY.rgba),
+        default_material=MAT_LIPO_WRAP,
         chemistry="LiPo",
         cells_s=2,
     )
