@@ -63,6 +63,7 @@ class ComponentMeta:
     layers: tuple[str, ...]  # viewer STL layers
     mount_orientation: MountOrientation
     script_emitter: Callable | None = None  # ShapeScript emitter, set after import
+    multi_material_emitter: Callable | None = None  # returns MultiMaterialResult
 
 
 _COMPONENT_REGISTRY: dict[ComponentKind, ComponentMeta] | None = None
@@ -80,7 +81,9 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
     from botcad.shapescript.emit_components import (
         battery_script,
         bearing_script,
+        camera_multi_material,
         camera_script,
+        compute_multi_material,
         compute_script,
         wheel_component_script,
     )
@@ -109,6 +112,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FACE_NORMAL,
             script_emitter=camera_script,
+            multi_material_emitter=camera_multi_material,
         ),
         ComponentKind.BATTERY: ComponentMeta(
             category="electronics",
@@ -121,6 +125,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=compute_script,
+            multi_material_emitter=compute_multi_material,
         ),
         ComponentKind.WHEEL: ComponentMeta(
             category="structure",

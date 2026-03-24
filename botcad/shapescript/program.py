@@ -324,3 +324,28 @@ class ShapeScript:
                     max_counter = max(max_counter, int(parts[1]) + 1)
         prog._counter = max_counter
         return prog
+
+
+@dataclass
+class MaterialProgram:
+    """A ShapeScript program tagged with the material it represents.
+
+    Used by multi-material component emitters. Each material region
+    (e.g., PCB substrate, IC packages, metal connectors) gets its own
+    program that produces an independent solid for its own STL.
+    """
+
+    material: object  # botcad.materials.Material (use object to avoid circular import)
+    program: ShapeScript
+
+
+@dataclass
+class MultiMaterialResult:
+    """Result from a multi-material component emitter.
+
+    Contains the primary program (used for bounding box / collision geometry)
+    plus per-material programs for visual rendering.
+    """
+
+    primary: ShapeScript  # main program (union of all regions, for bbox/collision)
+    material_programs: list[MaterialProgram]  # per-material programs for STL export
