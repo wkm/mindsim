@@ -10,6 +10,12 @@ Each component has a single `Appearance` (one RGBA color). A Pi board is flat gr
 
 Separately, `botcad/materials.py` tracks physical properties (density, print process) and `botcad/component.py` has `Appearance` (color, metallic, roughness). These are two halves of the same concept.
 
+## Scope & Non-Goals
+
+**In scope:** Multi-material rendering for purchased component meshes in the viewer (servos, Pi boards, cameras, wheels). Unifying the Appearance/Material split.
+
+**Non-goals:** Body solids (printed structural shells) are NOT affected — they remain single-mesh for MuJoCo collision. Multi-material applies only to purchased component visualization in the viewer. MuJoCo sim continues to use a single color per geom.
+
 ## Design
 
 ### Unified Material
@@ -19,15 +25,18 @@ Merge physical and visual properties into a single `Material` dataclass:
 ```python
 @dataclass(frozen=True)
 class Material:
-    name: str                    # "fr4_green", "abs_black", "rubber_dark"
+    name: str                         # "fr4_green", "abs_black", "rubber_dark"
     # Visual
     color: RGBA
     metallic: float = 0.0
     roughness: float = 0.7
+    opacity: float = 1.0
     # Physical
     density: float | None = None
-    process: str | None = None   # "fdm", "purchased", etc.
+    process: PrintProcess | None = None  # FDM params; None for purchased materials
 ```
+
+Note: `process` is `PrintProcess | None` (preserving the existing structured type), not a bare string. Purchased-component materials (e.g., `MAT_FR4_GREEN`, `MAT_RUBBER`) always have `process=None` — print process only applies to fabricated body materials.
 
 ### Material Catalog
 
@@ -38,28 +47,25 @@ Real-world materials with correct visual and physical properties:
 - `MAT_NICKEL` — connector pins, fastener plating (silver, metallic)
 - `MAT_ABS_DARK` — servo housing, camera body (dark gray, slight sheen)
 - `MAT_RUBBER` — tire surface (dark, high roughness)
-- `MAT_POLYCARBONATE_CLEAR` — camera lens cover (dark, low roughness)
-- `MAT_PLA_LIGHT` — 3D printed structural parts (light gray, matte)
+- `MAT_POLYCARBONATE_CLEAR` — camera lens cover (dark, low roughness, opacity < 1.0)
+- `MAT_PLA_LIGHT` — 3D printed structural parts (light gray, matte, process=FDM)
 - `MAT_STEEL` — fastener bodies (gray, metallic)
 - `MAT_ALUMINUM` — servo horns, brackets (light gray, metallic)
 
-### Material-Tagged ShapeScript Ops
+### Multi-Material via Separate ShapeScript Programs
 
-Solid-producing ShapeScript ops get an optional `material: Material | None` field. Component geometry functions assign materials to sub-solids at design time (local frame).
+Each component emitter produces **one ShapeScript program per material region**. Sub-solids of different materials are never boolean-fused together — this avoids the problem of tracking per-face material origin through OCCT boolean operations (which is fragile and not exposed by build123d).
 
-Example — Pi compute board:
-- PCB slab → `MAT_FR4_GREEN`
-- Chip blocks → `MAT_IC_PACKAGE`
-- GPIO header → `MAT_NICKEL`
-- USB/ethernet ports → `MAT_NICKEL`
+Example — Pi compute board emitter produces 3 programs:
+- Program 1 (MAT_FR4_GREEN): PCB slab
+- Program 2 (MAT_IC_PACKAGE): chip blocks (unioned together, same material)
+- Program 3 (MAT_NICKEL): GPIO header + USB ports (unioned, same material)
 
-Example — Pololu wheel:
-- Hub → `MAT_ABS_DARK` (or gray plastic)
-- Tire ring → `MAT_RUBBER`
+Each program executes independently against the OCCT backend and exports to its own STL.
 
 ### STL Export
 
-When exporting component meshes, group faces by material. Emit one STL per material group:
+One STL per material group per component:
 - `pi_compute__fr4_green.stl`
 - `pi_compute__ic_package.stl`
 - `pi_compute__nickel.stl`
@@ -79,16 +85,23 @@ Component mesh entry becomes a list of material-tagged meshes:
 }
 ```
 
-Manifest also includes a `materials` dictionary mapping name → visual properties (color, metallic, roughness).
+**Migration:** During transition, the viewer accepts both `"mesh"` (legacy single-mesh, used by body solids) and `"meshes"` (multi-material, used by components). Body solids continue to use the single `"mesh"` field.
+
+Manifest also includes a `materials` dictionary mapping name → visual properties (color, metallic, roughness, opacity).
 
 ### Viewer Rendering
 
-`bot-viewer.ts` loads multi-mesh components as a Three.js `Group`. Each sub-mesh gets a `MeshPhysicalMaterial` derived from the material entry (color, metalness, roughness).
+`bot-viewer.ts` loads multi-mesh components as a Three.js `Group`. Each sub-mesh gets a `MeshPhysicalMaterial` derived from the material entry (color, metalness, roughness, opacity).
+
+### MuJoCo Emission
+
+MuJoCo continues to use a single RGBA per geom. The `default_material.color` is used for `<geom rgba="...">`. Multi-material is viewer-only.
 
 ### Migration
 
 - Delete `Appearance` dataclass from `component.py`
-- Replace `appearance` field on `Component` with `material: Material` (default/fallback material)
+- Replace `appearance` field on `Component` with `default_material: Material` (used by MuJoCo and as fallback)
+- Multi-material breakdown is encoded in the component's ShapeScript emitter (multiple programs, each tagged with a material)
 - Existing `colors.py` palette becomes seed data for material catalog colors
 - `materials.py` physical-only materials merge into unified `Material`
 
@@ -97,12 +110,13 @@ Manifest also includes a `materials` dictionary mapping name → visual properti
 | File | Change |
 |------|--------|
 | `botcad/materials.py` | Unified `Material` dataclass + catalog |
-| `botcad/component.py` | Remove `Appearance`, add `material` field |
+| `botcad/component.py` | Remove `Appearance`, add `default_material` field |
 | `botcad/colors.py` | Keep as color constants, referenced by materials |
 | `botcad/shapescript/ops.py` | Add `material` field to solid ops |
-| `botcad/components/*.py` | Tag sub-solids with materials |
-| `botcad/emit/viewer.py` | Multi-mesh manifest entries |
-| `botcad/emit/mujoco.py` | Derive rgba from material.color |
+| `botcad/shapescript/emit_body.py` | Component emitters produce per-material programs |
+| `botcad/components/*.py` | Tag sub-solids with materials via separate programs |
+| `botcad/emit/viewer.py` | Multi-mesh manifest entries + materials dictionary |
+| `botcad/emit/mujoco.py` | Derive rgba from `default_material.color` |
 | `viewer/bot-viewer.ts` | Load multi-mesh components, material-aware rendering |
 
 ## Dependencies

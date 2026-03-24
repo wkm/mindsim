@@ -21,7 +21,8 @@ enum NodeKind {
     Body,        // fabricated/purchased physical part with mesh
     Component,   // leaf part mounted on a body (servo, camera, battery)
     SubPart,     // child of component (bracket, coupler, horn)
-    Layer,       // overlay (wires, fasteners)
+    Joint,       // kinematic joint connecting parent body to child body
+    Layer,       // overlay (wires, fasteners) — used by workstream 3
 }
 ```
 
@@ -40,13 +41,18 @@ Wheeler Arm (Robot)
 │   │   ├── Bracket (SubPart)
 │   │   ├── Coupler (SubPart)
 │   │   └── Fasteners (SubPart)
+│   ├── arm_shoulder (Joint) ──→ Wheel Assembly
 │   └── Wheel Assembly (Assembly)
 │       ├── wheel (Body)
 │       ├── STS3215 @ arm_wrist (Component)
+│       │   ├── Bracket (SubPart)
+│       │   └── Fasteners (SubPart)
 │       └── Pololu Wheel (Component)
-├── Wires (Layer)
-└── Fasteners (Layer)
 ```
+
+Joint nodes appear in the tree to preserve kinematic chain visibility. They show which joint connects a parent assembly to a child assembly, and provide access to joint properties (range, servo specs) in the properties panel.
+
+Layer nodes (Wires, Fasteners) are deferred to workstream 3, which will define their aggregation and interaction semantics.
 
 ### Visibility Model
 
@@ -54,8 +60,9 @@ Two independent toggles per node. Both cascade to the full subtree.
 
 **Hide (eye icon):** Toggle this subtree invisible/visible.
 - Hiding an assembly hides all its children
-- Unhiding restores children to their previous state (not force-show)
-- Stored as `hidden: boolean` per node
+- `hidden` represents the user's explicit toggle on that specific node, not effective visibility
+- Unhiding a parent does not force-show children that were independently hidden — each node's `hidden` flag is independent
+- Effective visibility is computed by `resolveVisibility()` which checks both the node's own `hidden` flag and all ancestors
 
 **Isolate (target icon):** Show only this subtree, dim/hide everything else.
 - Additive: shift-click isolate on a second node adds it to the isolated set
@@ -76,49 +83,79 @@ interface SceneNode {
     kind: NodeKind;
     label: string;
     children: string[];
-    hidden: boolean;       // user toggled hide
+    hidden: boolean;          // user's explicit toggle on this node
     parentId: string | null;
-    bodyIds: number[];     // MuJoCo body IDs this node maps to (empty for Assembly)
+    bodyNames: string[];      // body names from manifest (empty for Assembly/Joint)
 }
 ```
 
-`BotScene` changes:
-- `nodes: Map<string, SceneNode>` — replaces flat `bodies` array for visibility
-- `isolatedIds: Set<string>` — node IDs (not body IDs)
-- `resolveVisibility(nodeId): boolean` — walks ancestors for hide + isolation
-- Body-level opacity computation derives from node visibility
+Note: `bodyNames` stores manifest body names (strings), not MuJoCo numeric IDs. The name → ID mapping is built at runtime by `ExploreMode._buildBodyNameMap()` after MuJoCo WASM loads.
+
+**Dual model — SceneNode + BodyState:**
+
+`BodyState[]` persists for per-body rendering state (`ghosted`, `hovered`, `selected`, opacity). `SceneNode.hidden` feeds into visibility computation that ultimately sets `BodyState.visible`. The relationship:
+
+- `SceneNode` — tree structure + user visibility intent (hidden, isolation)
+- `BodyState` — per-body render state (ghosted, hovered, selected, computed opacity)
+- `resolveVisibility(nodeId)` reads SceneNode tree → writes BodyState.visible
+
+**Visibility resolution helper:** `resolveVisibility` lives on a `SceneTree` helper class (not on `BotScene` directly) to preserve `BotScene` as a pure data model without tree-walking logic.
+
+```typescript
+class SceneTree {
+    nodes: Map<string, SceneNode>;
+    isolatedIds: Set<string>;
+    resolveVisibility(nodeId: string): boolean;
+    resolveBodyVisibility(bodyName: string): boolean;
+}
+```
+
+`BotScene` gains a `tree: SceneTree` field. The existing `BotScene.bodies: BodyState[]` remains for render state.
 
 ### Tree Interactions
 
 | Action | Behavior |
 |--------|----------|
 | Click node | Select, show properties panel |
-| Click eye | Toggle hide on this subtree |
-| Click target | Toggle isolate (additive with shift) |
-| Expand/collapse | Assembly and component nodes are collapsible |
+| Double-click node | Focus camera on node (existing behavior, preserved) |
+| Click eye | Toggle `hidden` on this node |
+| Shift-click target | Add/remove from isolation set |
+| Click target (no shift) | Replace isolation set with this node |
+| Expand/collapse | Assembly, Component, and Joint nodes are collapsible |
 | Search | Filter by name, highlights matching nodes |
 | Category chips | Filter by NodeKind |
 
-### Sync
+### Sync Algorithm
 
-`scene-sync.ts` iterates `SceneNode` tree instead of flat body list. For each node with `bodyIds`, computes effective visibility and applies to Three.js meshes (opacity, visible flag).
+`scene-sync.ts` sync function:
+1. For each body name in the system, call `sceneTree.resolveBodyVisibility(bodyName)` to get effective visibility from the node tree
+2. If effectively hidden → `bodyOpacity = 0`, `mesh.visible = false`
+3. If visible, apply existing ghosted/hovered/selected logic from `BodyState`:
+   - Ghosted → `opacity = GHOST_OPACITY`
+   - Hovered → emissive highlight on structural meshes
+   - Selected → emissive highlight (stronger)
+4. Clone materials on first sync (existing behavior, preserved)
+
+### Manifest Changes
+
+The Python manifest emitter (`botcad/emit/viewer.py`) adds a `node_kind` field to each entry in the existing `bodies`, `joints`, `parts`, and `assemblies` arrays. Values map directly to `NodeKind` enum strings. The viewer builds the `SceneTree` from these existing arrays + kind annotations — no new top-level manifest structure needed.
 
 ### Migration from Current Model
 
-- Current `BotScene.bodies[]` visibility state moves to `SceneNode.hidden`
-- Current `BotScene._isolatedIds` (body IDs) moves to `BotScene.isolatedIds` (node IDs)
-- `ExploreMode` callbacks update nodes instead of bodies
-- Manifest generation in Python adds `nodeKind` to each entry
+- `BotScene.bodies[]` visibility state → `SceneNode.hidden` + `SceneTree.resolveVisibility()`
+- `BotScene._isolatedIds` (body IDs) → `SceneTree.isolatedIds` (node IDs)
+- `ExploreMode` callbacks update `SceneTree` nodes instead of `BodyState` directly
+- `ComponentTree` renders nodes by `NodeKind` with appropriate icons and affordances
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `viewer/bot-scene.ts` | `SceneNode` model, `NodeKind` enum, node-based visibility |
-| `viewer/component-tree.ts` | Render by NodeKind, cascading hide, additive isolate |
-| `viewer/scene-sync.ts` | Node-tree traversal for visibility resolution |
-| `viewer/explore-mode.ts` | Wire callbacks to node model |
-| `botcad/emit/viewer.py` | Emit node kinds in manifest |
+| `viewer/bot-scene.ts` | `SceneNode`, `NodeKind` enum, `SceneTree` helper, `BotScene.tree` field |
+| `viewer/component-tree.ts` | Render by NodeKind, cascading hide, additive isolate, Joint nodes |
+| `viewer/scene-sync.ts` | Use `SceneTree.resolveBodyVisibility()` in sync loop |
+| `viewer/explore-mode.ts` | Wire callbacks to SceneTree, preserve double-click focus |
+| `botcad/emit/viewer.py` | Add `node_kind` to manifest entries |
 
 ## Dependencies
 
