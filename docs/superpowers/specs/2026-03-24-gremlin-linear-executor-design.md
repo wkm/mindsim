@@ -166,7 +166,7 @@ You are Gremlin, an AI agent working on a Linear issue for the MindSim project.
 
 ## Instructions
 
-1. Create branch: `gremlin/{issue_identifier_slug}-{slugified_title}` (if branch exists from a prior attempt, reuse it)
+1. Create branch: `gremlin/{issue_identifier_lowercase}-{slugified_title}` (if branch exists from a prior attempt, reuse it)
 2. Understand the issue — read relevant code, explore the codebase
 3. Implement the fix/feature
 4. Run `make validate` — lint, tests, and renders must pass
@@ -252,7 +252,7 @@ Target: ~80-120 lines. This is a notification pipe, not a decision-maker.
 **Goal:** Validate that Gremlin can take one well-scoped issue and produce a useful PR.
 
 - Create all `gremlin-*` labels in Linear
-- Build `/gremlin` skill with single-issue dispatch (no queue selection UI)
+- Build `/gremlin` skill with queue display and single-issue selection
 - Sub-agent works in worktree, posts comments, opens draft PR
 - Main session handles label transitions
 - Test on one easy ticket (e.g., a viewer bug with clear repro)
