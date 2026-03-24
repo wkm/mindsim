@@ -317,7 +317,7 @@ def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
         return emit_body_ir(body, pj, wire_segs or None)
 
     # Purchased body — route to the appropriate script emitter
-    comp = body._component
+    comp = body.component
     if comp is None:
         return None
 
@@ -353,7 +353,7 @@ def _build_multi_material_solids(
     """
     from botcad.component import get_component_meta
 
-    comp = body._component
+    comp = body.component
     if comp is None:
         return
 
@@ -499,7 +499,7 @@ def build_cad(bot: Bot) -> CadModel:
 
             # Multi-material: if this is a component body with a multi-material
             # emitter, execute each material program and store the results.
-            if body._component is not None and body.name.startswith("comp_"):
+            if body.component is not None and body.name.startswith("comp_"):
                 _build_multi_material_solids(
                     body, mount, ir_backend, multi_material_solids, log
                 )

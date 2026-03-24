@@ -5,6 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from botcad.materials import Material
 
 from botcad.shapescript.ops import (
     ALIGN_CENTER,
@@ -335,7 +339,7 @@ class MaterialProgram:
     program that produces an independent solid for its own STL.
     """
 
-    material: object  # botcad.materials.Material (use object to avoid circular import)
+    material: Material
     program: ShapeScript
 
 

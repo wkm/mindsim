@@ -16,26 +16,6 @@ Vec3 = tuple[float, float, float]
 RGBA = tuple[float, float, float, float]
 
 
-# Backward-compat alias — Appearance is replaced by Material.
-# Existing code that constructs Appearance(color=...) should migrate to
-# Material(name=..., color=...).  This shim lets old code keep working
-# during the transition.
-def Appearance(
-    color: RGBA = (0.541, 0.608, 0.659, 1.0),
-    metallic: float = 0.0,
-    roughness: float = 0.7,
-    opacity: float = 1.0,
-) -> Material:
-    """Create a Material from legacy Appearance parameters."""
-    return Material(
-        name="_appearance",
-        color=color,
-        metallic=metallic,
-        roughness=roughness,
-        opacity=opacity,
-    )
-
-
 class ComponentKind(StrEnum):
     """Semantic category of a physical component."""
 

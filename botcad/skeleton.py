@@ -407,6 +407,11 @@ class Body:
     # visual props (color, metallic, roughness) for rendering.
     material: Material = PLA
 
+    @property
+    def component(self) -> Component | None:
+        """The component that generated this purchased body (servo, horn, mounted part)."""
+        return self._component
+
     def to_body_frame(self, p: Vec3) -> Vec3:
         """Transform a canonical-frame point/vector into body-frame coordinates."""
         w, x, y, z = self.frame_quat

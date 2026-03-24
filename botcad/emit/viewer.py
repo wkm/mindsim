@@ -15,7 +15,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
+import logging
+
 from botcad.component import ComponentKind
+
+log = logging.getLogger(__name__)
 
 
 def _component_specs(comp) -> dict:
@@ -105,7 +109,11 @@ def _build_materials_dict(bot: Bot) -> dict:
                                 "opacity": mat.opacity,
                             }
                 except Exception:
-                    pass
+                    log.debug(
+                        "Multi-material emitter failed for %s during material collection",
+                        kind_key,
+                        exc_info=True,
+                    )
 
     return materials
 
@@ -240,7 +248,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
         # Derive category and extra fields from body name / component
         if body.name.startswith("servo_"):
             joint_name = body.name[len("servo_") :]
-            comp = body._component
+            comp = body.component
             part_entry = {
                 "id": body.name,
                 "name": comp.name if comp else body.name,
@@ -257,7 +265,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             manifest["parts"].append(part_entry)
         elif body.name.startswith("horn_"):
             joint_name = body.name[len("horn_") :]
-            comp = body._component
+            comp = body.component
             part_entry = {
                 "id": body.name,
                 "name": "Horn disc",
@@ -270,7 +278,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             }
             manifest["parts"].append(part_entry)
         elif body.name.startswith("comp_"):
-            comp = body._component
+            comp = body.component
             # Extract mount_label: body name is "comp_{parent}_{label}"
             # parent_body_name is known, so strip "comp_{parent}_" prefix
             prefix = f"comp_{body.parent_body_name}_"
@@ -315,7 +323,11 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         if meshes:
                             part_entry["meshes"] = meshes
                     except Exception:
-                        pass  # fall back to single mesh
+                        log.debug(
+                            "Multi-material emitter failed for %s, falling back to single mesh",
+                            body.name,
+                            exc_info=True,
+                        )
 
             manifest["parts"].append(part_entry)
 
