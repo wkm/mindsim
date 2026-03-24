@@ -45,10 +45,23 @@ def _relative_pos(pb_world: Vec3Type, parent_world: Vec3Type) -> Vec3Type:
     )
 
 
+def generate_mujoco_xml(bot: Bot) -> str:
+    """Return the bot.xml MuJoCo XML string without writing to disk.
+
+    This is the pure-function entry point used by the API server.
+    """
+    return _build_bot_xml(bot)
+
+
+def generate_scene_xml(bot: Bot) -> str:
+    """Return the scene.xml MuJoCo XML string without writing to disk."""
+    return _build_scene_xml(bot)
+
+
 def emit_mujoco(bot: Bot, output_dir: Path) -> None:
     """Generate bot.xml and scene.xml in output_dir."""
-    bot_xml = _build_bot_xml(bot)
-    scene_xml = _build_scene_xml(bot)
+    bot_xml = generate_mujoco_xml(bot)
+    scene_xml = generate_scene_xml(bot)
 
     (output_dir / "bot.xml").write_text(bot_xml)
     (output_dir / "scene.xml").write_text(scene_xml)

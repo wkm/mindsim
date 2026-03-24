@@ -733,6 +733,115 @@ def _axis_to_quat(axis: tuple) -> list[float]:
     return list(rotation_between((0.0, 0.0, 1.0), axis))
 
 
+def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
+    """Generate STL bytes for a named mesh in a bot's mesh directory.
+
+    Dispatches based on the mesh stem prefix to the appropriate solid factory.
+    Returns None if the mesh name is not recognized.
+    """
+    from botcad.skeleton import BodyKind
+
+    body_solids = cad.body_solids
+
+    # --- Body mesh: {body_name} ---
+    if stem in body_solids:
+        return _solid_to_stl_bytes(body_solids[stem])
+
+    # --- Component mesh: comp_{body}_{label} ---
+    if stem.startswith("comp_"):
+        from botcad.emit.cad import make_component_solid
+
+        for body in bot.all_bodies:
+            if body.kind == BodyKind.PURCHASED or body.is_wheel_body:
+                continue
+            for mount in body.mounts:
+                if f"comp_{body.name}_{mount.label}" == stem:
+                    from build123d import Location
+
+                    comp_solid = make_component_solid(mount.component)
+                    if comp_solid is None:
+                        return None
+                    if mount.rotate_z:
+                        comp_solid = comp_solid.moved(Location((0, 0, 0), (0, 0, 90)))
+                    face_euler = mount._face_euler_deg
+                    if face_euler != (0.0, 0.0, 0.0):
+                        comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
+                    return _solid_to_stl_bytes(comp_solid)
+        return None
+
+    # --- Servo mesh: servo_{servo_name} ---
+    if stem.startswith("servo_"):
+        from botcad.emit.cad import servo_solid
+
+        servo_name = stem.removeprefix("servo_")
+        for joint in bot.all_joints:
+            if joint.servo.name == servo_name:
+                return _solid_to_stl_bytes(servo_solid(joint.servo))
+        return None
+
+    # --- Hardware/fastener mesh: hardware_{designation}_{head_type} ---
+    if stem.startswith("hardware_"):
+        from botcad.emit.cad import screw_solid
+        from botcad.fasteners import fastener_key, fastener_stl_stem
+
+        # Search all mounting points to find one matching this stem
+        for body in bot.all_bodies:
+            for joint in body.joints:
+                for mp in (
+                    *joint.servo.mounting_ears,
+                    *joint.servo.horn_mounting_points,
+                    *joint.servo.rear_horn_mounting_points,
+                ):
+                    if fastener_stl_stem(mp) == stem:
+                        k = fastener_key(mp)
+                        return _solid_to_stl_bytes(screw_solid(k[0], k[1]))
+            for mount in body.mounts:
+                for mp in mount.component.mounting_points:
+                    if fastener_stl_stem(mp) == stem:
+                        k = fastener_key(mp)
+                        return _solid_to_stl_bytes(screw_solid(k[0], k[1]))
+        return None
+
+    # --- Horn mesh: horn_{joint_name} ---
+    if stem.startswith("horn_"):
+        from botcad.emit.cad import _horn_solid, _orient_z_to_axis
+
+        joint_name = stem.removeprefix("horn_")
+        for joint in bot.all_joints:
+            if joint.name == joint_name:
+                horn = _horn_solid(joint.servo)
+                if horn is None:
+                    return None
+                horn = _orient_z_to_axis(horn, joint.axis)
+                return _solid_to_stl_bytes(horn)
+        return None
+
+    # --- Wire mesh: wire_{label}_{body}_{idx} ---
+    if stem.startswith("wire_"):
+        from botcad.component import BusType
+        from botcad.emit.cad import _wire_segment_solid
+
+        bus_radii = {
+            BusType.UART_HALF_DUPLEX: 0.0009,
+            BusType.CSI: 0.0018,
+            BusType.POWER: 0.0012,
+        }
+        for route in bot.wire_routes:
+            radius = bus_radii.get(route.bus_type, 0.0015)
+            for i, seg in enumerate(route.segments):
+                if seg.straight_length < 0.001:
+                    continue
+                expected = f"wire_{route.label}_{seg.body_name}_{i}"
+                if expected == stem:
+                    wire_solid = _wire_segment_solid(seg.start, seg.end, radius)
+                    if wire_solid is None:
+                        return None
+                    return _solid_to_stl_bytes(wire_solid)
+        return None
+
+    return None
+
+
 class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
     """HTTP handler that serves static files and component API endpoints."""
 
@@ -813,6 +922,18 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
         m = re.match(r"^/api/components/([^/]+)/stl/(\w+)$", path)
         if m:
             self._handle_component_stl(m.group(1), m.group(2))
+            return
+
+        # /api/bots/<bot>/bot.xml — on-demand MuJoCo XML
+        m = re.match(r"^/api/bots/([^/]+)/bot\.xml$", path)
+        if m:
+            self._handle_bot_xml(m.group(1))
+            return
+
+        # /api/bots/<bot>/meshes/<mesh_name>.stl — on-demand mesh STL
+        m = re.match(r"^/api/bots/([^/]+)/meshes/(.+\.stl)$", path)
+        if m:
+            self._handle_bot_mesh(m.group(1), m.group(2))
             return
 
         # Fall through to static file serving
@@ -971,6 +1092,64 @@ class ViewerHTTPHandler(http.server.SimpleHTTPRequestHandler):
             )
 
         self._send_json(json.dumps({"fasteners": fasteners}).encode())
+
+    def _handle_bot_xml(self, bot_name: str):
+        """Serve on-demand MuJoCo bot.xml generated from the bot skeleton."""
+        try:
+            bot, _cad = _load_bot(bot_name)
+        except FileNotFoundError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"bot.xml generation failed: {e}")
+            return
+
+        from botcad.emit.mujoco import generate_mujoco_xml
+
+        xml_str = generate_mujoco_xml(bot)
+        xml_bytes = xml_str.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml")
+        self.send_header("Content-Length", str(len(xml_bytes)))
+        self.end_headers()
+        self.wfile.write(xml_bytes)
+
+    def _handle_bot_mesh(self, bot_name: str, mesh_name: str):
+        """Serve on-demand mesh STL generated from cached CAD solids.
+
+        Mesh names follow the same convention as emit_cad():
+        - {body_name}.stl — structural body mesh
+        - comp_{body}_{label}.stl — mounted component
+        - servo_{servo_name}.stl — servo body
+        - hw_{designation}_{head_type}.stl — fastener/screw
+        - horn_{joint_name}.stl — horn disc
+        - wire_{label}_{body}_{idx}.stl — wire segment
+        """
+        try:
+            bot, cad = _load_bot(bot_name)
+        except FileNotFoundError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"Mesh generation failed: {e}")
+            return
+
+        stem = mesh_name.removesuffix(".stl")
+
+        try:
+            stl_bytes = _generate_bot_mesh(bot, cad, stem)
+        except KeyError as e:
+            self.send_error(404, str(e))
+            return
+        except Exception as e:
+            self.send_error(500, f"Mesh generation failed for {mesh_name}: {e}")
+            return
+
+        if stl_bytes is None:
+            self.send_error(404, f"Mesh not found: {mesh_name}")
+            return
+
+        self._send_binary(stl_bytes, mesh_name)
 
     def _handle_cad_steps_meta(self, bot_name: str, body_name: str):
         """Return JSON metadata for all CAD construction steps of a body."""

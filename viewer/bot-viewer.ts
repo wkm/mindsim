@@ -175,19 +175,19 @@ export async function initBotViewer(botName: string) {
 
     loadingText.textContent = 'Loading bot model...';
 
-    // Fetch bot.xml
-    const botDir = `../bots/${botName}`;
-    const xmlText = await (await fetch(`${botDir}/bot.xml`)).text();
+    // Fetch bot.xml from API (on-demand generation from skeleton)
+    const botApi = `/api/bots/${botName}`;
+    const xmlText = await (await fetch(`${botApi}/bot.xml`)).text();
     mujoco.FS.writeFile('/working/bot.xml', xmlText);
 
-    // Parse XML to find mesh files and fetch them in parallel
+    // Parse XML to find mesh files and fetch them in parallel from API
     const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
     const meshFiles = [...xmlDoc.querySelectorAll('mesh[file]')].map((el) => el.getAttribute('file'));
 
     loadingText.textContent = `Loading ${meshFiles.length} meshes...`;
     await Promise.all(
       meshFiles.map(async (file) => {
-        const buf = new Uint8Array(await (await fetch(`${botDir}/meshes/${file}`)).arrayBuffer());
+        const buf = new Uint8Array(await (await fetch(`${botApi}/meshes/${file}`)).arrayBuffer());
         mujoco.FS.writeFile(`/working/meshes/${file}`, buf);
       }),
     );
