@@ -700,7 +700,7 @@ def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
 
     Camera position is read from the purchased Body instance.
     """
-    from botcad.component import CameraSpec
+    from botcad.component import ComponentKind
 
     # Build lookup of component purchased bodies for this structural body
     comp_bodies: dict[str, Body] = {}
@@ -713,7 +713,7 @@ def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
             comp_bodies[pb.name] = pb
 
     for mount in body.mounts:
-        if isinstance(mount.component, CameraSpec):
+        if mount.component.kind == ComponentKind.CAMERA:
             cam = mount.component
             comp_key = f"comp_{body.name}_{mount.label}"
             cb = comp_bodies.get(comp_key)

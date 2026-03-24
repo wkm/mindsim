@@ -15,31 +15,25 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
-from botcad.component import BatterySpec, CameraSpec, ComponentKind, ServoSpec
+from botcad.component import ComponentKind
 
 
 def _component_specs(comp) -> dict:
     """Extract type-specific specs from a Component."""
     specs: dict = {}
-    if isinstance(comp, CameraSpec):
-        specs["component_type"] = "camera"
+    specs["component_type"] = comp.kind.value
+    if comp.kind == ComponentKind.CAMERA:
         specs["fov_deg"] = comp.fov_deg
         specs["resolution"] = list(comp.resolution)
-    elif isinstance(comp, BatterySpec):
-        specs["component_type"] = "battery"
+    elif comp.kind == ComponentKind.BATTERY:
         specs["chemistry"] = comp.chemistry
         specs["voltage"] = comp.voltage
         specs["cells_s"] = comp.cells_s
-    elif isinstance(comp, ServoSpec):
-        specs["component_type"] = "servo"
+    elif comp.kind == ComponentKind.SERVO:
         specs["stall_torque_nm"] = round(comp.stall_torque, 4)
         specs["no_load_speed_rad_s"] = round(comp.no_load_speed, 3)
         specs["voltage"] = comp.voltage
         specs["gear_ratio"] = comp.gear_ratio
-    elif comp.kind == ComponentKind.WHEEL:
-        specs["component_type"] = "wheel"
-    else:
-        specs["component_type"] = "component"
     return specs
 
 

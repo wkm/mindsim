@@ -414,9 +414,9 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
     if bot.root is None:
         return route
 
-    # Find camera body and CSI port (look for CameraSpec instances,
+    # Find camera body and CSI port (look for camera components,
     # not just any CSI port — the Pi also has one)
-    from botcad.component import CameraSpec
+    from botcad.component import ComponentKind
 
     camera_body: Body | None = None
     camera_pos: Vec3 | None = None
@@ -426,7 +426,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         if camera_body is not None:
             return
         for mount in body.mounts:
-            if isinstance(mount.component, CameraSpec):
+            if mount.component.kind == ComponentKind.CAMERA:
                 for port in mount.component.wire_ports:
                     if port.bus_type == BusType.CSI:
                         camera_body = body
@@ -507,10 +507,10 @@ def _route_power(bot: Bot) -> WireRoute:
     battery_pos: Vec3 | None = None
     pi_pos: Vec3 | None = None
 
-    from botcad.component import BatterySpec
+    from botcad.component import ComponentKind
 
     for mount in bot.root.mounts:
-        if isinstance(mount.component, BatterySpec):
+        if mount.component.kind == ComponentKind.BATTERY:
             for port in mount.component.wire_ports:
                 if port.bus_type == BusType.POWER:
                     battery_pos = _add_vec3(mount.resolved_pos, port.pos)

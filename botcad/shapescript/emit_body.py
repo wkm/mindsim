@@ -38,7 +38,7 @@ def emit_body_ir(
     from botcad.bracket import (
         BracketSpec,
     )
-    from botcad.component import BearingSpec, CameraSpec
+    from botcad.component import ComponentKind
     from botcad.emit.cad import _ensure_solid
     from botcad.geometry import quat_to_euler
     from botcad.skeleton import BodyShape, BracketStyle
@@ -109,7 +109,7 @@ def emit_body_ir(
     if not body.is_wheel_body:
         for mount in body.mounts:
             cd = mount.placed_dimensions
-            if isinstance(mount.component, BearingSpec):
+            if mount.component.kind == ComponentKind.BEARING:
                 # Bearings: cylindrical pocket with tolerance
                 tol = 0.0005  # 0.5mm total diameter clearance
                 pocket_r = mount.component.od / 2 + tol / 2
@@ -127,7 +127,7 @@ def emit_body_ir(
             shell = prog.cut(shell, pocket)
 
             # Camera-specific cuts: lens aperture + ribbon cable exit
-            if isinstance(mount.component, CameraSpec):
+            if mount.component.kind == ComponentKind.CAMERA:
                 shell = _emit_camera_cuts(prog, shell, mount, body.dimensions, dims)
 
     # ── 3. Union coupler (cad.py:827-843) ──

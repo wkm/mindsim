@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from botcad.component import CameraSpec
+from botcad.component import ComponentKind
 from botcad.skeleton import BaseType
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ def emit_assembly_guide(bot: Bot, output_dir: Path) -> None:
     has_controller = False
     for body in bot.all_bodies:
         for mount in body.mounts:
-            if isinstance(mount.component, CameraSpec):
+            if mount.component.kind == ComponentKind.CAMERA:
                 has_camera = True
             elif mount.component.name == "RaspberryPiZero2W":
                 has_pi = True

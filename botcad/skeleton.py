@@ -33,11 +33,12 @@ from typing import Literal
 
 from botcad.component import (
     Appearance,
-    CameraSpec,
     Component,
     ComponentKind,
+    MountOrientation,
     ServoSpec,
     Vec3,
+    get_component_meta,
 )
 from botcad.geometry import (
     EULER_IDENTITY,
@@ -176,7 +177,10 @@ class Mount:
         is rotated to align with the mount face normal.
         """
 
-        return isinstance(self.component, CameraSpec)
+        return (
+            get_component_meta(self.component.kind).mount_orientation
+            == MountOrientation.FACE_NORMAL
+        )
 
     @property
     def _face_rotation_entry(self) -> _FaceRotEntry | None:
@@ -726,7 +730,6 @@ class Bot:
         """
         import logging
 
-        from botcad.component import get_component_meta
         from botcad.shapescript.backend_occt import OcctBackend
 
         log = logging.getLogger(__name__)

@@ -30,14 +30,14 @@ from botcad.bracket import (
     servo_solid,
 )
 from botcad.cad_utils import as_solid as _as_solid
-from botcad.component import BearingSpec, BusType, CameraSpec, ComponentKind
+from botcad.component import BusType, ComponentKind
 from botcad.geometry import quat_to_euler
 from botcad.skeleton import BodyKind
 
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from botcad.component import Component, Vec3
+    from botcad.component import BearingSpec, Component, Vec3
     from botcad.skeleton import Body, Bot, Joint
 
 
@@ -236,8 +236,6 @@ def make_component_solid(component: Component):
     ValueError for unknown components.
     """
 
-    from botcad.component import ServoSpec
-
     dims = component.dimensions
 
     if component.name == "RaspberryPiZero2W":
@@ -252,27 +250,25 @@ def make_component_solid(component: Component):
         return _make_wheel_solid(r, w)
 
     # Servos: use detailed solid from bracket module
-    if isinstance(component, ServoSpec):
+    if component.kind == ComponentKind.SERVO:
         from botcad.bracket import servo_solid
 
         return servo_solid(component)
 
     # Cameras: use detailed solid from camera module
-    if isinstance(component, CameraSpec):
+    if component.kind == ComponentKind.CAMERA:
         from botcad.components.camera import camera_solid
 
         return camera_solid(component)
 
     # Batteries: use detailed solid from battery module
-    from botcad.component import BatterySpec, BearingSpec
-
-    if isinstance(component, BatterySpec):
+    if component.kind == ComponentKind.BATTERY:
         from botcad.components.battery import battery_solid
 
         return battery_solid(component)
 
     # Bearings: outer ring - inner bore
-    if isinstance(component, BearingSpec):
+    if component.kind == ComponentKind.BEARING:
         return _make_bearing_solid(component)
 
     # Test fastener prism: drilled holes at each mount point

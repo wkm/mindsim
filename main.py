@@ -457,42 +457,35 @@ def _build_component_registry() -> dict:
 
 def _component_layers(comp) -> list[str]:
     """Return the list of available STL layer IDs for a component."""
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind, get_component_meta
 
-    if isinstance(comp, ServoSpec):
+    meta = get_component_meta(comp.kind)
+    layers = list(meta.layers)
+    # Servo: conditionally add horn layer
+    if comp.kind == ComponentKind.SERVO:
         from botcad.bracket import horn_disc_params
 
-        layers = [
-            "servo",
-            "bracket",
-            "cradle",
-            "coupler",
-            "bracket_envelope",
-            "cradle_envelope",
-        ]
-        if horn_disc_params(comp) is not None:
+        if horn_disc_params(comp) is not None and "horn" not in layers:
             layers.insert(1, "horn")
-    else:
-        layers = ["body"]
-    if comp.mounting_points:
+    if comp.mounting_points and "fasteners" not in layers:
         layers.append("fasteners")
     return layers
 
 
 def _component_to_json(comp, category: str) -> dict:
     """Serialize a Component instance to JSON-safe dict."""
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind
 
     info = {
         "name": comp.name,
         "category": category,
         "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
         "mass_g": round(comp.mass * 1000, 1),
-        "is_servo": isinstance(comp, ServoSpec),
+        "is_servo": comp.kind == ComponentKind.SERVO,
         "color": list(comp.color),
         "layers": _component_layers(comp),
     }
-    if isinstance(comp, ServoSpec):
+    if comp.kind == ComponentKind.SERVO:
         import math
 
         info["servo"] = {
@@ -504,7 +497,7 @@ def _component_to_json(comp, category: str) -> dict:
             "continuous": comp.continuous,
         }
     # Discover available 2D technical drawings
-    if isinstance(comp, ServoSpec):
+    if comp.kind == ComponentKind.SERVO:
         safe = comp.name.lower()
         drawing_types = ["pocket", "coupler", "cradle", "coupler_assembly"]
         drawings = []
@@ -665,13 +658,13 @@ def _generate_solid(comp, part: str):
     All underlying factory functions are @lru_cache'd and route through
     ShapeScript (which uses DiskCache), so no additional caching is needed here.
     """
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind
     from botcad.emit.cad import make_component_solid
 
     if part == "body":
         return make_component_solid(comp)
 
-    if isinstance(comp, ServoSpec):
+    if comp.kind == ComponentKind.SERVO:
         from botcad.bracket import (
             BracketSpec,
             bracket_envelope,
