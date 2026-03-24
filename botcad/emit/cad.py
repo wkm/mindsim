@@ -41,6 +41,29 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
+def _find_mount_for_comp_body(bot, body):
+    """Find the Mount that produced a comp_* purchased body."""
+    parent = next((b for b in bot.all_bodies if b.name == body.parent_body_name), None)
+    if parent is None:
+        return None
+    for mount in parent.mounts:
+        if f"comp_{parent.name}_{mount.label}" == body.name:
+            return mount
+    return None
+
+
+def _apply_mount_rotation(solid, mount):
+    """Apply rotate_z + face_euler to a component solid, matching pocket orientation."""
+    from build123d import Location
+
+    if mount.rotate_z:
+        solid = solid.moved(Location((0, 0, 0), (0, 0, 90)))
+    face_euler = mount._face_euler_deg
+    if face_euler != (0.0, 0.0, 0.0):
+        solid = solid.moved(Location((0, 0, 0), face_euler))
+    return solid
+
+
 @dataclass
 class CadModel:
     """Pre-built CAD geometry for all bodies in a bot."""
@@ -395,6 +418,14 @@ def build_cad(bot: Bot) -> CadModel:
             print(f" {dt:.1f}s")
 
         if solid is not None:
+            # Mounted components: apply rotate_z + face_euler so body_solids
+            # stores the oriented solid.  Clearance checks and on-demand mesh
+            # endpoints both consume body_solids, so the rotation must be
+            # applied here — not deferred to STL export time.
+            if body.name.startswith("comp_") and body.parent_body_name:
+                mount = _find_mount_for_comp_body(bot, body)
+                if mount is not None:
+                    solid = _apply_mount_rotation(solid, mount)
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"
@@ -462,28 +493,9 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
         if solid is not None:
             export_stl(solid, str(meshes_dir / f"{body.name}.stl"))
 
-    # --- Per-component STLs (for MuJoCo mesh geoms) ---
-    # Each component gets its own STL at origin; MuJoCo positions it via pos/quat.
-    # Rotations use .moved() (not .locate()) since make_component_solid is @lru_cache'd.
-    comp_stl_count = 0
-    for body in bot.all_bodies:
-        if body.is_wheel_body:
-            continue  # wheel mesh already represents the component
-        for mount in body.mounts:
-            comp_solid = make_component_solid(mount.component)
-            if comp_solid is None:
-                continue
-            # rotate_z: 90° around Z to swap X/Y (e.g. Pi board front-to-back)
-            if mount.rotate_z:
-                comp_solid = comp_solid.moved(Location((0, 0, 0), (0, 0, 90)))
-            # Face-outward rotation: align component +Z with mount face normal
-            # (e.g. camera lens faces forward when front-mounted)
-            face_euler = mount._face_euler_deg
-            if face_euler != (0.0, 0.0, 0.0):
-                comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
-            stl_name = f"comp_{body.name}_{mount.label}.stl"
-            export_stl(comp_solid, str(meshes_dir / stl_name))
-            comp_stl_count += 1
+    # Component STLs are written by the per-body loop above — body_solids
+    # already contains the rotated solid (rotate_z + face_euler applied in
+    # build_cad via _apply_mount_rotation).
 
     # --- Per-servo STLs (for MuJoCo mesh geoms) ---
     # Each servo gets an STL at origin; MuJoCo positions via servo_placement().

@@ -349,36 +349,12 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
 
     Dispatches based on the mesh stem prefix to the appropriate solid factory.
     """
-    from botcad.skeleton import BodyKind
 
     body_solids = cad.body_solids
 
-    # Component mesh: comp_{body}_{label}
-    # Must be checked BEFORE body_solids lookup — body_solids stores the raw
-    # unrotated ShapeScript solid, but component STLs need rotate_z and
-    # face_euler applied to match the pocket orientation in the parent body.
-    if stem.startswith("comp_"):
-        from botcad.emit.cad import make_component_solid
-
-        for body in bot.all_bodies:
-            if body.kind == BodyKind.PURCHASED or body.is_wheel_body:
-                continue
-            for mount in body.mounts:
-                if f"comp_{body.name}_{mount.label}" == stem:
-                    from build123d import Location
-
-                    comp_solid = make_component_solid(mount.component)
-                    if comp_solid is None:
-                        return None
-                    if mount.rotate_z:
-                        comp_solid = comp_solid.moved(Location((0, 0, 0), (0, 0, 90)))
-                    face_euler = mount._face_euler_deg
-                    if face_euler != (0.0, 0.0, 0.0):
-                        comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
-                    return _solid_to_stl_bytes(comp_solid)
-        return None
-
-    # Structural body mesh: look up pre-built solid from build_cad()
+    # Body mesh (structural or component): look up pre-built solid from build_cad().
+    # Component solids in body_solids are already rotated (rotate_z + face_euler
+    # applied in build_cad via _apply_mount_rotation).
     if stem in body_solids:
         return _solid_to_stl_bytes(body_solids[stem])
 
