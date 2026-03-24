@@ -1,11 +1,9 @@
-"""Translate _make_body_solid logic into ShapeScript programs.
+"""Emit ShapeScript programs that build body solids.
 
-This module mirrors botcad/emit/cad.py:_make_body_solid() line-by-line,
-but emits IR ops instead of calling build123d directly. The resulting
-ShapeScript can be executed by the OCCT backend to produce the same solid.
-
-The key invariant: for every bot, the ShapeScript path must produce body solids
-whose volumes and bounding boxes match the direct build123d path.
+This is the single source of truth for body geometry. Each body's parametric
+definition (shell shape, component mounts, bracket cuts, wire channels) is
+translated into ShapeScript IR ops, then executed by OcctBackend to produce
+the final build123d Solid.
 """
 
 from __future__ import annotations

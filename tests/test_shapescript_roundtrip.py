@@ -310,8 +310,7 @@ class TestBuildCadIntegration:
     """build_cad() through ShapeScript path produces valid CadModel."""
 
     @pytest.mark.timeout(300)
-    def test_build_cad_via_ir(self, bot_fixture, monkeypatch):
-        monkeypatch.setenv("SHAPESCRIPT", "1")
+    def test_build_cad_via_ir(self, bot_fixture):
         _clear_all_caches()
 
         from botcad.emit.cad import build_cad

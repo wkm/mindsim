@@ -82,10 +82,14 @@ class RegularPolygonExtrudeOp:
 
 @dataclass(frozen=True)
 class PrebuiltOp:
-    """Injects a pre-built solid into the IR (e.g. from bracket.py factories).
+    """Injects a pre-built solid into the IR.
+
+    Used for Body.custom_solid — a user-supplied build123d Solid that bypasses
+    the standard parametric shell generation. The solid is stored out-of-band
+    in ShapeScript.prebuilt_solids and referenced by ShapeRef.
 
     The solid_hash is a content hash of the prebuilt geometry, used for
-    cache invalidation. The actual solid is passed out-of-band to the backend.
+    cache invalidation.
     """
 
     ref: ShapeRef
