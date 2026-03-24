@@ -190,7 +190,7 @@ class Mount:
         return _FACE_ROTATION.get(self.position)
 
     @property
-    def _face_euler_deg(self) -> tuple[float, float, float]:
+    def face_euler_deg(self) -> tuple[float, float, float]:
         """Euler angles (X, Y, Z) in degrees to rotate component +Z to face
         the mount normal.  Identity when face_outward is False or position
         is "top"/"center" (already +Z).
@@ -579,6 +579,7 @@ class Bot:
         """
         existing = {(c.body_a, c.body_b) for c in self._clearance_constraints}
         existing |= {(c.body_b, c.body_a) for c in self._clearance_constraints}
+        body_names = {b.name for b in self.all_bodies}
 
         def _add(a: str, b: str, min_dist: float, label: str) -> None:
             if a == b:
@@ -599,10 +600,10 @@ class Bot:
                 if joint.child:
                     joint_bodies.append((joint.child.name, "child"))
                 servo_name = f"servo_{joint.name}"
-                if any(b.name == servo_name for b in self.all_bodies):
+                if servo_name in body_names:
                     joint_bodies.append((servo_name, "servo"))
                 horn_name = f"horn_{joint.name}"
-                if any(b.name == horn_name for b in self.all_bodies):
+                if horn_name in body_names:
                     joint_bodies.append((horn_name, "horn"))
 
                 # Check pairs — skip parent-servo (servo is intentionally
@@ -628,7 +629,7 @@ class Bot:
                 if mount.component.kind == ComponentKind.WHEEL:
                     continue
                 comp_name = f"comp_{body.name}_{mount.label}"
-                if any(b.name == comp_name for b in self.all_bodies):
+                if comp_name in body_names:
                     _add(
                         comp_name,
                         body.name,

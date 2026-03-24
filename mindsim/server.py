@@ -147,23 +147,10 @@ def _build_component_registry() -> dict:
 
 def _component_layers(comp) -> list[str]:
     """Return the list of available STL layer IDs for a component."""
-    from botcad.component import ComponentKind, get_component_meta
+    from botcad.component import get_component_meta
 
     meta = get_component_meta(comp.kind)
-    layers = list(meta.layers)
-    if comp.kind == ComponentKind.SERVO:
-        from botcad.bracket import horn_disc_params
-
-        if horn_disc_params(comp) is not None and "horn" not in layers:
-            layers.insert(1, "horn")
-        # server-specific layers
-        if "bracket_insertion_channel" not in layers:
-            layers.append("bracket_insertion_channel")
-        if "cradle_insertion_channel" not in layers:
-            layers.append("cradle_insertion_channel")
-    if comp.mounting_points and "fasteners" not in layers:
-        layers.append("fasteners")
-    return layers
+    return list(meta.layers)
 
 
 def _component_to_json(comp, category: str) -> dict:

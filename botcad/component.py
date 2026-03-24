@@ -47,7 +47,6 @@ class MountOrientation(StrEnum):
 class ComponentMeta:
     """Metadata for a component kind — script emitter, layers, category."""
 
-    kind: ComponentKind
     category: str  # BOM category: "electronics", "actuator", "structure"
     layers: tuple[str, ...]  # viewer STL layers
     mount_orientation: MountOrientation
@@ -77,7 +76,6 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
 
     return {
         ComponentKind.SERVO: ComponentMeta(
-            kind=ComponentKind.SERVO,
             category="actuator",
             layers=(
                 "servo",
@@ -86,6 +84,8 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
                 "coupler",
                 "bracket_envelope",
                 "cradle_envelope",
+                "bracket_insertion_channel",
+                "cradle_insertion_channel",
                 "horn",
                 "fasteners",
             ),
@@ -93,42 +93,36 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             script_emitter=servo_script,
         ),
         ComponentKind.CAMERA: ComponentMeta(
-            kind=ComponentKind.CAMERA,
             category="electronics",
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FACE_NORMAL,
             script_emitter=camera_script,
         ),
         ComponentKind.BATTERY: ComponentMeta(
-            kind=ComponentKind.BATTERY,
             category="electronics",
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=battery_script,
         ),
         ComponentKind.COMPUTE: ComponentMeta(
-            kind=ComponentKind.COMPUTE,
             category="electronics",
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=compute_script,
         ),
         ComponentKind.WHEEL: ComponentMeta(
-            kind=ComponentKind.WHEEL,
             category="structure",
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=wheel_component_script,
         ),
         ComponentKind.BEARING: ComponentMeta(
-            kind=ComponentKind.BEARING,
             category="structure",
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=bearing_script,
         ),
         ComponentKind.GENERIC: ComponentMeta(
-            kind=ComponentKind.GENERIC,
             category="component",
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,

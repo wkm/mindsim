@@ -685,7 +685,7 @@ class TestComponentRegistry:
 
         for kind in ComponentKind:
             meta = get_component_meta(kind)
-            assert meta.kind == kind
+            assert meta.category  # every kind has a non-empty category
 
     def test_camera_meta_has_face_normal_orientation(self):
         from botcad.component import ComponentKind, MountOrientation, get_component_meta

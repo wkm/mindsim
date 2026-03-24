@@ -41,24 +41,13 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-def _find_mount_for_comp_body(bot, body):
-    """Find the Mount that produced a comp_* purchased body."""
-    parent = next((b for b in bot.all_bodies if b.name == body.parent_body_name), None)
-    if parent is None:
-        return None
-    for mount in parent.mounts:
-        if f"comp_{parent.name}_{mount.label}" == body.name:
-            return mount
-    return None
-
-
 def _apply_mount_rotation(solid, mount):
     """Apply rotate_z + face_euler to a component solid, matching pocket orientation."""
     from build123d import Location
 
     if mount.rotate_z:
         solid = solid.moved(Location((0, 0, 0), (0, 0, 90)))
-    face_euler = mount._face_euler_deg
+    face_euler = mount.face_euler_deg
     if face_euler != (0.0, 0.0, 0.0):
         solid = solid.moved(Location((0, 0, 0), face_euler))
     return solid
@@ -375,6 +364,12 @@ def build_cad(bot: Bot) -> CadModel:
 
     body_solids: dict[str, object] = {}
 
+    # Pre-build comp_name → Mount lookup for rotation application.
+    comp_mount_map: dict[str, object] = {}
+    for body in bot.all_bodies:
+        for mount in body.mounts:
+            comp_mount_map[f"comp_{body.name}_{mount.label}"] = mount
+
     # Build geometry for ALL bodies — fabricated and purchased.
     # Fabricated bodies use emit_body_ir (complex structural geometry).
     # Purchased bodies use component-specific script emitters.
@@ -422,10 +417,9 @@ def build_cad(bot: Bot) -> CadModel:
             # stores the oriented solid.  Clearance checks and on-demand mesh
             # endpoints both consume body_solids, so the rotation must be
             # applied here — not deferred to STL export time.
-            if body.name.startswith("comp_") and body.parent_body_name:
-                mount = _find_mount_for_comp_body(bot, body)
-                if mount is not None:
-                    solid = _apply_mount_rotation(solid, mount)
+            mount = comp_mount_map.get(body.name)
+            if mount is not None:
+                solid = _apply_mount_rotation(solid, mount)
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"
