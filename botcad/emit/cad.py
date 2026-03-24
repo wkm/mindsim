@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,6 +54,15 @@ def _apply_mount_rotation(solid, mount):
 
 
 @dataclass
+@dataclass
+class MaterialSolid:
+    """A solid tagged with the material it represents."""
+
+    material_name: str  # e.g., "fr4_green"
+    solid: object  # build123d Solid
+
+
+@dataclass
 class CadModel:
     """Pre-built CAD geometry for all bodies in a bot."""
 
@@ -61,6 +70,8 @@ class CadModel:
     parent_joint_map: dict[str, Joint]  # body_name → parent Joint
     rigid_groups: dict[str, list[Body]]  # group_name → [Body, ...]
     body_wire_segments: dict[str, list[tuple]]  # body_name → [(seg, bus_type), ...]
+    # Multi-material: body_name → list of (material_name, solid) for viewer STLs
+    multi_material_solids: dict[str, list[MaterialSolid]] = field(default_factory=dict)
 
 
 @dataclass
@@ -327,6 +338,67 @@ def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
     return None
 
 
+def _build_multi_material_solids(
+    body: Body,
+    mount: object,
+    ir_backend: object,
+    multi_material_solids: dict[str, list[MaterialSolid]],
+    log,
+) -> None:
+    """Execute multi-material programs for a component body, if available.
+
+    Each material program produces an independent solid. The solid is rotated
+    with the same mount rotation as the primary solid, then stored in
+    multi_material_solids for later STL export.
+    """
+    from botcad.component import get_component_meta
+
+    comp = body._component
+    if comp is None:
+        return
+
+    meta = get_component_meta(comp.kind)
+    if meta.multi_material_emitter is None:
+        return
+
+    try:
+        mm_result = meta.multi_material_emitter(comp)
+    except Exception:
+        log.debug("Multi-material emitter failed for %s", body.name, exc_info=True)
+        return
+
+    mat_solids = []
+    for mp in mm_result.material_programs:
+        try:
+            result = ir_backend.execute(mp.program)
+            solid = result.shapes.get(mp.program.output_ref.id)
+            if solid is not None:
+                # Apply same mount rotation as primary solid
+                if mount is not None:
+                    solid = _apply_mount_rotation(solid, mount)
+                mat_solids.append(
+                    MaterialSolid(
+                        material_name=mp.material.name,
+                        solid=solid,
+                    )
+                )
+        except Exception:
+            log.debug(
+                "Multi-material program %s failed for %s",
+                mp.material.name,
+                body.name,
+                exc_info=True,
+            )
+
+    if mat_solids:
+        multi_material_solids[body.name] = mat_solids
+        log.info(
+            "Multi-material: %s → %d material regions",
+            body.name,
+            len(mat_solids),
+        )
+
+
 def build_cad(bot: Bot) -> CadModel:
     """Build all body solids and refine mass/inertia from actual geometry.
 
@@ -363,6 +435,7 @@ def build_cad(bot: Bot) -> CadModel:
     cache_hits = 0
 
     body_solids: dict[str, object] = {}
+    multi_material_solids: dict[str, list[MaterialSolid]] = {}
 
     # Pre-build comp_name → Mount lookup for rotation application.
     comp_mount_map: dict[str, object] = {}
@@ -423,6 +496,14 @@ def build_cad(bot: Bot) -> CadModel:
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"
+
+            # Multi-material: if this is a component body with a multi-material
+            # emitter, execute each material program and store the results.
+            if body._component is not None and body.name.startswith("comp_"):
+                _build_multi_material_solids(
+                    body, mount, ir_backend, multi_material_solids, log
+                )
+
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
 
     print(f"[build_cad] {cache_hits}/{n} cache hits")
@@ -466,6 +547,7 @@ def build_cad(bot: Bot) -> CadModel:
         parent_joint_map=parent_joint_map,
         rigid_groups=rigid_groups,
         body_wire_segments=body_wire_segments,
+        multi_material_solids=multi_material_solids,
     )
 
 
@@ -490,6 +572,12 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     # Component STLs are written by the per-body loop above — body_solids
     # already contains the rotated solid (rotate_z + face_euler applied in
     # build_cad via _apply_mount_rotation).
+
+    # --- Multi-material component STLs (for viewer) ---
+    for body_name, mat_solids in cad.multi_material_solids.items():
+        for ms in mat_solids:
+            stl_name = f"{body_name}__{ms.material_name}.stl"
+            export_stl(ms.solid, str(meshes_dir / stl_name))
 
     # --- Per-servo STLs (for MuJoCo mesh geoms) ---
     # Each servo gets an STL at origin; MuJoCo positions via servo_placement().

@@ -60,6 +60,56 @@ def _build_assembly_tree(bot: Bot) -> list[dict]:
     return [_assembly_dict(asm) for asm in bot._assemblies.values()]
 
 
+def _build_materials_dict(bot: Bot) -> dict:
+    """Build the materials dictionary for the manifest.
+
+    Collects all unique materials from component default_materials and the
+    material catalog, mapping name -> visual properties for the viewer.
+    """
+    materials: dict[str, dict] = {}
+
+    # Collect from component default_materials
+    for body in bot.all_bodies:
+        for mount in body.mounts:
+            mat = mount.component.default_material
+            if mat.name not in materials and mat.name != "_default":
+                materials[mat.name] = {
+                    "color": list(mat.color),
+                    "metallic": mat.metallic,
+                    "roughness": mat.roughness,
+                    "opacity": mat.opacity,
+                }
+
+    # Collect from multi-material emitters (if build_cad has been run)
+    from botcad.component import get_component_meta
+
+    seen_kinds: set[str] = set()
+    for body in bot.all_bodies:
+        for mount in body.mounts:
+            comp = mount.component
+            kind_key = comp.kind.value
+            if kind_key in seen_kinds:
+                continue
+            seen_kinds.add(kind_key)
+            meta = get_component_meta(comp.kind)
+            if meta.multi_material_emitter is not None:
+                try:
+                    mm_result = meta.multi_material_emitter(comp)
+                    for mp in mm_result.material_programs:
+                        mat = mp.material
+                        if mat.name not in materials:
+                            materials[mat.name] = {
+                                "color": list(mat.color),
+                                "metallic": mat.metallic,
+                                "roughness": mat.roughness,
+                                "opacity": mat.opacity,
+                            }
+                except Exception:
+                    pass
+
+    return materials
+
+
 def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     """Generate viewer_manifest.json in the bot's output directory."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
@@ -72,6 +122,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
         "parts": [],
         "assembly_steps": [],
         "ik_chains": [],
+        "materials": _build_materials_dict(bot),
     }
 
     # Walk tree to build body/joint lists and assembly steps
@@ -243,6 +294,29 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 "mass": round(comp.mass, 4) if comp else 0.0,
                 "shapescript_component": comp.name if comp else body.name,
             }
+
+            # Multi-material meshes: if this component has per-material
+            # programs, add a `meshes` array alongside the legacy `mesh`.
+            if comp is not None:
+                from botcad.component import get_component_meta
+
+                meta = get_component_meta(comp.kind)
+                if meta.multi_material_emitter is not None:
+                    try:
+                        mm_result = meta.multi_material_emitter(comp)
+                        meshes = []
+                        for mp in mm_result.material_programs:
+                            meshes.append(
+                                {
+                                    "file": f"{body.name}__{mp.material.name}.stl",
+                                    "material": mp.material.name,
+                                }
+                            )
+                        if meshes:
+                            part_entry["meshes"] = meshes
+                    except Exception:
+                        pass  # fall back to single mesh
+
             manifest["parts"].append(part_entry)
 
     # 3. Fasteners at each joint (bracket screws + horn screws + rear horn screws)
