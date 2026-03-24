@@ -25,7 +25,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from botcad.component import Component, ServoSpec
+from botcad.component import Component, ComponentKind, ServoSpec, get_component_meta
 from botcad.emit.composite import grid, save_png
 from botcad.emit.render3d import (
     COLOR_BRACKET,
@@ -103,7 +103,7 @@ def _add_common_geoms(scene: SceneBuilder, component: Component) -> None:
     scene.add_mesh("comp", "component.stl", _body_render_color(component))
 
     d = component.dimensions
-    if isinstance(component, ServoSpec):
+    if component.kind == ComponentKind.SERVO:
         d = component.effective_body_dims
     _add_axis_annotations(scene, d)
 
@@ -368,7 +368,7 @@ def build_component_scene(component: Component) -> tuple[SceneBuilder, Path]:
     _add_common_geoms(scene, component)
     _add_mounting_annotations(scene, component)
     _add_wire_port_annotations(scene, component)
-    if isinstance(component, ServoSpec):
+    if component.kind == ComponentKind.SERVO:
         _add_servo_annotations(scene, component)
 
     return scene, temp_dir
@@ -821,39 +821,6 @@ def render_connector_catalog() -> Image.Image:
 # ── Pipeline entry point ──
 
 
-_COMPONENT_CATEGORY_REGISTRY: dict[str, str] | None = None
-
-
-def _component_category(comp: Component) -> str:
-    """Derive category from the component's module (battery, camera, servo, etc.).
-
-    Builds a name→module registry on first call, avoiding repeated brute-force
-    module scanning and factory instantiation.
-    """
-    global _COMPONENT_CATEGORY_REGISTRY
-    if _COMPONENT_CATEGORY_REGISTRY is None:
-        import importlib
-        import pkgutil
-
-        import botcad.components as pkg
-
-        registry: dict[str, str] = {}
-        for info in pkgutil.iter_modules(pkg.__path__):
-            mod = importlib.import_module(f"botcad.components.{info.name}")
-            for attr in dir(mod):
-                obj = getattr(mod, attr)
-                if callable(obj) and not isinstance(obj, type):
-                    try:
-                        instance = obj()
-                        if isinstance(instance, Component):
-                            registry[instance.name] = info.name
-                    except TypeError:
-                        pass
-        _COMPONENT_CATEGORY_REGISTRY = registry
-
-    return _COMPONENT_CATEGORY_REGISTRY.get(comp.name, "component")
-
-
 def emit_component_renders(bot, output_dir: Path) -> None:
     """Render every unique component used in the bot.
 
@@ -892,9 +859,9 @@ def emit_component_renders(bot, output_dir: Path) -> None:
 
     # Render non-servo components
     for name, comp in seen.items():
-        if isinstance(comp, ServoSpec):
+        if comp.kind == ComponentKind.SERVO:
             continue  # servos handled below
-        category = _component_category(comp)
+        category = get_component_meta(comp.kind).category
         safe_name = name.lower().replace(" ", "_")
         filename = f"test_{category}_{safe_name}.png"
 
