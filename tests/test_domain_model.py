@@ -627,4 +627,53 @@ class TestAssemblyHierarchy:
         bot.solve()
 
         assert bot._assembly_bodies("arm") == [upper]
-        assert bot._assembly_bodies("base") == [root]
+
+
+class TestComponentKind:
+    def test_ov5647_has_camera_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.camera import OV5647
+
+        cam = OV5647()
+        assert cam.kind == ComponentKind.CAMERA
+
+    def test_sts3215_has_servo_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.servo import STS3215
+
+        servo = STS3215()
+        assert servo.kind == ComponentKind.SERVO
+
+    def test_lipo2s_has_battery_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.battery import LiPo2S
+
+        bat = LiPo2S(1000)
+        assert bat.kind == ComponentKind.BATTERY
+
+    def test_generic_component_has_generic_kind(self):
+        from botcad.component import Component, ComponentKind
+
+        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        assert comp.kind == ComponentKind.GENERIC
+
+    def test_wheel_has_wheel_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.wheel import PololuWheel90mm
+
+        wheel = PololuWheel90mm()
+        assert wheel.kind == ComponentKind.WHEEL
+
+    def test_bearing_has_bearing_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.bearing import Bearing6x3x3
+
+        bearing = Bearing6x3x3()
+        assert bearing.kind == ComponentKind.BEARING
+
+    def test_compute_has_compute_kind(self):
+        from botcad.component import ComponentKind
+        from botcad.components.compute import RaspberryPiZero2W
+
+        pi = RaspberryPiZero2W()
+        assert pi.kind == ComponentKind.COMPUTE

@@ -23,6 +23,25 @@ class Appearance:
     opacity: float = 1.0  # transparency
 
 
+class ComponentKind(StrEnum):
+    """Semantic category of a physical component."""
+
+    SERVO = "servo"
+    CAMERA = "camera"
+    BATTERY = "battery"
+    COMPUTE = "compute"
+    WHEEL = "wheel"
+    BEARING = "bearing"
+    GENERIC = "generic"
+
+
+class MountOrientation(StrEnum):
+    """How a component sits relative to its mounting surface."""
+
+    FLAT = "flat"  # lies flat on mounting surface
+    FACE_NORMAL = "face_normal"  # functional axis aligns with mount face normal
+
+
 class BusType(StrEnum):
     """Wire bus protocol type."""
 
@@ -82,18 +101,19 @@ class Component:
     name: str
     dimensions: Vec3  # bounding box (x, y, z) in meters
     mass: float  # kg
+    kind: ComponentKind = ComponentKind.GENERIC
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
     appearance: Appearance = Appearance(color=(0.541, 0.608, 0.659, 1.0))
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
-    is_wheel: bool = False  # True for wheel components
 
 
 @dataclass(frozen=True)
 class BatterySpec(Component):
     """A battery pack with chemistries and cell counts."""
 
+    kind: ComponentKind = ComponentKind.BATTERY
     chemistry: str = "LiPo"
     cells_s: int = 1
     cells_p: int = 1
@@ -103,6 +123,7 @@ class BatterySpec(Component):
 class BearingSpec(Component):
     """A ball bearing with dimensions and mounting type."""
 
+    kind: ComponentKind = ComponentKind.BEARING
     od: float = 0.0  # outer diameter (meters)
     id: float = 0.0  # inner diameter (meters)
     width: float = 0.0  # thickness (meters)
@@ -112,6 +133,7 @@ class BearingSpec(Component):
 class CameraSpec(Component):
     """A camera module with optical parameters."""
 
+    kind: ComponentKind = ComponentKind.CAMERA
     fov_deg: float = 72.0  # diagonal field of view
     resolution: tuple[int, int] = (640, 480)  # width x height pixels
 
@@ -130,6 +152,7 @@ class ServoSpec(Component):
     ``servo_placement()`` can position the body correctly at a joint.
     """
 
+    kind: ComponentKind = ComponentKind.SERVO
     stall_torque: float = 0.0  # N-m
     no_load_speed: float = 0.0  # rad/s
     voltage: float = 0.0  # V

@@ -31,7 +31,14 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from botcad.component import Appearance, CameraSpec, Component, ServoSpec, Vec3
+from botcad.component import (
+    Appearance,
+    CameraSpec,
+    Component,
+    ComponentKind,
+    ServoSpec,
+    Vec3,
+)
 from botcad.geometry import (
     EULER_IDENTITY,
     EULER_RX_180,
@@ -614,7 +621,7 @@ class Bot:
             # Skip wheel components — the wheel component IS the wheel body
             # (same geometry), so they always fully overlap.
             for mount in body.mounts:
-                if mount.component.is_wheel:
+                if mount.component.kind == ComponentKind.WHEEL:
                     continue
                 comp_name = f"comp_{body.name}_{mount.label}"
                 if any(b.name == comp_name for b in self.all_bodies):
@@ -662,7 +669,9 @@ class Bot:
             if body.assembly is None:
                 body.assembly = parent_assembly
             # Compute is_wheel_body from mounted components
-            body.is_wheel_body = any(m.component.is_wheel for m in body.mounts)
+            body.is_wheel_body = any(
+                m.component.kind == ComponentKind.WHEEL for m in body.mounts
+            )
             self.all_bodies.append(body)
             for joint in body.joints:
                 self.all_joints.append(joint)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from botcad.colors import COLOR_STRUCTURE_RUBBER
-from botcad.component import Appearance, Component, MountPoint
+from botcad.component import Appearance, Component, ComponentKind, MountPoint
 
 
 def PololuWheel90mm() -> Component:
@@ -93,5 +93,5 @@ def PololuWheel90mm() -> Component:
             ),
         ),
         appearance=Appearance(color=COLOR_STRUCTURE_RUBBER.rgba),
-        is_wheel=True,
+        kind=ComponentKind.WHEEL,
     )
