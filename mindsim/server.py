@@ -147,42 +147,39 @@ def _build_component_registry() -> dict:
 
 def _component_layers(comp) -> list[str]:
     """Return the list of available STL layer IDs for a component."""
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind, get_component_meta
 
-    if isinstance(comp, ServoSpec):
+    meta = get_component_meta(comp.kind)
+    layers = list(meta.layers)
+    if comp.kind == ComponentKind.SERVO:
         from botcad.bracket import horn_disc_params
 
-        layers = [
-            "servo",
-            "bracket",
-            "cradle",
-            "coupler",
-            "bracket_insertion_channel",
-            "cradle_insertion_channel",
-        ]
-        if horn_disc_params(comp) is not None:
+        if horn_disc_params(comp) is not None and "horn" not in layers:
             layers.insert(1, "horn")
-    else:
-        layers = ["body"]
-    if comp.mounting_points:
+        # server-specific layers
+        if "bracket_insertion_channel" not in layers:
+            layers.append("bracket_insertion_channel")
+        if "cradle_insertion_channel" not in layers:
+            layers.append("cradle_insertion_channel")
+    if comp.mounting_points and "fasteners" not in layers:
         layers.append("fasteners")
     return layers
 
 
 def _component_to_json(comp, category: str) -> dict:
     """Serialize a Component instance to JSON-safe dict."""
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind
 
     info = {
         "name": comp.name,
         "category": category,
         "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
         "mass_g": round(comp.mass * 1000, 1),
-        "is_servo": isinstance(comp, ServoSpec),
+        "is_servo": comp.kind == ComponentKind.SERVO,
         "color": list(comp.appearance.color),
         "layers": _component_layers(comp),
     }
-    if isinstance(comp, ServoSpec):
+    if comp.kind == ComponentKind.SERVO:
         import math
 
         info["servo"] = {
@@ -194,7 +191,7 @@ def _component_to_json(comp, category: str) -> dict:
             "continuous": comp.continuous,
         }
     # Discover available 2D technical drawings
-    if isinstance(comp, ServoSpec):
+    if comp.kind == ComponentKind.SERVO:
         safe = comp.name.lower()
         drawing_types = ["pocket", "coupler", "cradle", "coupler_assembly"]
         drawings = []
@@ -259,7 +256,7 @@ def _generate_solid(comp, part: str):
     Thread-safe with caching so solids are built once and reused for both
     STL export and SVG rendering.
     """
-    from botcad.component import ServoSpec
+    from botcad.component import ComponentKind
     from botcad.emit.cad import make_component_solid
 
     cache_key = (comp.name, part)
@@ -270,7 +267,7 @@ def _generate_solid(comp, part: str):
     solid = None
     if part == "body":
         solid = make_component_solid(comp)
-    elif isinstance(comp, ServoSpec):
+    elif comp.kind == ComponentKind.SERVO:
         from botcad.bracket import (
             BracketSpec,
             bracket_solid_solid,
@@ -345,6 +342,113 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
     with _stl_cache_lock:
         _stl_cache[cache_key] = stl_bytes
     return stl_bytes
+
+
+def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
+    """Generate STL bytes for a named mesh in a bot's mesh directory.
+
+    Dispatches based on the mesh stem prefix to the appropriate solid factory.
+    """
+    from botcad.skeleton import BodyKind
+
+    body_solids = cad.body_solids
+
+    # Body mesh: {body_name}
+    if stem in body_solids:
+        return _solid_to_stl_bytes(body_solids[stem])
+
+    # Component mesh: comp_{body}_{label}
+    if stem.startswith("comp_"):
+        from botcad.emit.cad import make_component_solid
+
+        for body in bot.all_bodies:
+            if body.kind == BodyKind.PURCHASED or body.is_wheel_body:
+                continue
+            for mount in body.mounts:
+                if f"comp_{body.name}_{mount.label}" == stem:
+                    from build123d import Location
+
+                    comp_solid = make_component_solid(mount.component)
+                    if comp_solid is None:
+                        return None
+                    if mount.rotate_z:
+                        comp_solid = comp_solid.moved(Location((0, 0, 0), (0, 0, 90)))
+                    face_euler = mount._face_euler_deg
+                    if face_euler != (0.0, 0.0, 0.0):
+                        comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
+                    return _solid_to_stl_bytes(comp_solid)
+        return None
+
+    # Servo mesh: servo_{servo_name}
+    if stem.startswith("servo_"):
+        from botcad.emit.cad import servo_solid
+
+        servo_name = stem.removeprefix("servo_")
+        for joint in bot.all_joints:
+            if joint.servo.name == servo_name:
+                return _solid_to_stl_bytes(servo_solid(joint.servo))
+        return None
+
+    # Hardware/fastener mesh: hardware_{designation}_{head_type}
+    if stem.startswith("hardware_"):
+        from botcad.emit.cad import screw_solid
+        from botcad.fasteners import fastener_key, fastener_stl_stem
+
+        for body in bot.all_bodies:
+            for joint in body.joints:
+                for mp in (
+                    *joint.servo.mounting_ears,
+                    *joint.servo.horn_mounting_points,
+                    *joint.servo.rear_horn_mounting_points,
+                ):
+                    if fastener_stl_stem(mp) == stem:
+                        k = fastener_key(mp)
+                        return _solid_to_stl_bytes(screw_solid(k[0], k[1]))
+            for mount in body.mounts:
+                for mp in mount.component.mounting_points:
+                    if fastener_stl_stem(mp) == stem:
+                        k = fastener_key(mp)
+                        return _solid_to_stl_bytes(screw_solid(k[0], k[1]))
+        return None
+
+    # Horn mesh: horn_{joint_name}
+    if stem.startswith("horn_"):
+        from botcad.emit.cad import _horn_solid, _orient_z_to_axis
+
+        joint_name = stem.removeprefix("horn_")
+        for joint in bot.all_joints:
+            if joint.name == joint_name:
+                horn = _horn_solid(joint.servo)
+                if horn is None:
+                    return None
+                horn = _orient_z_to_axis(horn, joint.axis)
+                return _solid_to_stl_bytes(horn)
+        return None
+
+    # Wire mesh: wire_{label}_{body}_{idx}
+    if stem.startswith("wire_"):
+        from botcad.component import BusType
+        from botcad.emit.cad import _wire_segment_solid
+
+        bus_radii = {
+            BusType.UART_HALF_DUPLEX: 0.0009,
+            BusType.CSI: 0.0018,
+            BusType.POWER: 0.0012,
+        }
+        for route in bot.wire_routes:
+            radius = bus_radii.get(route.bus_type, 0.0015)
+            for i, seg in enumerate(route.segments):
+                if seg.straight_length < 0.001:
+                    continue
+                expected = f"wire_{route.label}_{seg.body_name}_{i}"
+                if expected == stem:
+                    wire_solid = _wire_segment_solid(seg.start, seg.end, radius)
+                    if wire_solid is None:
+                        return None
+                    return _solid_to_stl_bytes(wire_solid)
+        return None
+
+    return None
 
 
 def _axis_to_quat(axis: tuple) -> list[float]:
@@ -587,6 +691,54 @@ async def render_svg(name: str, request: Request):
         raise HTTPException(500, f"SVG render failed: {e}")
 
     return Response(content=svg.encode("utf-8"), media_type="image/svg+xml")
+
+
+@app.get("/api/bots/{bot}/bot.xml")
+def get_bot_xml(bot: str):
+    """Serve on-demand MuJoCo bot.xml generated from the bot skeleton."""
+    try:
+        bot_obj, _cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"bot.xml generation failed: {e}")
+
+    from botcad.emit.mujoco import generate_mujoco_xml
+
+    xml_str = generate_mujoco_xml(bot_obj)
+    return Response(content=xml_str.encode("utf-8"), media_type="application/xml")
+
+
+@app.get("/api/bots/{bot}/meshes/{mesh_name:path}")
+def get_bot_mesh(bot: str, mesh_name: str):
+    """Serve on-demand mesh STL generated from cached CAD solids."""
+    try:
+        bot_obj, cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Mesh generation failed: {e}")
+
+    stem = mesh_name.removesuffix(".stl")
+
+    try:
+        stl_bytes = _generate_bot_mesh(bot_obj, cad, stem)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Mesh generation failed for {mesh_name}: {e}")
+
+    if stl_bytes is None:
+        raise HTTPException(404, f"Mesh not found: {mesh_name}")
+
+    return Response(
+        content=stl_bytes,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{mesh_name}"'},
+    )
 
 
 @app.get("/api/bots/{bot}/body/{body}/cad-steps")
