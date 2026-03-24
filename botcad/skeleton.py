@@ -1077,6 +1077,18 @@ class Bot:
 
         emit_viewer_manifest(self, output_dir_path)
 
+    def analyze_stresses(self):
+        """Analyze the safety factor of all fabricated joints in the bot."""
+        from botcad.fea import analyze_joint_stresses
+
+        return analyze_joint_stresses(self)
+
+    def print_fea_report(self):
+        """Print a human-readable FEA report for the bot."""
+        from botcad.fea import print_fea_report
+
+        print_fea_report(self)
+
     def emit(self, output_dir: str | None = None) -> None:
         """Generate all output files.
 

@@ -23,10 +23,13 @@ class Material:
 
     name: str
     density: float  # kg/m^3
+    youngs_modulus: float = 2.3e9  # Pa (default PLA)
+    poisson_ratio: float = 0.35
+    yield_strength: float = 40e6  # Pa
     process: PrintProcess | None = None
 
 
 # Standard instances
-PLA = Material("PLA", 1200.0, PrintProcess())
-TPU = Material("TPU", 1120.0, PrintProcess(infill=0.15))
-ALUMINUM = Material("aluminum", 2700.0, None)
+PLA = Material("PLA", 1200.0, 2.3e9, 0.35, 40e6, PrintProcess())
+TPU = Material("TPU", 1120.0, 0.1e9, 0.45, 15e6, PrintProcess(infill=0.15))
+ALUMINUM = Material("aluminum", 2700.0, 70e9, 0.33, 270e6, None)
