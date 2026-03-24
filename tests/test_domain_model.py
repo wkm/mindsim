@@ -677,3 +677,30 @@ class TestComponentKind:
 
         pi = RaspberryPiZero2W()
         assert pi.kind == ComponentKind.COMPUTE
+
+
+class TestComponentRegistry:
+    def test_registry_has_all_kinds(self):
+        from botcad.component import ComponentKind, get_component_meta
+
+        for kind in ComponentKind:
+            meta = get_component_meta(kind)
+            assert meta.kind == kind
+
+    def test_camera_meta_has_face_normal_orientation(self):
+        from botcad.component import ComponentKind, MountOrientation, get_component_meta
+
+        meta = get_component_meta(ComponentKind.CAMERA)
+        assert meta.mount_orientation == MountOrientation.FACE_NORMAL
+
+    def test_servo_meta_has_script_emitter(self):
+        from botcad.component import ComponentKind, get_component_meta
+
+        meta = get_component_meta(ComponentKind.SERVO)
+        assert meta.script_emitter is not None
+
+    def test_generic_meta_has_no_script_emitter(self):
+        from botcad.component import ComponentKind, get_component_meta
+
+        meta = get_component_meta(ComponentKind.GENERIC)
+        assert meta.script_emitter is None

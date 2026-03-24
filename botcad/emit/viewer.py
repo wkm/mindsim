@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
-from botcad.component import BatterySpec, CameraSpec, ServoSpec
+from botcad.component import BatterySpec, CameraSpec, ComponentKind, ServoSpec
 
 
 def _component_specs(comp) -> dict:
@@ -36,7 +36,7 @@ def _component_specs(comp) -> dict:
         specs["no_load_speed_rad_s"] = round(comp.no_load_speed, 3)
         specs["voltage"] = comp.voltage
         specs["gear_ratio"] = comp.gear_ratio
-    elif comp.is_wheel:
+    elif comp.kind == ComponentKind.WHEEL:
         specs["component_type"] = "wheel"
     else:
         specs["component_type"] = "component"

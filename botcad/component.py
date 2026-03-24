@@ -6,6 +6,7 @@ with real-world dimensions, mass, wire ports, and mounting points.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -40,6 +41,100 @@ class MountOrientation(StrEnum):
 
     FLAT = "flat"  # lies flat on mounting surface
     FACE_NORMAL = "face_normal"  # functional axis aligns with mount face normal
+
+
+@dataclass(frozen=True)
+class ComponentMeta:
+    """Metadata for a component kind — script emitter, layers, category."""
+
+    kind: ComponentKind
+    category: str  # BOM category: "electronics", "actuator", "structure"
+    layers: tuple[str, ...]  # viewer STL layers
+    mount_orientation: MountOrientation
+    script_emitter: Callable | None = None  # ShapeScript emitter, set after import
+
+
+_COMPONENT_REGISTRY: dict[ComponentKind, ComponentMeta] | None = None
+
+
+def get_component_meta(kind: ComponentKind) -> ComponentMeta:
+    """Look up metadata for a component kind. Lazy-loads the registry."""
+    global _COMPONENT_REGISTRY
+    if _COMPONENT_REGISTRY is None:
+        _COMPONENT_REGISTRY = _build_registry()
+    return _COMPONENT_REGISTRY[kind]
+
+
+def _build_registry() -> dict[ComponentKind, ComponentMeta]:
+    from botcad.shapescript.emit_components import (
+        battery_script,
+        bearing_script,
+        camera_script,
+        compute_script,
+        wheel_component_script,
+    )
+    from botcad.shapescript.emit_servo import servo_script
+
+    return {
+        ComponentKind.SERVO: ComponentMeta(
+            kind=ComponentKind.SERVO,
+            category="actuator",
+            layers=(
+                "servo",
+                "bracket",
+                "cradle",
+                "coupler",
+                "bracket_envelope",
+                "cradle_envelope",
+                "horn",
+                "fasteners",
+            ),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=servo_script,
+        ),
+        ComponentKind.CAMERA: ComponentMeta(
+            kind=ComponentKind.CAMERA,
+            category="electronics",
+            layers=("body", "fasteners"),
+            mount_orientation=MountOrientation.FACE_NORMAL,
+            script_emitter=camera_script,
+        ),
+        ComponentKind.BATTERY: ComponentMeta(
+            kind=ComponentKind.BATTERY,
+            category="electronics",
+            layers=("body", "fasteners"),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=battery_script,
+        ),
+        ComponentKind.COMPUTE: ComponentMeta(
+            kind=ComponentKind.COMPUTE,
+            category="electronics",
+            layers=("body", "fasteners"),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=compute_script,
+        ),
+        ComponentKind.WHEEL: ComponentMeta(
+            kind=ComponentKind.WHEEL,
+            category="structure",
+            layers=("body",),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=wheel_component_script,
+        ),
+        ComponentKind.BEARING: ComponentMeta(
+            kind=ComponentKind.BEARING,
+            category="structure",
+            layers=("body",),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=bearing_script,
+        ),
+        ComponentKind.GENERIC: ComponentMeta(
+            kind=ComponentKind.GENERIC,
+            category="component",
+            layers=("body",),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=None,
+        ),
+    }
 
 
 class BusType(StrEnum):

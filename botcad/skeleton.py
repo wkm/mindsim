@@ -726,16 +726,8 @@ class Bot:
         """
         import logging
 
-        from botcad.component import BatterySpec, BearingSpec, ServoSpec
+        from botcad.component import get_component_meta
         from botcad.shapescript.backend_occt import OcctBackend
-        from botcad.shapescript.emit_components import (
-            battery_script,
-            bearing_script,
-            camera_script,
-            compute_script,
-            wheel_component_script,
-        )
-        from botcad.shapescript.emit_servo import servo_script
 
         log = logging.getLogger(__name__)
         backend = OcctBackend()
@@ -750,18 +742,9 @@ class Bot:
 
                 prog = None
                 try:
-                    if isinstance(comp, CameraSpec):
-                        prog = camera_script(comp)
-                    elif isinstance(comp, BatterySpec):
-                        prog = battery_script(comp)
-                    elif isinstance(comp, BearingSpec):
-                        prog = bearing_script(comp)
-                    elif isinstance(comp, ServoSpec):
-                        prog = servo_script(comp)
-                    elif comp.is_wheel:
-                        prog = wheel_component_script(comp)
-                    else:
-                        prog = compute_script(comp)
+                    meta = get_component_meta(comp.kind)
+                    if meta.script_emitter is not None:
+                        prog = meta.script_emitter(comp)
                 except Exception:
                     log.debug(
                         "No ShapeScript emitter for component %s, "

@@ -30,7 +30,7 @@ from botcad.bracket import (
     servo_solid,
 )
 from botcad.cad_utils import as_solid as _as_solid
-from botcad.component import BearingSpec, BusType, CameraSpec
+from botcad.component import BearingSpec, BusType, CameraSpec, ComponentKind
 from botcad.geometry import quat_to_euler
 from botcad.skeleton import BodyKind
 
@@ -246,7 +246,7 @@ def make_component_solid(component: Component):
         return raspberry_pi_zero_solid()
 
     # Wheels: detailed tire/hub geometry
-    if component.is_wheel:
+    if component.kind == ComponentKind.WHEEL:
         r = dims[0] / 2
         w = dims[2]
         return _make_wheel_solid(r, w)
@@ -290,8 +290,6 @@ def make_component_solid(component: Component):
 
 def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
     """Get or create the ShapeScript program for any body (fabricated or purchased)."""
-    from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
-
     if body.kind == BodyKind.FABRICATED:
         from botcad.shapescript.emit_body import emit_body_ir
 
@@ -304,31 +302,20 @@ def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
     if comp is None:
         return None
 
-    from botcad.shapescript import emit_components
+    from botcad.component import get_component_meta
 
-    if isinstance(comp, ServoSpec):
-        if body.name.startswith("horn_"):
-            return emit_components.horn_script(comp)
-        from botcad.shapescript.emit_servo import servo_script
+    # Special case: horn bodies use the servo's horn script
+    if comp.kind == ComponentKind.SERVO and body.name.startswith("horn_"):
+        from botcad.shapescript.emit_components import horn_script
 
-        return servo_script(comp)
-    elif isinstance(comp, CameraSpec):
-        return emit_components.camera_script(comp)
-    elif isinstance(comp, BatterySpec):
-        return emit_components.battery_script(comp)
-    elif isinstance(comp, BearingSpec):
-        return emit_components.bearing_script(comp)
-    elif comp.is_wheel:
-        return emit_components.wheel_component_script(comp)
-    else:
-        # Try category-based lookup
-        # Component category is derived from the module it came from
-        fn = getattr(emit_components, "compute_script", None)
-        if callable(fn):
-            try:
-                return fn(comp)
-            except Exception:
-                pass
+        return horn_script(comp)
+
+    meta = get_component_meta(comp.kind)
+    if meta.script_emitter is not None:
+        try:
+            return meta.script_emitter(comp)
+        except Exception:
+            pass
     return None
 
 
