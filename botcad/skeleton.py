@@ -506,8 +506,13 @@ class Bot:
         base = bot.body("base", padding=0.01)
         base.mount(STS3215(), ...)
         # ... define kinematic tree ...
-        bot.solve()  # run packing + routing
-        bot.emit()   # generate all outputs
+        bot.solve()           # run packing + routing
+        bot.emit()            # generate all outputs (calls all write_*())
+        bot.write_mujoco()    # or generate only what you need
+        bot.write_step()
+        bot.write_docs()
+        bot.write_renders()
+        bot.write_viewer_manifest()
     """
 
     name: str
@@ -983,8 +988,8 @@ class Bot:
 
         self._cad_model = build_cad(self)
 
-    def emit(self, output_dir: str | None = None) -> None:
-        """Generate all output files."""
+    def _resolve_output_dir(self, output_dir: str | None = None):
+        """Resolve output directory, creating it if needed."""
         from pathlib import Path
 
         if output_dir is None:
@@ -993,19 +998,49 @@ class Bot:
             output_dir_path = Path(output_dir)
 
         output_dir_path.mkdir(parents=True, exist_ok=True)
-        (output_dir_path / "meshes").mkdir(exist_ok=True)
+        return output_dir_path
 
-        # Build geometry + refine mass (if not already done)
+    def _ensure_cad(self) -> None:
+        """Build CAD geometry if not already done."""
         if self._cad_model is None:
             self.build_cad()
+
+    def write_mujoco(self, output_dir: str | None = None) -> None:
+        """Write bot.xml + scene.xml + STL meshes for MuJoCo simulation."""
+        output_dir_path = self._resolve_output_dir(output_dir)
+        (output_dir_path / "meshes").mkdir(exist_ok=True)
+
+        self._ensure_cad()
+
+        from botcad.emit.cad import emit_cad
+
+        emit_cad(self, output_dir_path, self._cad_model)
+
+        from botcad.emit.mujoco import emit_mujoco
+
+        emit_mujoco(self, output_dir_path)
+
+    def write_step(self, output_dir: str | None = None) -> None:
+        """Write STEP assembly files for manufacturing/CAD."""
+        output_dir_path = self._resolve_output_dir(output_dir)
+        (output_dir_path / "meshes").mkdir(exist_ok=True)
+
+        self._ensure_cad()
 
         from botcad.emit.cad import emit_cad
 
         parts = emit_cad(self, output_dir_path, self._cad_model)
 
-        from botcad.emit.mujoco import emit_mujoco
+        # Per-assembly STEP files
+        if self._assemblies:
+            from botcad.emit.cad import emit_cad_for_assembly
 
-        emit_mujoco(self, output_dir_path)
+            for asm_name in self._assemblies:
+                emit_cad_for_assembly(self, asm_name, output_dir_path, parts)
+
+    def write_docs(self, output_dir: str | None = None) -> None:
+        """Write BOM, assembly guide, and technical drawings."""
+        output_dir_path = self._resolve_output_dir(output_dir)
 
         from botcad.emit.bom import emit_bom
 
@@ -1015,28 +1050,46 @@ class Bot:
 
         emit_assembly_guide(self, output_dir_path)
 
-        from botcad.emit.renders import emit_renders
-
-        emit_renders(self, output_dir_path)
-
         from botcad.emit.drawings import emit_drawings
 
         emit_drawings(self, output_dir_path)
 
-        # Per-assembly outputs (STEP, BOM, assembly guide)
+        # Per-assembly docs
         if self._assemblies:
             from botcad.emit.bom import emit_bom_for_module
-            from botcad.emit.cad import emit_cad_for_assembly
             from botcad.emit.readme import emit_assembly_guide_for_module
 
             for asm_name in self._assemblies:
-                emit_cad_for_assembly(self, asm_name, output_dir_path, parts)
                 emit_bom_for_module(self, asm_name, output_dir_path)
                 emit_assembly_guide_for_module(self, asm_name, output_dir_path)
+
+    def write_renders(self, output_dir: str | None = None) -> None:
+        """Write overview and sweep render PNGs."""
+        output_dir_path = self._resolve_output_dir(output_dir)
+
+        from botcad.emit.renders import emit_renders
+
+        emit_renders(self, output_dir_path)
+
+    def write_viewer_manifest(self, output_dir: str | None = None) -> None:
+        """Write viewer_manifest.json — metadata for the web viewer."""
+        output_dir_path = self._resolve_output_dir(output_dir)
 
         from botcad.emit.viewer import emit_viewer_manifest
 
         emit_viewer_manifest(self, output_dir_path)
+
+    def emit(self, output_dir: str | None = None) -> None:
+        """Generate all output files.
+
+        Convenience method that calls all write_*() methods. Prefer calling
+        individual methods when you only need specific outputs.
+        """
+        self.write_mujoco(output_dir)
+        self.write_step(output_dir)
+        self.write_docs(output_dir)
+        self.write_renders(output_dir)
+        self.write_viewer_manifest(output_dir)
 
 
 def _parse_axis(axis: str | Vec3) -> Vec3:
