@@ -26,14 +26,33 @@ and speed determine the joint's geometry, control limits, and damping.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from botcad.component import Appearance, Component, ServoSpec, Vec3
+from botcad.component import Appearance, CameraSpec, Component, ServoSpec, Vec3
 from botcad.materials import PLA, Material
 
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
+
+# Face rotation table: position → (euler_deg, dims_reorder, point_transform).
+#   euler_deg:  rotation for build123d Location
+#   dims_reorder: indices to reorder (cx, cy, cz), or None if unchanged
+#   point_transform: (x, y, z) → rotated (x', y', z')
+_FaceRotEntry = tuple[
+    tuple[float, float, float],
+    tuple[int, int, int] | None,
+    Callable[[float, float, float], Vec3] | None,
+]
+_FACE_ROTATION: dict[str, _FaceRotEntry] = {
+    "front": ((-90.0, 0.0, 0.0), (0, 2, 1), lambda x, y, z: (x, z, -y)),
+    "back": ((90.0, 0.0, 0.0), (0, 2, 1), lambda x, y, z: (x, -z, y)),
+    "left": ((0.0, -90.0, 0.0), (2, 1, 0), lambda x, y, z: (-z, y, x)),
+    "right": ((0.0, 90.0, 0.0), (2, 1, 0), lambda x, y, z: (z, y, -x)),
+    "bottom": ((180.0, 0.0, 0.0), None, lambda x, y, z: (x, -y, -z)),
+}
+_NO_EULER: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -142,9 +161,15 @@ class Mount:
         Cameras always face outward — their lens axis (+Z in component frame)
         is rotated to align with the mount face normal.
         """
-        from botcad.component import CameraSpec
 
         return isinstance(self.component, CameraSpec)
+
+    @property
+    def _face_rotation_entry(self) -> _FaceRotEntry | None:
+        """Look up the face rotation for this mount, or None if no rotation."""
+        if not self.face_outward or not isinstance(self.position, str):
+            return None
+        return _FACE_ROTATION.get(self.position)
 
     @property
     def _face_euler_deg(self) -> tuple[float, float, float]:
@@ -152,21 +177,8 @@ class Mount:
         the mount normal.  Identity when face_outward is False or position
         is "top"/"center" (already +Z).
         """
-        if not self.face_outward or not isinstance(self.position, str):
-            return (0.0, 0.0, 0.0)
-        match self.position:
-            case "front":
-                return (-90.0, 0.0, 0.0)
-            case "back":
-                return (90.0, 0.0, 0.0)
-            case "left":
-                return (0.0, -90.0, 0.0)
-            case "right":
-                return (0.0, 90.0, 0.0)
-            case "bottom":
-                return (180.0, 0.0, 0.0)
-            case _:
-                return (0.0, 0.0, 0.0)
+        entry = self._face_rotation_entry
+        return entry[0] if entry else _NO_EULER
 
     @property
     def placed_dimensions(self) -> Vec3:
@@ -183,16 +195,11 @@ class Mount:
         )
         if self.rotate_z:
             d = (d[1], d[0], d[2])
-        # Face rotation: component +Z aligns with face normal, swapping axes
-        match self._face_euler_deg:
-            case (-90.0, 0.0, 0.0) | (90.0, 0.0, 0.0):
-                # Rx(±90°): Y↔Z swap
-                d = (d[0], d[2], d[1])
-            case (0.0, -90.0, 0.0) | (0.0, 90.0, 0.0):
-                # Ry(±90°): X↔Z swap
-                d = (d[2], d[1], d[0])
-            case (180.0, 0.0, 0.0):
-                pass  # Rx(180°): no size change
+        entry = self._face_rotation_entry
+        if entry:
+            reorder = entry[1]
+            if reorder is not None:
+                d = (d[reorder[0]], d[reorder[1]], d[reorder[2]])
         return d
 
     def rotate_point(self, p: Vec3) -> Vec3:
@@ -202,23 +209,11 @@ class Mount:
         """
         if self.rotate_z:
             p = (-p[1], p[0], p[2])
-        # Face rotation: rotate component +Z to face the mount normal
-        match self._face_euler_deg:
-            case (-90.0, 0.0, 0.0):
-                # Rx(-90°): (x,y,z) → (x, z, -y)
-                p = (p[0], p[2], -p[1])
-            case (90.0, 0.0, 0.0):
-                # Rx(+90°): (x,y,z) → (x, -z, y)
-                p = (p[0], -p[2], p[1])
-            case (0.0, -90.0, 0.0):
-                # Ry(-90°): (x,y,z) → (-z, y, x)
-                p = (-p[2], p[1], p[0])
-            case (0.0, 90.0, 0.0):
-                # Ry(+90°): (x,y,z) → (z, y, -x)
-                p = (p[2], p[1], -p[0])
-            case (180.0, 0.0, 0.0):
-                # Rx(180°): (x,y,z) → (x, -y, -z)
-                p = (p[0], -p[1], -p[2])
+        entry = self._face_rotation_entry
+        if entry:
+            xform = entry[2]
+            if xform is not None:
+                p = xform(p[0], p[1], p[2])
         return p
 
 
@@ -715,7 +710,7 @@ class Bot:
         """
         import logging
 
-        from botcad.component import BatterySpec, BearingSpec, CameraSpec, ServoSpec
+        from botcad.component import BatterySpec, BearingSpec, ServoSpec
         from botcad.shapescript.backend_occt import OcctBackend
         from botcad.shapescript.emit_components import (
             battery_script,

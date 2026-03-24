@@ -677,32 +677,21 @@ def _emit_mounting_hardware(
 
 from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
 
+# Camera xyaxes by mount position.
+# "x1 x2 x3 y1 y2 y3" — camera X and Y axes in world frame; looks along -(X×Y).
+_CAMERA_XYAXES: dict[str, str] = {
+    "front": "1 0 0 0 0 1",  # look +Y, up +Z
+    "back": "-1 0 0 0 0 1",  # look -Y, up +Z
+    "left": "0 1 0 0 0 1",  # look -X, up +Z
+    "right": "0 -1 0 0 0 1",  # look +X, up +Z
+    "top": "1 0 0 0 1 0",  # look +Z, up +Y
+    "bottom": "1 0 0 0 -1 0",  # look -Z, up -Y
+}
+
 
 def _camera_xyaxes(position: str) -> str:
-    """Compute MuJoCo camera xyaxes for a given mount position.
-
-    MuJoCo cameras look along local -Z with +Y as up.  The xyaxes attribute
-    specifies the camera frame's X and Y axes in world coordinates.
-    We orient the camera to look along the face normal with +Z as world-up
-    (for horizontal mounts) or +Y as world-up (for vertical mounts).
-    """
-    # xyaxes = "x1 x2 x3 y1 y2 y3"
-    # Camera X and Y axes in world frame; camera looks along -Z = -(X×Y)
-    match position:
-        case "front":
-            return "1 0 0 0 0 1"  # look +Y, up +Z
-        case "back":
-            return "-1 0 0 0 0 1"  # look -Y, up +Z
-        case "left":
-            return "0 1 0 0 0 1"  # look -X, up +Z
-        case "right":
-            return "0 -1 0 0 0 1"  # look +X, up +Z
-        case "top":
-            return "1 0 0 0 1 0"  # look +Z, up +Y
-        case "bottom":
-            return "1 0 0 0 -1 0"  # look -Z, up -Y
-        case _:
-            return "1 0 0 0 0 1"  # default: look +Y
+    """MuJoCo camera xyaxes for a given mount position."""
+    return _CAMERA_XYAXES.get(position, "1 0 0 0 0 1")
 
 
 def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
