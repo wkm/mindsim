@@ -353,11 +353,10 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
 
     body_solids = cad.body_solids
 
-    # Body mesh: {body_name}
-    if stem in body_solids:
-        return _solid_to_stl_bytes(body_solids[stem])
-
     # Component mesh: comp_{body}_{label}
+    # Must be checked BEFORE body_solids lookup — body_solids stores the raw
+    # unrotated ShapeScript solid, but component STLs need rotate_z and
+    # face_euler applied to match the pocket orientation in the parent body.
     if stem.startswith("comp_"):
         from botcad.emit.cad import make_component_solid
 
@@ -378,6 +377,10 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
                         comp_solid = comp_solid.moved(Location((0, 0, 0), face_euler))
                     return _solid_to_stl_bytes(comp_solid)
         return None
+
+    # Structural body mesh: look up pre-built solid from build_cad()
+    if stem in body_solids:
+        return _solid_to_stl_bytes(body_solids[stem])
 
     # Servo mesh: servo_{servo_name}
     if stem.startswith("servo_"):
