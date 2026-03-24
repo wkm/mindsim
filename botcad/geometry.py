@@ -13,6 +13,22 @@ from botcad.component import Vec3
 
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
 
+# Named Euler rotations (degrees) — used by face rotation, camera orientation
+EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
+EULER_RX_POS90: tuple[float, float, float] = (90.0, 0.0, 0.0)
+EULER_RX_180: tuple[float, float, float] = (180.0, 0.0, 0.0)
+EULER_RY_NEG90: tuple[float, float, float] = (0.0, -90.0, 0.0)
+EULER_RY_POS90: tuple[float, float, float] = (0.0, 90.0, 0.0)
+EULER_IDENTITY: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+# Named direction vectors — mount face normals
+DIR_POS_X: tuple[float, float, float] = (1.0, 0.0, 0.0)
+DIR_NEG_X: tuple[float, float, float] = (-1.0, 0.0, 0.0)
+DIR_POS_Y: tuple[float, float, float] = (0.0, 1.0, 0.0)
+DIR_NEG_Y: tuple[float, float, float] = (0.0, -1.0, 0.0)
+DIR_POS_Z: tuple[float, float, float] = (0.0, 0.0, 1.0)
+DIR_NEG_Z: tuple[float, float, float] = (0.0, 0.0, -1.0)
+
 
 def add_vec3(a: Vec3, b: Vec3) -> Vec3:
     """Element-wise addition of two 3-tuples."""

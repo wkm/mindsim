@@ -14,6 +14,14 @@ import logging
 from typing import TYPE_CHECKING
 
 from botcad.component import Vec3
+from botcad.geometry import (
+    DIR_NEG_X,
+    DIR_NEG_Y,
+    DIR_NEG_Z,
+    DIR_POS_X,
+    DIR_POS_Y,
+    DIR_POS_Z,
+)
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot
@@ -21,13 +29,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _POSITION_AXES: dict[str, Vec3] = {
-    "top": (0.0, 0.0, 1.0),
-    "bottom": (0.0, 0.0, -1.0),
-    "front": (0.0, 1.0, 0.0),
-    "back": (0.0, -1.0, 0.0),
-    "left": (-1.0, 0.0, 0.0),
-    "right": (1.0, 0.0, 0.0),
-    "center": (0.0, 0.0, 1.0),
+    "top": DIR_POS_Z,
+    "bottom": DIR_NEG_Z,
+    "front": DIR_POS_Y,
+    "back": DIR_NEG_Y,
+    "left": DIR_NEG_X,
+    "right": DIR_POS_X,
+    "center": DIR_POS_Z,
 }
 
 

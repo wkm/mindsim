@@ -32,6 +32,14 @@ from enum import StrEnum
 from typing import Literal
 
 from botcad.component import Appearance, CameraSpec, Component, ServoSpec, Vec3
+from botcad.geometry import (
+    EULER_IDENTITY,
+    EULER_RX_180,
+    EULER_RX_NEG90,
+    EULER_RX_POS90,
+    EULER_RY_NEG90,
+    EULER_RY_POS90,
+)
 from botcad.materials import PLA, Material
 
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
@@ -46,13 +54,12 @@ _FaceRotEntry = tuple[
     Callable[[float, float, float], Vec3] | None,
 ]
 _FACE_ROTATION: dict[str, _FaceRotEntry] = {
-    "front": ((-90.0, 0.0, 0.0), (0, 2, 1), lambda x, y, z: (x, z, -y)),
-    "back": ((90.0, 0.0, 0.0), (0, 2, 1), lambda x, y, z: (x, -z, y)),
-    "left": ((0.0, -90.0, 0.0), (2, 1, 0), lambda x, y, z: (-z, y, x)),
-    "right": ((0.0, 90.0, 0.0), (2, 1, 0), lambda x, y, z: (z, y, -x)),
-    "bottom": ((180.0, 0.0, 0.0), None, lambda x, y, z: (x, -y, -z)),
+    "front": (EULER_RX_NEG90, (0, 2, 1), lambda x, y, z: (x, z, -y)),
+    "back": (EULER_RX_POS90, (0, 2, 1), lambda x, y, z: (x, -z, y)),
+    "left": (EULER_RY_NEG90, (2, 1, 0), lambda x, y, z: (-z, y, x)),
+    "right": (EULER_RY_POS90, (2, 1, 0), lambda x, y, z: (z, y, -x)),
+    "bottom": (EULER_RX_180, None, lambda x, y, z: (x, -y, -z)),
 }
-_NO_EULER: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -178,7 +185,7 @@ class Mount:
         is "top"/"center" (already +Z).
         """
         entry = self._face_rotation_entry
-        return entry[0] if entry else _NO_EULER
+        return entry[0] if entry else EULER_IDENTITY
 
     @property
     def placed_dimensions(self) -> Vec3:

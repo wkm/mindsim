@@ -679,6 +679,7 @@ from botcad.geometry import add_vec3 as _add_vec3  # noqa: E402
 
 # Camera xyaxes by mount position.
 # "x1 x2 x3 y1 y2 y3" — camera X and Y axes in world frame; looks along -(X×Y).
+# Positions correspond to mount face normals defined by DIR_* in geometry.py.
 _CAMERA_XYAXES: dict[str, str] = {
     "front": "1 0 0 0 0 1",  # look +Y, up +Z
     "back": "-1 0 0 0 0 1",  # look -Y, up +Z
