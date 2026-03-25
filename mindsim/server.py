@@ -345,6 +345,16 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
     if stem in body_solids:
         return _solid_to_stl_bytes(body_solids[stem])
 
+    # Multi-material component mesh: e.g. comp_base_pi__fr4_green
+    # Look up in cad.multi_material_solids by body_name + material_name.
+    if "__" in stem:
+        body_name, mat_name = stem.rsplit("__", 1)
+        mat_solids = cad.multi_material_solids.get(body_name, [])
+        for ms in mat_solids:
+            if ms.material_name == mat_name:
+                return _solid_to_stl_bytes(ms.solid)
+        return None
+
     # Servo mesh: servo_{servo_name}
     if stem.startswith("servo_"):
         from botcad.emit.cad import servo_solid
