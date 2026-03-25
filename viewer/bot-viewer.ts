@@ -142,12 +142,15 @@ async function enhanceMultiMaterialParts(
     (existingMesh as any)._multiMaterialReplaced = true;
     existingMesh.visible = false;
 
-    // Add sub-meshes directly to the parent group at origin.
-    // The per-material STLs are already in body-local frame (mount rotation
-    // applied during build_cad via _apply_mount_rotation), same coordinate
-    // system as the original component STL. MuJoCo geom position/quaternion
-    // is MuJoCo's own placement — copying it would double-apply the transform.
+    // Add sub-meshes to the parent group with the geom's position offset
+    // but NOT its quaternion. The per-material STLs already have mount
+    // rotation baked in (from _apply_mount_rotation in build_cad), same as
+    // the original STL. The MuJoCo geom quaternion represents the same
+    // rotation, so copying it would double-apply it. But the position offset
+    // (geom center relative to body origin) is still needed.
     for (const subMesh of subMeshes) {
+      subMesh.position.copy(existingMesh.position);
+      subMesh.scale.copy(existingMesh.scale);
       // Tag sub-meshes with the same body/geom metadata
       (subMesh as any).bodyID = (existingMesh as any).bodyID;
       (subMesh as any).geomGroup = (existingMesh as any).geomGroup;
