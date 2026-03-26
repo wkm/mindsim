@@ -154,14 +154,12 @@ export class OverlayViz {
         mesh.position.set(fastener.pos[0], fastener.pos[1], fastener.pos[2]);
       }
 
-      // Orient: fastener STL has head top face at Z=0, entire body in -Z.
-      // Manifest axis = MountPoint.axis = the direction the screw points
-      // (from head toward tip). Negate it so the STL -Z (tip) aligns with
-      // the INTO-hole direction, leaving the head facing outward.
-      const axisVec = new THREE.Vector3(fastener.axis![0], fastener.axis![1], fastener.axis![2]).normalize();
-      const negZ = new THREE.Vector3(0, 0, -1);
-      const quatFromAxis = new THREE.Quaternion().setFromUnitVectors(negZ, axisVec.negate());
-      mesh.quaternion.copy(quatFromAxis);
+      // Orient using the manifest quat — it already encodes the correct
+      // rotation from servo-local to body-local frame (verified: head faces
+      // outward, shank points into mounting hole).
+      if (fastener.quat) {
+        mesh.quaternion.set(fastener.quat[1], fastener.quat[2], fastener.quat[3], fastener.quat[0]);
+      }
 
       group.add(mesh);
       this._fastenerMeshes.push(mesh);
