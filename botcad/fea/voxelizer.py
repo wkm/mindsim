@@ -158,51 +158,7 @@ def voxelize_solid(
                 print(f"    Warning: failed to process tag {tag_name}: {e}")
                 continue
 
-    # 4. Handle Mounting Points from Body metadata
-    if body:
-        print(f"  Processing mounting points for body {body.name}...")
-        for mount in body.mounts:
-            for mp in mount.component.mounting_points:
-                # Need to resolve mp.pos to body local frame
-                # mount.resolved_pos is where the component center is
-                # ... this needs careful swizzling but we can approximate with a combined mask
-                pass
-
-        # Simpler fallback for POC: if no fastener_hole tag, we use ANY tag
-        # that looks structural or we'll just fix the lowest Z voxels.
-        if "fastener_hole" not in tag_masks:
-            print("  Warning: No fastener_hole tag. Fixing lowest 'inside' Z layer.")
-            # Find the lowest Z index that has any 'inside' voxels
-            inside_np = inside_mask.numpy()
-            res_np = [res_wp[0], res_wp[1], res_wp[2]]
-
-            # Reshape to (X, Y, Z)
-            inside_3d = inside_np.reshape(res_np)
-
-            # Find the first Z plane that has any 1s
-            lowest_iz = 0
-            for iz in range(res_np[2]):
-                if np.any(inside_3d[:, :, iz] == 1):
-                    lowest_iz = iz
-                    break
-
-            print(f"  Fixing layer iz={lowest_iz}")
-            base_mask = wp.zeros(grid.cell_count(), dtype=int)
-
-            @wp.kernel
-            def fix_base_kernel(
-                mask: wp.array(dtype=int), res: wp.vec3i, target_iz: int
-            ):
-                tid = wp.tid()
-                iz = tid % res[2]
-                if iz == target_iz:
-                    mask[tid] = 1
-
-            wp.launch(
-                fix_base_kernel,
-                dim=grid.cell_count(),
-                inputs=(base_mask, res_wp, lowest_iz),
-            )
-            tag_masks["fastener_hole"] = base_mask
+    if "fastener_hole" not in tag_masks:
+        print("  Warning: No 'fastener_hole' tag found. FEA will not have fixed BCs.")
 
     return VoxelDomain(grid, grid.cell_count(), inside_mask, tag_masks)

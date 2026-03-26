@@ -81,6 +81,8 @@ def analyze_component(
     n_fixed = np.sum(fixed_mask.numpy()) if fixed_mask is not None else 0
 
     if n_fixed == 0:
+        available = list(vd.tag_masks.keys()) if vd.tag_masks else []
+        print(f"  No 'fastener_hole' tag found. Available tags: {available}")
         return None
 
     fixed_subdomain = fem.Subdomain(domain, element_mask=fixed_mask)
