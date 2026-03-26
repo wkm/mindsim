@@ -141,7 +141,6 @@ class ComponentBrowser {
     this.viewport = new Viewport3D(container, {
       cameraType: 'orthographic',
       grid: true,
-      edges: true,
     });
 
     // Expose delegates for convenience
