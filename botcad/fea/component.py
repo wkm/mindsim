@@ -66,11 +66,12 @@ def analyze_component(
     t1 = time.monotonic()
     timings["voxelization"] = round(t1 - t0, 2)
 
-    # Material properties
+    # Material properties (infill-scaled via Gibson-Ashby)
+    E = material.effective_youngs_modulus
+    nu = material.poisson_ratio
     lame = wp.vec2(
-        (material.youngs_modulus * material.poisson_ratio)
-        / ((1.0 + material.poisson_ratio) * (1.0 - 2.0 * material.poisson_ratio)),
-        material.youngs_modulus / (2.0 * (1.0 + material.poisson_ratio)),
+        (E * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu)),
+        E / (2.0 * (1.0 + nu)),
     )
 
     space = fem.make_polynomial_space(vd.grid, degree=1, dtype=wp.vec3)
