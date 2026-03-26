@@ -228,7 +228,9 @@ def _compute_mass_inertia(body: Body) -> None:
     dims = body.dimensions
     # Estimate structural mass: thin-walled box, ~1mm wall
     wall_thickness = 0.001
-    density = body.material.density if body.material else 1200.0
+    density = (
+        body.material.density if body.material and body.material.density else 1200.0
+    )
     surface_area = 2 * (dims[0] * dims[1] + dims[1] * dims[2] + dims[0] * dims[2])
     structural_mass = surface_area * wall_thickness * density
 

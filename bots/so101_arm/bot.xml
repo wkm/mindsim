@@ -175,9 +175,9 @@
                 <inertial pos="-0.012453 -0.000031 0.022517" mass="0.074011" fullinertia="2.743545e-05 3.696162e-05 1.932017e-05 -1.962794e-07 4.897211e-06 -9.554178e-08"/>
                 <joint name="wrist_roll" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-2.7440 2.8410"/>
                 <geom name="wrist_roll_horn_disc" type="mesh" mesh="horn_wrist_roll_mesh" pos="0.000000 0.000000 0.004000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom type="mesh" mesh="wrist_roll_mesh" rgba="0.0392 0.4000 0.2510 1.0000" contype="1" conaffinity="1"/>
+                <geom type="mesh" mesh="wrist_roll_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="1" conaffinity="1"/>
                 <camera name="camera_cam" fovy="62.2" pos="0.000000 0.012950 0.000000" xyaxes="1 0 0 0 0 1"/>
-                <geom name="comp_wrist_roll_camera" type="mesh" mesh="comp_wrist_roll_camera_mesh" pos="0.000000 0.012950 0.000000" rgba="0.0392 0.4000 0.2510 1.0000" contype="0" conaffinity="0" group="1"/>
+                <geom name="comp_wrist_roll_camera" type="mesh" mesh="comp_wrist_roll_camera_mesh" pos="0.000000 0.012950 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
                 <geom name="gripper_servo" type="mesh" mesh="servo_STS3215_mesh" pos="-0.016000 0.000000 0.030500" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
                 <geom name="screw_gripper_ear_1" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.033500 -0.010250 0.013500" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 -0.707107 0.000000"/>
                 <geom name="screw_gripper_ear_2" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.033500 -0.010250 0.030500" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.000000 -0.707107 0.000000"/>
