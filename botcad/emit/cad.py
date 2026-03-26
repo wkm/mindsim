@@ -54,7 +54,6 @@ def _apply_mount_rotation(solid, mount):
 
 
 @dataclass
-@dataclass
 class MaterialSolid:
     """A solid tagged with the material it represents."""
 

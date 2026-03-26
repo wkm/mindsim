@@ -11,6 +11,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from botcad.colors import (
+    BP_BLUE3,
+    BP_DARK_GRAY1,
+    BP_DARK_GRAY3,
+    BP_FOREST3,
+    BP_GOLD3,
+    BP_GRAY4,
+    BP_GRAY5,
+    BP_GREEN3,
+    BP_LIGHT_GRAY1,
+)
+
 RGBA = tuple[float, float, float, float]
 
 
@@ -46,21 +58,21 @@ class Material:
 
 PLA = Material(
     "PLA",
-    color=(0.808, 0.851, 0.878, 1.0),  # light gray
+    color=(*BP_LIGHT_GRAY1, 1.0),
     roughness=0.8,
     density=1200.0,
     process=PrintProcess(),
 )
 TPU = Material(
     "TPU",
-    color=(0.161, 0.216, 0.278, 1.0),  # dark gray
+    color=(*BP_DARK_GRAY3, 1.0),
     roughness=0.9,
     density=1120.0,
     process=PrintProcess(infill=0.15),
 )
 ALUMINUM = Material(
     "aluminum",
-    color=(0.655, 0.761, 0.831, 1.0),  # silver-gray
+    color=(*BP_GRAY4, 1.0),
     metallic=0.9,
     roughness=0.3,
     density=2700.0,
@@ -71,21 +83,21 @@ ALUMINUM = Material(
 # PCB substrate — green solder mask
 MAT_FR4_GREEN = Material(
     "fr4_green",
-    color=(0.059, 0.600, 0.373, 1.0),  # BP_GREEN3
+    color=(*BP_GREEN3, 1.0),
     roughness=0.85,
 )
 
 # IC package epoxy — dark matte
 MAT_IC_PACKAGE = Material(
     "ic_package",
-    color=(0.094, 0.133, 0.157, 1.0),  # BP_DARK_GRAY1
+    color=(*BP_DARK_GRAY1, 1.0),
     roughness=0.9,
 )
 
 # Nickel plating — connector pins, shield cans
 MAT_NICKEL = Material(
     "nickel",
-    color=(0.655, 0.761, 0.831, 1.0),  # BP_GRAY4
+    color=(*BP_GRAY4, 1.0),
     metallic=0.85,
     roughness=0.25,
 )
@@ -93,14 +105,14 @@ MAT_NICKEL = Material(
 # ABS dark — servo housing, camera body
 MAT_ABS_DARK = Material(
     "abs_dark",
-    color=(0.094, 0.133, 0.157, 1.0),  # BP_DARK_GRAY1
+    color=(*BP_DARK_GRAY1, 1.0),
     roughness=0.6,
 )
 
 # Rubber — tire surface
 MAT_RUBBER = Material(
     "rubber",
-    color=(0.161, 0.216, 0.278, 1.0),  # BP_DARK_GRAY3
+    color=(*BP_DARK_GRAY3, 1.0),
     roughness=0.95,
 )
 
@@ -112,51 +124,39 @@ MAT_POLYCARBONATE_CLEAR = Material(
     opacity=0.7,
 )
 
-# PLA light — 3D printed structural parts
-MAT_PLA_LIGHT = Material(
-    "pla_light",
-    color=(0.808, 0.851, 0.878, 1.0),  # BP_LIGHT_GRAY1
-    roughness=0.8,
-    density=1200.0,
-    process=PrintProcess(),
-)
+# PLA light — 3D printed structural parts (same as PLA)
+MAT_PLA_LIGHT = PLA
 
 # Steel — fastener bodies
 MAT_STEEL = Material(
     "steel",
-    color=(0.655, 0.761, 0.831, 1.0),  # BP_GRAY4
+    color=(*BP_GRAY4, 1.0),
     metallic=0.9,
     roughness=0.35,
     density=7800.0,
 )
 
-# Aluminum — servo horns, brackets
-MAT_ALUMINUM = Material(
-    "aluminum_part",
-    color=(0.808, 0.851, 0.878, 1.0),  # light silver
-    metallic=0.85,
-    roughness=0.3,
-    density=2700.0,
-)
+# Aluminum — servo horns, brackets (same as ALUMINUM)
+MAT_ALUMINUM = ALUMINUM
 
 # Battery — blue LiPo wrap
 MAT_LIPO_WRAP = Material(
     "lipo_wrap",
-    color=(0.075, 0.486, 0.741, 1.0),  # BP_BLUE3
+    color=(*BP_BLUE3, 1.0),
     roughness=0.7,
 )
 
 # Electronics controller PCB — darker green
 MAT_PCB_DARK_GREEN = Material(
     "pcb_dark_green",
-    color=(0.137, 0.549, 0.173, 1.0),  # BP_FOREST3
+    color=(*BP_FOREST3, 1.0),
     roughness=0.85,
 )
 
 # Bearing steel
 MAT_BEARING_STEEL = Material(
     "bearing_steel",
-    color=(0.655, 0.761, 0.831, 1.0),  # BP_GRAY4
+    color=(*BP_GRAY4, 1.0),
     metallic=1.0,
     roughness=0.3,
 )
@@ -164,7 +164,14 @@ MAT_BEARING_STEEL = Material(
 # Brass — decorative fasteners
 MAT_BRASS = Material(
     "brass",
-    color=(0.851, 0.620, 0.043, 1.0),  # BP_GOLD3
+    color=(*BP_GOLD3, 1.0),
     metallic=0.9,
     roughness=0.3,
+)
+
+# Tube default — gray structural tube
+MAT_TUBE_DEFAULT = Material(
+    "tube_default",
+    color=(*BP_GRAY5, 1.0),
+    roughness=0.7,
 )

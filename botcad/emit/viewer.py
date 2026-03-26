@@ -22,6 +22,16 @@ from botcad.component import ComponentKind
 log = logging.getLogger(__name__)
 
 
+def _material_to_dict(mat) -> dict:
+    """Convert a Material to a viewer-serializable dict."""
+    return {
+        "color": list(mat.color),
+        "metallic": mat.metallic,
+        "roughness": mat.roughness,
+        "opacity": mat.opacity,
+    }
+
+
 def _component_specs(comp) -> dict:
     """Extract type-specific specs from a Component."""
     specs: dict = {}
@@ -64,7 +74,37 @@ def _build_assembly_tree(bot: Bot) -> list[dict]:
     return [_assembly_dict(asm) for asm in bot._assemblies.values()]
 
 
-def _build_materials_dict(bot: Bot) -> dict:
+def _get_multi_material_result(comp, cache: dict):
+    """Get multi-material emitter result for a component, with caching by kind.
+
+    Returns the emitter result or None if unavailable/failed.
+    """
+    from botcad.component import get_component_meta
+
+    kind_key = comp.kind.value
+    if kind_key in cache:
+        return cache[kind_key]
+
+    meta = get_component_meta(comp.kind)
+    if meta.multi_material_emitter is None:
+        cache[kind_key] = None
+        return None
+
+    try:
+        result = meta.multi_material_emitter(comp)
+        cache[kind_key] = result
+        return result
+    except Exception:
+        log.debug(
+            "Multi-material emitter failed for %s",
+            kind_key,
+            exc_info=True,
+        )
+        cache[kind_key] = None
+        return None
+
+
+def _build_materials_dict(bot: Bot, mm_cache: dict) -> dict:
     """Build the materials dictionary for the manifest.
 
     Collects all unique materials from component default_materials and the
@@ -76,44 +116,23 @@ def _build_materials_dict(bot: Bot) -> dict:
     for body in bot.all_bodies:
         for mount in body.mounts:
             mat = mount.component.default_material
-            if mat.name not in materials and mat.name != "_default":
-                materials[mat.name] = {
-                    "color": list(mat.color),
-                    "metallic": mat.metallic,
-                    "roughness": mat.roughness,
-                    "opacity": mat.opacity,
-                }
+            if mat is not None and mat.name not in materials:
+                materials[mat.name] = _material_to_dict(mat)
 
-    # Collect from multi-material emitters (if build_cad has been run)
-    from botcad.component import get_component_meta
-
+    # Collect from multi-material emitters
     seen_kinds: set[str] = set()
     for body in bot.all_bodies:
         for mount in body.mounts:
             comp = mount.component
-            kind_key = comp.kind.value
-            if kind_key in seen_kinds:
+            if comp.kind.value in seen_kinds:
                 continue
-            seen_kinds.add(kind_key)
-            meta = get_component_meta(comp.kind)
-            if meta.multi_material_emitter is not None:
-                try:
-                    mm_result = meta.multi_material_emitter(comp)
-                    for mp in mm_result.material_programs:
-                        mat = mp.material
-                        if mat.name not in materials:
-                            materials[mat.name] = {
-                                "color": list(mat.color),
-                                "metallic": mat.metallic,
-                                "roughness": mat.roughness,
-                                "opacity": mat.opacity,
-                            }
-                except Exception:
-                    log.debug(
-                        "Multi-material emitter failed for %s during material collection",
-                        kind_key,
-                        exc_info=True,
-                    )
+            seen_kinds.add(comp.kind.value)
+            mm_result = _get_multi_material_result(comp, mm_cache)
+            if mm_result is not None:
+                for mp in mm_result.material_programs:
+                    mat = mp.material
+                    if mat.name not in materials:
+                        materials[mat.name] = _material_to_dict(mat)
 
     return materials
 
@@ -121,6 +140,10 @@ def _build_materials_dict(bot: Bot) -> dict:
 def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     """Generate viewer_manifest.json in the bot's output directory."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
+
+    # Cache multi-material emitter results (keyed by ComponentKind value)
+    # so we call each emitter at most once across materials + parts.
+    mm_cache: dict = {}
 
     manifest = {
         "bot_name": bot.name,
@@ -130,7 +153,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
         "parts": [],
         "assembly_steps": [],
         "ik_chains": [],
-        "materials": _build_materials_dict(bot),
+        "materials": _build_materials_dict(bot, mm_cache),
     }
 
     # Walk tree to build body/joint lists and assembly steps
@@ -306,28 +329,18 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             # Multi-material meshes: if this component has per-material
             # programs, add a `meshes` array alongside the legacy `mesh`.
             if comp is not None:
-                from botcad.component import get_component_meta
-
-                meta = get_component_meta(comp.kind)
-                if meta.multi_material_emitter is not None:
-                    try:
-                        mm_result = meta.multi_material_emitter(comp)
-                        meshes = []
-                        for mp in mm_result.material_programs:
-                            meshes.append(
-                                {
-                                    "file": f"{body.name}__{mp.material.name}.stl",
-                                    "material": mp.material.name,
-                                }
-                            )
-                        if meshes:
-                            part_entry["meshes"] = meshes
-                    except Exception:
-                        log.debug(
-                            "Multi-material emitter failed for %s, falling back to single mesh",
-                            body.name,
-                            exc_info=True,
+                mm_result = _get_multi_material_result(comp, mm_cache)
+                if mm_result is not None:
+                    meshes = []
+                    for mp in mm_result.material_programs:
+                        meshes.append(
+                            {
+                                "file": f"{body.name}__{mp.material.name}.stl",
+                                "material": mp.material.name,
+                            }
                         )
+                    if meshes:
+                        part_entry["meshes"] = meshes
 
             manifest["parts"].append(part_entry)
 

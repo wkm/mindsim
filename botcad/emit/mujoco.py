@@ -528,7 +528,11 @@ def _emit_mounted_components(
 
     for mount in body.mounts:
         comp = mount.component
-        r, g, b, a = comp.default_material.color
+        r, g, b, a = (
+            comp.default_material.color
+            if comp.default_material
+            else (0.541, 0.608, 0.659, 1.0)
+        )
         comp_key = f"comp_{body.name}_{mount.label}"
         mesh_name = f"{comp_key}_mesh"
 

@@ -163,7 +163,9 @@ def _component_to_json(comp, category: str) -> dict:
         "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
         "mass_g": round(comp.mass * 1000, 1),
         "is_servo": comp.kind == ComponentKind.SERVO,
-        "color": list(comp.default_material.color),
+        "color": list(comp.default_material.color)
+        if comp.default_material
+        else [0.541, 0.608, 0.659, 1.0],
         "layers": _component_layers(comp),
     }
     if comp.kind == ComponentKind.SERVO:
@@ -222,7 +224,12 @@ def _layer_color(comp, layer_id: str) -> tuple[int, int, int]:
     """Return RGB color for a component layer."""
     if layer_id in _LAYER_COLORS:
         return _LAYER_COLORS[layer_id]
-    r, g, b = comp.default_material.color[:3]
+    color = (
+        comp.default_material.color
+        if comp.default_material
+        else (0.541, 0.608, 0.659, 1.0)
+    )
+    r, g, b = color[:3]
     return (int(r * 255), int(g * 255), int(b * 255))
 
 

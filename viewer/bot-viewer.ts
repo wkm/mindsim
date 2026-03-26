@@ -45,10 +45,19 @@ interface ManifestMaterial {
 
 interface ManifestPart {
   id: string;
+  name?: string;
+  kind?: string;
+  category?: string;
   mesh?: string;
   meshes?: ManifestMesh[];
   parent_body?: string;
-  [key: string]: any;
+  joint?: string;
+  mount_label?: string;
+  pos?: number[];
+  quat?: number[];
+  mass?: number;
+  shapescript_component?: string;
+  bus_type?: string;
 }
 
 /**
@@ -87,21 +96,38 @@ async function enhanceMultiMaterialParts(
   for (const part of multiMaterialParts) {
     // Find the parent body that contains this component's MuJoCo geom
     const parentBodyName = part.parent_body;
-    if (!parentBodyName) continue;
+    if (!parentBodyName) {
+      console.warn('[multi-mat] no parent_body for', part.id);
+      continue;
+    }
 
     const parentBodyId = nameToBody[parentBodyName];
-    if (parentBodyId === undefined) continue;
+    if (parentBodyId === undefined) {
+      console.warn('[multi-mat] no body ID for', parentBodyName);
+      continue;
+    }
     const parentGroup = bodies[parentBodyId];
-    if (!parentGroup) continue;
+    if (!parentGroup) {
+      console.warn('[multi-mat] no group for body', parentBodyId);
+      continue;
+    }
 
     // Find the MuJoCo geom mesh for this component (by geomName matching part.id)
     let existingMesh: any = null;
+    const geomNames: string[] = [];
     parentGroup.traverse((child: any) => {
-      if (child.isMesh && child.geomName === part.id) {
-        existingMesh = child;
+      if (child.isMesh) {
+        geomNames.push(child.geomName ?? '(none)');
+        if (child.geomName === part.id) {
+          existingMesh = child;
+        }
       }
     });
-    if (!existingMesh) continue;
+    if (!existingMesh) {
+      console.warn('[multi-mat] no geom match for', part.id, '— available:', geomNames);
+      continue;
+    }
+    console.log('[multi-mat] replacing', part.id, 'with', part.meshes!.length, 'sub-meshes');
 
     // Load per-material STLs in parallel
     const meshEntries = part.meshes!;

@@ -969,26 +969,19 @@ class Bot:
         from botcad.materials import (
             MAT_ABS_DARK,
             MAT_PLA_LIGHT,
-            Material,
+            MAT_TUBE_DEFAULT,
         )
 
         for body in self.all_bodies:
             # Purchased body: inherit from first component
-            if (
-                body.mounts
-                and body.mounts[0].component.default_material.name != "_default"
-            ):
+            if body.mounts and body.mounts[0].component.default_material is not None:
                 body.material = body.mounts[0].component.default_material
                 continue
             # Fabricated body: shape-based default
             if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
                 body.material = MAT_ABS_DARK
             elif body.shape is BodyShape.TUBE:
-                body.material = Material(
-                    name="_tube_default",
-                    color=(0.749, 0.800, 0.839, 1.0),  # BP_GRAY5
-                    roughness=0.7,
-                )
+                body.material = MAT_TUBE_DEFAULT
             elif body.shape is BodyShape.JAW:
                 body.material = MAT_PLA_LIGHT
             else:

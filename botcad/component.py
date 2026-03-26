@@ -13,7 +13,6 @@ from enum import StrEnum
 from botcad.materials import Material
 
 Vec3 = tuple[float, float, float]
-RGBA = tuple[float, float, float, float]
 
 
 class ComponentKind(StrEnum):
@@ -190,9 +189,7 @@ class Component:
     kind: ComponentKind = ComponentKind.GENERIC
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
-    default_material: Material = Material(
-        name="_default", color=(0.541, 0.608, 0.659, 1.0)
-    )
+    default_material: Material | None = None
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 
