@@ -15,8 +15,9 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { Earcut } from 'three/src/extras/Earcut.js';
+import { loadEnvironment } from './environment.ts';
 import { MeasureTool } from './measure-tool.ts';
-import { BP, createEdgeComposer, RENDER_ORDER } from './presentation.ts';
+import { BP, RENDER_ORDER } from './presentation.ts';
 
 const VIEW_PRESETS = {
   iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
@@ -131,11 +132,11 @@ export class Viewport3D {
   _followBadge: any;
   _onFollowChange: any;
   _sectionCapColorFn: any;
+  _dirLight: THREE.DirectionalLight | null;
   _scene: any;
   _cam: any;
   _ctrl: any;
   _ren: any;
-  _edgeC: any;
   _meas: any;
   _gridHelper: any;
   _overlay: any;
@@ -161,7 +162,6 @@ export class Viewport3D {
   _settingsPopover: any;
   _perspBtn: any;
   _orthoBtn: any;
-  _edgeCb: any;
   _gridCb: any;
   _onResize: any;
   _onKey: any;
@@ -202,6 +202,7 @@ export class Viewport3D {
     this._onFollowChange = null; // callback when follow mode changes
     // Section cap callback — lets external code provide per-group cap colors
     this._sectionCapColorFn = null;
+    this._dirLight = null;
 
     this._initScene(options);
     this._initOverlay();
@@ -530,7 +531,6 @@ export class Viewport3D {
       this._cam.updateProjectionMatrix();
     }
     this._ren.setSize(w, h);
-    if (this._edgeC) this._edgeC.resize(w, h);
     if (this._contourLineMat) {
       this._contourLineMat.resolution.set(w, h);
     }
@@ -612,10 +612,6 @@ export class Viewport3D {
     this._ctrl.target.copy(target);
     this._ctrl.update();
 
-    // Reconnect edge composer if active
-    if (this._edgeC) {
-      this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
-    }
     // Reconnect measure tool camera reference
     this._meas._camera = this._cam;
   }
@@ -645,8 +641,10 @@ export class Viewport3D {
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._ren.setSize(w, h);
     this._ren.shadowMap.enabled = true;
-    this._ren.shadowMap.type = THREE.PCFShadowMap;
+    this._ren.shadowMap.type = THREE.PCFSoftShadowMap;
     this._ren.localClippingEnabled = true;
+    this._ren.toneMapping = THREE.AgXToneMapping;
+    this._ren.toneMappingExposure = 0.9;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
     this._ctrl.enableDamping = true;
@@ -656,11 +654,24 @@ export class Viewport3D {
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
     // Lighting
-    this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+    this._scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
     dir.position.set(0.3, 0.5, 0.4);
     this._scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    this._dirLight = dir;
+    dir.castShadow = true;
+    dir.shadow.mapSize.width = 1024;
+    dir.shadow.mapSize.height = 1024;
+    dir.shadow.bias = -0.0005;
+    // Shadow camera frustum — sized for typical bot (~0.3m).
+    // Covers a 0.4m box centered on origin, 0.5m tall.
+    dir.shadow.camera.left = -0.2;
+    dir.shadow.camera.right = 0.2;
+    dir.shadow.camera.top = 0.5;
+    dir.shadow.camera.bottom = -0.05;
+    dir.shadow.camera.near = 0.01;
+    dir.shadow.camera.far = 1.5;
+    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
     this._gridHelper = null;
@@ -669,8 +680,8 @@ export class Viewport3D {
       this._gridHelper.rotation.x = Math.PI / 2;
       this._scene.add(this._gridHelper);
     }
-    if (opts.edges) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     this._meas = new MeasureTool(this._cam, this._scene, c);
+    loadEnvironment(this._ren, this._scene);
   }
 
   // ── Overlay controls ──
@@ -1293,29 +1304,6 @@ export class Viewport3D {
     camRow.appendChild(camToggle);
     this._settingsPopover.appendChild(camRow);
     updateCamBtns();
-
-    // Edge rendering checkbox
-    const edgeRow = document.createElement('label');
-    edgeRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;';
-    this._edgeCb = document.createElement('input');
-    this._edgeCb.type = 'checkbox';
-    this._edgeCb.checked = !!this._edgeC;
-    this._edgeCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
-    this._edgeCb.addEventListener('change', () => {
-      if (this._edgeCb.checked) {
-        if (!this._edgeC) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
-      } else {
-        if (this._edgeC) {
-          this._edgeC = null;
-        }
-      }
-    });
-    edgeRow.appendChild(this._edgeCb);
-    const edgeLabel = document.createElement('span');
-    edgeLabel.textContent = 'Edge detection';
-    edgeLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
-    edgeRow.appendChild(edgeLabel);
-    this._settingsPopover.appendChild(edgeRow);
 
     // Grid checkbox
     const gridRow = document.createElement('label');
@@ -2072,11 +2060,7 @@ export class Viewport3D {
     // consistent screen-space density regardless of camera distance
     this._updateHatchRepeat();
     // Edge detection works with section caps (no stencil dependency)
-    if (this._edgeC) {
-      this._edgeC.render();
-    } else {
-      this._ren.render(this._scene, this._cam);
-    }
+    this._ren.render(this._scene, this._cam);
     if (this._meas.enabled || this._meas.measurements.length > 0) this._meas.update();
     // Sync orientation cube
     this._syncOrientationCube();
