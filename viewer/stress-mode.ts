@@ -267,13 +267,15 @@ export class StressMode implements ViewerMode {
         (geometry) => {
           geometry.computeVertexNormals();
 
-          const material = new THREE.MeshPhongMaterial({
+          // Use MeshBasicMaterial so vertex colors render at full brightness
+          // regardless of scene lighting (heatmaps are data viz, not geometry).
+          const material = new THREE.MeshBasicMaterial({
             vertexColors: true,
             transparent: label.includes('structure'),
             opacity: label.includes('structure') ? 0.3 : 1.0,
-            shininess: 10,
             depthTest: true,
-            depthWrite: true,
+            depthWrite: !label.includes('structure'),
+            toneMapped: false, // bypass AgX tone mapping — show raw heatmap colors
           });
 
           const mesh = new THREE.Mesh(geometry, material);
