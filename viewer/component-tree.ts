@@ -835,7 +835,7 @@ export class ComponentTree {
 
       .tree-node-header {
         display: flex; align-items: center; gap: 4px;
-        padding: 3px 6px; border-radius: 4px; cursor: pointer;
+        padding: 3px 28px 3px 6px; border-radius: 4px; cursor: pointer;
         font-size: 12px; color: var(--dark5);
         transition: background 0.1s;
         position: relative;
@@ -862,6 +862,7 @@ export class ComponentTree {
       .tree-chevron:hover { color: var(--gray1); }
       .tree-chevron-spacer {
         width: 14px; height: 14px; flex-shrink: 0;
+        display: inline-flex;
       }
 
       /* Category color dot */
@@ -883,10 +884,10 @@ export class ComponentTree {
         line-height: 16px; flex-shrink: 0;
       }
 
-      /* ── Visibility dot indicator (always last flex child) ── */
+      /* ── Visibility dot indicator (absolutely positioned at right edge) ── */
       .vis-dot {
         width: 12px; height: 12px; border-radius: 50%;
-        flex-shrink: 0; margin-left: auto;
+        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
         cursor: pointer; background: #58a6ff;
         box-sizing: border-box;
         transition: background 0.15s, border 0.15s;
