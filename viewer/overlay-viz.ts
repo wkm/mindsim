@@ -155,11 +155,12 @@ export class OverlayViz {
       }
 
       // Orient: fastener STL has head top face at Z=0, entire body in -Z.
-      // Manifest axis = insertion direction (into the hole).
-      // Align -Z (screw body) with insertion axis → head surface faces outward.
-      const insertDir = new THREE.Vector3(fastener.axis![0], fastener.axis![1], fastener.axis![2]).normalize();
+      // Manifest axis = MountPoint.axis = the direction the screw points
+      // (from head toward tip). Negate it so the STL -Z (tip) aligns with
+      // the INTO-hole direction, leaving the head facing outward.
+      const axisVec = new THREE.Vector3(fastener.axis![0], fastener.axis![1], fastener.axis![2]).normalize();
       const negZ = new THREE.Vector3(0, 0, -1);
-      const quatFromAxis = new THREE.Quaternion().setFromUnitVectors(negZ, insertDir);
+      const quatFromAxis = new THREE.Quaternion().setFromUnitVectors(negZ, axisVec.negate());
       mesh.quaternion.copy(quatFromAxis);
 
       group.add(mesh);
