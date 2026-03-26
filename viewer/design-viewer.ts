@@ -24,7 +24,14 @@ export interface DesignViewerContext {
   syncVisibility(): void;
 }
 
-/** Create a positioned mesh from geometry, material, pos, and quat. */
+/** Edge line material — shared across all meshes for consistent look. */
+const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.15,
+});
+
+/** Create a positioned mesh with edge lines, matching component browser style. */
 function createPositionedMesh(
   geometry: THREE.BufferGeometry,
   material: THREE.Material,
@@ -36,6 +43,13 @@ function createPositionedMesh(
   mesh.receiveShadow = true;
   mesh.position.set(pos[0], pos[1], pos[2]);
   mesh.quaternion.copy(manifestQuatToThree(quat));
+
+  // Add wireframe edge lines for surface definition (same as component browser)
+  const edges = new THREE.EdgesGeometry(geometry, 28);
+  const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
+  lines.raycast = () => {}; // edges don't participate in picking
+  mesh.add(lines);
+
   return mesh;
 }
 
