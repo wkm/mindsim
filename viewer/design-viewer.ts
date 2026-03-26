@@ -28,7 +28,8 @@ export interface DesignViewerContext {
 const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
   color: 0x000000,
   transparent: true,
-  opacity: 0.15,
+  opacity: 0.35,
+  linewidth: 2, // only effective on some platforms; WebGL often caps at 1px
 });
 
 /** Create a positioned mesh with edge lines, matching component browser style. */
