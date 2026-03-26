@@ -26,7 +26,7 @@ export class StressMode implements ViewerMode {
   activate() {
     this.active = true;
     this.ctx.scene.add(this.stressGroup);
-    
+
     // Sync stress group to bot position
     this.stressGroup.position.copy(this.ctx.mujocoRoot.position);
     this.stressGroup.quaternion.copy(this.ctx.mujocoRoot.quaternion);
@@ -36,24 +36,24 @@ export class StressMode implements ViewerMode {
     // Dim the main bot
     this.ctx.botScene.ghostAllExcept([]);
     this.ctx.syncScene();
-    
+
     this._showStressPanel();
   }
 
   deactivate() {
     this.active = false;
     this.ctx.scene.remove(this.stressGroup);
-    
+
     // Restore bot visibility
     this.ctx.botScene.unghost();
     for (const id of this.hiddenBodyIds) {
-        if (this.ctx.botScene.bodies[id]) {
-            this.ctx.botScene.bodies[id].visible = true;
-        }
+      if (this.ctx.botScene.bodies[id]) {
+        this.ctx.botScene.bodies[id].visible = true;
+      }
     }
     this.hiddenBodyIds = [];
     this.ctx.syncScene();
-    
+
     const panel = document.getElementById('side-panel');
     if (panel) panel.innerHTML = '';
   }
@@ -64,17 +64,44 @@ export class StressMode implements ViewerMode {
 
     let html = '<h2>Stress Analysis</h2>';
     html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">3D High-Res FEA propagation (Warp FEM).</p>';
-    
-    if (stats) {
-        html += '<div style="background:#182026;padding:12px;border-radius:4px;margin-bottom:16px;border-left:4px solid #48AFF0;">';
-        html += `<div style="font-size:11px;color:#A7B6C2;text-transform:uppercase;">Target: <b>${stats.body}</b></div>`;
-        html += `<div style="font-size:18px;color:#fff;margin:4px 0;">${stats.max_stress_mpa} <span style="font-size:12px;color:#A7B6C2;">MPa Max</span></div>`;
-        const sfColor = stats.safety_factor < 1.0 ? '#FF7373' : stats.safety_factor < 2.0 ? '#FFB366' : '#3DCC91';
-        html += `<div style="font-size:13px;color:${sfColor};">Safety Factor: <b>${stats.safety_factor}</b></div>`;
-        if (stats.timings?.total) {
-            html += `<div style="font-size:11px;color:#5C7080;margin-top:8px;">Total time: ${stats.timings.total}s</div>`;
+
+    if (stats?.bodies) {
+      // Buildability summary
+      const buildColor = stats.buildable ? '#3DCC91' : '#FF7373';
+      const buildLabel = stats.buildable ? 'BUILDABLE' : 'NOT BUILDABLE';
+      html += `<div style="background:#182026;padding:12px;border-radius:4px;margin-bottom:16px;border-left:4px solid ${buildColor};">`;
+      html += `<div style="font-size:14px;color:${buildColor};font-weight:bold;margin-bottom:4px;">${buildLabel}</div>`;
+      if (stats.worst_body) {
+        html += `<div style="font-size:11px;color:#A7B6C2;">Worst: <b>${stats.worst_body}</b> (SF ${stats.worst_sf})</div>`;
+      }
+      html += `<div style="font-size:11px;color:#5C7080;margin-top:4px;">Total time: ${stats.total_duration}s</div>`;
+      html += '</div>';
+
+      // Per-body results table
+      html += '<h3>Per-Body Results</h3>';
+      html += '<div style="margin-bottom:16px;">';
+      for (const b of stats.bodies) {
+        if (b.status === 'ok') {
+          const sfColor = b.safety_factor < 1.0 ? '#FF7373' : b.safety_factor < 2.0 ? '#FFB366' : '#3DCC91';
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #30404D;font-size:12px;">`;
+          html += `<span style="color:#E1E8ED;">${b.body}</span>`;
+          html += `<span style="color:${sfColor};font-weight:bold;">SF ${b.safety_factor} <span style="color:#5C7080;font-weight:normal;">(${b.max_stress_mpa} MPa)</span></span>`;
+          html += '</div>';
+        } else {
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #30404D;font-size:12px;">`;
+          html += `<span style="color:#E1E8ED;">${b.body}</span>`;
+          html += `<span style="color:#5C7080;font-style:italic;">${b.status}${b.reason ? `: ${b.reason}` : ''}</span>`;
+          html += '</div>';
         }
-        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Find yield for legend from the worst body result
+    let yieldMpa = 40;
+    if (stats?.bodies && stats.worst_body) {
+      const worstResult = stats.bodies.find((b: any) => b.body === stats.worst_body);
+      if (worstResult?.yield_mpa) yieldMpa = worstResult.yield_mpa;
     }
 
     html += '<h3>Heatmap Legend</h3>';
@@ -83,8 +110,8 @@ export class StressMode implements ViewerMode {
         <div style="height:12px; width:100%; background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000); border-radius:2px; margin-bottom:4px;"></div>
         <div style="display:flex; justify-content:space-between; font-size:10px; color:#A7B6C2;">
           <span>0 MPa</span>
-          <span>20 MPa</span>
-          <span>40 MPa (Yield)</span>
+          <span>${yieldMpa / 2} MPa</span>
+          <span>${yieldMpa} MPa (Yield)</span>
         </div>
       </div>
     `;
@@ -104,160 +131,168 @@ export class StressMode implements ViewerMode {
       </div>
     `;
     html += '</div>';
-    
-    html += '<button id="load-fea-btn" class="btn btn-sm btn-primary" style="margin-top:16px;width:100%;">Run 3D FEA Solve</button>';
-    html += '<div id="fea-log" style="font-family:monospace;font-size:10px;color:#3DCC91;margin-top:12px;max-height:150px;overflow-y:auto;border-top:1px solid #30404D;padding-top:8px;"></div>';
+
+    html +=
+      '<button id="load-fea-btn" class="btn btn-sm btn-primary" style="margin-top:16px;width:100%;">Run 3D FEA Solve</button>';
+    html +=
+      '<div id="fea-log" style="font-family:monospace;font-size:10px;color:#3DCC91;margin-top:12px;max-height:150px;overflow-y:auto;border-top:1px solid #30404D;padding-top:8px;"></div>';
 
     panel.innerHTML = html;
 
     document.getElementById('load-fea-btn')?.addEventListener('click', () => this.loadAllFEA());
-    
+
     document.getElementById('toggle-heatmap')?.addEventListener('change', (e) => {
-        const checked = (e.target as HTMLInputElement).checked;
-        this.stressGroup.traverse((child) => {
-            if (child.name.includes('heatmap')) child.visible = checked;
-        });
+      const checked = (e.target as HTMLInputElement).checked;
+      this.stressGroup.traverse((child) => {
+        if (child.name.includes('heatmap')) child.visible = checked;
+      });
     });
-    
+
     document.getElementById('toggle-voxels')?.addEventListener('change', (e) => {
-        const checked = (e.target as HTMLInputElement).checked;
-        this.stressGroup.traverse((child) => {
-            if (child.name.includes('voxels')) child.visible = checked;
-        });
+      const checked = (e.target as HTMLInputElement).checked;
+      this.stressGroup.traverse((child) => {
+        if (child.name.includes('voxels')) child.visible = checked;
+      });
     });
   }
 
   _log(msg: string, color?: string) {
     const log = document.getElementById('fea-log');
     if (log) {
-        const style = color ? `style="color:${color}"` : '';
-        log.innerHTML += `<div ${style}>> ${msg}</div>`;
-        log.scrollTop = log.scrollHeight;
+      const style = color ? `style="color:${color}"` : '';
+      log.innerHTML += `<div ${style}>> ${msg}</div>`;
+      log.scrollTop = log.scrollHeight;
     }
   }
 
   async loadAllFEA() {
     const btn = document.getElementById('load-fea-btn') as HTMLButtonElement;
     if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Solver Running...';
+      btn.disabled = true;
+      btn.textContent = 'Solver Running...';
     }
 
     const logEl = document.getElementById('fea-log');
     if (logEl) logEl.innerHTML = '';
 
     try {
-        this._log('Connecting to Warp FEM engine...');
-        
-        // 1. Trigger the analysis on the server
-        const runResp = await fetch(`/api/bots/${this.ctx.botName}/fea/run`, { method: 'POST' });
-        if (!runResp.ok) throw new Error(await runResp.text());
-        
-        const runData = await runResp.json();
-        const t = runData.timings;
-        
-        this._log(`CAD Generation: ${t.cad_gen}s`);
-        this._log(`Voxelization (20x20x20): ${t.voxelization}s`);
-        this._log(`Assembly: ${t.assembly}s`);
-        this._log(`Projection: ${t.projection}s`);
-        this._log(`Solve: ${t.solve}s`);
-        this._log(`Heatmap: ${t.heatmap}s`);
-        this._log(`Mesh Export: ${t.mesh_export}s`);
-        this._log(`Total Server Time: ${t.total}s`, '#48AFF0');
+      this._log('Connecting to Warp FEM engine...');
 
-        // Hide original body to prevent Z-fighting with heatmap
-        // Find the body ID in botScene
-        for (let i=0; i < this.ctx.botScene.bodies.length; i++) {
-            if (this.ctx.botScene.bodies[i].name === runData.body) {
-                this.ctx.botScene.bodies[i].visible = false;
-                this.hiddenBodyIds.push(i);
-            }
+      // 1. Trigger the analysis on the server
+      const runResp = await fetch(`/api/bots/${this.ctx.botName}/fea/run`, { method: 'POST' });
+      if (!runResp.ok) throw new Error(await runResp.text());
+
+      const runData = await runResp.json();
+
+      // Log per-body results
+      for (const b of runData.bodies ?? []) {
+        if (b.status === 'ok') {
+          const sfColor = b.safety_factor < 1.0 ? '#FF7373' : b.safety_factor < 2.0 ? '#FFB366' : '#3DCC91';
+          this._log(`${b.body}: SF ${b.safety_factor} (${b.max_stress_mpa} MPa) - ${b.duration}s`, sfColor);
+        } else {
+          this._log(`${b.body}: ${b.status}${b.reason ? ` - ${b.reason}` : ''}`, '#5C7080');
+        }
+      }
+      this._log(`Total: ${runData.total_duration}s`, '#48AFF0');
+      this._log(runData.buildable ? 'BUILDABLE' : 'NOT BUILDABLE', runData.buildable ? '#3DCC91' : '#FF7373');
+
+      // Load PLY overlays for the worst body
+      const worstBody = runData.worst_body;
+      if (worstBody) {
+        // Hide original body to prevent Z-fighting
+        for (let i = 0; i < this.ctx.botScene.bodies.length; i++) {
+          if (this.ctx.botScene.bodies[i].name === worstBody) {
+            this.ctx.botScene.bodies[i].visible = false;
+            this.hiddenBodyIds.push(i);
+          }
         }
         this.ctx.syncScene();
 
-        // Find the parent group for this body in the MuJoCo scene to get its transform
+        // Find transform for worst body
         let bodyGroup: THREE.Object3D | null = null;
         this.ctx.mujocoRoot.traverse((obj) => {
-            if (obj.name === runData.body) {
-                bodyGroup = obj;
-            }
+          if (obj.name === worstBody) {
+            bodyGroup = obj;
+          }
         });
 
-        // 2. Load the resulting PLY files
         const baseUrl = `/api/bots/${this.ctx.botName}/fea`;
         const files = [
-            { name: 'stress_heatmap.ply', label: 'heatmap' },
-            { name: 'fixed_voxels.ply', label: 'voxels_fixed' },
-            { name: 'loaded_voxels.ply', label: 'voxels_loaded' },
-            { name: 'structure_voxels.ply', label: 'voxels_structure' }
+          { name: `${worstBody}_stress_heatmap.ply`, label: 'heatmap' },
+          { name: `${worstBody}_fixed_voxels.ply`, label: 'voxels_fixed' },
+          { name: `${worstBody}_structure_voxels.ply`, label: 'voxels_structure' },
         ];
 
         // Clear existing overlays
-        while(this.stressGroup.children.length > 0) {
-            this.stressGroup.remove(this.stressGroup.children[0]);
+        while (this.stressGroup.children.length > 0) {
+          this.stressGroup.remove(this.stressGroup.children[0]);
         }
 
         for (const file of files) {
-            try {
-                this._log(`Loading ${file.name}...`);
-                const mesh = await this.loadPLY(`${baseUrl}/${file.name}`, file.label) as THREE.Mesh;
-                
-                if (bodyGroup) {
-                    mesh.position.copy(bodyGroup.position);
-                    mesh.quaternion.copy(bodyGroup.quaternion);
-                    mesh.scale.copy(bodyGroup.scale);
-                }
-                
-                this.stressGroup.add(mesh);
-            } catch (err) {
-                console.warn(`Could not load FEA file ${file.name}:`, err);
+          try {
+            this._log(`Loading ${file.name}...`);
+            const mesh = (await this.loadPLY(`${baseUrl}/${file.name}`, file.label)) as THREE.Mesh;
+
+            if (bodyGroup) {
+              mesh.position.copy(bodyGroup.position);
+              mesh.quaternion.copy(bodyGroup.quaternion);
+              mesh.scale.copy(bodyGroup.scale);
             }
+
+            this.stressGroup.add(mesh);
+          } catch (err) {
+            console.warn(`Could not load FEA file ${file.name}:`, err);
+          }
         }
-        
-        this._log('Analysis successful.', '#3DCC91');
-        
-        // Re-render panel with stats
-        this._showStressPanel(runData);
-        
-    } catch (err) {
-        console.error('FEA failed:', err);
-        this._log(`ERROR: ${err.message}`, '#FF7373');
-        if (btn) {
-            btn.textContent = 'FEA Failed';
-            btn.classList.add('btn-danger');
-        }
+      }
+
+      this._log('Analysis complete.', '#3DCC91');
+
+      // Re-render panel with stats
+      this._showStressPanel(runData);
+    } catch (err: any) {
+      console.error('FEA failed:', err);
+      this._log(`ERROR: ${err.message}`, '#FF7373');
+      if (btn) {
+        btn.textContent = 'FEA Failed';
+        btn.classList.add('btn-danger');
+      }
     }
   }
 
   async loadPLY(url: string, label: string) {
     return new Promise((resolve, reject) => {
-      this.loader.load(url, (geometry) => {
-        geometry.computeVertexNormals();
-        
-        const material = new THREE.MeshPhongMaterial({ 
+      this.loader.load(
+        url,
+        (geometry) => {
+          geometry.computeVertexNormals();
+
+          const material = new THREE.MeshPhongMaterial({
             vertexColors: true,
             transparent: label.includes('structure'),
             opacity: label.includes('structure') ? 0.3 : 1.0,
             shininess: 10,
             depthTest: true,
-            depthWrite: true
-        });
-        
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.name = label;
-        
-        // Initial visibility from checkboxes
-        const heatmapChecked = (document.getElementById('toggle-heatmap') as HTMLInputElement)?.checked ?? true;
-        const voxelsChecked = (document.getElementById('toggle-voxels') as HTMLInputElement)?.checked ?? false;
-        
-        if (label.includes('heatmap')) mesh.visible = heatmapChecked;
-        if (label.includes('voxels')) mesh.visible = voxelsChecked;
+            depthWrite: true,
+          });
 
-        resolve(mesh);
-      }, undefined, reject);
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = label;
+
+          // Initial visibility from checkboxes
+          const heatmapChecked = (document.getElementById('toggle-heatmap') as HTMLInputElement)?.checked ?? true;
+          const voxelsChecked = (document.getElementById('toggle-voxels') as HTMLInputElement)?.checked ?? false;
+
+          if (label.includes('heatmap')) mesh.visible = heatmapChecked;
+          if (label.includes('voxels')) mesh.visible = voxelsChecked;
+
+          resolve(mesh);
+        },
+        undefined,
+        reject,
+      );
     });
   }
 
-  update() {
-  }
+  update() {}
 }

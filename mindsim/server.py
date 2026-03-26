@@ -813,7 +813,7 @@ def _serve_cad_step_solid(bot_name: str, body_name: str, step_idx: int, attr: st
 
 @app.post("/api/bots/{bot}/fea/run")
 async def run_fea(bot: str):
-    """Trigger FEA analysis for a bot's main bodies."""
+    """Trigger FEA analysis for all fabricated bodies."""
     try:
         t_total_start = time.monotonic()
         bot_obj, cad = _load_bot(bot)
@@ -821,129 +821,127 @@ async def run_fea(bot: str):
         traceback.print_exc()
         raise HTTPException(500, f"Bot load failed: {e}")
 
-    # For POC, we analyze the first fabricated body
     from botcad.skeleton import BodyKind
 
-    target_body = None
-    for body in bot_obj.all_bodies:
-        if body.kind == BodyKind.FABRICATED:
-            target_body = body
-            break
-
-    if not target_body:
+    fab_bodies = [b for b in bot_obj.all_bodies if b.kind == BodyKind.FABRICATED]
+    if not fab_bodies:
         raise HTTPException(400, "No fabricated bodies found for FEA.")
 
-    # Find its IR result to get tags
-    try:
-        # We need the ExecutionResult from OcctBackend.
-        from botcad.shapescript.backend_occt import OcctBackend
+    import tempfile
 
-        t_cad_start = time.monotonic()
-        # Find parent joint for the body to get the full script
-        parent_joint = cad.parent_joint_map.get(target_body.name)
-        wire_segs = cad.body_wire_segments.get(target_body.name)
-        wire_segs_tuple = tuple(wire_segs) if wire_segs else None
+    from botcad.fea import analyze_component, export_stress_mesh, export_voxel_mesh
+    from botcad.shapescript.backend_occt import OcctBackend
+    from botcad.shapescript.emit_body import emit_body_ir
 
-        from botcad.shapescript.emit_body import emit_body_ir
+    def _get_ply_bytes(func, *args, **kwargs):
+        with tempfile.NamedTemporaryFile(suffix=".ply", delete=True) as tmp:
+            func(*args, tmp.name, **kwargs)
+            return Path(tmp.name).read_bytes()
 
-        prog = emit_body_ir(target_body, parent_joint, wire_segs_tuple)
-        backend = OcctBackend()
-        result = backend.execute(prog)
-        solid = result.shapes[prog.output_ref.id]
-        t_cad_end = time.monotonic()
-        cad_duration = round(t_cad_end - t_cad_start, 2)
+    body_results: list[dict] = []
+    worst_sf = float("inf")
+    worst_body: str | None = None
 
-        from botcad.fea import analyze_component, export_stress_mesh, export_voxel_mesh
+    for target_body in fab_bodies:
+        t_body_start = time.monotonic()
+        try:
+            parent_joint = cad.parent_joint_map.get(target_body.name)
+            wire_segs = cad.body_wire_segments.get(target_body.name)
+            wire_segs_tuple = tuple(wire_segs) if wire_segs else None
 
-        print(f"[fea] Running analysis for {bot}:{target_body.name}...")
-        # Use 2.94 as default torque if no servo (unlikely for fabricated joints)
-        torque = 2.94
-        for joint in target_body.joints:
-            if joint.servo:
-                torque = joint.servo.stall_torque
-                break
+            prog = emit_body_ir(target_body, parent_joint, wire_segs_tuple)
+            backend = OcctBackend()
+            result = backend.execute(prog)
+            solid = result.shapes[prog.output_ref.id]
 
-        # Lowered resolution to 20x20x20 for better performance
-        solve_res_tuple = analyze_component(
-            solid, result, torque_nm=torque, res=(20, 20, 20), body=target_body
-        )
-        if not solve_res_tuple:
-            raise Exception("FEA solve failed (see server logs)")
+            torque = 2.94
+            for joint in target_body.joints:
+                if joint.servo:
+                    torque = max(torque, joint.servo.stall_torque)
 
-        u_field, stress_array, vd, fea_timings = solve_res_tuple
-        max_stress = float(stress_array.numpy().max())
-        sf = (
-            float(target_body.material.yield_strength / max_stress)
-            if max_stress > 0
-            else 99.0
-        )
+            print(f"[fea] Running analysis for {bot}:{target_body.name}...")
+            solve_res_tuple = analyze_component(
+                solid, result, torque_nm=torque, res=(20, 20, 20), body=target_body
+            )
+            if not solve_res_tuple:
+                body_results.append(
+                    {"body": target_body.name, "status": "skipped", "reason": "no BCs"}
+                )
+                continue
 
-        # Export to bytes and cache
-        import tempfile
+            u_field, stress_array, vd, fea_timings = solve_res_tuple
+            max_stress = float(stress_array.numpy().max())
+            eff_yield = target_body.material.effective_yield_strength
+            sf = float(eff_yield / max_stress) if max_stress > 0 else 99.0
 
-        t_export_start = time.monotonic()
+            print(f"[fea] Generating PLY meshes for {target_body.name}...")
+            files = {
+                f"{target_body.name}_stress_heatmap.ply": _get_ply_bytes(
+                    lambda *a: export_stress_mesh(*a, yield_strength=eff_yield),
+                    solid,
+                    u_field.space,
+                    u_field,
+                    stress_array,
+                ),
+                f"{target_body.name}_fixed_voxels.ply": _get_ply_bytes(
+                    export_voxel_mesh,
+                    vd,
+                    vd.tag_masks["fastener_hole"],
+                    [0, 255, 0, 255],
+                ),
+                f"{target_body.name}_structure_voxels.ply": _get_ply_bytes(
+                    export_voxel_mesh, vd, vd.inside_mask, [200, 200, 200, 100]
+                ),
+            }
 
-        def _get_ply_bytes(func, *args):
-            with tempfile.NamedTemporaryFile(suffix=".ply", delete=True) as tmp:
-                func(*args, tmp.name)
-                return Path(tmp.name).read_bytes()
+            with _fea_cache_lock:
+                for fname, bdata in files.items():
+                    _fea_cache[(bot, target_body.name, fname)] = bdata
 
-        # Find a load mask: broaden to any tag with 'bracket' or 'pocket'
-        load_mask = None
-        for tag, mask in vd.tag_masks.items():
-            if "bracket" in tag or "pocket" in tag or "front_plate" in tag:
-                load_mask = mask
-                break
+            t_body_end = time.monotonic()
+            body_results.append(
+                {
+                    "body": target_body.name,
+                    "status": "ok",
+                    "max_stress_mpa": round(max_stress / 1e6, 2),
+                    "safety_factor": round(sf, 2),
+                    "yield_mpa": round(eff_yield / 1e6, 1),
+                    "duration": round(t_body_end - t_body_start, 2),
+                }
+            )
 
-        print("[fea] Generating PLY meshes...")
-        files = {
-            "stress_heatmap.ply": _get_ply_bytes(
-                export_stress_mesh, solid, u_field.space, u_field, stress_array
-            ),
-            "fixed_voxels.ply": _get_ply_bytes(
-                export_voxel_mesh, vd, vd.tag_masks["fastener_hole"], [0, 255, 0, 255]
-            ),
-            "loaded_voxels.ply": _get_ply_bytes(
-                export_voxel_mesh,
-                vd,
-                load_mask or vd.inside_mask,  # fallback
-                [255, 0, 0, 255],
-            ),
-            "structure_voxels.ply": _get_ply_bytes(
-                export_voxel_mesh, vd, vd.inside_mask, [200, 200, 200, 100]
-            ),
-        }
-        t_export_end = time.monotonic()
-        export_duration = round(t_export_end - t_export_start, 2)
+            if sf < worst_sf:
+                worst_sf = sf
+                worst_body = target_body.name
 
-        with _fea_cache_lock:
-            for fname, bdata in files.items():
-                _fea_cache[(bot, target_body.name, fname)] = bdata
+        except Exception as e:
+            traceback.print_exc()
+            t_body_end = time.monotonic()
+            body_results.append(
+                {
+                    "body": target_body.name,
+                    "status": "error",
+                    "reason": str(e),
+                    "duration": round(t_body_end - t_body_start, 2),
+                }
+            )
 
-        t_total_end = time.monotonic()
-        total_duration = round(t_total_end - t_total_start, 2)
+    t_total_end = time.monotonic()
 
-        return {
-            "status": "success",
-            "body": target_body.name,
-            "max_stress_mpa": round(max_stress / 1e6, 2),
-            "safety_factor": round(sf, 2),
-            "timings": {
-                "cad_gen": cad_duration,
-                "voxelization": fea_timings["voxelization"],
-                "assembly": fea_timings["assembly"],
-                "projection": fea_timings["projection"],
-                "solve": fea_timings["solve"],
-                "heatmap": fea_timings["heatmap"],
-                "mesh_export": export_duration,
-                "total": total_duration,
-            },
-            "files": list(files.keys()),
-        }
+    if worst_sf == float("inf"):
+        worst_sf = 0.0
+        buildable = False
+    else:
+        buildable = worst_sf >= 1.0
 
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(500, f"FEA run failed: {e}")
+    return {
+        "status": "success",
+        "buildable": buildable,
+        "worst_body": worst_body,
+        "worst_sf": round(worst_sf, 2),
+        "bodies": body_results,
+        "total_duration": round(t_total_end - t_total_start, 2),
+    }
 
 
 @app.get("/api/bots/{bot}/fea/{file_name}")
