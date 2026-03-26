@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
@@ -245,10 +246,18 @@ export function createEdgeComposer(renderer: THREE.WebGLRenderer, scene: THREE.S
   edgePass.uniforms.edgeColor.value.set(EDGE_COLOR);
   composer.addPass(edgePass);
 
+  const outputPass = new OutputPass();
+  composer.addPass(outputPass);
+
   return {
     composer,
 
     render() {
+      // Disable tone mapping on renderer — OutputPass handles it as the final step.
+      // This prevents double-application (RenderPass + screen output).
+      const origToneMapping = renderer.toneMapping;
+      renderer.toneMapping = THREE.NoToneMapping;
+
       // Hide non-mesh objects and the section viz plane for edge passes.
       // Hide non-mesh objects AND section cap geometry from edge passes.
       // Cap triangles create false edges in the normal/depth detection.
@@ -283,7 +292,7 @@ export function createEdgeComposer(renderer: THREE.WebGLRenderer, scene: THREE.S
       renderer.setRenderTarget(depthTarget);
       renderer.render(scene, camera);
 
-      // 3. Restore visibility and composite
+      // 3. Restore and composite
       scene.overrideMaterial = origOverride;
       scene.background = origBg;
       for (const obj of hidden) obj.visible = true;
@@ -292,7 +301,9 @@ export function createEdgeComposer(renderer: THREE.WebGLRenderer, scene: THREE.S
       edgePass.uniforms.tNormal.value = normalTarget.texture;
       edgePass.uniforms.tDepth.value = depthTarget.texture;
 
+      // OutputPass (final) applies tone mapping + color space once.
       composer.render();
+      renderer.toneMapping = origToneMapping;
     },
 
     resize(w, h) {
