@@ -642,7 +642,7 @@ export class ComponentTree {
     const header = document.createElement('div');
     header.className = 'tree-node-header';
 
-    // Chevron (SVG disclosure triangle) — only for collapsible nodes
+    // Chevron (SVG disclosure triangle) or spacer for alignment
     if (hasChildren) {
       const chevron = document.createElement('span');
       chevron.className = 'tree-chevron';
@@ -658,6 +658,11 @@ export class ComponentTree {
       };
       chevron.addEventListener('click', toggleFn);
       header.appendChild(chevron);
+    } else {
+      // Spacer matching chevron width so siblings align regardless of children
+      const spacer = document.createElement('span');
+      spacer.className = 'tree-chevron-spacer';
+      header.appendChild(spacer);
     }
 
     // Category color dot
@@ -855,6 +860,9 @@ export class ComponentTree {
         transform: rotate(90deg);
       }
       .tree-chevron:hover { color: var(--gray1); }
+      .tree-chevron-spacer {
+        width: 14px; height: 14px; flex-shrink: 0;
+      }
 
       /* Category color dot */
       .tree-cat-dot {
