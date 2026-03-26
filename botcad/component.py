@@ -10,18 +10,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from botcad.materials import Material
+
 Vec3 = tuple[float, float, float]
-RGBA = tuple[float, float, float, float]
-
-
-@dataclass(frozen=True)
-class Appearance:
-    """Visual properties for rendering. Emitters read this, never compute colors."""
-
-    color: RGBA
-    metallic: float = 0.0  # 0=plastic, 1=metal
-    roughness: float = 0.7  # surface roughness
-    opacity: float = 1.0  # transparency
 
 
 class ComponentKind(StrEnum):
@@ -51,6 +42,7 @@ class ComponentMeta:
     layers: tuple[str, ...]  # viewer STL layers
     mount_orientation: MountOrientation
     script_emitter: Callable | None = None  # ShapeScript emitter, set after import
+    multi_material_emitter: Callable | None = None  # returns MultiMaterialResult
 
 
 _COMPONENT_REGISTRY: dict[ComponentKind, ComponentMeta] | None = None
@@ -68,7 +60,9 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
     from botcad.shapescript.emit_components import (
         battery_script,
         bearing_script,
+        camera_multi_material,
         camera_script,
+        compute_multi_material,
         compute_script,
         wheel_component_script,
     )
@@ -97,6 +91,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FACE_NORMAL,
             script_emitter=camera_script,
+            multi_material_emitter=camera_multi_material,
         ),
         ComponentKind.BATTERY: ComponentMeta(
             category="electronics",
@@ -109,6 +104,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body", "fasteners"),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=compute_script,
+            multi_material_emitter=compute_multi_material,
         ),
         ComponentKind.WHEEL: ComponentMeta(
             category="structure",
@@ -193,7 +189,7 @@ class Component:
     kind: ComponentKind = ComponentKind.GENERIC
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
-    appearance: Appearance = Appearance(color=(0.541, 0.608, 0.659, 1.0))
+    default_material: Material | None = None
     voltage: float = 0.0  # operating voltage (V), 0 = unpowered
     typical_current: float = 0.0  # typical draw (A), 0 = unpowered
 

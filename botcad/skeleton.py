@@ -32,7 +32,6 @@ from enum import StrEnum
 from typing import Literal
 
 from botcad.component import (
-    Appearance,
     Component,
     ComponentKind,
     MountOrientation,
@@ -403,9 +402,15 @@ class Body:
     # Used by build_cad() to assign the correct ShapeScript.
     _component: Component | None = field(default=None, repr=False)
 
-    # Material and appearance — set during solve() or at construction time.
+    # Material — set during solve() or at construction time.
+    # `material` provides both physical props (density, print process) and
+    # visual props (color, metallic, roughness) for rendering.
     material: Material = PLA
-    appearance: Appearance | None = None
+
+    @property
+    def component(self) -> Component | None:
+        """The component that generated this purchased body (servo, horn, mounted part)."""
+        return self._component
 
     def to_body_frame(self, p: Vec3) -> Vec3:
         """Transform a canonical-frame point/vector into body-frame coordinates."""
@@ -798,7 +803,7 @@ class Bot:
         self._validate_bracket_rom()
         self._compute_component_dimensions()
         solve_packing(self)
-        self._assign_appearances()
+        self._assign_materials()
 
         # After packing has positioned servos and components, compute
         # world-frame transforms for structural bodies and create
@@ -955,30 +960,32 @@ class Bot:
                     stacklevel=2,
                 )
 
-    def _assign_appearances(self) -> None:
-        """Set appearance on every body that doesn't already have one.
+    def _assign_materials(self) -> None:
+        """Set material on every body that doesn't already have one explicitly set.
 
         Purchased bodies (with mounted components) inherit their component's
-        appearance. Fabricated bodies get shape-based defaults.
+        default_material. Fabricated bodies get shape-based defaults.
         """
-        from botcad.colors import BP_GRAY5, COLOR_STRUCTURE_BODY, COLOR_STRUCTURE_DARK
+        from botcad.materials import (
+            MAT_ABS_DARK,
+            MAT_PLA_LIGHT,
+            MAT_TUBE_DEFAULT,
+        )
 
         for body in self.all_bodies:
-            if body.appearance is not None:
-                continue  # already set explicitly
             # Purchased body: inherit from first component
-            if body.mounts and body.mounts[0].component.appearance:
-                body.appearance = body.mounts[0].component.appearance
+            if body.mounts and body.mounts[0].component.default_material is not None:
+                body.material = body.mounts[0].component.default_material
                 continue
             # Fabricated body: shape-based default
             if body.shape is BodyShape.CYLINDER and body.radius and body.radius > 0.03:
-                body.appearance = Appearance(color=COLOR_STRUCTURE_DARK.rgba)
+                body.material = MAT_ABS_DARK
             elif body.shape is BodyShape.TUBE:
-                body.appearance = Appearance(color=(*BP_GRAY5, 1.0))
+                body.material = MAT_TUBE_DEFAULT
             elif body.shape is BodyShape.JAW:
-                body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
+                body.material = MAT_PLA_LIGHT
             else:
-                body.appearance = Appearance(color=COLOR_STRUCTURE_BODY.rgba)
+                body.material = MAT_PLA_LIGHT
 
     def build_cad(self):
         """Build CAD geometry and refine mass/inertia from actual solids."""
