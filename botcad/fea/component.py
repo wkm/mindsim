@@ -271,6 +271,15 @@ def analyze_component(
     )
     b_scipy = load_wp.numpy().flatten().astype(np.float64)
 
+    # Jacobi preconditioner: M⁻¹ = diag(A)⁻¹
+    # Dramatically improves convergence when air-penalty cells (1e-3 weight)
+    # create a wide eigenvalue spread in the stiffness matrix.
+    from scipy.sparse.linalg import LinearOperator
+
+    diag_A = A_scipy.diagonal()
+    diag_A[diag_A == 0] = 1.0
+    M_inv = LinearOperator(A_scipy.shape, matvec=lambda x: x / diag_A)
+
     t_sol_start = time.monotonic()
     solve_timeout = 60.0  # seconds
 
@@ -279,12 +288,10 @@ def analyze_component(
             raise TimeoutError(f"CG solver exceeded {solve_timeout}s timeout")
 
     try:
-        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-4, callback=_cg_callback)
+        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-4, M=M_inv, callback=_cg_callback)
     except TimeoutError as e:
         print(f"  {e} — returning best estimate")
-        # CG was interrupted; use last iterate from the residual
-        # Re-solve with very loose tolerance to get partial result
-        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-1, maxiter=10)
+        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-1, M=M_inv, maxiter=10)
     t_sol_end = time.monotonic()
     timings["solve"] = round(t_sol_end - t_sol_start, 2)
 
