@@ -554,13 +554,6 @@ export class ComponentTree {
           bodyName: body.name,
         });
 
-        // Add arrow indicator
-        const header = jointNode.querySelector('.tree-node-header');
-        const arrow = document.createElement('span');
-        arrow.className = 'tree-joint-arrow';
-        arrow.textContent = '\u2192';
-        header.appendChild(arrow);
-
         if (hasJointChild) {
           const jointChildrenEl = jointNode.querySelector('.tree-node-children');
           jointChildrenEl.appendChild(this._buildBodyNode(childBody, asmScope));
@@ -672,12 +665,24 @@ export class ComponentTree {
       header.appendChild(badge);
     }
 
-    // Visibility dot indicator (right-aligned)
+    // ShapeScript code icon (visible on hover, before vis-dot)
+    if (shapescriptUrl) {
+      const codeBtn = document.createElement('span');
+      codeBtn.className = 'tree-code-icon';
+      codeBtn.textContent = '</>';
+      codeBtn.title = 'View in ShapeScript';
+      codeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.onShapeScript) this.onShapeScript(shapescriptUrl);
+        else window.location.href = shapescriptUrl;
+      });
+      header.appendChild(codeBtn);
+    }
+
+    // Visibility dot indicator (always last, right-aligned via margin-left:auto)
     {
       const visDot = document.createElement('span');
       visDot.className = 'vis-dot';
-      visDot.style.cssText =
-        'width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-left:auto;cursor:pointer;background:#58a6ff;box-sizing:border-box;';
       visDot.title = 'Toggle visibility';
       visDot.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -691,20 +696,6 @@ export class ComponentTree {
         e.stopPropagation();
         if (this.onSolo) this.onSolo(nodeId);
       });
-    }
-
-    // ShapeScript code icon (right-aligned, visible on hover)
-    if (shapescriptUrl) {
-      const codeBtn = document.createElement('span');
-      codeBtn.className = 'tree-code-icon';
-      codeBtn.textContent = '</>';
-      codeBtn.title = 'View in ShapeScript';
-      codeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this.onShapeScript) this.onShapeScript(shapescriptUrl);
-        else window.location.href = shapescriptUrl;
-      });
-      header.appendChild(codeBtn);
     }
 
     // Click header to select (also toggles if has children)
@@ -868,13 +859,12 @@ export class ComponentTree {
         line-height: 16px; flex-shrink: 0;
       }
 
-      /* Joint arrow */
-      .tree-joint-arrow {
-        color: var(--gray3); font-size: 11px; margin-left: 2px; flex-shrink: 0;
-      }
-
-      /* ── Visibility dot indicator ── */
+      /* ── Visibility dot indicator (always last flex child) ── */
       .vis-dot {
+        width: 12px; height: 12px; border-radius: 50%;
+        flex-shrink: 0; margin-left: auto;
+        cursor: pointer; background: #58a6ff;
+        box-sizing: border-box;
         transition: background 0.15s, border 0.15s;
       }
       .vis-dot:hover { opacity: 0.7; }

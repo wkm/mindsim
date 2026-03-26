@@ -76,6 +76,16 @@ if (cadstepsParam) {
   // Import Viewport3D and set up shared container
   import('./viewport3d.ts').then(async ({ Viewport3D }) => {
     const container = document.getElementById('canvas-container');
+    const TREE_PANEL_WIDTH = 280;
+
+    /** Offset the canvas container so it doesn't overlap the tree panel. */
+    function updateCanvasLayout(treePanelVisible: boolean) {
+      const left = treePanelVisible ? TREE_PANEL_WIDTH : 0;
+      container.style.left = `${left}px`;
+    }
+
+    // Initial layout: Design tab is active, tree panel visible
+    updateCanvasLayout(true);
 
     // Create a perspective viewport for Design
     const designViewport = new Viewport3D(container, {
@@ -110,6 +120,7 @@ if (cadstepsParam) {
         // Hide Design scene
         designViewport.scene.visible = false;
         treePanel.style.display = 'none';
+        updateCanvasLayout(false);
 
         // Show Sim UI
         document.getElementById('side-panel').style.display = '';
@@ -135,6 +146,7 @@ if (cadstepsParam) {
         // Show Design scene
         designViewport.scene.visible = true;
         treePanel.style.display = 'block';
+        updateCanvasLayout(true);
         designCtx.syncVisibility();
         designViewport.resize();
       }
