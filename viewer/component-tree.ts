@@ -11,19 +11,15 @@
  *   - Search input filters nodes by name (case-insensitive, debounced)
  *   - Category filter chips toggle visibility of node types
  *   - Collapsible sections with animated disclosure triangles (SVG chevrons)
- *   - Show/Hide/Isolate per tree node with eye and target icons
+ *   - Filled/empty circle visibility toggles (click to toggle, right-click to solo)
  *   - Indentation guides, hover highlights, selected state styling
  */
+
+import type { SceneTree } from './design-scene.ts';
 
 // ── SVG Icons ──
 
 const CHEVRON_RIGHT = `<svg viewBox="0 0 16 16" width="10" height="10"><path d="M6 3l5 5-5 5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-const EYE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3C4.5 3 1.7 5.1 .5 8c1.2 2.9 4 5 7.5 5s6.3-2.1 7.5-5c-1.2-2.9-4-5-7.5-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z" fill="currentColor"/></svg>`;
-
-const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 2l12 12M8 3C4.5 3 1.7 5.1.5 8c.5 1.2 1.3 2.3 2.3 3.1M8 13c3.5 0 6.3-2.1 7.5-5-.5-1.2-1.3-2.3-2.3-3.1" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>`;
-
-const TARGET_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="currentColor" fill="none" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
 
 const ICONS = {
   assembly: { symbol: '\u25b8', color: '#5C7080' }, // right triangle — gray
@@ -67,9 +63,9 @@ function iconTypeToCategory(iconType) {
 interface ComponentTreeOptions {
   onShapeScript?: (url: string) => void;
   onDoubleClick?: (nodeId: string, data: any) => void;
-  onToggleVisibility?: (bodyName: string, visible: boolean) => void;
-  onIsolate?: (bodyName: string) => void;
-  onShowAll?: () => void;
+  onToggleNodeHidden?: (nodeId: string) => void;
+  onSolo?: (nodeId: string) => void;
+  onUnsolo?: () => void;
 }
 
 export class ComponentTree {
@@ -78,9 +74,9 @@ export class ComponentTree {
   onSelect: (nodeId: string, data: any) => void;
   onShapeScript: ((url: string) => void) | null;
   onDoubleClick: ((nodeId: string, data: any) => void) | null;
-  onToggleVisibility: ((bodyName: string, visible: boolean) => void) | null;
-  onIsolate: ((bodyName: string) => void) | null;
-  onShowAll: (() => void) | null;
+  onToggleNodeHidden: ((nodeId: string) => void) | null;
+  onSolo: ((nodeId: string) => void) | null;
+  onUnsolo: (() => void) | null;
   focusedNodeId: string | null;
   _filters: Record<string, boolean>;
   _searchQuery: string;
@@ -104,10 +100,15 @@ export class ComponentTree {
     this.onSelect = onSelect;
     this.onShapeScript = options.onShapeScript || null;
     this.onDoubleClick = options.onDoubleClick || null;
-    this.onToggleVisibility = options.onToggleVisibility || null;
-    this.onIsolate = options.onIsolate || null;
-    this.onShowAll = options.onShowAll || null;
+    this.onToggleNodeHidden = options.onToggleNodeHidden || null;
+    this.onSolo = options.onSolo || null;
+    this.onUnsolo = options.onUnsolo || null;
     this.focusedNodeId = null;
+
+    // Escape key un-solos
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.onUnsolo) this.onUnsolo();
+    });
 
     // Category filter state
     this._filters = {
@@ -224,16 +225,6 @@ export class ComponentTree {
     searchWrap.appendChild(clearBtn);
     topRow.appendChild(searchWrap);
 
-    // Show All button
-    const showAllBtn = document.createElement('button');
-    showAllBtn.className = 'tree-show-all-btn';
-    showAllBtn.textContent = 'Show All';
-    showAllBtn.title = 'Reset visibility — show all bodies';
-    showAllBtn.addEventListener('click', () => {
-      if (this.onShowAll) this.onShowAll();
-    });
-    topRow.appendChild(showAllBtn);
-
     toolbar.appendChild(topRow);
 
     // Category filter chips
@@ -291,32 +282,22 @@ export class ComponentTree {
   }
 
   /**
-   * Update tree node styling based on external visibility state.
-   * Called by ExploreMode after syncScene() with the current state from BotScene.
-   *
-   * @param hiddenBodies - set of body names that are currently hidden
-   * @param isolatedBodies - set of body names that are currently isolated
+   * Update tree node styling from a SceneTree visibility model.
+   * Each node's filled/empty dot and row opacity reflect resolved visibility.
    */
-  updateVisualState(hiddenBodies: Set<string>, isolatedBodies: Set<string>): void {
-    if (!this._treeRoot) return;
-    const bodyNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-body-name]');
-    for (const node of bodyNodes) {
-      const name = node.dataset.bodyName;
-      const hidden = hiddenBodies.has(name!);
-      node.classList.toggle('body-hidden', hidden);
-
-      // Update eye icon within this node's header
-      const eyeBtn = node.querySelector(':scope > .tree-node-header .tree-vis-eye') as HTMLElement | null;
-      if (eyeBtn) {
-        eyeBtn.innerHTML = hidden ? EYE_OFF_ICON : EYE_ICON;
-        eyeBtn.title = hidden ? 'Show body' : 'Hide body';
+  updateFromDesignScene(tree: SceneTree): void {
+    const allNodes = this._treeRoot?.querySelectorAll<HTMLElement>('.tree-node[data-node-id]');
+    if (!allNodes) return;
+    for (const domNode of allNodes) {
+      const nodeId = domNode.dataset.nodeId!;
+      const visible = tree.resolveVisibility(nodeId);
+      const dot = domNode.querySelector('.vis-dot') as HTMLElement;
+      if (dot) {
+        dot.style.background = visible ? '#58a6ff' : 'transparent';
+        dot.style.border = visible ? 'none' : '2px solid #484f58';
+        dot.style.boxSizing = 'border-box';
       }
-
-      // Update target icon state
-      const targetBtn = node.querySelector(':scope > .tree-node-header .tree-vis-target');
-      if (targetBtn) {
-        targetBtn.classList.toggle('isolated', isolatedBodies.has(name!));
-      }
+      domNode.style.opacity = visible ? '1' : '0.45';
     }
   }
 
@@ -691,42 +672,25 @@ export class ComponentTree {
       header.appendChild(badge);
     }
 
-    // Visibility action icons (hover-visible, right-aligned)
-    if (bodyName) {
-      const actions = document.createElement('span');
-      actions.className = 'tree-vis-actions';
-
-      // Eye toggle
-      const eyeBtn = document.createElement('span');
-      eyeBtn.className = 'tree-vis-eye';
-      eyeBtn.innerHTML = EYE_ICON;
-      eyeBtn.title = 'Hide body';
-      eyeBtn.addEventListener('click', (e) => {
+    // Visibility dot indicator (right-aligned)
+    {
+      const visDot = document.createElement('span');
+      visDot.className = 'vis-dot';
+      visDot.style.cssText =
+        'width:12px;height:12px;border-radius:50%;flex-shrink:0;margin-left:auto;cursor:pointer;background:#58a6ff;box-sizing:border-box;';
+      visDot.title = 'Toggle visibility';
+      visDot.addEventListener('click', (e) => {
         e.stopPropagation();
-        // Determine current visibility from DOM state
-        const isHidden = node.classList.contains('body-hidden');
-        if (this.onToggleVisibility) this.onToggleVisibility(bodyName, isHidden);
+        if (this.onToggleNodeHidden) this.onToggleNodeHidden(nodeId);
       });
-      actions.appendChild(eyeBtn);
+      header.appendChild(visDot);
 
-      // Isolate target
-      const targetBtn = document.createElement('span');
-      targetBtn.className = 'tree-vis-target';
-      targetBtn.innerHTML = TARGET_ICON;
-      targetBtn.title = 'Isolate body';
-      targetBtn.addEventListener('click', (e) => {
+      // Right-click to solo
+      header.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        // Check if already isolated via DOM state
-        const isIsolated = targetBtn.classList.contains('isolated');
-        if (isIsolated) {
-          if (this.onShowAll) this.onShowAll();
-        } else {
-          if (this.onIsolate) this.onIsolate(bodyName);
-        }
+        if (this.onSolo) this.onSolo(nodeId);
       });
-      actions.appendChild(targetBtn);
-
-      header.appendChild(actions);
     }
 
     // ShapeScript code icon (right-aligned, visible on hover)
@@ -829,17 +793,6 @@ export class ComponentTree {
       }
       .tree-search-clear:hover { background: var(--secondary); color: var(--foreground); }
 
-      /* Show All button */
-      .tree-show-all-btn {
-        height: 28px; padding: 0 10px;
-        border: 1px solid var(--border); border-radius: var(--radius-sm);
-        font-family: var(--font); font-size: 11px; font-weight: 500;
-        color: var(--muted-fg); background: var(--card);
-        cursor: pointer; transition: all 0.15s; outline: none;
-        white-space: nowrap; flex-shrink: 0;
-      }
-      .tree-show-all-btn:hover { background: var(--secondary); color: var(--foreground); border-color: var(--gray3); }
-
       /* ── Category filter chips ── */
       .tree-filter-bar {
         display: flex; flex-wrap: wrap; gap: 4px;
@@ -866,7 +819,7 @@ export class ComponentTree {
       /* ── Tree nodes ── */
       .tree-node { }
       .tree-node.search-hidden { display: none; }
-      .tree-node.body-hidden > .tree-node-header { opacity: 0.4; }
+      /* Node opacity controlled inline by updateFromDesignScene */
 
       .tree-node-header {
         display: flex; align-items: center; gap: 4px;
@@ -920,25 +873,11 @@ export class ComponentTree {
         color: var(--gray3); font-size: 11px; margin-left: 2px; flex-shrink: 0;
       }
 
-      /* ── Visibility action icons (hover-visible) ── */
-      .tree-vis-actions {
-        display: inline-flex; align-items: center; gap: 2px;
-        margin-left: auto; flex-shrink: 0;
-        opacity: 0; transition: opacity 0.15s;
+      /* ── Visibility dot indicator ── */
+      .vis-dot {
+        transition: background 0.15s, border 0.15s;
       }
-      .tree-node-header:hover .tree-vis-actions { opacity: 1; }
-      /* Always show actions when body is hidden or isolated */
-      .tree-node.body-hidden > .tree-node-header .tree-vis-actions { opacity: 1; }
-
-      .tree-vis-eye, .tree-vis-target {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 20px; height: 20px; border-radius: 3px;
-        color: var(--gray3); cursor: pointer;
-        transition: color 0.1s, background 0.1s;
-      }
-      .tree-vis-eye:hover { color: var(--foreground); background: rgba(206,217,224,0.4); }
-      .tree-vis-target:hover { color: var(--primary); background: rgba(19,124,189,0.1); }
-      .tree-vis-target.isolated { color: var(--primary); background: rgba(19,124,189,0.15); }
+      .vis-dot:hover { opacity: 0.7; }
 
       /* Code icon (right-aligned, hover-visible) */
       .tree-code-icon {
