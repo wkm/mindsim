@@ -172,6 +172,19 @@ _FASTENER_CONTEXT = {
 }
 
 
+def _fastener_total_length(mp) -> float:
+    """Total screw length (head + shank) for a mount point's fastener."""
+    from botcad.fasteners import resolve_fastener
+
+    try:
+        spec = resolve_fastener(mp)
+        head_h = spec.head_height
+    except KeyError:
+        head_h = 0.003
+    shank = 0.004  # default shank length (matches screw_solid default)
+    return head_h + shank
+
+
 def _build_joint_fastener_entry(
     joint_name: str,
     tag: str,
@@ -184,12 +197,27 @@ def _build_joint_fastener_entry(
 ) -> dict:
     """Build a manifest entry for a joint-mounted fastener (bracket/horn/rear)."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
-    from botcad.geometry import quat_multiply, rotation_between
+    from botcad.geometry import quat_multiply, rotate_vec, rotation_between
 
     # Align fastener +Z (head top face) to the mount point axis direction,
     # then compose with servo orientation to get world-frame quaternion.
     axis_align = rotation_between((0.0, 0.0, 1.0), mp.axis)
     final_quat = quat_multiply(servo_quat, axis_align)
+
+    # Position: mount hole center, then offset so screw tip sits at hole depth
+    # and head protrudes outward. The screw STL extends from Z=0 (head) to
+    # Z=-total_length (tip). After quat rotation, the head faces along the
+    # mount axis. Offset along the axis by total_length so the tip aligns
+    # with the original mount hole position.
+    base_pos = _transform_fastener_pos(mp.pos, servo_quat, servo_center, body_world_pos)
+    total_len = _fastener_total_length(mp)
+    # The mount axis in world frame = servo_quat applied to mp.axis
+    world_axis = rotate_vec(servo_quat, mp.axis)
+    offset_pos = (
+        base_pos[0] + world_axis[0] * total_len,
+        base_pos[1] + world_axis[1] * total_len,
+        base_pos[2] + world_axis[2] * total_len,
+    )
 
     return {
         "id": f"fastener_{joint_name}_{tag}_{index}",
@@ -199,9 +227,7 @@ def _build_joint_fastener_entry(
         "parent_body": body_name,
         "joint": joint_name,
         "mesh": f"{fastener_stl_stem(mp)}.stl",
-        "pos": _transform_fastener_pos(
-            mp.pos, servo_quat, servo_center, body_world_pos
-        ),
+        "pos": _round_vec(offset_pos),
         "quat": _round_vec(final_quat),
         "material": "steel",
         "context": _FASTENER_CONTEXT.get(tag, "fastener"),
