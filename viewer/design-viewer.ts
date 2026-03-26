@@ -218,7 +218,7 @@ export async function initDesignViewer(
 
     let mat: THREE.Material;
     if (part.category === 'fastener') {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
+      mat = new THREE.MeshPhysicalMaterial({ color: 0xc0c0c0, metalness: 0.9, roughness: 0.2 });
     } else if (part.color) {
       const c = new THREE.Color(part.color[0], part.color[1], part.color[2]);
       mat = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.5, emissive: c, emissiveIntensity: 0.15 });
