@@ -67,16 +67,14 @@ export interface ManifestPart {
   quat?: number[]; // wxyz
   meshes?: ManifestMesh[];
   // Fastener-specific fields
-  axis?: number[];
   material?: string;
   context?: string;
   // Wire stub-specific fields
   wire_kind?: string;
-  position?: number[];
-  direction?: number[];
-  length?: number;
   bus_type?: string;
   connector_type?: string;
+  // Color (used by wire stubs and other colored parts)
+  color?: [number, number, number, number];
 }
 
 export interface ManifestDesignLayer {

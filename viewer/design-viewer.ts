@@ -10,7 +10,6 @@ import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
 import { DesignScene, NodeKind } from './design-scene.ts';
 import type { ManifestPart, ViewerManifest } from './manifest-types.ts';
-import { OverlayViz } from './overlay-viz.ts';
 import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
@@ -204,12 +203,10 @@ export async function initDesignViewer(
     }
   });
 
-  // Step 5b: Load remaining part meshes (fasteners + anything else in parts[])
-  // Wire stubs are handled by OverlayViz (they're generated geometry, not STLs).
+  // Step 5b: Load remaining part meshes (fasteners, wire stubs, etc.)
+  // All parts now use the standard pos/quat/mesh path — no special cases.
   const partsList = manifest.parts ?? [];
   const partMeshPromises = partsList.map(async (part) => {
-    // Skip wires — OverlayViz generates wire stub cylinders
-    if (part.category === 'wire') return;
     // Skip parts without positioning data
     if (!part.pos || !part.quat) return;
 
@@ -219,38 +216,23 @@ export async function initDesignViewer(
     const geometry = await fetchSTL(botName, part.mesh);
     if (!geometry) return;
 
-    const mat = part.category === 'fastener'
-      ? new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 })
-      : new THREE.MeshPhysicalMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.1 });
-
-    const mesh = new THREE.Mesh(geometry, mat);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.position.set(part.pos[0], part.pos[1], part.pos[2]);
-
+    let mat: THREE.Material;
     if (part.category === 'fastener') {
-      // Fastener STL: head at Z=0, shank in -Z.
-      // Manifest quat = servo placement quat (rotates servo-canonical → body-local).
-      // MountingEar default axis = (0,0,-1) in servo-local, meaning the screw's
-      // Z-axis should map to -Z in servo-local. So we need a 180° flip around X
-      // BEFORE applying the servo quat: fastener_quat = servo_quat * Rx(180°).
-      const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
-      const servoQuat = manifestQuatToThree(part.quat);
-      mesh.quaternion.copy(servoQuat.multiply(flip));
+      mat = new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
+    } else if (part.color) {
+      const c = new THREE.Color(part.color[0], part.color[1], part.color[2]);
+      mat = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.5, emissive: c, emissiveIntensity: 0.15 });
     } else {
-      mesh.quaternion.copy(manifestQuatToThree(part.quat));
+      mat = new THREE.MeshPhysicalMaterial({ color: 0x808080, roughness: 0.5, metalness: 0.0 });
     }
 
+    const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
     group.add(mesh);
     designScene.registerMesh(nodeId, mesh);
   });
 
   // Wait for all eager meshes
   await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
-
-  // Step 5c: Build overlay viz (wire stubs only — fasteners handled in 5b)
-  const overlayViz = new OverlayViz(bodyGroups, botName);
-  overlayViz.buildWireStubs(partsList, designScene);
 
   // Step 6: Sync initial visibility
   function syncVisibility(): void {
@@ -356,63 +338,6 @@ export async function initDesignViewer(
     } else {
       tree.clearFocus();
     }
-  });
-
-  // Step 8b: Tooltip on hover for overlay meshes (wire stubs + fasteners)
-  let tooltipEl: HTMLDivElement | null = null;
-  const tooltipRaycaster = new THREE.Raycaster();
-  const tooltipPointer = new THREE.Vector2();
-
-  function getTooltipEl(): HTMLDivElement {
-    if (!tooltipEl) {
-      const el = document.createElement('div');
-      el.style.cssText = `
-        position: fixed; z-index: 1000; pointer-events: none;
-        background: rgba(24, 32, 38, 0.92); color: #E1E8ED;
-        font-size: 11px; font-family: var(--font, sans-serif);
-        padding: 4px 8px; border-radius: 4px;
-        white-space: nowrap; display: none;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      `;
-      document.body.appendChild(el);
-      tooltipEl = el;
-    }
-    return tooltipEl;
-  }
-
-  function showTooltip(x: number, y: number, text: string): void {
-    const el = getTooltipEl();
-    el.textContent = text;
-    el.style.display = 'block';
-    el.style.left = `${x + 12}px`;
-    el.style.top = `${y - 8}px`;
-  }
-
-  function hideTooltip(): void {
-    if (tooltipEl) tooltipEl.style.display = 'none';
-  }
-
-  canvas.addEventListener('pointermove', (e: PointerEvent) => {
-    const rect = canvas.getBoundingClientRect();
-    tooltipPointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    tooltipPointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    tooltipRaycaster.setFromCamera(tooltipPointer, viewport.camera);
-
-    const overlayTargets = overlayViz.getRaycastTargets();
-    if (overlayTargets.length > 0) {
-      const hits = tooltipRaycaster.intersectObjects(overlayTargets, false);
-      if (hits.length > 0) {
-        const text = OverlayViz.formatTooltip(hits[0].object as THREE.Mesh);
-        if (text) {
-          showTooltip(e.clientX, e.clientY, text);
-          canvas.style.cursor = 'pointer';
-          return;
-        }
-      }
-    }
-
-    hideTooltip();
-    canvas.style.cursor = '';
   });
 
   // Step 9: Frame camera on loaded geometry
