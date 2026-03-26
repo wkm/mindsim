@@ -1,9 +1,9 @@
 /**
- * buildSceneTree — constructs a SceneTree from a viewer manifest JSON.
+ * buildSceneTree -- constructs a SceneTree from a viewer manifest JSON.
  *
  * Hierarchy:
  *   Robot (root)
- *     Assembly (from manifest.assemblies, or auto-generated from kinematic structure)
+ *     Assembly (auto-generated from kinematic structure)
  *       Body
  *       Component (mounted parts: non-servo, non-horn, non-fastener)
  *         SubPart (fasteners grouped: "6x M3 SHC")
@@ -19,108 +19,13 @@
  *       Wire group (hidden by default)
  *
  * Bodies never contain sub-bodies. Assemblies are the containers.
- * meshIds are empty at build time — populated when meshes are loaded.
+ * meshIds are empty at build time -- populated when meshes are loaded.
  */
 
 import { NodeKind, SceneTree } from './design-scene.ts';
-
-// ---------------------------------------------------------------------------
-// Manifest types (minimal — just what buildSceneTree reads)
-// ---------------------------------------------------------------------------
-
-interface ManifestBodyMount {
-  label: string;
-  component_name: string;
-  component_type: string;
-}
-
-interface ManifestBody {
-  name: string;
-  mesh: string;
-  role: 'structure' | 'component';
-  parent: string | null;
-  mounts?: ManifestBodyMount[];
-  joint?: string;
-  component?: string;
-  category?: string;
-  shapescript_component?: string;
-}
-
-interface ManifestDesignLayer {
-  kind: string;
-  mesh: string;
-  parent_body: string;
-}
-
-interface ManifestJoint {
-  name: string;
-  parent_body: string;
-  child_body: string;
-  servo: string;
-  design_layers?: ManifestDesignLayer[];
-}
-
-interface ManifestMount {
-  body: string;
-  label: string;
-  component: string;
-  category: string;
-  mesh: string;
-  shapescript_component?: string;
-}
-
-interface ManifestPart {
-  id: string;
-  name: string;
-  category: string;
-  parent_body: string;
-  joint?: string;
-  mount_label?: string;
-}
-
-interface ManifestAssembly {
-  name: string;
-  path: string;
-  bodies: string[];
-  sub_assemblies: ManifestAssembly[];
-}
-
-interface ViewerManifest {
-  bot_name: string;
-  assemblies?: ManifestAssembly[];
-  bodies: ManifestBody[];
-  joints: ManifestJoint[];
-  mounts?: ManifestMount[];
-  parts?: ManifestPart[];
-}
-
-// ---------------------------------------------------------------------------
-// Fastener grouping helper
-// ---------------------------------------------------------------------------
-
-interface FastenerGroup {
-  key: string;
-  name: string;
-  label: string;
-  count: number;
-  items: ManifestPart[];
-}
-
-function groupFasteners(fasteners: ManifestPart[]): FastenerGroup[] {
-  const groups: Record<string, FastenerGroup> = {};
-  for (const f of fasteners) {
-    const key = f.name;
-    if (!groups[key]) {
-      groups[key] = { key, name: f.name, label: f.name, count: 0, items: [] };
-    }
-    groups[key].count++;
-    groups[key].items.push(f);
-  }
-  return Object.values(groups).map((g) => ({
-    ...g,
-    label: g.count > 1 ? `${g.count}\u00d7 ${g.name}` : g.name,
-  }));
-}
+import type { ManifestBody, ManifestJoint, ViewerManifest } from './manifest-types.ts';
+import { indexManifest } from './manifest-types.ts';
+import { groupFasteners, humanizeJointName } from './utils.ts';
 
 // ---------------------------------------------------------------------------
 // buildSceneTree
@@ -128,51 +33,7 @@ function groupFasteners(fasteners: ManifestPart[]): FastenerGroup[] {
 
 export function buildSceneTree(manifest: ViewerManifest): SceneTree {
   const tree = new SceneTree();
-  const parts = manifest.parts || [];
-  const mounts = manifest.mounts || [];
-
-  // Index helpers
-  const bodiesByName: Record<string, ManifestBody> = {};
-  for (const b of manifest.bodies) bodiesByName[b.name] = b;
-
-  const childJointsOf: Record<string, ManifestJoint[]> = {};
-  for (const j of manifest.joints) {
-    if (!childJointsOf[j.parent_body]) childJointsOf[j.parent_body] = [];
-    childJointsOf[j.parent_body].push(j);
-  }
-
-  // Component bodies indexed by joint name (servos, horns)
-  const servosByJoint: Record<string, ManifestBody[]> = {};
-  const hornsByJoint: Record<string, ManifestBody[]> = {};
-  for (const b of manifest.bodies) {
-    if (b.role !== 'component' || !b.joint) continue;
-    if (b.category === 'servo') {
-      if (!servosByJoint[b.joint]) servosByJoint[b.joint] = [];
-      servosByJoint[b.joint].push(b);
-    } else if (b.category === 'horn') {
-      if (!hornsByJoint[b.joint]) hornsByJoint[b.joint] = [];
-      hornsByJoint[b.joint].push(b);
-    }
-  }
-
-  // Mounts indexed by parent body name
-  const mountsByBody: Record<string, ManifestMount[]> = {};
-  for (const m of mounts) {
-    if (!mountsByBody[m.body]) mountsByBody[m.body] = [];
-    mountsByBody[m.body].push(m);
-  }
-
-  // Fastener parts indexed by body and joint
-  const partsByBody: Record<string, ManifestPart[]> = {};
-  const partsByJoint: Record<string, ManifestPart[]> = {};
-  for (const p of parts) {
-    if (!partsByBody[p.parent_body]) partsByBody[p.parent_body] = [];
-    partsByBody[p.parent_body].push(p);
-    if (p.joint) {
-      if (!partsByJoint[p.joint]) partsByJoint[p.joint] = [];
-      partsByJoint[p.joint].push(p);
-    }
-  }
+  const idx = indexManifest(manifest);
 
   // Robot root
   const rootId = `robot:${manifest.bot_name}`;
@@ -188,15 +49,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     meshIds: [],
   });
 
-  // Humanize a joint name: "left_wheel" → "Left Wheel"
-  function humanizeJointName(name: string): string {
-    return name
-      .split('_')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-  }
-
-  // Build a flat body node (no joint/servo children — those go in sub-assemblies)
+  // Build a flat body node (no joint/servo children -- those go in sub-assemblies)
   function buildBodyNode(body: ManifestBody, parentId: string): string {
     const bodyId = `body:${body.name}`;
     tree.addNode({
@@ -213,8 +66,8 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
 
   // Build mounted component nodes for a body from mounts[], adding them as children of parentId
   function buildMountedComponents(body: ManifestBody, parentId: string, parentChildren: string[]): void {
-    const bodyMounts = mountsByBody[body.name] || [];
-    const bodyParts = partsByBody[body.name] || [];
+    const bodyMounts = idx.mountsByBody[body.name] || [];
+    const bodyParts = idx.partsByBody[body.name] || [];
     const mountFasteners = bodyParts.filter((p) => p.category === 'fastener' && !p.joint);
 
     for (const mount of bodyMounts) {
@@ -252,7 +105,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
 
   // Build wire group for a body, adding it as a child of parentId
   function buildWireGroup(body: ManifestBody, parentId: string, parentChildren: string[]): void {
-    const bodyParts = partsByBody[body.name] || [];
+    const bodyParts = idx.partsByBody[body.name] || [];
     const wires = bodyParts.filter((p) => p.category === 'wire');
     if (wires.length > 0) {
       const wireGroupId = `wire-group:${body.name}`;
@@ -275,10 +128,10 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     const asmChildren: string[] = [];
 
     // Servo and horn component bodies from bodies[] (role="component")
-    const servos = servosByJoint[joint.name] || [];
-    const horns = hornsByJoint[joint.name] || [];
+    const servos = idx.servosByJoint[joint.name] || [];
+    const horns = idx.hornsByJoint[joint.name] || [];
     // Fasteners still come from parts[]
-    const jointParts = partsByJoint[joint.name] || [];
+    const jointParts = idx.partsByJoint[joint.name] || [];
     const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
     for (const servo of servos) {
@@ -327,7 +180,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     }
 
     // Child body
-    const childBody = bodiesByName[joint.child_body];
+    const childBody = idx.bodiesByName[joint.child_body];
     if (childBody) {
       const childBodyId = buildBodyNode(childBody, asmId);
       asmChildren.push(childBodyId);
@@ -336,7 +189,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       buildMountedComponents(childBody, asmId, asmChildren);
 
       // Recurse: joints from the child body create nested sub-assemblies
-      const childJoints = childJointsOf[childBody.name] || [];
+      const childJoints = idx.childJointsOf[childBody.name] || [];
       for (const childJoint of childJoints) {
         const subAsmId = buildJointAssembly(childJoint, asmId);
         asmChildren.push(subAsmId);
@@ -389,7 +242,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     buildMountedComponents(rootBody, asmId, asmChildren);
 
     // Sub-assemblies from joints on root body
-    const joints = childJointsOf[rootBody.name] || [];
+    const joints = idx.childJointsOf[rootBody.name] || [];
     for (const joint of joints) {
       const subAsmId = buildJointAssembly(joint, asmId);
       asmChildren.push(subAsmId);
@@ -411,188 +264,11 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     return asmId;
   }
 
-  // Build tree structure based on assemblies or auto-generate from kinematic structure
-  if (manifest.assemblies && manifest.assemblies.length > 0) {
-    // Legacy path for bots with explicit assembly definitions
-    // (kept for backward compatibility but uses old body-recursive approach)
-
-    function buildBodyLegacy(body: ManifestBody, parentId: string): string {
-      const bodyId = `body:${body.name}`;
-      const bodyChildren: string[] = [];
-      const bodyParts = partsByBody[body.name] || [];
-      const joints = childJointsOf[body.name] || [];
-
-      // Mounted components from mounts[]
-      const bodyMounts = mountsByBody[body.name] || [];
-      const mountFasteners = bodyParts.filter((p) => p.category === 'fastener' && !p.joint);
-
-      for (const mount of bodyMounts) {
-        const compId = `mount:${mount.body}:${mount.label}`;
-        const compChildren: string[] = [];
-        const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
-        const grouped = groupFasteners(compFasteners);
-        for (const group of grouped) {
-          const fId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
-          tree.addNode({
-            id: fId,
-            kind: NodeKind.SubPart,
-            label: group.label,
-            children: [],
-            hidden: false,
-            parentId: compId,
-            meshIds: [],
-          });
-          compChildren.push(fId);
-        }
-        tree.addNode({
-          id: compId,
-          kind: NodeKind.Component,
-          label: mount.component,
-          children: compChildren,
-          hidden: false,
-          parentId: bodyId,
-          meshIds: [],
-        });
-        bodyChildren.push(compId);
-      }
-
-      for (const joint of joints) {
-        // Servo and horn bodies from bodies[] (role="component")
-        const servos = servosByJoint[joint.name] || [];
-        const horns = hornsByJoint[joint.name] || [];
-        const jParts = partsByJoint[joint.name] || [];
-        const fasteners = jParts.filter((p) => p.category === 'fastener');
-
-        for (const servo of servos) {
-          const servoId = `body:${servo.name}`;
-          const servoChildren: string[] = [];
-          for (const horn of horns) {
-            const hornId = `body:${horn.name}`;
-            tree.addNode({
-              id: hornId,
-              kind: NodeKind.SubPart,
-              label: horn.component ?? 'Horn disc',
-              children: [],
-              hidden: false,
-              parentId: servoId,
-              meshIds: [],
-            });
-            servoChildren.push(hornId);
-          }
-          const grouped = groupFasteners(fasteners);
-          for (const group of grouped) {
-            const fId = `fastener-group:${joint.name}:${group.key}`;
-            tree.addNode({
-              id: fId,
-              kind: NodeKind.SubPart,
-              label: group.label,
-              children: [],
-              hidden: false,
-              parentId: servoId,
-              meshIds: [],
-            });
-            servoChildren.push(fId);
-          }
-          tree.addNode({
-            id: servoId,
-            kind: NodeKind.Component,
-            label: `${servo.component ?? servo.name} @ ${joint.name}`,
-            children: servoChildren,
-            hidden: false,
-            parentId: bodyId,
-            meshIds: [],
-          });
-          bodyChildren.push(servoId);
-        }
-
-        const jointId = `joint:${joint.name}`;
-        const jointChildren: string[] = [];
-        const childBody = bodiesByName[joint.child_body];
-        if (childBody) {
-          const childBodyId = buildBodyLegacy(childBody, jointId);
-          jointChildren.push(childBodyId);
-        }
-        tree.addNode({
-          id: jointId,
-          kind: NodeKind.Joint,
-          label: joint.name,
-          children: jointChildren,
-          hidden: false,
-          parentId: bodyId,
-          meshIds: [],
-        });
-        bodyChildren.push(jointId);
-      }
-
-      const wires = bodyParts.filter((p) => p.category === 'wire');
-      if (wires.length > 0) {
-        const wireGroupId = `wire-group:${body.name}`;
-        tree.addNode({
-          id: wireGroupId,
-          kind: NodeKind.Component,
-          label: `Wires (${wires.length})`,
-          children: [],
-          hidden: true,
-          parentId: bodyId,
-          meshIds: [],
-        });
-        bodyChildren.push(wireGroupId);
-      }
-
-      tree.addNode({
-        id: bodyId,
-        kind: NodeKind.Body,
-        label: body.name,
-        children: bodyChildren,
-        hidden: false,
-        parentId: parentId,
-        meshIds: [],
-      });
-      return bodyId;
-    }
-
-    function buildAssembly(asm: ManifestAssembly, parentId: string): string {
-      const asmId = `assembly:${asm.path || asm.name}`;
-      const asmChildren: string[] = [];
-
-      for (const sub of asm.sub_assemblies) {
-        const subId = buildAssembly(sub, asmId);
-        asmChildren.push(subId);
-      }
-
-      const asmBodySet = new Set(asm.bodies);
-      const rootBodies = asm.bodies
-        .map((name) => bodiesByName[name])
-        .filter((b) => b && b.role === 'structure' && (b.parent === null || !asmBodySet.has(b.parent)));
-
-      for (const body of rootBodies) {
-        const bodyId = buildBodyLegacy(body, asmId);
-        asmChildren.push(bodyId);
-      }
-
-      tree.addNode({
-        id: asmId,
-        kind: NodeKind.Assembly,
-        label: asm.name,
-        children: asmChildren,
-        hidden: false,
-        parentId: parentId,
-        meshIds: [],
-      });
-      return asmId;
-    }
-
-    for (const asm of manifest.assemblies) {
-      const asmId = buildAssembly(asm, rootId);
-      rootChildren.push(asmId);
-    }
-  } else {
-    // Auto-generate assemblies from kinematic structure
-    const rootBody = manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
-    if (rootBody) {
-      const asmId = buildAutoAssemblyTree(rootBody);
-      rootChildren.push(asmId);
-    }
+  // Auto-generate assemblies from kinematic structure
+  const rootBody = manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
+  if (rootBody) {
+    const asmId = buildAutoAssemblyTree(rootBody);
+    rootChildren.push(asmId);
   }
 
   return tree;

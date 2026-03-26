@@ -6,10 +6,11 @@
  */
 
 import * as THREE from 'three';
-import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
 import { DesignScene, NodeKind } from './design-scene.ts';
+import type { ManifestPart, ViewerManifest } from './manifest-types.ts';
+import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -21,129 +22,6 @@ export interface DesignViewerContext {
   tree: ComponentTree;
   viewport: Viewport3D;
   syncVisibility(): void;
-}
-
-// ---------------------------------------------------------------------------
-// Manifest sub-types (minimal, mirrors Python emit/viewer.py output)
-// ---------------------------------------------------------------------------
-
-interface ManifestMaterial {
-  color: [number, number, number];
-  metallic: number;
-  roughness: number;
-  opacity: number;
-}
-
-interface ManifestBody {
-  name: string;
-  mesh: string;
-  role: 'structure' | 'component';
-  parent: string | null;
-  pos: number[];
-  quat: number[]; // wxyz
-  color?: [number, number, number];
-  component?: string;
-  category?: string;
-  joint?: string;
-  shapescript_component?: string;
-}
-
-interface ManifestSubMesh {
-  file: string;
-  material: string;
-}
-
-interface ManifestMount {
-  body: string;
-  label: string;
-  component: string;
-  category: string;
-  mesh: string;
-  pos: number[];
-  quat: number[]; // wxyz
-  meshes?: ManifestSubMesh[];
-  shapescript_component?: string;
-}
-
-interface ManifestPart {
-  id: string;
-  name: string;
-  category: string;
-  parent_body: string;
-  joint?: string;
-  mount_label?: string;
-  mesh: string;
-  pos: number[];
-  quat: number[]; // wxyz
-  meshes?: ManifestSubMesh[];
-}
-
-interface ManifestDesignLayer {
-  kind: string;
-  mesh: string;
-  parent_body: string;
-}
-
-interface ManifestJoint {
-  name: string;
-  parent_body: string;
-  child_body: string;
-  design_layers?: ManifestDesignLayer[];
-}
-
-interface ViewerManifest {
-  bot_name: string;
-  bodies: ManifestBody[];
-  joints: ManifestJoint[];
-  mounts?: ManifestMount[];
-  parts?: ManifestPart[];
-  materials?: Record<string, ManifestMaterial>;
-  assemblies?: unknown[];
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const stlLoader = new STLLoader();
-
-/** Convert manifest wxyz quaternion to Three.js xyzw quaternion. */
-function manifestQuatToThree(q: number[]): THREE.Quaternion {
-  // Manifest: [w, x, y, z] → Three.js: new Quaternion(x, y, z, w)
-  return new THREE.Quaternion(q[1], q[2], q[3], q[0]);
-}
-
-/** Create a MeshPhysicalMaterial from a manifest material definition. */
-function makeMaterial(matDef: ManifestMaterial | undefined): THREE.MeshPhysicalMaterial {
-  if (!matDef) {
-    return new THREE.MeshPhysicalMaterial({ color: 0xb0b0b0, roughness: 0.7 });
-  }
-  const color = new THREE.Color(matDef.color[0], matDef.color[1], matDef.color[2]);
-  return new THREE.MeshPhysicalMaterial({
-    color,
-    metalness: matDef.metallic,
-    roughness: matDef.roughness,
-    transparent: matDef.opacity < 1.0,
-    opacity: matDef.opacity,
-  });
-}
-
-/** Fetch an STL and parse it into a BufferGeometry with vertex normals. */
-async function fetchSTL(botName: string, meshFile: string): Promise<THREE.BufferGeometry | null> {
-  try {
-    const resp = await fetch(`/api/bots/${botName}/meshes/${meshFile}`);
-    if (!resp.ok) {
-      console.warn(`[design-viewer] failed to fetch ${meshFile}: ${resp.status}`);
-      return null;
-    }
-    const buf = await resp.arrayBuffer();
-    const geometry = stlLoader.parse(buf);
-    geometry.computeVertexNormals();
-    return geometry;
-  } catch (err) {
-    console.warn(`[design-viewer] error loading ${meshFile}:`, err);
-    return null;
-  }
 }
 
 /** Create a positioned mesh from geometry, material, pos, and quat. */
@@ -161,13 +39,6 @@ function createPositionedMesh(
   return mesh;
 }
 
-// ---------------------------------------------------------------------------
-// Layer lazy-loading state
-// ---------------------------------------------------------------------------
-
-/** Track which layer nodes have been loaded (or are loading). */
-const layerLoadState = new Map<string, 'loading' | 'loaded'>();
-
 /** Lazy-load a design layer mesh on first visibility toggle. */
 async function lazyLoadLayerMesh(
   nodeId: string,
@@ -176,6 +47,7 @@ async function lazyLoadLayerMesh(
   viewport: Viewport3D,
   botName: string,
   bodyGroups: Record<string, THREE.Group>,
+  layerLoadState: Map<string, 'loading' | 'loaded'>,
 ): Promise<void> {
   if (layerLoadState.has(nodeId)) return;
   layerLoadState.set(nodeId, 'loading');
@@ -249,8 +121,11 @@ export async function initDesignViewer(
   const manifest: ViewerManifest = await resp.json();
   const materials = manifest.materials ?? {};
 
+  // Layer lazy-loading state — scoped to this viewer instance
+  const layerLoadState = new Map<string, 'loading' | 'loaded'>();
+
   // Step 2: Build SceneTree from manifest
-  const sceneTree = buildSceneTree(manifest as any);
+  const sceneTree = buildSceneTree(manifest);
   const designScene = new DesignScene(sceneTree);
 
   // Step 3: Create a viewport group per body so Viewport3D tracks them for
@@ -314,8 +189,8 @@ export async function initDesignViewer(
       const geometry = await fetchSTL(botName, mount.mesh);
       if (!geometry) return;
 
-      const mountColor = (mount as any).color
-        ? new THREE.Color((mount as any).color[0], (mount as any).color[1], (mount as any).color[2])
+      const mountColor = mount.color
+        ? new THREE.Color(mount.color[0], mount.color[1], mount.color[2])
         : new THREE.Color(0x808080);
       const mat = new THREE.MeshPhysicalMaterial({
         color: mountColor,
@@ -362,7 +237,7 @@ export async function initDesignViewer(
   // Step 7: Build component tree and wire callbacks
   const tree = new ComponentTree(
     treePanelEl,
-    manifest as any,
+    manifest,
     (_nodeId: string, _data: unknown) => {
       // Node selected — could focus camera in future
     },
@@ -373,7 +248,7 @@ export async function initDesignViewer(
         // Lazy-load layer mesh on first show
         const node = designScene.tree.getNode(nodeId);
         if (node && node.kind === NodeKind.Layer && node.meshIds.length === 0 && !node.hidden) {
-          lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, botName, bodyGroups).then(() => {
+          lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, botName, bodyGroups, layerLoadState).then(() => {
             syncVisibility();
           });
         }

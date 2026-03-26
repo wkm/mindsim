@@ -16,6 +16,9 @@
  */
 
 import type { SceneTree } from './design-scene.ts';
+import type { ManifestIndex, ViewerManifest } from './manifest-types.ts';
+import { indexManifest } from './manifest-types.ts';
+import { groupFasteners, humanizeJointName } from './utils.ts';
 
 // ── SVG Icons ──
 
@@ -70,10 +73,10 @@ interface ComponentTreeOptions {
 
 export class ComponentTree {
   container: HTMLElement;
-  manifest: any;
-  onSelect: (nodeId: string, data: any) => void;
+  manifest: ViewerManifest;
+  onSelect: (nodeId: string, data: unknown) => void;
   onShapeScript: ((url: string) => void) | null;
-  onDoubleClick: ((nodeId: string, data: any) => void) | null;
+  onDoubleClick: ((nodeId: string, data: unknown) => void) | null;
   onToggleNodeHidden: ((nodeId: string) => void) | null;
   onSolo: ((nodeId: string) => void) | null;
   onUnsolo: (() => void) | null;
@@ -83,19 +86,13 @@ export class ComponentTree {
   _searchTimeout: ReturnType<typeof setTimeout> | null;
   _searchInput: HTMLInputElement | null;
   _treeRoot: HTMLDivElement | null;
-  bodiesByName: Record<string, any>;
-  jointsByName: Record<string, any>;
-  childJointsOf: Record<string, any[]>;
-  servosByJoint: Record<string, any[]>;
-  hornsByJoint: Record<string, any[]>;
-  mountsByBody: Record<string, any[]>;
-  partsByBody: Record<string, any[]>;
-  partsByJoint: Record<string, any[]>;
+  _idx: ManifestIndex;
+  _escapeHandler: ((e: KeyboardEvent) => void) | null;
 
   constructor(
     container: HTMLElement,
-    manifest: any,
-    onSelect: (nodeId: string, data: any) => void,
+    manifest: ViewerManifest,
+    onSelect: (nodeId: string, data: unknown) => void,
     options: ComponentTreeOptions = {},
   ) {
     this.container = container;
@@ -108,10 +105,11 @@ export class ComponentTree {
     this.onUnsolo = options.onUnsolo || null;
     this.focusedNodeId = null;
 
-    // Escape key un-solos
-    document.addEventListener('keydown', (e) => {
+    // Escape key un-solos — store reference so we can remove it in dispose()
+    this._escapeHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && this.onUnsolo) this.onUnsolo();
-    });
+    };
+    document.addEventListener('keydown', this._escapeHandler);
 
     // Category filter state
     this._filters = {
@@ -126,52 +124,15 @@ export class ComponentTree {
     this._searchQuery = '';
     this._searchTimeout = null;
 
-    // Index bodies and joints by name for lookup
-    this.bodiesByName = {};
-    for (const b of manifest.bodies) this.bodiesByName[b.name] = b;
-    this.jointsByName = {};
-    for (const j of manifest.joints) this.jointsByName[j.name] = j;
+    // Build shared manifest index
+    this._idx = indexManifest(manifest);
+  }
 
-    // Build parent->children map for joints
-    this.childJointsOf = {}; // bodyName -> [joint]
-    for (const j of manifest.joints) {
-      if (!this.childJointsOf[j.parent_body]) this.childJointsOf[j.parent_body] = [];
-      this.childJointsOf[j.parent_body].push(j);
-    }
-
-    // Index component bodies (servos, horns) by joint
-    this.servosByJoint = {};
-    this.hornsByJoint = {};
-    for (const b of manifest.bodies) {
-      if (b.role !== 'component' || !b.joint) continue;
-      if (b.category === 'servo') {
-        if (!this.servosByJoint[b.joint]) this.servosByJoint[b.joint] = [];
-        this.servosByJoint[b.joint].push(b);
-      } else if (b.category === 'horn') {
-        if (!this.hornsByJoint[b.joint]) this.hornsByJoint[b.joint] = [];
-        this.hornsByJoint[b.joint].push(b);
-      }
-    }
-
-    // Index mounts by parent body
-    this.mountsByBody = {};
-    for (const m of manifest.mounts || []) {
-      if (!this.mountsByBody[m.body]) this.mountsByBody[m.body] = [];
-      this.mountsByBody[m.body].push(m);
-    }
-
-    // Index parts (fasteners + wires only) by parent_body
-    this.partsByBody = {}; // bodyName -> [part]
-    this.partsByJoint = {}; // jointName -> [part]
-    for (const p of manifest.parts || []) {
-      const bodyName = p.parent_body;
-      if (!this.partsByBody[bodyName]) this.partsByBody[bodyName] = [];
-      this.partsByBody[bodyName].push(p);
-
-      if (p.joint) {
-        if (!this.partsByJoint[p.joint]) this.partsByJoint[p.joint] = [];
-        this.partsByJoint[p.joint].push(p);
-      }
+  /** Remove event listeners to prevent leaks. */
+  dispose(): void {
+    if (this._escapeHandler) {
+      document.removeEventListener('keydown', this._escapeHandler);
+      this._escapeHandler = null;
     }
   }
 
@@ -189,18 +150,11 @@ export class ComponentTree {
     this._treeRoot.className = 'tree-root';
     this.container.appendChild(this._treeRoot);
 
-    const assemblies = this.manifest.assemblies;
-    if (assemblies && assemblies.length > 0) {
-      for (const asm of assemblies) {
-        this._treeRoot.appendChild(this._buildAssemblyNode(asm));
-      }
-    } else {
-      // Auto-generate assemblies from kinematic structure
-      const rootBody = this.manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
-      if (!rootBody) return;
-      const autoAsm = this._buildAutoAssemblyFromKinematics(rootBody);
-      this._treeRoot.appendChild(autoAsm);
-    }
+    // Auto-generate assemblies from kinematic structure
+    const rootBody = this.manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
+    if (!rootBody) return;
+    const autoAsm = this._buildAutoAssemblyFromKinematics(rootBody);
+    this._treeRoot.appendChild(autoAsm);
 
     // Apply initial filter state (hide fasteners + wires by default)
     this._applyFilters();
@@ -426,43 +380,6 @@ export class ComponentTree {
 
   // ── Node builders ──
 
-  _buildAssemblyNode(asm) {
-    const nodeId = `assembly:${asm.path || asm.name}`;
-    const bodyNames = asm.bodies || [];
-    const subAsms = asm.sub_assemblies || [];
-    const hasChildren = bodyNames.length > 0 || subAsms.length > 0;
-
-    const data = { ...asm, _type: 'assembly' };
-    const node = this._createNode(nodeId, `${asm.name}`, 'assembly', data, hasChildren, null, { startExpanded: true });
-
-    if (hasChildren) {
-      const childrenEl = node.querySelector('.tree-node-children');
-
-      for (const sub of subAsms) {
-        childrenEl.appendChild(this._buildAssemblyNode(sub));
-      }
-
-      const asmBodySet = new Set(bodyNames);
-      const rootBodies = bodyNames
-        .map((n) => this.bodiesByName[n])
-        .filter((b) => b && b.role === 'structure' && (b.parent === null || !asmBodySet.has(b.parent)));
-
-      for (const body of rootBodies) {
-        childrenEl.appendChild(this._buildBodyNode(body, asmBodySet));
-      }
-    }
-
-    return node;
-  }
-
-  /** Humanize a joint name: "left_wheel" → "Left Wheel" */
-  _humanizeJointName(name: string): string {
-    return name
-      .split('_')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-  }
-
   /**
    * Auto-generate an assembly tree from kinematic structure when no
    * manifest.assemblies are defined. Bodies never contain sub-bodies;
@@ -470,11 +387,11 @@ export class ComponentTree {
    */
   _buildAutoAssemblyFromKinematics(rootBody) {
     const botName = this.manifest.bot_name;
-    const asmLabel = `${this._humanizeJointName(botName)} Assembly`;
+    const asmLabel = `${humanizeJointName(botName)} Assembly`;
     const nodeId = `assembly:${botName}`;
     const data = { name: asmLabel, _type: 'assembly' };
 
-    const childJoints = this.childJointsOf[rootBody.name] || [];
+    const childJoints = this._idx.childJointsOf[rootBody.name] || [];
     const hasChildren = true; // root body always has at least the body node
 
     const node = this._createNode(nodeId, asmLabel, 'assembly', data, hasChildren, null, {
@@ -515,8 +432,8 @@ export class ComponentTree {
 
   /** Append mounted component nodes from mounts[] to a parent element. */
   _appendMountedComponents(body, parentEl) {
-    const bodyMounts = this.mountsByBody[body.name] || [];
-    const parts = this.partsByBody[body.name] || [];
+    const bodyMounts = this._idx.mountsByBody[body.name] || [];
+    const parts = this._idx.partsByBody[body.name] || [];
     const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
 
     for (const mount of bodyMounts) {
@@ -536,7 +453,7 @@ export class ComponentTree {
       });
       if (hasCompChildren) {
         const compChildrenEl = compNode.querySelector('.tree-node-children');
-        const grouped = this._groupFasteners(compFasteners);
+        const grouped = groupFasteners(compFasteners);
         for (const group of grouped) {
           const fNodeId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
           const fData = { ...group, _type: 'fastener-group' };
@@ -552,7 +469,7 @@ export class ComponentTree {
 
   /** Append wire group node for a body to the parent element. */
   _appendWireGroup(body, parentEl) {
-    const parts = this.partsByBody[body.name] || [];
+    const parts = this._idx.partsByBody[body.name] || [];
     const wires = parts.filter((p) => p.category === 'wire');
     if (wires.length > 0) {
       const wireGroupId = `wire-group:${body.name}`;
@@ -579,7 +496,7 @@ export class ComponentTree {
   /** Build a sub-assembly from a joint: servo + joint node + child body + child components + recurse. */
   _buildJointAssemblyNode(joint) {
     const asmId = `assembly:joint:${joint.name}`;
-    const asmLabel = this._humanizeJointName(joint.name);
+    const asmLabel = humanizeJointName(joint.name);
     const data = { ...joint, _type: 'assembly' };
 
     const node = this._createNode(asmId, asmLabel, 'assembly', data, true, null, {
@@ -588,10 +505,10 @@ export class ComponentTree {
     const childrenEl = node.querySelector('.tree-node-children');
 
     // Servo and horn component bodies from bodies[] (role="component")
-    const servos = this.servosByJoint[joint.name] || [];
-    const horns = this.hornsByJoint[joint.name] || [];
+    const servos = this._idx.servosByJoint[joint.name] || [];
+    const horns = this._idx.hornsByJoint[joint.name] || [];
     // Fasteners still come from parts[]
-    const jointParts = this.partsByJoint[joint.name] || [];
+    const jointParts = this._idx.partsByJoint[joint.name] || [];
     const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
     for (const servo of servos) {
@@ -630,7 +547,7 @@ export class ComponentTree {
           servoChildrenEl.appendChild(hornNode);
         }
 
-        const grouped = this._groupFasteners(fasteners);
+        const grouped = groupFasteners(fasteners);
         for (const group of grouped) {
           const fNodeId = `fastener-group:${joint.name}:${group.key}`;
           const fData = { ...group, _type: 'fastener-group' };
@@ -645,13 +562,13 @@ export class ComponentTree {
     }
 
     // Child body + its components
-    const childBody = this.bodiesByName[joint.child_body];
+    const childBody = this._idx.bodiesByName[joint.child_body];
     if (childBody) {
       childrenEl.appendChild(this._buildFlatBodyNode(childBody));
       this._appendMountedComponents(childBody, childrenEl);
 
       // Recurse: joints from the child body create nested sub-assemblies
-      const childJoints = this.childJointsOf[childBody.name] || [];
+      const childJoints = this._idx.childJointsOf[childBody.name] || [];
       for (const childJoint of childJoints) {
         childrenEl.appendChild(this._buildJointAssemblyNode(childJoint));
       }
@@ -660,187 +577,6 @@ export class ComponentTree {
     }
 
     return node;
-  }
-
-  _buildBodyNode(body, asmScope = null) {
-    const nodeId = `body:${body.name}`;
-    const parts = this.partsByBody[body.name] || [];
-    const childJoints = this.childJointsOf[body.name] || [];
-    const bodyMounts = this.mountsByBody[body.name] || [];
-
-    const wires = parts.filter((p) => p.category === 'wire');
-    const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
-
-    const hasChildren =
-      bodyMounts.length > 0 || childJoints.length > 0 || wires.length > 0 || mountFasteners.length > 0;
-
-    const labelText = body.name;
-    const data = { ...body, _type: 'body' };
-    const shapescriptUrl =
-      body.role === 'structure'
-        ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-        : null;
-
-    const node = this._createNode(nodeId, labelText, 'body', data, hasChildren, shapescriptUrl, {
-      startExpanded: true,
-      bodyName: body.name,
-    });
-
-    if (hasChildren) {
-      const childrenEl = node.querySelector('.tree-node-children');
-
-      // 1. Mounted components from mounts[]
-      for (const mount of bodyMounts) {
-        const compNodeId = `mount:${mount.body}:${mount.label}`;
-        const iconType = mount.category || 'mount';
-        const compData = { ...mount, _type: 'mount' };
-        const compSsUrl = mount.shapescript_component
-          ? `?cadsteps=component:${encodeURIComponent(mount.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-          : null;
-
-        const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
-        const hasCompChildren = compFasteners.length > 0;
-
-        const compNode = this._createNode(compNodeId, mount.component, iconType, compData, hasCompChildren, compSsUrl, {
-          startExpanded: false,
-          bodyName: body.name,
-        });
-        if (hasCompChildren) {
-          const compChildrenEl = compNode.querySelector('.tree-node-children');
-          const grouped = this._groupFasteners(compFasteners);
-          for (const group of grouped) {
-            const fNodeId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
-            const fData = { ...group, _type: 'fastener-group' };
-            const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
-              bodyName: body.name,
-            });
-            compChildrenEl.appendChild(fNode);
-          }
-        }
-        childrenEl.appendChild(compNode);
-      }
-
-      // 2. Servo groups per joint (from component bodies)
-      for (const joint of childJoints) {
-        const servos = this.servosByJoint[joint.name] || [];
-        const horns = this.hornsByJoint[joint.name] || [];
-        const jParts = this.partsByJoint[joint.name] || [];
-        const fasteners = jParts.filter((p) => p.category === 'fastener');
-
-        for (const servo of servos) {
-          const servoNodeId = `body:${servo.name}`;
-          const servoLabel = `${servo.component ?? servo.name} @ ${joint.name}`;
-          const servoData = { ...servo, _type: 'component-body', servo_specs: joint.servo_specs };
-          const servoSsUrl = servo.shapescript_component
-            ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-            : null;
-          const servoHasChildren = horns.length > 0 || fasteners.length > 0;
-          const servoNode = this._createNode(
-            servoNodeId,
-            servoLabel,
-            'servo',
-            servoData,
-            servoHasChildren,
-            servoSsUrl,
-            { startExpanded: true, bodyName: body.name },
-          );
-
-          if (servoHasChildren) {
-            const servoChildrenEl = servoNode.querySelector('.tree-node-children');
-
-            for (const horn of horns) {
-              const hornNodeId = `body:${horn.name}`;
-              const hornData = { ...horn, _type: 'component-body' };
-              const hornSsUrl = horn.shapescript_component
-                ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-                : null;
-              const hornNode = this._createNode(
-                hornNodeId,
-                horn.component ?? 'Horn disc',
-                'horn',
-                hornData,
-                false,
-                hornSsUrl,
-                {
-                  bodyName: body.name,
-                },
-              );
-              servoChildrenEl.appendChild(hornNode);
-            }
-
-            const grouped = this._groupFasteners(fasteners);
-            for (const group of grouped) {
-              const fNodeId = `fastener-group:${joint.name}:${group.key}`;
-              const fData = { ...group, _type: 'fastener-group' };
-              const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
-                bodyName: body.name,
-              });
-              servoChildrenEl.appendChild(fNode);
-            }
-          }
-
-          childrenEl.appendChild(servoNode);
-        }
-
-        // Joint node -> child body
-        const jointNodeId = `joint:${joint.name}`;
-        const jointData = { ...joint, _type: 'joint' };
-        const childBody = this.bodiesByName[joint.child_body];
-        const hasJointChild = !!childBody;
-        const jointNode = this._createNode(jointNodeId, `${joint.name}`, 'joint', jointData, hasJointChild, null, {
-          startExpanded: true,
-          bodyName: body.name,
-        });
-
-        if (hasJointChild) {
-          const jointChildrenEl = jointNode.querySelector('.tree-node-children');
-          jointChildrenEl.appendChild(this._buildBodyNode(childBody, asmScope));
-        }
-
-        childrenEl.appendChild(jointNode);
-      }
-
-      // 3. Wires (collapsible group, collapsed by default)
-      if (wires.length > 0) {
-        const wireGroupId = `wire-group:${body.name}`;
-        const wireGroupData = { wires, _type: 'wire-group', parent_body: body.name };
-        const wireGroupNode = this._createNode(wireGroupId, `Wires`, 'wire', wireGroupData, true, null, {
-          startExpanded: false,
-          countBadge: wires.length,
-          bodyName: body.name,
-        });
-
-        const wireChildrenEl = wireGroupNode.querySelector('.tree-node-children');
-        for (const wire of wires) {
-          const wireNodeId = `part:${wire.id}`;
-          const wireData = { ...wire, _type: 'part' };
-          const wireNode = this._createNode(wireNodeId, wire.name, 'wire', wireData, false, null, {
-            bodyName: body.name,
-          });
-          wireChildrenEl.appendChild(wireNode);
-        }
-        childrenEl.appendChild(wireGroupNode);
-      }
-    }
-
-    return node;
-  }
-
-  /**
-   * Group identical fasteners: "4x M2 SHC" instead of 4 separate nodes.
-   */
-  _groupFasteners(fasteners: any[]): any[] {
-    const groups: Record<string, any> = {};
-    for (const f of fasteners) {
-      const key = f.name;
-      if (!groups[key]) groups[key] = { key, name: f.name, count: 0, items: [] };
-      groups[key].count++;
-      groups[key].items.push(f);
-    }
-    return Object.values(groups).map((g: any) => ({
-      ...g,
-      label: g.count > 1 ? `${g.count}\u00d7 ${g.name}` : g.name,
-    }));
   }
 
   _createNode(

@@ -157,13 +157,63 @@ def _transform_fastener_pos(
     )
 
 
+def _build_joint_fastener_entry(
+    joint_name: str,
+    tag: str,
+    index: int,
+    mp,
+    servo_quat: tuple,
+    servo_center: tuple,
+    body_world_pos: tuple,
+    body_name: str,
+) -> dict:
+    """Build a manifest entry for a joint-mounted fastener (bracket/horn/rear)."""
+    from botcad.fasteners import fastener_key, fastener_stl_stem
+
+    return {
+        "id": f"fastener_{joint_name}_{tag}_{index}",
+        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
+        "kind": "purchased",
+        "category": "fastener",
+        "parent_body": body_name,
+        "joint": joint_name,
+        "mesh": f"{fastener_stl_stem(mp)}.stl",
+        "pos": _transform_fastener_pos(
+            mp.pos, servo_quat, servo_center, body_world_pos
+        ),
+        "quat": _round_vec(servo_quat),
+    }
+
+
+def _build_mount_fastener_entry(
+    body_name: str,
+    mount_label: str,
+    index: int,
+    mp,
+    fastener_pos: list,
+) -> dict:
+    """Build a manifest entry for a mount-attached fastener."""
+    from botcad.fasteners import fastener_key, fastener_stl_stem
+
+    return {
+        "id": f"fastener_{body_name}_{mount_label}_{index}",
+        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
+        "kind": "purchased",
+        "category": "fastener",
+        "parent_body": body_name,
+        "mount_label": mount_label,
+        "mesh": f"{fastener_stl_stem(mp)}.stl",
+        "pos": fastener_pos,
+        "quat": [1.0, 0.0, 0.0, 0.0],
+    }
+
+
 def build_viewer_manifest(bot: Bot) -> dict:
     """Build the viewer manifest dict from a Bot object.
 
     Returns the manifest as a plain dict, ready for JSON serialization
     or direct use as an API response.
     """
-    from botcad.fasteners import fastener_key, fastener_stl_stem
 
     # Cache multi-material emitter results (keyed by ComponentKind value)
     # so we call each emitter at most once across materials + parts.
@@ -419,45 +469,21 @@ def build_viewer_manifest(bot: Bot) -> dict:
             bwp = body.world_pos
             for i, ear in enumerate(servo.mounting_ears):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_ear_{i}",
-                        "name": f"{fastener_key(ear)[0]} {fastener_key(ear)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(ear)}.stl",
-                        "pos": _transform_fastener_pos(ear.pos, sq, sc, bwp),
-                        "quat": _round_vec(sq),
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "ear", i, ear, sq, sc, bwp, body.name
+                    )
                 )
             for i, mp in enumerate(servo.horn_mounting_points):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_horn_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                        "pos": _transform_fastener_pos(mp.pos, sq, sc, bwp),
-                        "quat": _round_vec(sq),
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "horn", i, mp, sq, sc, bwp, body.name
+                    )
                 )
             for i, mp in enumerate(servo.rear_horn_mounting_points):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_rear_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                        "pos": _transform_fastener_pos(mp.pos, sq, sc, bwp),
-                        "quat": _round_vec(sq),
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "rear", i, mp, sq, sc, bwp, body.name
+                    )
                 )
 
     # 3b. Fasteners for mounted components
@@ -476,17 +502,9 @@ def build_viewer_manifest(bot: Bot) -> dict:
                     )
                 )
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{body.name}_{mount.label}_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "mount_label": mount.label,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                        "pos": fastener_pos,
-                        "quat": [1.0, 0.0, 0.0, 0.0],
-                    }
+                    _build_mount_fastener_entry(
+                        body.name, mount.label, i, mp, fastener_pos
+                    )
                 )
 
     # 4. Wire segments
