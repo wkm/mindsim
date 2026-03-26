@@ -26,6 +26,7 @@ _BUS_TYPE_COLORS: dict[str, list[float]] = {
     "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],  # blue — servo bus
     "csi": [0.40, 0.73, 0.42, 1.0],  # green — camera ribbon
     "power": [0.90, 0.30, 0.25, 1.0],  # red — power
+    "usb": [0.55, 0.35, 0.75, 1.0],  # purple — USB data/power
 }
 
 
@@ -604,7 +605,8 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
     Each stub is emitted as a proper part with pos/quat/mesh so the viewer
     can render it the same way as any other part.
     """
-    from botcad.geometry import rotation_between
+    from botcad.connectors import connector_spec
+    from botcad.geometry import rotate_vec, rotation_between
 
     for body in bot.all_bodies:
         for mount in body.mounts:
@@ -615,8 +617,6 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
 
                 # Look up connector spec for wire exit direction
                 try:
-                    from botcad.connectors import connector_spec
-
                     cspec = connector_spec(wp.connector_type)
                 except KeyError:
                     log.debug(
@@ -656,6 +656,64 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 manifest["parts"].append(
                     {
                         "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
+                        "name": wp.label,
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "stub",
+                        "parent_body": body.name,
+                        "mesh": "wire_stub.stl",
+                        "pos": _round_vec(stub_center),
+                        "quat": _round_vec(stub_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": _BUS_TYPE_COLORS.get(
+                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                        ),
+                    }
+                )
+
+        # --- Servo wire ports (on joints, not mounts) ---
+        for joint in body.joints:
+            servo = joint.servo
+            for wp in servo.wire_ports:
+                if not wp.connector_type:
+                    continue
+
+                try:
+                    cspec = connector_spec(wp.connector_type)
+                except KeyError:
+                    log.debug(
+                        "Unknown connector_type %r on servo %s/%s, skipping",
+                        wp.connector_type,
+                        servo.name,
+                        wp.label,
+                    )
+                    continue
+
+                # Transform from servo-local to body-local frame
+                rotated_pos = rotate_vec(joint.solved_servo_quat, wp.pos)
+                sc = joint.solved_servo_center
+                body_pos = (
+                    rotated_pos[0] + sc[0],
+                    rotated_pos[1] + sc[1],
+                    rotated_pos[2] + sc[2],
+                )
+
+                body_dir = rotate_vec(
+                    joint.solved_servo_quat, cspec.wire_exit_direction
+                )
+                stub_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_dir))
+
+                half_len = 0.0125
+                stub_center = (
+                    body_pos[0] + body_dir[0] * half_len,
+                    body_pos[1] + body_dir[1] * half_len,
+                    body_pos[2] + body_dir[2] * half_len,
+                )
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_stub_{body.name}_{joint.name}_{wp.label}",
                         "name": wp.label,
                         "kind": "fabricated",
                         "category": "wire",

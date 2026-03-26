@@ -20,11 +20,23 @@ def WaveshareSerialBus() -> Component:
         dimensions=(0.055, 0.025, 0.012),
         mass=0.015,
         wire_ports=(
-            WirePort("usb_c", pos=(-0.0275, 0.0, 0.0), bus_type=BusType.USB),
+            WirePort(
+                "usb_c",
+                pos=(-0.0275, 0.0, 0.0),
+                bus_type=BusType.USB,
+                connector_type="usb_c",
+            ),
             WirePort(
                 "servo_bus",
                 pos=(0.0275, 0.0, 0.0),
                 bus_type=BusType.UART_HALF_DUPLEX,
+                connector_type="5264_3pin",
+            ),
+            WirePort(
+                "power_in",
+                pos=(0.0, -0.0125, 0.0),
+                bus_type=BusType.POWER,
+                connector_type="xt30",
             ),
         ),
         mounting_points=(

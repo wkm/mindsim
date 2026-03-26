@@ -22,7 +22,19 @@ def RaspberryPiZero2W() -> Component:
             # GPIO header (40-pin, along one long edge)
             WirePort("gpio", pos=(0.0, 0.013, 0.0025), bus_type=BusType.GPIO),
             # USB micro (power input)
-            WirePort("usb_power", pos=(-0.0325, 0.0, 0.0), bus_type=BusType.USB),
+            WirePort(
+                "usb_power",
+                pos=(-0.0325, 0.0, 0.0),
+                bus_type=BusType.USB,
+                connector_type="usb_c",
+            ),
+            # USB micro OTG (data out to controller)
+            WirePort(
+                "usb_data",
+                pos=(-0.020, 0.0, 0.0),
+                bus_type=BusType.USB,
+                connector_type="usb_c",
+            ),
             # CSI camera connector
             WirePort("csi", pos=(0.016, 0.0, 0.0025), bus_type=BusType.CSI),
             # UART (on GPIO pins 8/10)

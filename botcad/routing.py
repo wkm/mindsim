@@ -83,7 +83,7 @@ def solve_routing(bot: Bot) -> list[WireRoute]:
     """Compute wire routes for the bot."""
     routes: list[WireRoute] = []
 
-    # 1. Servo daisy-chain bus: Pi UART → servo chain
+    # 1. Servo daisy-chain bus (from controller or Pi UART)
     servo_route = _route_servo_bus(bot)
     if servo_route.segments:
         routes.append(servo_route)
@@ -93,10 +93,25 @@ def solve_routing(bot: Bot) -> list[WireRoute]:
     if csi_route.segments:
         routes.append(csi_route)
 
-    # 3. Power bus: battery → Pi
-    power_route = _route_power(bot)
-    if power_route.segments:
-        routes.append(power_route)
+    # 3. Power distribution through controller + BEC
+    power_servo_route = _route_power_servo(bot)
+    power_pi_route = _route_power_pi(bot)
+    pi_usb_route = _route_pi_usb_data(bot)
+
+    has_controller = bool(power_servo_route.segments or pi_usb_route.segments)
+
+    if power_servo_route.segments:
+        routes.append(power_servo_route)
+    if power_pi_route.segments:
+        routes.append(power_pi_route)
+    if pi_usb_route.segments:
+        routes.append(pi_usb_route)
+
+    # 4. Fallback: direct battery → Pi power (for bots without BEC/controller)
+    if not has_controller:
+        power_route = _route_power(bot)
+        if power_route.segments:
+            routes.append(power_route)
 
     return routes
 
@@ -155,6 +170,29 @@ def _wireport_local(body: Body, bus_type: BusType) -> Vec3 | None:
         for port in mount.component.wire_ports:
             if port.bus_type == bus_type:
                 return _add_vec3(mount.resolved_pos, port.pos)
+    return None
+
+
+def _wireport_for_mount(
+    body: Body,
+    mount_label: str,
+    bus_type: BusType | None = None,
+    port_label: str | None = None,
+) -> Vec3 | None:
+    """Find a wire port on a specific mount by label.
+
+    Matches on mount_label (required) plus optionally bus_type and/or
+    port_label. Returns body-local position, or None.
+    """
+    for mount in body.mounts:
+        if mount.label != mount_label:
+            continue
+        for port in mount.component.wire_ports:
+            if bus_type is not None and port.bus_type != bus_type:
+                continue
+            if port_label is not None and port.label != port_label:
+                continue
+            return _add_vec3(mount.resolved_pos, port.pos)
     return None
 
 
@@ -325,10 +363,15 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
     if bot.root is None:
         return route
 
-    # Pi UART port — origin of the bus, in root body frame
-    pi_uart_pos = _wireport_local(bot.root, BusType.UART_HALF_DUPLEX)
-    if pi_uart_pos is None:
-        pi_uart_pos = (0.0, 0.0, 0.0)
+    # Prefer controller board's servo_bus port as bus origin
+    servo_bus_origin = _wireport_for_mount(
+        bot.root, "controller", BusType.UART_HALF_DUPLEX
+    )
+    if servo_bus_origin is None:
+        # Fallback: Pi UART (for bots without a controller board)
+        servo_bus_origin = _wireport_local(bot.root, BusType.UART_HALF_DUPLEX)
+    if servo_bus_origin is None:
+        servo_bus_origin = (0.0, 0.0, 0.0)
 
     parent_map = _build_parent_map(bot)
 
@@ -399,7 +442,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
             if joint.child is not None:
                 _walk(joint.child, _joint_entry_local(), joint.child.name)
 
-    _walk(bot.root, current_pos=pi_uart_pos, current_body=bot.root.name)
+    _walk(bot.root, current_pos=servo_bus_origin, current_body=bot.root.name)
     return route
 
 
@@ -523,6 +566,59 @@ def _route_power(bot: Bot) -> WireRoute:
     if battery_pos is not None and pi_pos is not None:
         route.segments.extend(_expand_segment(bot, battery_pos, pi_pos, bot.root.name))
 
+    return route
+
+
+def _route_power_servo(bot: Bot) -> WireRoute:
+    """Route power from battery to Waveshare controller (servo power distribution)."""
+    route = WireRoute(label="power_servo", bus_type=BusType.POWER)
+    if bot.root is None:
+        return route
+
+    battery_pos = _wireport_for_mount(bot.root, "battery", BusType.POWER)
+    controller_pos = _wireport_for_mount(bot.root, "controller", BusType.POWER)
+
+    if battery_pos is not None and controller_pos is not None:
+        route.segments.extend(
+            _expand_segment(bot, battery_pos, controller_pos, bot.root.name)
+        )
+    return route
+
+
+def _route_power_pi(bot: Bot) -> WireRoute:
+    """Route power from battery through BEC to Pi.
+
+    Battery → BEC power_in, then BEC power_out → Pi usb_power.
+    """
+    route = WireRoute(label="power_pi", bus_type=BusType.POWER)
+    if bot.root is None:
+        return route
+
+    battery_pos = _wireport_for_mount(bot.root, "battery", BusType.POWER)
+    bec_in = _wireport_for_mount(bot.root, "bec", port_label="power_in")
+    bec_out = _wireport_for_mount(bot.root, "bec", port_label="power_out")
+    pi_power = _wireport_for_mount(bot.root, "pi", port_label="usb_power")
+
+    if battery_pos is not None and bec_in is not None:
+        route.segments.extend(_expand_segment(bot, battery_pos, bec_in, bot.root.name))
+    if bec_out is not None and pi_power is not None:
+        route.segments.extend(_expand_segment(bot, bec_out, pi_power, bot.root.name))
+    return route
+
+
+def _route_pi_usb_data(bot: Bot) -> WireRoute:
+    """Route USB data from Pi to Waveshare controller."""
+    route = WireRoute(label="pi_usb_data", bus_type=BusType.USB)
+    if bot.root is None:
+        return route
+
+    pi_usb = _wireport_for_mount(bot.root, "pi", port_label="usb_data")
+    controller_usb = _wireport_for_mount(bot.root, "controller", BusType.USB)
+
+    if pi_usb is not None and controller_usb is not None:
+        route.segments.extend(
+            _expand_segment(bot, pi_usb, controller_usb, bot.root.name)
+        )
     return route
 
 
