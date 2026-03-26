@@ -11,7 +11,7 @@ Improve the Three.js bot viewer's visual quality and realism by adding environme
 
 - **Materials:** `MeshPhysicalMaterial` with roughness 0.6, metalness 0.1 — physically-based but uniform
 - **Lighting:** Ambient (1.0) + key directional (1.6) + fill directional (0.5) — flat, no environment
-- **Shadows:** `PCFShadowMap` enabled on key light, default 512 map size
+- **Shadows:** `PCFShadowMap` enabled on renderer, but key light lacks `castShadow = true`
 - **Post-processing:** Roberts cross edge detection (normals + depth) — kept as-is
 - **No environment map, no tone mapping, no AO**
 - **Three.js version:** 0.183
@@ -37,6 +37,12 @@ https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/{resolution}/{name}_{resolutio
 
 **Caching:** Browser HTTP cache handles repeat loads. Loading is async during scene init.
 
+**Fallback:** If HDRI fails to load (network error, CORS, CDN down), degrade gracefully to current lighting — no environment map, viewer still works. Log a warning.
+
+**Light rebalancing:** The current `AmbientLight(1.0)` will likely wash out the IBL contribution. Once environment is active, reduce or remove the ambient light and rebalance directional light intensities. Use `scene.environmentIntensity` (available in Three.js 0.183) as a tuning knob.
+
+**PMREMGenerator lifecycle:** Dispose the generator after producing the environment texture (`pmremGenerator.dispose()`).
+
 ### 2. Tone Mapping
 
 Set on the `WebGLRenderer` after creation:
@@ -48,14 +54,17 @@ Set on the `WebGLRenderer` after creation:
 
 We'll compare both with the user and pick one.
 
+**EffectComposer interaction:** The edge detection pipeline (`presentation.ts`) uses `EffectComposer` with `RenderPass`. When `renderer.toneMapping` is set, Three.js applies it at the end of every `render()` call — including inside the composer, which can cause double tone mapping. Fix: set `renderer.toneMapping = NoToneMapping` before `composer.render()` and restore after, or set `renderPass.toneMapping = NoToneMapping` on the render pass. This must be handled during implementation.
+
 ### 3. Soft Shadows
 
 Three changes to the existing shadow setup in `Viewport3D`:
 
-1. **Shadow type:** `THREE.PCFShadowMap` → `THREE.PCFSoftShadowMap` (softer penumbra)
-2. **Shadow map size:** Default (512) → 1024 or 2048 for crisper shadows
-3. **Shadow camera fitting:** After bot geometry loads, fit the directional light's shadow camera frustum to the bot's bounding box so shadow resolution isn't wasted on empty space
-4. **Bias tuning:** Set `light.shadow.bias` (typically -0.0001 to -0.001) to eliminate shadow acne
+1. **Enable castShadow:** The key directional light currently lacks `castShadow = true` — add it along with shadow camera configuration
+2. **Shadow type:** `THREE.PCFShadowMap` → `THREE.PCFSoftShadowMap` (softer penumbra)
+3. **Shadow map size:** Default (512) → 1024 (sufficient for bot-scale geometry after frustum fitting)
+4. **Shadow camera fitting:** After bot geometry loads, fit the directional light's shadow camera frustum to the scene bounding box so shadow resolution isn't wasted on empty space. Refit on initial load only (not on visibility changes).
+5. **Bias tuning:** Set `light.shadow.bias` (typically -0.0001 to -0.001) to eliminate shadow acne
 
 ### 4. Iteration Plan
 
@@ -76,6 +85,12 @@ Each change is a separate commit. After all three are in place:
 - **New:** `viewer/environment.ts` — HDRI loading + PMREMGenerator pipeline
 - **Modified:** `viewer/viewport3d.ts` — tone mapping config, soft shadow config, call environment loader
 - **Modified:** `viewer/bot-viewer.ts` — shadow camera fitting after geometry loads (needs bounding box)
+
+## Render Pipeline Order
+
+After this work, the pipeline is:
+1. Scene render (IBL environment + directional lights + soft shadows + tone mapping)
+2. Optional edge detection post-process (EffectComposer — tone mapping disabled during this pass)
 
 ## Non-Goals
 
