@@ -37,16 +37,32 @@ interface ManifestMaterial {
 interface ManifestBody {
   name: string;
   mesh: string;
-  kind: string;
+  role: 'structure' | 'component';
   parent: string | null;
   pos: number[];
   quat: number[]; // wxyz
   color?: [number, number, number];
+  component?: string;
+  category?: string;
+  joint?: string;
+  shapescript_component?: string;
 }
 
 interface ManifestSubMesh {
   file: string;
   material: string;
+}
+
+interface ManifestMount {
+  body: string;
+  label: string;
+  component: string;
+  category: string;
+  mesh: string;
+  pos: number[];
+  quat: number[]; // wxyz
+  meshes?: ManifestSubMesh[];
+  shapescript_component?: string;
 }
 
 interface ManifestPart {
@@ -79,6 +95,7 @@ interface ViewerManifest {
   bot_name: string;
   bodies: ManifestBody[];
   joints: ManifestJoint[];
+  mounts?: ManifestMount[];
   parts?: ManifestPart[];
   materials?: Record<string, ManifestMaterial>;
   assemblies?: unknown[];
@@ -249,19 +266,21 @@ export async function initDesignViewer(
   }
 
   // Step 4: Load body meshes
-  // Build a set of bodies that exist solely to host a purchased component.
-  // When a body has a comp_* part mounted on it, the body mesh and the
-  // component mesh are identical — skip the body mesh to avoid double-rendering.
-  const bodiesWithCompPart = new Set<string>();
+  // Detect bodies whose sole purpose is hosting a single purchased component.
+  // These bodies produce an identical mesh to their component (e.g., left_rim
+  // body = Pololu wheel). Skip the body mesh — the component renders instead.
+  // Only skip if the body has EXACTLY ONE comp_* part (structural bodies like
+  // "base" with multiple comp_* mounts must NOT be skipped).
+  const compCountPerBody = new Map<string, number>();
   for (const part of manifest.parts ?? []) {
     if (part.id.startsWith('comp_') && part.parent_body) {
-      bodiesWithCompPart.add(part.parent_body);
+      compCountPerBody.set(part.parent_body, (compCountPerBody.get(part.parent_body) ?? 0) + 1);
     }
   }
 
   const bodyMeshPromises = manifest.bodies.map(async (body) => {
-    if (bodiesWithCompPart.has(body.name)) {
-      // Component mesh will render with proper material instead
+    if (compCountPerBody.get(body.name) === 1) {
+      // Single-component body — the component mesh will render with material
       return;
     }
     const geometry = await fetchSTL(botName, body.mesh);

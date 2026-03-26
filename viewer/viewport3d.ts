@@ -655,19 +655,20 @@ export class Viewport3D {
     this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
-    // Lighting — CAD-style: hemisphere ambient + camera headlight + key/fill
-    this._scene.add(new THREE.HemisphereLight(0xf0f0f0, 0x808080, 1.0));
+    // Lighting — CAD-style: strong ambient + camera headlight + key/fill
+    // Higher ambient so dark materials (servos, IC packages) remain visible
+    this._scene.add(new THREE.HemisphereLight(0xffffff, 0xb0b0b0, 1.5));
     // Camera headlight — moves with the camera so surfaces always have detail
-    const headlight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const headlight = new THREE.DirectionalLight(0xffffff, 0.8);
     headlight.position.set(0, 0, 1); // in camera space: forward
     this._cam.add(headlight);
     this._scene.add(this._cam); // camera must be in scene graph for children to render
     // Key light at ~45 degrees
-    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    const key = new THREE.DirectionalLight(0xffffff, 0.6);
     key.position.set(0.3, 0.5, 0.4);
     this._scene.add(key);
     // Fill light opposite the key
-    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.4);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
     this._gridHelper = null;
