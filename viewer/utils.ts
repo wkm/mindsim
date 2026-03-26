@@ -3,6 +3,8 @@
  */
 
 import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import type { ManifestMaterial, ManifestPart } from './manifest-types.ts';
 
 // MuJoCo geom group constants
 export const GEOM_GROUP_STRUCTURAL = 0;
@@ -136,4 +138,98 @@ export function createTextSprite(
   texture.minFilter = THREE.LinearFilter;
   const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
   return new THREE.Sprite(mat);
+}
+
+// ---------------------------------------------------------------------------
+// Fastener grouping
+// ---------------------------------------------------------------------------
+
+export interface FastenerGroup {
+  key: string;
+  name: string;
+  label: string;
+  count: number;
+  items: ManifestPart[];
+}
+
+/** Group identical fasteners: "4x M2 SHC" instead of 4 separate nodes. */
+export function groupFasteners(fasteners: ManifestPart[]): FastenerGroup[] {
+  const groups: Record<string, FastenerGroup> = {};
+  for (const f of fasteners) {
+    const key = f.name;
+    if (!groups[key]) {
+      groups[key] = { key, name: f.name, label: f.name, count: 0, items: [] };
+    }
+    groups[key].count++;
+    groups[key].items.push(f);
+  }
+  return Object.values(groups).map((g) => ({
+    ...g,
+    label: g.count > 1 ? `${g.count}\u00d7 ${g.name}` : g.name,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Joint name humanization
+// ---------------------------------------------------------------------------
+
+/** Humanize a joint name: "left_wheel" -> "Left Wheel" */
+export function humanizeJointName(name: string): string {
+  return name
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// STL loading
+// ---------------------------------------------------------------------------
+
+const stlLoader = new STLLoader();
+
+/** Fetch an STL and parse it into a BufferGeometry with vertex normals. */
+export async function fetchSTL(botName: string, meshFile: string): Promise<THREE.BufferGeometry | null> {
+  try {
+    const resp = await fetch(`/api/bots/${botName}/meshes/${meshFile}`);
+    if (!resp.ok) {
+      console.warn(`[viewer] failed to fetch ${meshFile}: ${resp.status}`);
+      return null;
+    }
+    const buf = await resp.arrayBuffer();
+    const geometry = stlLoader.parse(buf);
+    geometry.computeVertexNormals();
+    return geometry;
+  } catch (err) {
+    console.warn(`[viewer] error loading ${meshFile}:`, err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Manifest quaternion conversion
+// ---------------------------------------------------------------------------
+
+/** Convert manifest wxyz quaternion to Three.js xyzw quaternion. */
+export function manifestQuatToThree(q: number[]): THREE.Quaternion {
+  // Manifest: [w, x, y, z] -> Three.js: new Quaternion(x, y, z, w)
+  return new THREE.Quaternion(q[1], q[2], q[3], q[0]);
+}
+
+// ---------------------------------------------------------------------------
+// Material creation
+// ---------------------------------------------------------------------------
+
+/** Create a MeshPhysicalMaterial from a manifest material definition. */
+export function makeMaterial(matDef: ManifestMaterial | undefined): THREE.MeshPhysicalMaterial {
+  if (!matDef) {
+    return new THREE.MeshPhysicalMaterial({ color: 0xb0b0b0, roughness: 0.7 });
+  }
+  const color = new THREE.Color(matDef.color[0], matDef.color[1], matDef.color[2]);
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    metalness: matDef.metallic,
+    roughness: matDef.roughness,
+    transparent: matDef.opacity < 1.0,
+    opacity: matDef.opacity,
+  });
 }

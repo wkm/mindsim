@@ -100,7 +100,7 @@ export class ExploreMode {
     const treePanel = document.getElementById('tree-panel');
     if (treePanel) treePanel.style.display = 'block';
 
-    // Build component tree with ShapeScript navigation and visibility support
+    // Build component tree with ShapeScript navigation
     this.tree = new ComponentTree(
       document.getElementById('tree-content'),
       this.manifest,
@@ -109,9 +109,6 @@ export class ExploreMode {
         onShapeScript: (url) => {
           window.location.href = url;
         },
-        onToggleVisibility: (bodyName, visible) => this._setBodyVisible(bodyName, visible),
-        onIsolate: (bodyName) => this._isolateBody(bodyName),
-        onShowAll: () => this._showAllBodies(),
       },
     );
     this.tree.build();
@@ -364,31 +361,9 @@ export class ExploreMode {
     if (btn) btn.textContent = this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate';
   }
 
-  /** Push BotScene visibility state to the component tree for DOM styling. */
+  /** Placeholder — Sim-mode tree doesn't track per-mesh design visibility. */
   _syncTreeVisualState() {
-    if (!this.tree) return;
-    const hiddenBodies = new Set<string>();
-    const isolatedBodies = new Set<string>();
-    const botScene = this.ctx.botScene;
-    const isolatedIds = botScene.isolatedIds();
-
-    for (const body of botScene.bodies) {
-      if (!body.visible && body.id !== 0) {
-        hiddenBodies.add(body.name);
-      }
-    }
-
-    // Determine which bodies are isolated (for target icon highlight)
-    if (isolatedIds.size > 0) {
-      for (const id of isolatedIds) {
-        const bodyState = botScene.bodies[id];
-        if (bodyState && bodyState.id !== 0) {
-          isolatedBodies.add(bodyState.name);
-        }
-      }
-    }
-
-    this.tree.updateVisualState(hiddenBodies, isolatedBodies);
+    // no-op: Sim mode uses BotScene body-level visibility, not SceneTree.
   }
 
   unfocus() {
@@ -435,7 +410,9 @@ export class ExploreMode {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${body.name}</h2>`;
     html += '<span class="prop-badge body-badge">Body</span>';
-    if (body.kind) {
+    if (body.role) {
+      html += ` <span style="font-size:11px;color:#5C7080;">${body.role}</span>`;
+    } else if (body.kind) {
       html += ` <span style="font-size:11px;color:#5C7080;">${body.kind}</span>`;
     }
 
@@ -472,7 +449,7 @@ export class ExploreMode {
     // Actions row
     html += '<div style="display:flex;gap:4px;margin-top:8px;">';
     html += `<button id="isolate-btn" class="btn btn-sm">${this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate'}</button>`;
-    if (body.kind === 'fabricated') {
+    if (body.role === 'structure' || body.kind === 'fabricated') {
       const botName = this.manifest.bot_name;
       html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="text-decoration:none;">View ShapeScript</a>`;
     }

@@ -438,7 +438,10 @@ def build_cad(bot: Bot) -> CadModel:
 
     # Pre-build comp_name → Mount lookup for rotation application.
     comp_mount_map: dict[str, object] = {}
+    # Pre-build name → Body lookup for parent frame_quat.
+    bodies_by_name: dict[str, Body] = {}
     for body in bot.all_bodies:
+        bodies_by_name[body.name] = body
         for mount in body.mounts:
             comp_mount_map[f"comp_{body.name}_{mount.label}"] = mount
 
@@ -492,6 +495,21 @@ def build_cad(bot: Bot) -> CadModel:
             mount = comp_mount_map.get(body.name)
             if mount is not None:
                 solid = _apply_mount_rotation(solid, mount)
+
+            # Purchased comp_ bodies: also apply the parent body's frame_quat
+            # so the component STL is oriented consistently with the parent
+            # body's geometry (e.g. a wheel on a cylinder rim aligned to the
+            # joint axis).  Without this the component STL stays in canonical
+            # Z-up frame while the parent body has been rotated.
+            if (
+                body.kind == BodyKind.PURCHASED
+                and body.parent_body_name
+                and body.name.startswith("comp_")
+            ):
+                parent = bodies_by_name.get(body.parent_body_name)
+                if parent is not None:
+                    solid = _orient_z_to_axis(solid, (0, 0, 1), quat=parent.frame_quat)
+
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"

@@ -21,6 +21,13 @@ from botcad.component import ComponentKind
 
 log = logging.getLogger(__name__)
 
+# Wire stub colors by bus type (RGBA, 0-1 range)
+_BUS_TYPE_COLORS: dict[str, list[float]] = {
+    "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],  # blue — servo bus
+    "csi": [0.40, 0.73, 0.42, 1.0],  # green — camera ribbon
+    "power": [0.90, 0.30, 0.25, 1.0],  # red — power
+}
+
 
 def _material_to_dict(mat) -> dict:
     """Convert a Material to a viewer-serializable dict."""
@@ -137,9 +144,129 @@ def _build_materials_dict(bot: Bot, mm_cache: dict) -> dict:
     return materials
 
 
-def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
-    """Generate viewer_manifest.json in the bot's output directory."""
+def _transform_fastener_pos(
+    mp_pos: tuple, servo_quat: tuple, servo_center: tuple, body_world_pos: tuple
+) -> list:
+    """Transform a fastener mount-point position to world frame.
+
+    mp_pos is in the servo's local frame. We rotate by the servo's solved
+    quaternion, add the servo center (body-local), then add body world pos.
+    """
+    from botcad.geometry import rotate_vec
+
+    rotated = rotate_vec(servo_quat, mp_pos)
+    return _round_vec(
+        (
+            body_world_pos[0] + servo_center[0] + rotated[0],
+            body_world_pos[1] + servo_center[1] + rotated[1],
+            body_world_pos[2] + servo_center[2] + rotated[2],
+        )
+    )
+
+
+# Context labels for fastener categories
+_FASTENER_CONTEXT = {
+    "ear": "bracket ear -> servo case",
+    "horn": "coupler -> horn",
+    "rear": "rear horn -> servo case",
+}
+
+
+def _fastener_total_length(mp) -> float:
+    """Total screw length (head + shank) for a mount point's fastener."""
+    from botcad.fasteners import resolve_fastener
+
+    try:
+        spec = resolve_fastener(mp)
+        head_h = spec.head_height
+    except KeyError:
+        head_h = 0.003
+    shank = 0.004  # default shank length (matches screw_solid default)
+    return head_h + shank
+
+
+def _build_joint_fastener_entry(
+    joint_name: str,
+    tag: str,
+    index: int,
+    mp,
+    servo_quat: tuple,
+    servo_center: tuple,
+    body_world_pos: tuple,
+    body_name: str,
+) -> dict:
+    """Build a manifest entry for a joint-mounted fastener (bracket/horn/rear)."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
+    from botcad.geometry import quat_multiply, rotate_vec, rotation_between
+
+    # Align fastener +Z (head top face) to the mount point axis direction,
+    # then compose with servo orientation to get world-frame quaternion.
+    axis_align = rotation_between((0.0, 0.0, 1.0), mp.axis)
+    final_quat = quat_multiply(servo_quat, axis_align)
+
+    # Position: mount hole center, then offset so screw tip sits at hole depth
+    # and head protrudes outward. The screw STL extends from Z=0 (head) to
+    # Z=-total_length (tip). After quat rotation, the head faces along the
+    # mount axis. Offset along the axis by total_length so the tip aligns
+    # with the original mount hole position.
+    base_pos = _transform_fastener_pos(mp.pos, servo_quat, servo_center, body_world_pos)
+    total_len = _fastener_total_length(mp)
+    # The mount axis in world frame = servo_quat applied to mp.axis
+    world_axis = rotate_vec(servo_quat, mp.axis)
+    offset_pos = (
+        base_pos[0] + world_axis[0] * total_len,
+        base_pos[1] + world_axis[1] * total_len,
+        base_pos[2] + world_axis[2] * total_len,
+    )
+
+    return {
+        "id": f"fastener_{joint_name}_{tag}_{index}",
+        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
+        "kind": "purchased",
+        "category": "fastener",
+        "parent_body": body_name,
+        "joint": joint_name,
+        "mesh": f"{fastener_stl_stem(mp)}.stl",
+        "pos": _round_vec(offset_pos),
+        "quat": _round_vec(final_quat),
+        "material": "steel",
+        "context": _FASTENER_CONTEXT.get(tag, "fastener"),
+    }
+
+
+def _build_mount_fastener_entry(
+    body_name: str,
+    mount_label: str,
+    index: int,
+    mp,
+    fastener_pos: list,
+    fastener_axis: tuple,
+) -> dict:
+    """Build a manifest entry for a mount-attached fastener."""
+    from botcad.fasteners import fastener_key, fastener_stl_stem
+    from botcad.geometry import rotation_between
+
+    return {
+        "id": f"fastener_{body_name}_{mount_label}_{index}",
+        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
+        "kind": "purchased",
+        "category": "fastener",
+        "parent_body": body_name,
+        "mount_label": mount_label,
+        "mesh": f"{fastener_stl_stem(mp)}.stl",
+        "pos": fastener_pos,
+        "quat": _round_vec(rotation_between((0.0, 0.0, 1.0), fastener_axis)),
+        "material": "steel",
+        "context": f"{mount_label} mount -> {body_name}",
+    }
+
+
+def build_viewer_manifest(bot: Bot) -> dict:
+    """Build the viewer manifest dict from a Bot object.
+
+    Returns the manifest as a plain dict, ready for JSON serialization
+    or direct use as an API response.
+    """
 
     # Cache multi-material emitter results (keyed by ComponentKind value)
     # so we call each emitter at most once across materials + parts.
@@ -150,6 +277,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
         "assemblies": _build_assembly_tree(bot),
         "bodies": [],
         "joints": [],
+        "mounts": [],
         "parts": [],
         "assembly_steps": [],
         "ik_chains": [],
@@ -160,33 +288,38 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     step_num = [0]
 
     def _walk_body(body: Body, parent_name: str | None, joint: Joint | None) -> None:
-        # Body entry — enriched with shape, dimensions, mass, mounts
+        # Body entry — enriched with shape, dimensions, mass
         body_entry = {
             "name": body.name,
             "mesh": f"{body.name}.stl",
-            "kind": "fabricated",
+            "role": "structure",
             "parent": parent_name,
             "shape": str(body.shape),
             "dimensions": _round_vec(body.dimensions),
             "mass": round(body.solved_mass, 4),
+            "pos": _round_vec(body.world_pos),
+            "quat": _round_vec(body.world_quat),
         }
+        # Emit body material color for rendering
+        if body.material is not None:
+            body_entry["color"] = list(body.material.color)
         if joint:
             body_entry["joint"] = joint.name
 
-        # Mounts with full component metadata
-        mounts = []
+        # Inline mount metadata on the body (for component details)
+        body_mounts = []
         for mount in body.mounts:
             comp = mount.component
-            mount_entry = {
+            mount_meta = {
                 "label": mount.label,
                 "component_name": comp.name,
                 "dimensions": _round_vec(comp.dimensions),
                 "mass": round(comp.mass, 4),
             }
-            mount_entry.update(_component_specs(comp))
-            mounts.append(mount_entry)
-        if mounts:
-            body_entry["mounts"] = mounts
+            mount_meta.update(_component_specs(comp))
+            body_mounts.append(mount_meta)
+        if body_mounts:
+            body_entry["mounts"] = body_mounts
 
         manifest["bodies"].append(body_entry)
 
@@ -213,6 +346,28 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                     "gear_ratio": joint.servo.gear_ratio,
                     "mass": round(joint.servo.mass, 4),
                 },
+                "design_layers": [
+                    {
+                        "kind": "bracket",
+                        "mesh": f"bracket_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "coupler",
+                        "mesh": f"coupler_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "clearance",
+                        "mesh": f"clearance_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "insertion",
+                        "mesh": f"insertion_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                ],
             }
             manifest["joints"].append(joint_entry)
 
@@ -259,51 +414,64 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     if bot.root:
         _walk_body(bot.root, None, None)
 
-    # --- Build parts list: every physical object that isn't a structural body ---
+    # --- Build component bodies and mounts ---
 
-    # 1 & 2. Servos, horns, and mounted components from purchased bodies
     from botcad.skeleton import BodyKind
+
+    # 1. Component bodies: servos, horns, and purchased bodies that are their
+    #    own kinematic node (e.g. wheels).  These go into bodies[] with
+    #    role="component" instead of the old parts[] array.
+    # 2. Mounts: purchased bodies that share a structural body's kinematic node
+    #    (camera, battery, compute mounted ON a structural body).  These go into
+    #    the new mounts[] array.
 
     for body in bot.all_bodies:
         if body.kind != BodyKind.PURCHASED:
             continue
 
-        # Derive category and extra fields from body name / component
+        comp = body.component
+
         if body.name.startswith("servo_"):
             joint_name = body.name[len("servo_") :]
-            comp = body.component
-            part_entry = {
-                "id": body.name,
-                "name": comp.name if comp else body.name,
-                "kind": "purchased",
-                "category": "servo",
-                "parent_body": body.parent_body_name,
-                "joint": joint_name,
-                "mesh": body.mesh_file,
-                "pos": _round_vec(body.world_pos),
-                "quat": _round_vec(body.world_quat),
-                "mass": round(comp.mass, 4) if comp else 0.0,
-                "shapescript_component": comp.name if comp else body.name,
-            }
-            manifest["parts"].append(part_entry)
+            manifest["bodies"].append(
+                {
+                    "name": body.name,
+                    "mesh": body.mesh_file,
+                    "role": "component",
+                    "component": comp.name if comp else body.name,
+                    "parent": body.parent_body_name,
+                    "category": "servo",
+                    "joint": joint_name,
+                    "pos": _round_vec(body.world_pos),
+                    "quat": _round_vec(body.world_quat),
+                    "mass": round(comp.mass, 4) if comp else 0.0,
+                    "color": list(comp.default_material.color)
+                    if comp and comp.default_material
+                    else None,
+                    "shapescript_component": comp.name if comp else body.name,
+                }
+            )
         elif body.name.startswith("horn_"):
             joint_name = body.name[len("horn_") :]
-            comp = body.component
-            part_entry = {
-                "id": body.name,
-                "name": "Horn disc",
-                "kind": "purchased",
-                "category": "horn",
-                "parent_body": body.parent_body_name,
-                "joint": joint_name,
-                "mesh": body.mesh_file,
-                "shapescript_component": f"horn:{comp.name}" if comp else body.name,
-            }
-            manifest["parts"].append(part_entry)
+            manifest["bodies"].append(
+                {
+                    "name": body.name,
+                    "mesh": body.mesh_file,
+                    "role": "component",
+                    "component": "Horn disc",
+                    "parent": body.parent_body_name,
+                    "category": "horn",
+                    "joint": joint_name,
+                    "pos": _round_vec(body.world_pos),
+                    "quat": _round_vec(body.world_quat),
+                    "color": list(comp.default_material.color)
+                    if comp and comp.default_material
+                    else None,
+                    "shapescript_component": f"horn:{comp.name}" if comp else body.name,
+                }
+            )
         elif body.name.startswith("comp_"):
-            comp = body.component
-            # Extract mount_label: body name is "comp_{parent}_{label}"
-            # parent_body_name is known, so strip "comp_{parent}_" prefix
+            # Mounted component — goes into mounts[]
             prefix = f"comp_{body.parent_body_name}_"
             mount_label = (
                 body.name[len(prefix) :] if body.name.startswith(prefix) else body.name
@@ -313,21 +481,22 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 if comp
                 else "component"
             )
-            part_entry = {
-                "id": body.name,
-                "name": comp.name if comp else body.name,
-                "kind": "purchased",
+            mount_entry = {
+                "body": body.parent_body_name,
+                "label": mount_label,
+                "component": comp.name if comp else body.name,
                 "category": category,
-                "parent_body": body.parent_body_name,
-                "mount_label": mount_label,
                 "mesh": body.mesh_file,
                 "pos": _round_vec(body.world_pos),
+                "quat": [1.0, 0.0, 0.0, 0.0],
                 "mass": round(comp.mass, 4) if comp else 0.0,
+                "color": list(comp.default_material.color)
+                if comp and comp.default_material
+                else None,
                 "shapescript_component": comp.name if comp else body.name,
             }
 
-            # Multi-material meshes: if this component has per-material
-            # programs, add a `meshes` array alongside the legacy `mesh`.
+            # Multi-material meshes
             if comp is not None:
                 mm_result = _get_multi_material_result(comp, mm_cache)
                 if mm_result is not None:
@@ -340,65 +509,56 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                             }
                         )
                     if meshes:
-                        part_entry["meshes"] = meshes
+                        mount_entry["meshes"] = meshes
 
-            manifest["parts"].append(part_entry)
+            manifest["mounts"].append(mount_entry)
 
     # 3. Fasteners at each joint (bracket screws + horn screws + rear horn screws)
     for body in bot.all_bodies:
         for joint in body.joints:
             servo = joint.servo
+            sq = joint.solved_servo_quat
+            sc = joint.solved_servo_center
+            bwp = body.world_pos
             for i, ear in enumerate(servo.mounting_ears):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_ear_{i}",
-                        "name": f"{fastener_key(ear)[0]} {fastener_key(ear)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(ear)}.stl",
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "ear", i, ear, sq, sc, bwp, body.name
+                    )
                 )
             for i, mp in enumerate(servo.horn_mounting_points):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_horn_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "horn", i, mp, sq, sc, bwp, body.name
+                    )
                 )
             for i, mp in enumerate(servo.rear_horn_mounting_points):
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{joint.name}_rear_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "joint": joint.name,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                    }
+                    _build_joint_fastener_entry(
+                        joint.name, "rear", i, mp, sq, sc, bwp, body.name
+                    )
                 )
 
     # 3b. Fasteners for mounted components
     for body in bot.all_bodies:
+        bwp = body.world_pos
         for mount in body.mounts:
+            rp = mount.resolved_pos
             for i, mp in enumerate(mount.component.mounting_points):
+                # Rotate mount point from component-local to body frame
+                rotated = mount.rotate_point(mp.pos)
+                fastener_pos = _round_vec(
+                    (
+                        bwp[0] + rp[0] + rotated[0],
+                        bwp[1] + rp[1] + rotated[1],
+                        bwp[2] + rp[2] + rotated[2],
+                    )
+                )
+                fastener_axis = tuple(mount.rotate_point(mp.axis))
                 manifest["parts"].append(
-                    {
-                        "id": f"fastener_{body.name}_{mount.label}_{i}",
-                        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-                        "kind": "purchased",
-                        "category": "fastener",
-                        "parent_body": body.name,
-                        "mount_label": mount.label,
-                        "mesh": f"{fastener_stl_stem(mp)}.stl",
-                    }
+                    _build_mount_fastener_entry(
+                        body.name, mount.label, i, mp, fastener_pos, fastener_axis
+                    )
                 )
 
     # 4. Wire segments
@@ -418,11 +578,99 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 }
             )
 
+    # 5. Wire stubs at connector sockets
+    _emit_wire_stubs(bot, manifest)
+
     # Build IK chains — find longest serial chains of hinge joints
     _build_ik_chains(bot, manifest)
 
+    return manifest
+
+
+def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
+    """Generate viewer_manifest.json in the bot's output directory."""
+    manifest = build_viewer_manifest(bot)
     out_path = output_dir / "viewer_manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
+    """Emit short wire stub entries at each component's WirePort.
+
+    Wire stubs are short cylinders (~25mm) extending from connector sockets
+    along the wire exit direction. They let the viewer show "there's a wire
+    here, does it collide?" without full cable routing.
+
+    Each stub is emitted as a proper part with pos/quat/mesh so the viewer
+    can render it the same way as any other part.
+    """
+    from botcad.geometry import rotation_between
+
+    for body in bot.all_bodies:
+        for mount in body.mounts:
+            comp = mount.component
+            for wp in comp.wire_ports:
+                if not wp.connector_type:
+                    continue
+
+                # Look up connector spec for wire exit direction
+                try:
+                    from botcad.connectors import connector_spec
+
+                    cspec = connector_spec(wp.connector_type)
+                except KeyError:
+                    log.debug(
+                        "Unknown connector_type %r on %s/%s, skipping wire stub",
+                        wp.connector_type,
+                        comp.name,
+                        wp.label,
+                    )
+                    continue
+
+                # Transform port position and exit direction from component-local
+                # to body-local frame:
+                #   1. Apply mount.rotate_point (handles rotate_z + face rotation)
+                #   2. Translate by mount.resolved_pos
+                rotated_pos = mount.rotate_point(wp.pos)
+                rp = mount.resolved_pos
+                body_pos = (
+                    rotated_pos[0] + rp[0],
+                    rotated_pos[1] + rp[1],
+                    rotated_pos[2] + rp[2],
+                )
+
+                # Direction is a vector (no translation), only rotation
+                body_dir = mount.rotate_point(cspec.wire_exit_direction)
+
+                # Quaternion aligning cylinder +Z to the wire exit direction
+                stub_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_dir))
+
+                # Position the stub center halfway along the 25mm length
+                half_len = 0.0125  # 25mm / 2
+                stub_center = (
+                    body_pos[0] + body_dir[0] * half_len,
+                    body_pos[1] + body_dir[1] * half_len,
+                    body_pos[2] + body_dir[2] * half_len,
+                )
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
+                        "name": wp.label,
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "stub",
+                        "parent_body": body.name,
+                        "mesh": "wire_stub.stl",
+                        "pos": _round_vec(stub_center),
+                        "quat": _round_vec(stub_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": _BUS_TYPE_COLORS.get(
+                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                        ),
+                    }
+                )
 
 
 def _build_ik_chains(bot: Bot, manifest: dict) -> None:

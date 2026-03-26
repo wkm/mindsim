@@ -27,7 +27,7 @@
     {
       "name": "base",
       "mesh": "base.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": null,
       "shape": "box",
       "dimensions": [
@@ -36,6 +36,23 @@
         0.05
       ],
       "mass": 0.171,
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
       "mounts": [
         {
           "label": "pi",
@@ -67,7 +84,7 @@
     {
       "name": "turntable",
       "mesh": "turntable.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "base",
       "shape": "box",
       "dimensions": [
@@ -76,12 +93,29 @@
         0.04
       ],
       "mass": 0.0893,
+      "pos": [
+        0.0,
+        0.0,
+        0.031
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
       "joint": "shoulder_pan"
     },
     {
       "name": "upper_arm",
       "mesh": "upper_arm.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "turntable",
       "shape": "tube",
       "dimensions": [
@@ -90,12 +124,29 @@
         0.1435
       ],
       "mass": 0.1029,
+      "pos": [
+        0.0,
+        0.0,
+        0.051
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.749,
+        0.8,
+        0.8392,
+        1.0
+      ],
       "joint": "shoulder_lift"
     },
     {
       "name": "forearm",
       "mesh": "forearm.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "upper_arm",
       "shape": "tube",
       "dimensions": [
@@ -104,12 +155,29 @@
         0.1625
       ],
       "mass": 0.096,
+      "pos": [
+        0.0,
+        0.0,
+        0.167
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.749,
+        0.8,
+        0.8392,
+        1.0
+      ],
       "joint": "elbow_flex"
     },
     {
       "name": "wrist",
       "mesh": "wrist.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "forearm",
       "shape": "box",
       "dimensions": [
@@ -118,12 +186,29 @@
         0.064
       ],
       "mass": 0.0865,
+      "pos": [
+        0.0,
+        0.0,
+        0.302
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
       "joint": "wrist_flex"
     },
     {
       "name": "wrist_roll",
       "mesh": "wrist_roll.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "wrist",
       "shape": "box",
       "dimensions": [
@@ -132,6 +217,23 @@
         0.037
       ],
       "mass": 0.074,
+      "pos": [
+        0.0,
+        0.0,
+        0.334
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
       "joint": "wrist_roll",
       "mounts": [
         {
@@ -155,7 +257,7 @@
     {
       "name": "jaw",
       "mesh": "jaw.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "wrist_roll",
       "shape": "jaw",
       "dimensions": [
@@ -164,7 +266,354 @@
         0.04
       ],
       "mass": 0.0135,
+      "pos": [
+        0.0,
+        0.0,
+        0.352
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
       "joint": "gripper"
+    },
+    {
+      "name": "servo_shoulder_pan",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "base",
+      "category": "servo",
+      "joint": "shoulder_pan",
+      "pos": [
+        -0.0125,
+        0.0,
+        0.015
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_shoulder_pan",
+      "mesh": "horn_shoulder_pan.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "base",
+      "category": "horn",
+      "joint": "shoulder_pan",
+      "pos": [
+        0.0,
+        0.0,
+        0.035
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_shoulder_lift",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "turntable",
+      "category": "servo",
+      "joint": "shoulder_lift",
+      "pos": [
+        -0.016,
+        0.0,
+        0.0635
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_shoulder_lift",
+      "mesh": "horn_shoulder_lift.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "turntable",
+      "category": "horn",
+      "joint": "shoulder_lift",
+      "pos": [
+        0.004,
+        0.0,
+        0.051
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_elbow_flex",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "upper_arm",
+      "category": "servo",
+      "joint": "elbow_flex",
+      "pos": [
+        -0.016,
+        0.0,
+        0.1795
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_elbow_flex",
+      "mesh": "horn_elbow_flex.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "upper_arm",
+      "category": "horn",
+      "joint": "elbow_flex",
+      "pos": [
+        0.004,
+        0.0,
+        0.167
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_wrist_flex",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "forearm",
+      "category": "servo",
+      "joint": "wrist_flex",
+      "pos": [
+        -0.016,
+        0.0,
+        0.3145
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_wrist_flex",
+      "mesh": "horn_wrist_flex.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "forearm",
+      "category": "horn",
+      "joint": "wrist_flex",
+      "pos": [
+        0.004,
+        0.0,
+        0.302
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_wrist_roll",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "wrist",
+      "category": "servo",
+      "joint": "wrist_roll",
+      "pos": [
+        -0.0125,
+        0.0,
+        0.318
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_wrist_roll",
+      "mesh": "horn_wrist_roll.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "wrist",
+      "category": "horn",
+      "joint": "wrist_roll",
+      "pos": [
+        0.0,
+        0.0,
+        0.338
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_gripper",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "wrist_roll",
+      "category": "servo",
+      "joint": "gripper",
+      "pos": [
+        -0.016,
+        0.0,
+        0.3645
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_gripper",
+      "mesh": "horn_gripper.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "wrist_roll",
+      "category": "horn",
+      "joint": "gripper",
+      "pos": [
+        0.004,
+        0.0,
+        0.352
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
     }
   ],
   "joints": [
@@ -198,7 +647,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_shoulder_pan.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_shoulder_pan.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_shoulder_pan.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_shoulder_pan.stl",
+          "parent_body": "base"
+        }
+      ]
     },
     {
       "name": "shoulder_lift",
@@ -230,7 +701,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_shoulder_lift.stl",
+          "parent_body": "turntable"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_shoulder_lift.stl",
+          "parent_body": "turntable"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_shoulder_lift.stl",
+          "parent_body": "turntable"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_shoulder_lift.stl",
+          "parent_body": "turntable"
+        }
+      ]
     },
     {
       "name": "elbow_flex",
@@ -262,7 +755,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_elbow_flex.stl",
+          "parent_body": "upper_arm"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_elbow_flex.stl",
+          "parent_body": "upper_arm"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_elbow_flex.stl",
+          "parent_body": "upper_arm"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_elbow_flex.stl",
+          "parent_body": "upper_arm"
+        }
+      ]
     },
     {
       "name": "wrist_flex",
@@ -294,7 +809,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_wrist_flex.stl",
+          "parent_body": "forearm"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_wrist_flex.stl",
+          "parent_body": "forearm"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_wrist_flex.stl",
+          "parent_body": "forearm"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_wrist_flex.stl",
+          "parent_body": "forearm"
+        }
+      ]
     },
     {
       "name": "wrist_roll",
@@ -326,7 +863,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_wrist_roll.stl",
+          "parent_body": "wrist"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_wrist_roll.stl",
+          "parent_body": "wrist"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_wrist_roll.stl",
+          "parent_body": "wrist"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_wrist_roll.stl",
+          "parent_body": "wrist"
+        }
+      ]
     },
     {
       "name": "gripper",
@@ -358,22 +917,42 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_gripper.stl",
+          "parent_body": "wrist_roll"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_gripper.stl",
+          "parent_body": "wrist_roll"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_gripper.stl",
+          "parent_body": "wrist_roll"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_gripper.stl",
+          "parent_body": "wrist_roll"
+        }
+      ]
     }
   ],
-  "parts": [
+  "mounts": [
     {
-      "id": "servo_shoulder_pan",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "base",
-      "joint": "shoulder_pan",
-      "mesh": "servo_STS3215.stl",
+      "body": "base",
+      "label": "pi",
+      "component": "RaspberryPiZero2W",
+      "category": "compute",
+      "mesh": "comp_base_pi.stl",
       "pos": [
-        -0.0125,
         0.0,
-        0.015
+        0.0,
+        0.0
       ],
       "quat": [
         1.0,
@@ -381,33 +960,13 @@
         0.0,
         0.0
       ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_shoulder_pan",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "base",
-      "joint": "shoulder_pan",
-      "mesh": "horn_shoulder_pan.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "comp_base_pi",
-      "name": "RaspberryPiZero2W",
-      "kind": "purchased",
-      "category": "compute",
-      "parent_body": "base",
-      "mount_label": "pi",
-      "mesh": "comp_base_pi.stl",
-      "pos": [
-        0.0,
-        0.0,
-        0.0
-      ],
       "mass": 0.01,
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
       "shapescript_component": "RaspberryPiZero2W",
       "meshes": [
         {
@@ -425,129 +984,15 @@
       ]
     },
     {
-      "id": "comp_base_battery",
-      "name": "LiPo2S-1000",
-      "kind": "purchased",
+      "body": "base",
+      "label": "battery",
+      "component": "LiPo2S-1000",
       "category": "battery",
-      "parent_body": "base",
-      "mount_label": "battery",
       "mesh": "comp_base_battery.stl",
       "pos": [
         0.0,
         0.0,
         -0.0158
-      ],
-      "mass": 0.055,
-      "shapescript_component": "LiPo2S-1000"
-    },
-    {
-      "id": "servo_shoulder_lift",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "turntable",
-      "joint": "shoulder_lift",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.0635
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_shoulder_lift",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "turntable",
-      "joint": "shoulder_lift",
-      "mesh": "horn_shoulder_lift.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "servo_elbow_flex",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "upper_arm",
-      "joint": "elbow_flex",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.1795
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_elbow_flex",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "upper_arm",
-      "joint": "elbow_flex",
-      "mesh": "horn_elbow_flex.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "servo_wrist_flex",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "forearm",
-      "joint": "wrist_flex",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.3145
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_wrist_flex",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "forearm",
-      "joint": "wrist_flex",
-      "mesh": "horn_wrist_flex.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "servo_wrist_roll",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "wrist",
-      "joint": "wrist_roll",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.0125,
-        0.0,
-        0.318
       ],
       "quat": [
         1.0,
@@ -556,64 +1001,38 @@
         0.0
       ],
       "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_wrist_roll",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "wrist",
-      "joint": "wrist_roll",
-      "mesh": "horn_wrist_roll.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "servo_gripper",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "wrist_roll",
-      "joint": "gripper",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.016,
-        0.0,
-        0.3645
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
       ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
+      "shapescript_component": "LiPo2S-1000"
     },
     {
-      "id": "horn_gripper",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "wrist_roll",
-      "joint": "gripper",
-      "mesh": "horn_gripper.stl",
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "comp_wrist_roll_camera",
-      "name": "PiCamera2",
-      "kind": "purchased",
+      "body": "wrist_roll",
+      "label": "camera",
+      "component": "PiCamera2",
       "category": "camera",
-      "parent_body": "wrist_roll",
-      "mount_label": "camera",
       "mesh": "comp_wrist_roll_camera.stl",
       "pos": [
         0.0,
         0.01295,
         0.334
       ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mass": 0.003,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
       "shapescript_component": "PiCamera2",
       "meshes": [
         {
@@ -629,7 +1048,9 @@
           "material": "nickel"
         }
       ]
-    },
+    }
+  ],
+  "parts": [
     {
       "id": "fastener_shoulder_pan_ear_0",
       "name": "M3 SHC",
@@ -637,7 +1058,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0045,
+        -0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_ear_1",
@@ -646,7 +1078,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0125,
+        -0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_ear_2",
@@ -655,7 +1098,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0045,
+        0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_ear_3",
@@ -664,7 +1118,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0125,
+        0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_ear_4",
@@ -673,7 +1138,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0295,
+        -0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_ear_5",
@@ -682,7 +1158,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0295,
+        0.01025,
+        -0.0025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_horn_0",
@@ -691,7 +1178,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.007,
+        0.0,
+        0.031
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_horn_1",
@@ -700,7 +1198,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.007,
+        0.0,
+        0.031
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_horn_2",
@@ -709,7 +1218,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.031
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_horn_3",
@@ -718,7 +1238,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.031
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_rear_0",
@@ -727,7 +1258,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.007,
+        0.0,
+        -0.001
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_rear_1",
@@ -736,7 +1278,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.007,
+        0.0,
+        -0.001
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_rear_2",
@@ -745,7 +1298,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        -0.001
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_pan_rear_3",
@@ -754,7 +1318,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "shoulder_pan",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        -0.001
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_0",
@@ -763,7 +1338,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.0465
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_1",
@@ -772,7 +1358,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.0635
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_2",
@@ -781,7 +1378,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.0465
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_3",
@@ -790,7 +1398,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.0635
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_4",
@@ -799,7 +1418,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.0805
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_ear_5",
@@ -808,7 +1438,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.0805
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_horn_0",
@@ -817,7 +1458,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.044
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_horn_1",
@@ -826,7 +1478,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.058
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_horn_2",
@@ -835,7 +1498,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.051
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_horn_3",
@@ -844,7 +1518,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.051
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_rear_0",
@@ -853,7 +1538,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.044
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_rear_1",
@@ -862,7 +1558,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.058
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_rear_2",
@@ -871,7 +1578,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.007,
+        0.051
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_shoulder_lift_rear_3",
@@ -880,7 +1598,18 @@
       "category": "fastener",
       "parent_body": "turntable",
       "joint": "shoulder_lift",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        -0.007,
+        0.051
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_0",
@@ -889,7 +1618,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.1625
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_1",
@@ -898,7 +1638,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.1795
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_2",
@@ -907,7 +1658,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.1625
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_3",
@@ -916,7 +1678,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.1795
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_4",
@@ -925,7 +1698,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.1965
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_ear_5",
@@ -934,7 +1718,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.1965
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_horn_0",
@@ -943,7 +1738,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.16
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_horn_1",
@@ -952,7 +1758,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.174
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_horn_2",
@@ -961,7 +1778,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.167
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_horn_3",
@@ -970,7 +1798,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.167
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_rear_0",
@@ -979,7 +1818,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.16
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_rear_1",
@@ -988,7 +1838,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.174
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_rear_2",
@@ -997,7 +1858,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.007,
+        0.167
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_elbow_flex_rear_3",
@@ -1006,7 +1878,18 @@
       "category": "fastener",
       "parent_body": "upper_arm",
       "joint": "elbow_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        -0.007,
+        0.167
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_0",
@@ -1015,7 +1898,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.2975
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_1",
@@ -1024,7 +1918,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.3145
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_2",
@@ -1033,7 +1938,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.2975
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_3",
@@ -1042,7 +1958,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.3145
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_4",
@@ -1051,7 +1978,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.3315
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_ear_5",
@@ -1060,7 +1998,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.3315
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_horn_0",
@@ -1069,7 +2018,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.295
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_horn_1",
@@ -1078,7 +2038,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.309
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_horn_2",
@@ -1087,7 +2058,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.302
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_horn_3",
@@ -1096,7 +2078,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.302
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_rear_0",
@@ -1105,7 +2098,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.295
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_rear_1",
@@ -1114,7 +2118,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.309
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_rear_2",
@@ -1123,7 +2138,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.007,
+        0.302
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_flex_rear_3",
@@ -1132,7 +2158,18 @@
       "category": "fastener",
       "parent_body": "forearm",
       "joint": "wrist_flex",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        -0.007,
+        0.302
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_0",
@@ -1141,7 +2178,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0045,
+        -0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_1",
@@ -1150,7 +2198,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0125,
+        -0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_2",
@@ -1159,7 +2218,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0045,
+        0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_3",
@@ -1168,7 +2238,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0125,
+        0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_4",
@@ -1177,7 +2258,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0295,
+        -0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_ear_5",
@@ -1186,7 +2278,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0295,
+        0.01025,
+        0.3005
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_horn_0",
@@ -1195,7 +2298,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.007,
+        0.0,
+        0.334
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_horn_1",
@@ -1204,7 +2318,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.007,
+        0.0,
+        0.334
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_horn_2",
@@ -1213,7 +2338,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.334
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_horn_3",
@@ -1222,7 +2358,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.334
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_rear_0",
@@ -1231,7 +2378,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.007,
+        0.0,
+        0.302
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_rear_1",
@@ -1240,7 +2398,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.007,
+        0.0,
+        0.302
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_rear_2",
@@ -1249,7 +2418,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.302
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_rear_3",
@@ -1258,7 +2438,18 @@
       "category": "fastener",
       "parent_body": "wrist",
       "joint": "wrist_roll",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.302
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_0",
@@ -1267,7 +2458,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.3475
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_1",
@@ -1276,7 +2478,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.3645
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_2",
@@ -1285,7 +2498,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.3475
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_3",
@@ -1294,7 +2518,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.3645
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_4",
@@ -1303,7 +2538,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        -0.01025,
+        0.3815
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_ear_5",
@@ -1312,7 +2558,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0335,
+        0.01025,
+        0.3815
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_horn_0",
@@ -1321,7 +2578,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.345
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_horn_1",
@@ -1330,7 +2598,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.359
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_horn_2",
@@ -1339,7 +2618,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        0.007,
+        0.352
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_horn_3",
@@ -1348,7 +2638,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0,
+        -0.007,
+        0.352
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_rear_0",
@@ -1357,7 +2658,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.345
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_rear_1",
@@ -1366,7 +2678,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.0,
+        0.359
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_rear_2",
@@ -1375,7 +2698,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        0.007,
+        0.352
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_gripper_rear_3",
@@ -1384,7 +2718,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "joint": "gripper",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.032,
+        -0.007,
+        0.352
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_0",
@@ -1393,7 +2738,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        -0.029,
+        -0.0115,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_1",
@@ -1402,7 +2758,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        0.029,
+        -0.0115,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_2",
@@ -1411,7 +2778,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        -0.029,
+        0.0115,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_3",
@@ -1420,7 +2798,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        0.029,
+        0.0115,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_camera_0",
@@ -1429,7 +2818,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.0105,
+        0.01295,
+        0.3435
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_camera_1",
@@ -1438,7 +2838,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0105,
+        0.01295,
+        0.3435
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_camera_2",
@@ -1447,7 +2858,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.0105,
+        0.01295,
+        0.331
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_wrist_roll_camera_3",
@@ -1456,7 +2878,18 @@
       "category": "fastener",
       "parent_body": "wrist_roll",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0105,
+        0.01295,
+        0.331
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "wire_servo_bus_base_0",
