@@ -11,19 +11,18 @@
  *   - Search input filters nodes by name (case-insensitive, debounced)
  *   - Category filter chips toggle visibility of node types
  *   - Collapsible sections with animated disclosure triangles (SVG chevrons)
- *   - Show/Hide/Isolate per tree node with eye and target icons
+ *   - Filled/empty circle visibility toggles (click to toggle, right-click to solo)
  *   - Indentation guides, hover highlights, selected state styling
  */
+
+import type { SceneTree } from './design-scene.ts';
+import type { ManifestIndex, ViewerManifest } from './manifest-types.ts';
+import { indexManifest } from './manifest-types.ts';
+import { groupFasteners, humanizeJointName } from './utils.ts';
 
 // ── SVG Icons ──
 
 const CHEVRON_RIGHT = `<svg viewBox="0 0 16 16" width="10" height="10"><path d="M6 3l5 5-5 5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-const EYE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 3C4.5 3 1.7 5.1 .5 8c1.2 2.9 4 5 7.5 5s6.3-2.1 7.5-5c-1.2-2.9-4-5-7.5-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z" fill="currentColor"/></svg>`;
-
-const EYE_OFF_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 2l12 12M8 3C4.5 3 1.7 5.1.5 8c.5 1.2 1.3 2.3 2.3 3.1M8 13c3.5 0 6.3-2.1 7.5-5-.5-1.2-1.3-2.3-2.3-3.1" stroke="currentColor" fill="none" stroke-width="1.5"/></svg>`;
-
-const TARGET_ICON = `<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6" stroke="currentColor" fill="none" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>`;
 
 const ICONS = {
   assembly: { symbol: '\u25b8', color: '#5C7080' }, // right triangle — gray
@@ -67,36 +66,33 @@ function iconTypeToCategory(iconType) {
 interface ComponentTreeOptions {
   onShapeScript?: (url: string) => void;
   onDoubleClick?: (nodeId: string, data: any) => void;
-  onToggleVisibility?: (bodyName: string, visible: boolean) => void;
-  onIsolate?: (bodyName: string) => void;
-  onShowAll?: () => void;
+  onToggleNodeHidden?: (nodeId: string) => void;
+  onSolo?: (nodeId: string) => void;
+  onUnsolo?: () => void;
 }
 
 export class ComponentTree {
   container: HTMLElement;
-  manifest: any;
-  onSelect: (nodeId: string, data: any) => void;
+  manifest: ViewerManifest;
+  onSelect: (nodeId: string, data: unknown) => void;
   onShapeScript: ((url: string) => void) | null;
-  onDoubleClick: ((nodeId: string, data: any) => void) | null;
-  onToggleVisibility: ((bodyName: string, visible: boolean) => void) | null;
-  onIsolate: ((bodyName: string) => void) | null;
-  onShowAll: (() => void) | null;
+  onDoubleClick: ((nodeId: string, data: unknown) => void) | null;
+  onToggleNodeHidden: ((nodeId: string) => void) | null;
+  onSolo: ((nodeId: string) => void) | null;
+  onUnsolo: (() => void) | null;
   focusedNodeId: string | null;
   _filters: Record<string, boolean>;
   _searchQuery: string;
   _searchTimeout: ReturnType<typeof setTimeout> | null;
   _searchInput: HTMLInputElement | null;
   _treeRoot: HTMLDivElement | null;
-  bodiesByName: Record<string, any>;
-  jointsByName: Record<string, any>;
-  childJointsOf: Record<string, any[]>;
-  partsByBody: Record<string, any[]>;
-  partsByJoint: Record<string, any[]>;
+  _idx: ManifestIndex;
+  _escapeHandler: ((e: KeyboardEvent) => void) | null;
 
   constructor(
     container: HTMLElement,
-    manifest: any,
-    onSelect: (nodeId: string, data: any) => void,
+    manifest: ViewerManifest,
+    onSelect: (nodeId: string, data: unknown) => void,
     options: ComponentTreeOptions = {},
   ) {
     this.container = container;
@@ -104,10 +100,16 @@ export class ComponentTree {
     this.onSelect = onSelect;
     this.onShapeScript = options.onShapeScript || null;
     this.onDoubleClick = options.onDoubleClick || null;
-    this.onToggleVisibility = options.onToggleVisibility || null;
-    this.onIsolate = options.onIsolate || null;
-    this.onShowAll = options.onShowAll || null;
+    this.onToggleNodeHidden = options.onToggleNodeHidden || null;
+    this.onSolo = options.onSolo || null;
+    this.onUnsolo = options.onUnsolo || null;
     this.focusedNodeId = null;
+
+    // Escape key un-solos — store reference so we can remove it in dispose()
+    this._escapeHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.onUnsolo) this.onUnsolo();
+    };
+    document.addEventListener('keydown', this._escapeHandler);
 
     // Category filter state
     this._filters = {
@@ -122,31 +124,15 @@ export class ComponentTree {
     this._searchQuery = '';
     this._searchTimeout = null;
 
-    // Index bodies and joints by name for lookup
-    this.bodiesByName = {};
-    for (const b of manifest.bodies) this.bodiesByName[b.name] = b;
-    this.jointsByName = {};
-    for (const j of manifest.joints) this.jointsByName[j.name] = j;
+    // Build shared manifest index
+    this._idx = indexManifest(manifest);
+  }
 
-    // Build parent->children map for joints
-    this.childJointsOf = {}; // bodyName -> [joint]
-    for (const j of manifest.joints) {
-      if (!this.childJointsOf[j.parent_body]) this.childJointsOf[j.parent_body] = [];
-      this.childJointsOf[j.parent_body].push(j);
-    }
-
-    // Index parts by parent_body
-    this.partsByBody = {}; // bodyName -> [part]
-    this.partsByJoint = {}; // jointName -> [part]
-    for (const p of manifest.parts || []) {
-      const bodyName = p.parent_body;
-      if (!this.partsByBody[bodyName]) this.partsByBody[bodyName] = [];
-      this.partsByBody[bodyName].push(p);
-
-      if (p.joint) {
-        if (!this.partsByJoint[p.joint]) this.partsByJoint[p.joint] = [];
-        this.partsByJoint[p.joint].push(p);
-      }
+  /** Remove event listeners to prevent leaks. */
+  dispose(): void {
+    if (this._escapeHandler) {
+      document.removeEventListener('keydown', this._escapeHandler);
+      this._escapeHandler = null;
     }
   }
 
@@ -164,16 +150,11 @@ export class ComponentTree {
     this._treeRoot.className = 'tree-root';
     this.container.appendChild(this._treeRoot);
 
-    const assemblies = this.manifest.assemblies;
-    if (assemblies && assemblies.length > 0) {
-      for (const asm of assemblies) {
-        this._treeRoot.appendChild(this._buildAssemblyNode(asm));
-      }
-    } else {
-      const root = this.manifest.bodies.find((b) => b.parent === null);
-      if (!root) return;
-      this._treeRoot.appendChild(this._buildBodyNode(root));
-    }
+    // Auto-generate assemblies from kinematic structure
+    const rootBody = this.manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
+    if (!rootBody) return;
+    const autoAsm = this._buildAutoAssemblyFromKinematics(rootBody);
+    this._treeRoot.appendChild(autoAsm);
 
     // Apply initial filter state (hide fasteners + wires by default)
     this._applyFilters();
@@ -224,16 +205,6 @@ export class ComponentTree {
     searchWrap.appendChild(clearBtn);
     topRow.appendChild(searchWrap);
 
-    // Show All button
-    const showAllBtn = document.createElement('button');
-    showAllBtn.className = 'tree-show-all-btn';
-    showAllBtn.textContent = 'Show All';
-    showAllBtn.title = 'Reset visibility — show all bodies';
-    showAllBtn.addEventListener('click', () => {
-      if (this.onShowAll) this.onShowAll();
-    });
-    topRow.appendChild(showAllBtn);
-
     toolbar.appendChild(topRow);
 
     // Category filter chips
@@ -280,6 +251,7 @@ export class ComponentTree {
   _resolveBodyName(nodeId, data) {
     const [type, ...rest] = nodeId.split(':');
     if (type === 'body') return rest[0];
+    if (type === 'mount') return rest[0]; // mount:{bodyName}:{label}
     if (type === 'joint') return data?.parent_body;
     if (type === 'part' || type === 'fastener-group' || type === 'wire-group') return data?.parent_body;
     if (type === 'assembly') {
@@ -291,32 +263,38 @@ export class ComponentTree {
   }
 
   /**
-   * Update tree node styling based on external visibility state.
-   * Called by ExploreMode after syncScene() with the current state from BotScene.
+   * Update tree node styling from a SceneTree visibility model.
    *
-   * @param hiddenBodies - set of body names that are currently hidden
-   * @param isolatedBodies - set of body names that are currently isolated
+   * Three visual states per node:
+   *   - Visible (own hidden=false, all ancestors visible):
+   *       dot = filled blue, row full opacity
+   *   - Explicitly hidden (own hidden=true):
+   *       dot = empty circle, row dimmed
+   *   - Implicitly hidden (own hidden=false but an ancestor is hidden):
+   *       dot = filled blue (shows it will reappear when ancestor is unhidden),
+   *       row dimmed
    */
-  updateVisualState(hiddenBodies: Set<string>, isolatedBodies: Set<string>): void {
-    if (!this._treeRoot) return;
-    const bodyNodes = this._treeRoot.querySelectorAll<HTMLElement>('.tree-node[data-body-name]');
-    for (const node of bodyNodes) {
-      const name = node.dataset.bodyName;
-      const hidden = hiddenBodies.has(name!);
-      node.classList.toggle('body-hidden', hidden);
+  updateFromDesignScene(tree: SceneTree): void {
+    const allNodes = this._treeRoot?.querySelectorAll<HTMLElement>('.tree-node[data-node-id]');
+    if (!allNodes) return;
+    for (const domNode of allNodes) {
+      const nodeId = domNode.dataset.nodeId!;
+      const node = tree.getNode(nodeId);
+      if (!node) continue;
 
-      // Update eye icon within this node's header
-      const eyeBtn = node.querySelector(':scope > .tree-node-header .tree-vis-eye') as HTMLElement | null;
-      if (eyeBtn) {
-        eyeBtn.innerHTML = hidden ? EYE_OFF_ICON : EYE_ICON;
-        eyeBtn.title = hidden ? 'Show body' : 'Hide body';
+      const ownHidden = node.hidden;
+      const effectivelyVisible = tree.resolveVisibility(nodeId);
+
+      const dot = domNode.querySelector('.vis-dot') as HTMLElement;
+      if (dot) {
+        // Dot shows OWN state: filled blue if not hidden, empty circle if hidden
+        dot.style.background = ownHidden ? 'transparent' : '#58a6ff';
+        dot.style.border = ownHidden ? '2px solid #484f58' : 'none';
+        dot.style.boxSizing = 'border-box';
       }
 
-      // Update target icon state
-      const targetBtn = node.querySelector(':scope > .tree-node-header .tree-vis-target');
-      if (targetBtn) {
-        targetBtn.classList.toggle('isolated', isolatedBodies.has(name!));
-      }
+      // Row opacity shows EFFECTIVE visibility (considers ancestors + solo)
+      domNode.style.opacity = effectivelyVisible ? '1' : '0.45';
     }
   }
 
@@ -402,233 +380,203 @@ export class ComponentTree {
 
   // ── Node builders ──
 
-  _buildAssemblyNode(asm) {
-    const nodeId = `assembly:${asm.path || asm.name}`;
-    const bodyNames = asm.bodies || [];
-    const subAsms = asm.sub_assemblies || [];
-    const hasChildren = bodyNames.length > 0 || subAsms.length > 0;
+  /**
+   * Auto-generate an assembly tree from kinematic structure when no
+   * manifest.assemblies are defined. Bodies never contain sub-bodies;
+   * each joint creates a sub-assembly.
+   */
+  _buildAutoAssemblyFromKinematics(rootBody) {
+    const botName = this.manifest.bot_name;
+    const asmLabel = `${humanizeJointName(botName)} Assembly`;
+    const nodeId = `assembly:${botName}`;
+    const data = { name: asmLabel, _type: 'assembly' };
 
-    const data = { ...asm, _type: 'assembly' };
-    const node = this._createNode(nodeId, `${asm.name}`, 'assembly', data, hasChildren, null, { startExpanded: true });
+    const childJoints = this._idx.childJointsOf[rootBody.name] || [];
+    const hasChildren = true; // root body always has at least the body node
 
-    if (hasChildren) {
-      const childrenEl = node.querySelector('.tree-node-children');
+    const node = this._createNode(nodeId, asmLabel, 'assembly', data, hasChildren, null, {
+      startExpanded: true,
+    });
+    const childrenEl = node.querySelector('.tree-node-children');
 
-      for (const sub of subAsms) {
-        childrenEl.appendChild(this._buildAssemblyNode(sub));
-      }
+    // Root body (flat, no recursive children)
+    childrenEl.appendChild(this._buildFlatBodyNode(rootBody));
 
-      const asmBodySet = new Set(bodyNames);
-      const rootBodies = bodyNames
-        .map((n) => this.bodiesByName[n])
-        .filter((b) => b && (b.parent === null || !asmBodySet.has(b.parent)));
+    // Mounted components on root body
+    this._appendMountedComponents(rootBody, childrenEl);
 
-      for (const body of rootBodies) {
-        childrenEl.appendChild(this._buildBodyNode(body, asmBodySet));
-      }
+    // Sub-assemblies from joints
+    for (const joint of childJoints) {
+      childrenEl.appendChild(this._buildJointAssemblyNode(joint));
     }
+
+    // Wire group for root body
+    this._appendWireGroup(rootBody, childrenEl);
 
     return node;
   }
 
-  _buildBodyNode(body, asmScope = null) {
+  /** Build a flat body node with no joint/servo children (those go in sub-assemblies). */
+  _buildFlatBodyNode(body) {
     const nodeId = `body:${body.name}`;
-    const parts = this.partsByBody[body.name] || [];
-    const childJoints = this.childJointsOf[body.name] || [];
-
-    const mountedComps = parts.filter(
-      (p) =>
-        p.category !== 'servo' &&
-        p.category !== 'horn' &&
-        p.category !== 'fastener' &&
-        p.category !== 'wire' &&
-        !p.joint,
-    );
-    const wires = parts.filter((p) => p.category === 'wire');
-
-    const servosByJoint = {};
-    for (const p of parts) {
-      if (p.joint && (p.category === 'servo' || p.category === 'horn' || p.category === 'fastener')) {
-        if (!servosByJoint[p.joint]) servosByJoint[p.joint] = [];
-        servosByJoint[p.joint].push(p);
-      }
-    }
-
-    const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
-
-    const hasChildren =
-      mountedComps.length > 0 ||
-      Object.keys(servosByJoint).length > 0 ||
-      wires.length > 0 ||
-      childJoints.length > 0 ||
-      mountFasteners.length > 0;
-
-    const labelText = body.name;
     const data = { ...body, _type: 'body' };
     const shapescriptUrl =
-      body.kind === 'fabricated'
+      body.role === 'structure'
         ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
         : null;
 
-    const node = this._createNode(nodeId, labelText, 'body', data, hasChildren, shapescriptUrl, {
-      startExpanded: true,
+    return this._createNode(nodeId, body.name, 'body', data, false, shapescriptUrl, {
       bodyName: body.name,
     });
+  }
 
-    if (hasChildren) {
-      const childrenEl = node.querySelector('.tree-node-children');
+  /** Append mounted component nodes from mounts[] to a parent element. */
+  _appendMountedComponents(body, parentEl) {
+    const bodyMounts = this._idx.mountsByBody[body.name] || [];
+    const parts = this._idx.partsByBody[body.name] || [];
+    const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
 
-      // 1. Mounted components
-      for (const comp of mountedComps) {
-        const compNodeId = `part:${comp.id}`;
-        const iconType = comp.category || 'mount';
-        const compData = { ...comp, _type: 'part' };
-        const compSsUrl = comp.shapescript_component
-          ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-          : null;
+    for (const mount of bodyMounts) {
+      const compNodeId = `mount:${mount.body}:${mount.label}`;
+      const iconType = mount.category || 'mount';
+      const compData = { ...mount, _type: 'mount' };
+      const compSsUrl = mount.shapescript_component
+        ? `?cadsteps=component:${encodeURIComponent(mount.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+        : null;
 
-        const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
-        const hasCompChildren = compFasteners.length > 0;
+      const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
+      const hasCompChildren = compFasteners.length > 0;
 
-        const compNode = this._createNode(compNodeId, comp.name, iconType, compData, hasCompChildren, compSsUrl, {
-          startExpanded: false,
-          bodyName: body.name,
-        });
-        if (hasCompChildren) {
-          const compChildrenEl = compNode.querySelector('.tree-node-children');
-          const grouped = this._groupFasteners(compFasteners);
-          for (const group of grouped) {
-            const fNodeId = `fastener-group:${comp.id}:${group.key}`;
-            const fData = { ...group, _type: 'fastener-group' };
-            const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
-              bodyName: body.name,
-            });
-            compChildrenEl.appendChild(fNode);
-          }
-        }
-        childrenEl.appendChild(compNode);
-      }
-
-      // 2. Servo groups per joint
-      for (const joint of childJoints) {
-        const jointParts = servosByJoint[joint.name] || [];
-        const servos = jointParts.filter((p) => p.category === 'servo');
-        const horns = jointParts.filter((p) => p.category === 'horn');
-        const fasteners = jointParts.filter((p) => p.category === 'fastener');
-
-        for (const servo of servos) {
-          const servoNodeId = `part:${servo.id}`;
-          const servoLabel = `${servo.name} @ ${joint.name}`;
-          const servoData = { ...servo, _type: 'part', servo_specs: joint.servo_specs };
-          const servoSsUrl = servo.shapescript_component
-            ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-            : null;
-          const servoHasChildren = horns.length > 0 || fasteners.length > 0;
-          const servoNode = this._createNode(
-            servoNodeId,
-            servoLabel,
-            'servo',
-            servoData,
-            servoHasChildren,
-            servoSsUrl,
-            { startExpanded: true, bodyName: body.name },
-          );
-
-          if (servoHasChildren) {
-            const servoChildrenEl = servoNode.querySelector('.tree-node-children');
-
-            for (const horn of horns) {
-              const hornNodeId = `part:${horn.id}`;
-              const hornData = { ...horn, _type: 'part' };
-              const hornSsUrl = horn.shapescript_component
-                ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
-                : null;
-              const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl, {
-                bodyName: body.name,
-              });
-              servoChildrenEl.appendChild(hornNode);
-            }
-
-            const grouped = this._groupFasteners(fasteners);
-            for (const group of grouped) {
-              const fNodeId = `fastener-group:${joint.name}:${group.key}`;
-              const fData = { ...group, _type: 'fastener-group' };
-              const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
-                bodyName: body.name,
-              });
-              servoChildrenEl.appendChild(fNode);
-            }
-          }
-
-          childrenEl.appendChild(servoNode);
-        }
-
-        // Joint node -> child body
-        const jointNodeId = `joint:${joint.name}`;
-        const jointData = { ...joint, _type: 'joint' };
-        const childBody = this.bodiesByName[joint.child_body];
-        const hasJointChild = !!childBody;
-        const jointNode = this._createNode(jointNodeId, `${joint.name}`, 'joint', jointData, hasJointChild, null, {
-          startExpanded: true,
-          bodyName: body.name,
-        });
-
-        // Add arrow indicator
-        const header = jointNode.querySelector('.tree-node-header');
-        const arrow = document.createElement('span');
-        arrow.className = 'tree-joint-arrow';
-        arrow.textContent = '\u2192';
-        header.appendChild(arrow);
-
-        if (hasJointChild) {
-          const jointChildrenEl = jointNode.querySelector('.tree-node-children');
-          jointChildrenEl.appendChild(this._buildBodyNode(childBody, asmScope));
-        }
-
-        childrenEl.appendChild(jointNode);
-      }
-
-      // 3. Wires (collapsible group, collapsed by default)
-      if (wires.length > 0) {
-        const wireGroupId = `wire-group:${body.name}`;
-        const wireGroupData = { wires, _type: 'wire-group', parent_body: body.name };
-        const wireGroupNode = this._createNode(wireGroupId, `Wires`, 'wire', wireGroupData, true, null, {
-          startExpanded: false,
-          countBadge: wires.length,
-          bodyName: body.name,
-        });
-
-        const wireChildrenEl = wireGroupNode.querySelector('.tree-node-children');
-        for (const wire of wires) {
-          const wireNodeId = `part:${wire.id}`;
-          const wireData = { ...wire, _type: 'part' };
-          const wireNode = this._createNode(wireNodeId, wire.name, 'wire', wireData, false, null, {
+      const compNode = this._createNode(compNodeId, mount.component, iconType, compData, hasCompChildren, compSsUrl, {
+        startExpanded: false,
+        bodyName: body.name,
+      });
+      if (hasCompChildren) {
+        const compChildrenEl = compNode.querySelector('.tree-node-children');
+        const grouped = groupFasteners(compFasteners);
+        for (const group of grouped) {
+          const fNodeId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
+          const fData = { ...group, _type: 'fastener-group' };
+          const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
             bodyName: body.name,
           });
-          wireChildrenEl.appendChild(wireNode);
+          compChildrenEl.appendChild(fNode);
         }
-        childrenEl.appendChild(wireGroupNode);
       }
+      parentEl.appendChild(compNode);
+    }
+  }
+
+  /** Append wire group node for a body to the parent element. */
+  _appendWireGroup(body, parentEl) {
+    const parts = this._idx.partsByBody[body.name] || [];
+    const wires = parts.filter((p) => p.category === 'wire');
+    if (wires.length > 0) {
+      const wireGroupId = `wire-group:${body.name}`;
+      const wireGroupData = { wires, _type: 'wire-group', parent_body: body.name };
+      const wireGroupNode = this._createNode(wireGroupId, `Wires`, 'wire', wireGroupData, true, null, {
+        startExpanded: false,
+        countBadge: `${wires.length} segments`,
+        bodyName: body.name,
+      });
+
+      const wireChildrenEl = wireGroupNode.querySelector('.tree-node-children');
+      for (const wire of wires) {
+        const wireNodeId = `part:${wire.id}`;
+        const wireData = { ...wire, _type: 'part' };
+        const wireNode = this._createNode(wireNodeId, wire.name, 'wire', wireData, false, null, {
+          bodyName: body.name,
+        });
+        wireChildrenEl.appendChild(wireNode);
+      }
+      parentEl.appendChild(wireGroupNode);
+    }
+  }
+
+  /** Build a sub-assembly from a joint: servo + joint node + child body + child components + recurse. */
+  _buildJointAssemblyNode(joint) {
+    const asmId = `assembly:joint:${joint.name}`;
+    const asmLabel = humanizeJointName(joint.name);
+    const data = { ...joint, _type: 'assembly' };
+
+    const node = this._createNode(asmId, asmLabel, 'assembly', data, true, null, {
+      startExpanded: true,
+    });
+    const childrenEl = node.querySelector('.tree-node-children');
+
+    // Servo and horn component bodies from bodies[] (role="component")
+    const servos = this._idx.servosByJoint[joint.name] || [];
+    const horns = this._idx.hornsByJoint[joint.name] || [];
+    // Fasteners still come from parts[]
+    const jointParts = this._idx.partsByJoint[joint.name] || [];
+    const fasteners = jointParts.filter((p) => p.category === 'fastener');
+
+    for (const servo of servos) {
+      const servoNodeId = `body:${servo.name}`;
+      const servoLabel = `${servo.component ?? servo.name} @ ${joint.name}`;
+      const servoData = { ...servo, _type: 'component-body', servo_specs: joint.servo_specs };
+      const servoSsUrl = servo.shapescript_component
+        ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+        : null;
+      const servoHasChildren = horns.length > 0 || fasteners.length > 0;
+      const servoNode = this._createNode(servoNodeId, servoLabel, 'servo', servoData, servoHasChildren, servoSsUrl, {
+        startExpanded: true,
+        bodyName: joint.parent_body,
+      });
+
+      if (servoHasChildren) {
+        const servoChildrenEl = servoNode.querySelector('.tree-node-children');
+
+        for (const horn of horns) {
+          const hornNodeId = `body:${horn.name}`;
+          const hornData = { ...horn, _type: 'component-body' };
+          const hornSsUrl = horn.shapescript_component
+            ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+            : null;
+          const hornNode = this._createNode(
+            hornNodeId,
+            horn.component ?? 'Horn disc',
+            'horn',
+            hornData,
+            false,
+            hornSsUrl,
+            {
+              bodyName: joint.parent_body,
+            },
+          );
+          servoChildrenEl.appendChild(hornNode);
+        }
+
+        const grouped = groupFasteners(fasteners);
+        for (const group of grouped) {
+          const fNodeId = `fastener-group:${joint.name}:${group.key}`;
+          const fData = { ...group, _type: 'fastener-group' };
+          const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
+            bodyName: joint.parent_body,
+          });
+          servoChildrenEl.appendChild(fNode);
+        }
+      }
+
+      childrenEl.appendChild(servoNode);
+    }
+
+    // Child body + its components
+    const childBody = this._idx.bodiesByName[joint.child_body];
+    if (childBody) {
+      childrenEl.appendChild(this._buildFlatBodyNode(childBody));
+      this._appendMountedComponents(childBody, childrenEl);
+
+      // Recurse: joints from the child body create nested sub-assemblies
+      const childJoints = this._idx.childJointsOf[childBody.name] || [];
+      for (const childJoint of childJoints) {
+        childrenEl.appendChild(this._buildJointAssemblyNode(childJoint));
+      }
+
+      this._appendWireGroup(childBody, childrenEl);
     }
 
     return node;
-  }
-
-  /**
-   * Group identical fasteners: "4x M2 SHC" instead of 4 separate nodes.
-   */
-  _groupFasteners(fasteners: any[]): any[] {
-    const groups: Record<string, any> = {};
-    for (const f of fasteners) {
-      const key = f.name;
-      if (!groups[key]) groups[key] = { key, name: f.name, count: 0, items: [] };
-      groups[key].count++;
-      groups[key].items.push(f);
-    }
-    return Object.values(groups).map((g: any) => ({
-      ...g,
-      label: g.count > 1 ? `${g.count}\u00d7 ${g.name}` : g.name,
-    }));
   }
 
   _createNode(
@@ -652,7 +600,7 @@ export class ComponentTree {
     const header = document.createElement('div');
     header.className = 'tree-node-header';
 
-    // Chevron (SVG disclosure triangle) — only for collapsible nodes
+    // Chevron (SVG disclosure triangle) or spacer for alignment
     if (hasChildren) {
       const chevron = document.createElement('span');
       chevron.className = 'tree-chevron';
@@ -668,6 +616,11 @@ export class ComponentTree {
       };
       chevron.addEventListener('click', toggleFn);
       header.appendChild(chevron);
+    } else {
+      // Spacer matching chevron width so siblings align regardless of children
+      const spacer = document.createElement('span');
+      spacer.className = 'tree-chevron-spacer';
+      header.appendChild(spacer);
     }
 
     // Category color dot
@@ -691,45 +644,7 @@ export class ComponentTree {
       header.appendChild(badge);
     }
 
-    // Visibility action icons (hover-visible, right-aligned)
-    if (bodyName) {
-      const actions = document.createElement('span');
-      actions.className = 'tree-vis-actions';
-
-      // Eye toggle
-      const eyeBtn = document.createElement('span');
-      eyeBtn.className = 'tree-vis-eye';
-      eyeBtn.innerHTML = EYE_ICON;
-      eyeBtn.title = 'Hide body';
-      eyeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // Determine current visibility from DOM state
-        const isHidden = node.classList.contains('body-hidden');
-        if (this.onToggleVisibility) this.onToggleVisibility(bodyName, isHidden);
-      });
-      actions.appendChild(eyeBtn);
-
-      // Isolate target
-      const targetBtn = document.createElement('span');
-      targetBtn.className = 'tree-vis-target';
-      targetBtn.innerHTML = TARGET_ICON;
-      targetBtn.title = 'Isolate body';
-      targetBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        // Check if already isolated via DOM state
-        const isIsolated = targetBtn.classList.contains('isolated');
-        if (isIsolated) {
-          if (this.onShowAll) this.onShowAll();
-        } else {
-          if (this.onIsolate) this.onIsolate(bodyName);
-        }
-      });
-      actions.appendChild(targetBtn);
-
-      header.appendChild(actions);
-    }
-
-    // ShapeScript code icon (right-aligned, visible on hover)
+    // ShapeScript code icon (visible on hover, before vis-dot)
     if (shapescriptUrl) {
       const codeBtn = document.createElement('span');
       codeBtn.className = 'tree-code-icon';
@@ -741,6 +656,25 @@ export class ComponentTree {
         else window.location.href = shapescriptUrl;
       });
       header.appendChild(codeBtn);
+    }
+
+    // Visibility dot indicator (always last, right-aligned via margin-left:auto)
+    {
+      const visDot = document.createElement('span');
+      visDot.className = 'vis-dot';
+      visDot.title = 'Toggle visibility';
+      visDot.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.onToggleNodeHidden) this.onToggleNodeHidden(nodeId);
+      });
+      header.appendChild(visDot);
+
+      // Right-click to solo
+      header.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.onSolo) this.onSolo(nodeId);
+      });
     }
 
     // Click header to select (also toggles if has children)
@@ -829,17 +763,6 @@ export class ComponentTree {
       }
       .tree-search-clear:hover { background: var(--secondary); color: var(--foreground); }
 
-      /* Show All button */
-      .tree-show-all-btn {
-        height: 28px; padding: 0 10px;
-        border: 1px solid var(--border); border-radius: var(--radius-sm);
-        font-family: var(--font); font-size: 11px; font-weight: 500;
-        color: var(--muted-fg); background: var(--card);
-        cursor: pointer; transition: all 0.15s; outline: none;
-        white-space: nowrap; flex-shrink: 0;
-      }
-      .tree-show-all-btn:hover { background: var(--secondary); color: var(--foreground); border-color: var(--gray3); }
-
       /* ── Category filter chips ── */
       .tree-filter-bar {
         display: flex; flex-wrap: wrap; gap: 4px;
@@ -866,11 +789,11 @@ export class ComponentTree {
       /* ── Tree nodes ── */
       .tree-node { }
       .tree-node.search-hidden { display: none; }
-      .tree-node.body-hidden > .tree-node-header { opacity: 0.4; }
+      /* Node opacity controlled inline by updateFromDesignScene */
 
       .tree-node-header {
         display: flex; align-items: center; gap: 4px;
-        padding: 3px 6px; border-radius: 4px; cursor: pointer;
+        padding: 3px 28px 3px 6px; border-radius: 4px; cursor: pointer;
         font-size: 12px; color: var(--dark5);
         transition: background 0.1s;
         position: relative;
@@ -895,6 +818,10 @@ export class ComponentTree {
         transform: rotate(90deg);
       }
       .tree-chevron:hover { color: var(--gray1); }
+      .tree-chevron-spacer {
+        width: 14px; height: 14px; flex-shrink: 0;
+        display: inline-flex;
+      }
 
       /* Category color dot */
       .tree-cat-dot {
@@ -915,30 +842,15 @@ export class ComponentTree {
         line-height: 16px; flex-shrink: 0;
       }
 
-      /* Joint arrow */
-      .tree-joint-arrow {
-        color: var(--gray3); font-size: 11px; margin-left: 2px; flex-shrink: 0;
+      /* ── Visibility dot indicator (absolutely positioned at right edge) ── */
+      .vis-dot {
+        width: 12px; height: 12px; border-radius: 50%;
+        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+        cursor: pointer; background: #58a6ff;
+        box-sizing: border-box;
+        transition: background 0.15s, border 0.15s;
       }
-
-      /* ── Visibility action icons (hover-visible) ── */
-      .tree-vis-actions {
-        display: inline-flex; align-items: center; gap: 2px;
-        margin-left: auto; flex-shrink: 0;
-        opacity: 0; transition: opacity 0.15s;
-      }
-      .tree-node-header:hover .tree-vis-actions { opacity: 1; }
-      /* Always show actions when body is hidden or isolated */
-      .tree-node.body-hidden > .tree-node-header .tree-vis-actions { opacity: 1; }
-
-      .tree-vis-eye, .tree-vis-target {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 20px; height: 20px; border-radius: 3px;
-        color: var(--gray3); cursor: pointer;
-        transition: color 0.1s, background 0.1s;
-      }
-      .tree-vis-eye:hover { color: var(--foreground); background: rgba(206,217,224,0.4); }
-      .tree-vis-target:hover { color: var(--primary); background: rgba(19,124,189,0.1); }
-      .tree-vis-target.isolated { color: var(--primary); background: rgba(19,124,189,0.15); }
+      .vis-dot:hover { opacity: 0.7; }
 
       /* Code icon (right-aligned, hover-visible) */
       .tree-code-icon {

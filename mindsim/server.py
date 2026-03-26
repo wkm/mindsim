@@ -338,6 +338,71 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
     return stl_bytes
 
 
+def _generate_design_layer_mesh(joint, layer_kind: str) -> bytes | None:
+    """Generate STL bytes for a design layer solid in body-local frame.
+
+    Builds the bracket/coupler/clearance/insertion solid in servo-local frame,
+    then applies the servo placement transform to get body-local coordinates.
+    """
+    from build123d import Location
+
+    from botcad.bracket import BracketSpec
+    from botcad.geometry import quat_to_euler
+    from botcad.skeleton import BracketStyle
+
+    servo = joint.servo
+    spec = BracketSpec()
+
+    # Build solid in servo-local frame
+    solid = None
+    if layer_kind == "bracket":
+        if joint.bracket_style is BracketStyle.COUPLER:
+            from botcad.bracket import cradle_solid_solid
+
+            solid = cradle_solid_solid(servo, spec)
+        else:
+            from botcad.bracket import bracket_solid_solid
+
+            solid = bracket_solid_solid(servo, spec)
+    elif layer_kind == "coupler":
+        from botcad.bracket import coupler_solid_solid
+
+        raw = coupler_solid_solid(servo, spec)
+        if raw is not None:
+            # Coupler is built in shaft-centered frame; shift to servo-local
+            # frame by applying shaft_offset.
+            sx, sy, sz = servo.shaft_offset
+            solid = raw.moved(Location((sx, sy, sz)))
+    elif layer_kind == "clearance":
+        if joint.bracket_style is BracketStyle.COUPLER:
+            from botcad.bracket import cradle_insertion_channel_solid
+
+            solid = cradle_insertion_channel_solid(servo, spec)
+        else:
+            from botcad.bracket import bracket_insertion_channel_solid
+
+            solid = bracket_insertion_channel_solid(servo, spec)
+    elif layer_kind == "insertion":
+        if joint.bracket_style is BracketStyle.COUPLER:
+            from botcad.bracket import cradle_insertion_channel_solid
+
+            solid = cradle_insertion_channel_solid(servo, spec)
+        else:
+            from botcad.bracket import bracket_insertion_channel_solid
+
+            solid = bracket_insertion_channel_solid(servo, spec)
+
+    if solid is None:
+        return None
+
+    # Transform from servo-local frame to body-local frame using .moved()
+    center = joint.solved_servo_center
+    euler = quat_to_euler(joint.solved_servo_quat)
+    solid = solid.moved(Location(center, euler))
+
+    return _solid_to_stl_bytes(solid)
+
+
 def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
     """Generate STL bytes for a named mesh in a bot's mesh directory.
 
@@ -407,6 +472,35 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
                 horn = _orient_z_to_axis(horn, joint.axis)
                 return _solid_to_stl_bytes(horn)
         return None
+
+    # Design layer meshes: bracket, coupler, clearance, insertion
+    # These are built in servo-local frame and transformed to body-local frame
+    # using the servo placement (solved_servo_center + solved_servo_quat).
+    for prefix, layer_kind in (
+        ("bracket_", "bracket"),
+        ("coupler_", "coupler"),
+        ("clearance_", "clearance"),
+        ("insertion_", "insertion"),
+    ):
+        if stem.startswith(prefix):
+            joint_name = stem.removeprefix(prefix)
+            for body in bot.all_bodies:
+                for joint in body.joints:
+                    if joint.name != joint_name:
+                        continue
+                    return _generate_design_layer_mesh(joint, layer_kind)
+            return None
+
+    # Wire stub mesh: shared cylinder for all wire stubs
+    if stem == "wire_stub":
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.program import ShapeScript
+
+        prog = ShapeScript()
+        stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
+        prog.output_ref = stub
+        result = OcctBackend().execute(prog)
+        return _solid_to_stl_bytes(result.shapes[stub.id])
 
     # Wire mesh: wire_{label}_{body}_{idx}
     if stem.startswith("wire_"):
@@ -701,6 +795,22 @@ async def render_svg(name: str, request: Request):
         raise HTTPException(500, f"SVG render failed: {e}")
 
     return Response(content=svg.encode("utf-8"), media_type="image/svg+xml")
+
+
+@app.get("/api/bots/{bot}/viewer_manifest")
+def get_viewer_manifest(bot: str):
+    """Serve viewer manifest on demand."""
+    try:
+        bot_obj, _cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Viewer manifest generation failed: {e}")
+
+    from botcad.emit.viewer import build_viewer_manifest
+
+    return build_viewer_manifest(bot_obj)
 
 
 @app.get("/api/bots/{bot}/bot.xml")

@@ -76,10 +76,26 @@ async function enhanceMultiMaterialParts(
   model: any,
 ): Promise<void> {
   const materials: Record<string, ManifestMaterial> = manifest.materials || {};
-  const parts: ManifestPart[] = manifest.parts || [];
 
-  // Find parts with multi-material meshes
-  const multiMaterialParts = parts.filter((p: ManifestPart) => p.meshes && p.meshes.length > 0);
+  // Multi-material meshes are now on mounts[] (mounted components).
+  // Build a unified list that has the fields this function needs: id, parent_body, meshes.
+  const mounts: any[] = manifest.mounts || [];
+  const multiMaterialParts: ManifestPart[] = mounts
+    .filter((m: any) => m.meshes && m.meshes.length > 0)
+    .map(
+      (m: any) =>
+        ({
+          id: `comp_${m.body}_${m.label}`,
+          parent_body: m.body,
+          meshes: m.meshes,
+        }) as ManifestPart,
+    );
+  // Also check legacy parts[] for backward compatibility
+  for (const p of (manifest.parts || []) as ManifestPart[]) {
+    if (p.meshes && p.meshes.length > 0) {
+      multiMaterialParts.push(p);
+    }
+  }
   if (multiMaterialParts.length === 0) return;
 
   // Build a name→bodyID lookup
@@ -186,7 +202,12 @@ async function enhanceMultiMaterialParts(
   }
 }
 
-export async function initBotViewer(botName: string) {
+export interface BotViewerHandle {
+  pause(): void;
+  resume(): void;
+}
+
+export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
   // ---------------------------------------------------------------------------
   // Globals shared across modes
   // ---------------------------------------------------------------------------
@@ -670,7 +691,10 @@ export async function initBotViewer(botName: string) {
     switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
+    let paused = false;
+
     viewport.animate(() => {
+      if (paused) return;
       initialFocus.update(); // drive initial camera animation
       if (currentMode?.update) currentMode.update();
     });
@@ -684,8 +708,23 @@ export async function initBotViewer(botName: string) {
         (modes.explore as ExploreMode).refocusCurrent();
       }
     });
+
+    return {
+      pause() {
+        paused = true;
+        // Deactivate current mode to clean up event listeners
+        if (currentMode) currentMode.deactivate();
+      },
+      resume() {
+        paused = false;
+        // Re-activate current mode
+        if (currentMode) currentMode.activate();
+        updateCanvasLayout();
+      },
+    };
   } catch (err) {
     console.error('Failed to initialize viewer:', err);
     document.getElementById('loading-text').textContent = `Error: ${err.message}`;
+    return { pause() {}, resume() {} };
   }
 }
