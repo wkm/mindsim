@@ -50,13 +50,13 @@ def check_inside_kernel(
 
 
 @wp.kernel
-def check_tag_kernel(
+def check_tag_sdf_kernel(
+    mesh: wp.uint64,
     bounds_lo: wp.vec3,
     dx: wp.vec3,
     res: wp.vec3i,
     mask: wp.array(dtype=int),
-    t_lo: wp.vec3,
-    t_hi: wp.vec3,
+    threshold: float,
 ):
     tid = wp.tid()
     iz = tid % res[2]
@@ -67,15 +67,17 @@ def check_tag_kernel(
         (float(ix) + 0.5) * dx[0], (float(iy) + 0.5) * dx[1], (float(iz) + 0.5) * dx[2]
     )
 
-    if (
-        p[0] >= t_lo[0]
-        and p[0] <= t_hi[0]
-        and p[1] >= t_lo[1]
-        and p[1] <= t_hi[1]
-        and p[2] >= t_lo[2]
-        and p[2] <= t_hi[2]
-    ):
-        mask[tid] = 1
+    # Use large max_dist to find interior voxels too (not just surface-near)
+    query = wp.mesh_query_point(mesh, p, 10.0)
+    if query.result:
+        # Inside the shape: always tag
+        if query.sign < 0.0:
+            mask[tid] = 1
+        else:
+            # Outside but within threshold of surface: tag (captures boundary voxels)
+            closest = wp.mesh_eval_position(mesh, query.face, query.u, query.v)
+            if wp.length(p - closest) <= threshold:
+                mask[tid] = 1
 
 
 def voxelize_solid(
@@ -115,31 +117,43 @@ def voxelize_solid(
     tag_masks = {}
     if tags and shapes:
         print(f"  Processing {len(tags._declarations)} tags...")
+        # Compute max voxel half-diagonal for proximity threshold
+        voxel_diag = float(np.sqrt(dx[0] ** 2 + dx[1] ** 2 + dx[2] ** 2)) * 0.5
+
         for tag_name in tags._declarations.keys():
             try:
-                print(f"    tag: {tag_name}")
                 ref = tags.source_ref(tag_name)
                 source_shape = shapes.get(ref.id)
                 if not source_shape:
                     continue
 
-                t_bb = source_shape.bounding_box()
+                # Tessellate tagged shape and create Warp mesh for SDF query
+                try:
+                    t_verts, t_faces = source_shape.tessellate(tolerance=0.001)
+                except Exception:
+                    continue
+                if len(t_verts) < 4 or len(t_faces) < 1:
+                    continue
+
+                t_verts_np = np.array(
+                    [(v.X, v.Y, v.Z) for v in t_verts], dtype=np.float32
+                )
+                t_faces_np = np.array(t_faces, dtype=np.int32)
+                t_wp_mesh = wp.Mesh(
+                    points=wp.array(t_verts_np, dtype=wp.vec3),
+                    indices=wp.array(t_faces_np.flatten(), dtype=int),
+                )
+
                 mask = wp.zeros(grid.cell_count(), dtype=int)
-
-                t_margin = 0.001
-                t_lo = wp.vec3(
-                    t_bb.min.X - t_margin, t_bb.min.Y - t_margin, t_bb.min.Z - t_margin
-                )
-                t_hi = wp.vec3(
-                    t_bb.max.X + t_margin, t_bb.max.Y + t_margin, t_bb.max.Z + t_margin
-                )
-
                 wp.launch(
-                    check_tag_kernel,
+                    check_tag_sdf_kernel,
                     dim=grid.cell_count(),
-                    inputs=(bounds_lo, dx, res_wp, mask, t_lo, t_hi),
+                    inputs=(t_wp_mesh.id, bounds_lo, dx, res_wp, mask, voxel_diag),
                 )
-                tag_masks[tag_name] = mask
+                n_tagged = int(np.sum(mask.numpy()))
+                if n_tagged > 0:
+                    print(f"    tag: {tag_name} ({n_tagged} voxels)")
+                    tag_masks[tag_name] = mask
             except Exception as e:
                 print(f"    Warning: failed to process tag {tag_name}: {e}")
                 continue
