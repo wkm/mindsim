@@ -67,9 +67,9 @@ export function hexStr(n: number) {
 // ---------------------------------------------------------------------------
 // Edge rendering constants
 // ---------------------------------------------------------------------------
-export const EDGE_COLOR = BP.DARK_GRAY1;
-export const EDGE_OPACITY = 0.85;
-export const EDGE_THICKNESS = 1.0; // edge line thickness (shader parameter)
+export const EDGE_COLOR = BP.DARK_GRAY3;
+export const EDGE_OPACITY = 0.55;
+export const EDGE_THICKNESS = 1.5; // edge sample radius in pixels
 
 // ---------------------------------------------------------------------------
 // Default material parameters
@@ -150,6 +150,7 @@ const EdgeDetectShader = {
     resolution: { value: new THREE.Vector2() },
     edgeColor: { value: new THREE.Color(EDGE_COLOR) },
     edgeOpacity: { value: EDGE_OPACITY },
+    thickness: { value: EDGE_THICKNESS },
     normalThreshold: { value: 0.3 },
     depthThreshold: { value: 0.0001 },
   },
@@ -169,11 +170,12 @@ const EdgeDetectShader = {
     uniform float edgeOpacity;
     uniform float normalThreshold;
     uniform float depthThreshold;
+    uniform float thickness;
 
     varying vec2 vUv;
 
     void main() {
-      vec2 texel = 1.0 / resolution;
+      vec2 texel = thickness / resolution;
 
       // Sample normals in a 2x2 neighborhood (Roberts cross)
       vec3 n00 = texture2D(tNormal, vUv).rgb;
@@ -198,9 +200,11 @@ const EdgeDetectShader = {
       if (normalEdge > normalThreshold) edge = 1.0;
       if (depthEdge > depthThreshold) edge = 1.0;
 
-      // Composite edge on top of color
+      // Darken toward edge color — multiply blend preserves surface luminance
+      // better than mix() which washes out dark surfaces
       vec4 color = texture2D(tDiffuse, vUv);
-      vec3 result = mix(color.rgb, edgeColor, edge * edgeOpacity);
+      float darken = 1.0 - edge * edgeOpacity;
+      vec3 result = color.rgb * darken + edgeColor * edge * edgeOpacity * 0.3;
       gl_FragColor = vec4(result, color.a);
     }
   `,
