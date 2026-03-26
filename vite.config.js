@@ -6,7 +6,6 @@ export default defineConfig({
   root: '.',
   publicDir: false,
   server: {
-    open: '/viewer/',
     proxy: {
       '/api': `http://localhost:${apiPort}`,
     },

@@ -71,7 +71,7 @@ web:
 	@echo "API port: $(API_PORT)  Vite port: $(VITE_PORT)"
 	API_PORT=$(API_PORT) pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \
 		"uv run uvicorn mindsim.server:app --host 0.0.0.0 --port $(API_PORT) --reload --reload-dir botcad --reload-dir mindsim" \
-		"while ! curl -sf http://localhost:$(API_PORT)/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --port $(VITE_PORT) --open /viewer/"
+		"while ! curl -sf http://localhost:$(API_PORT)/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --port $(VITE_PORT)"
 
 test-viewer:
 	pnpm exec playwright test --config viewer/tests/playwright.config.mjs
