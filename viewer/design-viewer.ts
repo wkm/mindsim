@@ -343,7 +343,11 @@ export async function initDesignViewer(
         tree.updateFromDesignScene(designScene.tree);
       },
       onSolo: (nodeId: string) => {
-        designScene.tree.solo(nodeId);
+        if (designScene.tree.soloedId === nodeId) {
+          designScene.tree.unsolo();
+        } else {
+          designScene.tree.solo(nodeId);
+        }
         syncVisibility();
         tree.updateFromDesignScene(designScene.tree);
       },
@@ -440,19 +444,17 @@ export async function initDesignViewer(
 /**
  * Resolve the SceneTree node ID for a manifest part.
  *
- * build-scene-tree.ts uses `component:${part.id}` for servo/mounted parts
- * and `subpart:${part.id}` for horns. Fasteners are grouped under
- * `subpart:` nodes and don't have individual meshes in the tree.
+ * build-scene-tree.ts uses `part:${part.id}` for servo/mounted/horn parts
+ * and `fastener-group:` for grouped fasteners.
  */
 function resolvePartNodeId(part: ManifestPart): string {
   if (part.category === 'horn') {
-    return `subpart:${part.id}`;
+    return `part:${part.id}`;
   }
   if (part.category === 'fastener') {
-    // Fasteners are grouped — use the joint-scoped group key
-    const groupKey = part.joint ? `subpart:${part.joint}:${part.name}` : `subpart:${part.id}:${part.name}`;
-    return groupKey;
+    // Fasteners are grouped — use the joint-scoped or component-scoped group key
+    return part.joint ? `fastener-group:${part.joint}:${part.name}` : `fastener-group:${part.id}:${part.name}`;
   }
-  // servo, camera, compute, battery, wheel, component — all use component: prefix
-  return `component:${part.id}`;
+  // servo, camera, compute, battery, wheel, component — all use part: prefix
+  return `part:${part.id}`;
 }

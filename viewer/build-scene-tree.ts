@@ -168,14 +168,14 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     const mountFasteners = bodyParts.filter((p) => p.category === 'fastener' && !p.joint);
 
     for (const comp of mountedComps) {
-      const compId = `component:${comp.id}`;
+      const compId = `part:${comp.id}`;
       const compChildren: string[] = [];
 
       // Fasteners belonging to this component's mount
       const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
       const grouped = groupFasteners(compFasteners);
       for (const group of grouped) {
-        const fId = `subpart:${comp.id}:${group.key}`;
+        const fId = `fastener-group:${comp.id}:${group.key}`;
         tree.addNode({
           id: fId,
           kind: NodeKind.SubPart,
@@ -208,12 +208,12 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
       for (const servo of servos) {
-        const servoId = `component:${servo.id}`;
+        const servoId = `part:${servo.id}`;
         const servoChildren: string[] = [];
 
         // Horn sub-parts
         for (const horn of horns) {
-          const hornId = `subpart:${horn.id}`;
+          const hornId = `part:${horn.id}`;
           tree.addNode({
             id: hornId,
             kind: NodeKind.SubPart,
@@ -229,7 +229,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
         // Fastener sub-parts (grouped)
         const grouped = groupFasteners(fasteners);
         for (const group of grouped) {
-          const fId = `subpart:${joint.name}:${group.key}`;
+          const fId = `fastener-group:${joint.name}:${group.key}`;
           tree.addNode({
             id: fId,
             kind: NodeKind.SubPart,
