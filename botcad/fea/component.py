@@ -214,17 +214,26 @@ def analyze_component(
     # Arm direction: from fixed toward load region
     arm_dir = load_centroid - fixed_centroid
     arm_length = float(np.linalg.norm(arm_dir))
-    if arm_length < 1e-9:
-        return None
-    arm_dir = arm_dir / arm_length
 
-    # Force direction: PERPENDICULAR to arm (bending, not axial)
-    # Cross arm with Z-up to get perpendicular; if arm is nearly vertical, use X
-    up = np.array([0.0, 0.0, 1.0])
-    if abs(np.dot(arm_dir, up)) > 0.9:
-        up = np.array([1.0, 0.0, 0.0])
-    force_dir = np.cross(arm_dir, up)
-    force_dir = force_dir / np.linalg.norm(force_dir)
+    if arm_length < 1e-6:
+        # Coincident centroids (symmetric brackets, etc.)
+        # Use body bounding box diagonal as arm length, apply force in -Z (gravity)
+        bb_diag = np.linalg.norm(
+            np.array([hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]])
+        )
+        arm_length = float(bb_diag) * 0.5
+        force_dir = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+        print(
+            f"  Coincident BC centroids — using gravity load, arm={arm_length * 1000:.1f}mm"
+        )
+    else:
+        arm_dir = arm_dir / arm_length
+        # Force direction: PERPENDICULAR to arm (bending, not axial)
+        up = np.array([0.0, 0.0, 1.0])
+        if abs(np.dot(arm_dir, up)) > 0.9:
+            up = np.array([1.0, 0.0, 0.0])
+        force_dir = np.cross(arm_dir, up)
+        force_dir = force_dir / np.linalg.norm(force_dir)
 
     # Force magnitude from torque: F = T / r
     force_magnitude = torque_nm / arm_length
