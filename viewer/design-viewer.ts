@@ -372,6 +372,9 @@ function resolvePartNodeId(part: ManifestPart): string {
     // Fasteners are grouped — use the joint-scoped or mount-scoped group key
     return part.joint ? `fastener-group:${part.joint}:${part.name}` : `fastener-group:${part.id}:${part.name}`;
   }
-  // Wire segments and any remaining parts
+  if (part.category === 'wire') {
+    // Wire stubs/segments register under the wire group node for their body
+    return `wire-group:${part.parent_body}`;
+  }
   return `part:${part.id}`;
 }
