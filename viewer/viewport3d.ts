@@ -1591,7 +1591,6 @@ export class Viewport3D {
 
     // Collect all visible meshes grouped by layer
     const allMeshes = [];
-    const layerMeshes = {};
 
     // Collect meshes from named groups AND from ungrouped scene children
     const sources = [];
@@ -1617,34 +1616,40 @@ export class Viewport3D {
       node.traverse((child) => {
         if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
           allMeshes.push({ mesh: child, groupName });
-          if (!layerMeshes[groupName]) layerMeshes[groupName] = [];
-          layerMeshes[groupName].push(child);
         }
       });
     }
 
     const plane = this._secPlane;
 
-    // Collect segments per group so each group gets its own cap color
-    const allSegments = [];
-    const segmentsByGroup: Record<string, number[]> = {};
+    // Collect segments per mesh so each mesh gets its own cap color
+    const segmentsByMesh: Map<number, number[]> = new Map();
+    const meshById: Map<number, THREE.Mesh> = new Map();
+    const meshGroupName: Map<number, string> = new Map();
+
     for (const { mesh, groupName } of allMeshes) {
-      if (!segmentsByGroup[groupName]) segmentsByGroup[groupName] = [];
-      const before = segmentsByGroup[groupName].length;
-      this._computeMeshPlaneContour(mesh, plane, segmentsByGroup[groupName]);
-      // Also collect into allSegments for contour lines
-      const added = segmentsByGroup[groupName].slice(before);
-      allSegments.push(...added);
+      if (!segmentsByMesh.has(mesh.id)) {
+        segmentsByMesh.set(mesh.id, []);
+        meshById.set(mesh.id, mesh);
+        meshGroupName.set(mesh.id, groupName);
+      }
+      this._computeMeshPlaneContour(mesh, plane, segmentsByMesh.get(mesh.id)!);
     }
 
-    // Create per-group hatched cap meshes, each with its own color
+    // Flatten all segments for contour lines
+    const allSegments: number[] = [];
+    for (const segs of segmentsByMesh.values()) {
+      allSegments.push(...segs);
+    }
+
+    // Create per-mesh hatched cap meshes, each with its own color
     if (!this._hatchTextures) this._hatchTextures = [];
     let anyCapCreated = false;
 
-    for (const [groupName, groupSegments] of Object.entries(segmentsByGroup)) {
-      if (groupSegments.length === 0) continue;
+    for (const [meshId, meshSegments] of segmentsByMesh) {
+      if (meshSegments.length === 0) continue;
 
-      const polygons = this._chainSegments(groupSegments);
+      const polygons = this._chainSegments(meshSegments);
       if (polygons.length === 0) continue;
 
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
@@ -1652,15 +1657,15 @@ export class Viewport3D {
 
       anyCapCreated = true;
 
-      // Determine cap color for this group
+      // Determine cap color: prefer callback (pass group name), else derive from mesh material
       let capColor: THREE.Color | undefined;
+      const groupName = meshGroupName.get(meshId)!;
       if (this._sectionCapColorFn) {
         capColor = this._sectionCapColorFn(groupName);
       }
       if (capColor == null) {
-        // Derive from the first mesh in this group
-        const groupMesh = layerMeshes[groupName]?.[0];
-        const mat = groupMesh?.material;
+        const sourceMesh = meshById.get(meshId)!;
+        const mat = sourceMesh.material as THREE.MeshPhysicalMaterial;
         const baseHex = mat?.color ? mat.color.getHex() : 0xced9e0;
         const base = new THREE.Color(baseHex);
         capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
