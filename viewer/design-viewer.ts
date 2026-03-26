@@ -254,6 +254,9 @@ export async function initDesignViewer(
   // Step 4: Load component part meshes
   const partsList = manifest.parts ?? [];
   const partMeshPromises = partsList.map(async (part) => {
+    // Skip parts without positioning data (e.g., wire segments)
+    if (!part.pos || !part.quat) return;
+
     // Determine the tree node ID — mirrors build-scene-tree.ts convention
     const nodeId = resolvePartNodeId(part);
 
