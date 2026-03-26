@@ -15,6 +15,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { Earcut } from 'three/src/extras/Earcut.js';
+import { loadEnvironment } from './environment.ts';
 import { MeasureTool } from './measure-tool.ts';
 import { BP, createEdgeComposer, RENDER_ORDER } from './presentation.ts';
 
@@ -131,6 +132,7 @@ export class Viewport3D {
   _followBadge: any;
   _onFollowChange: any;
   _sectionCapColorFn: any;
+  _dirLight: THREE.DirectionalLight | null;
   _scene: any;
   _cam: any;
   _ctrl: any;
@@ -202,6 +204,7 @@ export class Viewport3D {
     this._onFollowChange = null; // callback when follow mode changes
     // Section cap callback — lets external code provide per-group cap colors
     this._sectionCapColorFn = null;
+    this._dirLight = null;
 
     this._initScene(options);
     this._initOverlay();
@@ -647,6 +650,8 @@ export class Viewport3D {
     this._ren.shadowMap.enabled = true;
     this._ren.shadowMap.type = THREE.PCFShadowMap;
     this._ren.localClippingEnabled = true;
+    this._ren.toneMapping = THREE.ACESFilmicToneMapping;
+    this._ren.toneMappingExposure = 1.0;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
     this._ctrl.enableDamping = true;
@@ -656,11 +661,12 @@ export class Viewport3D {
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
     // Lighting
-    this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+    this._scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
     dir.position.set(0.3, 0.5, 0.4);
     this._scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    this._dirLight = dir;
+    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
     this._gridHelper = null;
@@ -671,6 +677,7 @@ export class Viewport3D {
     }
     if (opts.edges) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     this._meas = new MeasureTool(this._cam, this._scene, c);
+    loadEnvironment(this._ren, this._scene);
   }
 
   // ── Overlay controls ──
