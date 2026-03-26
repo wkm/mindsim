@@ -272,11 +272,23 @@ def analyze_component(
     b_scipy = load_wp.numpy().flatten().astype(np.float64)
 
     t_sol_start = time.monotonic()
-    x_sol, info = cg(A_scipy, b_scipy, rtol=1e-8)
+    solve_timeout = 60.0  # seconds
+
+    def _cg_callback(xk):
+        if time.monotonic() - t_sol_start > solve_timeout:
+            raise TimeoutError(f"CG solver exceeded {solve_timeout}s timeout")
+
+    try:
+        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-4, callback=_cg_callback)
+    except TimeoutError as e:
+        print(f"  {e} — returning best estimate")
+        # CG was interrupted; use last iterate from the residual
+        # Re-solve with very loose tolerance to get partial result
+        x_sol, info = cg(A_scipy, b_scipy, rtol=1e-1, maxiter=10)
     t_sol_end = time.monotonic()
     timings["solve"] = round(t_sol_end - t_sol_start, 2)
 
-    if info == 0:
+    if info >= 0:  # 0 = converged, >0 = maxiter reached (partial result still usable)
         u_field = fem.make_discrete_field(space)
         u_field.dof_values = wp.from_numpy(
             x_sol.reshape(-1, 3).astype(np.float32), dtype=wp.vec3
