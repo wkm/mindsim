@@ -283,21 +283,37 @@ export class ComponentTree {
 
   /**
    * Update tree node styling from a SceneTree visibility model.
-   * Each node's filled/empty dot and row opacity reflect resolved visibility.
+   *
+   * Three visual states per node:
+   *   - Visible (own hidden=false, all ancestors visible):
+   *       dot = filled blue, row full opacity
+   *   - Explicitly hidden (own hidden=true):
+   *       dot = empty circle, row dimmed
+   *   - Implicitly hidden (own hidden=false but an ancestor is hidden):
+   *       dot = filled blue (shows it will reappear when ancestor is unhidden),
+   *       row dimmed
    */
   updateFromDesignScene(tree: SceneTree): void {
     const allNodes = this._treeRoot?.querySelectorAll<HTMLElement>('.tree-node[data-node-id]');
     if (!allNodes) return;
     for (const domNode of allNodes) {
       const nodeId = domNode.dataset.nodeId!;
-      const visible = tree.resolveVisibility(nodeId);
+      const node = tree.getNode(nodeId);
+      if (!node) continue;
+
+      const ownHidden = node.hidden;
+      const effectivelyVisible = tree.resolveVisibility(nodeId);
+
       const dot = domNode.querySelector('.vis-dot') as HTMLElement;
       if (dot) {
-        dot.style.background = visible ? '#58a6ff' : 'transparent';
-        dot.style.border = visible ? 'none' : '2px solid #484f58';
+        // Dot shows OWN state: filled blue if not hidden, empty circle if hidden
+        dot.style.background = ownHidden ? 'transparent' : '#58a6ff';
+        dot.style.border = ownHidden ? '2px solid #484f58' : 'none';
         dot.style.boxSizing = 'border-box';
       }
-      domNode.style.opacity = visible ? '1' : '0.45';
+
+      // Row opacity shows EFFECTIVE visibility (considers ancestors + solo)
+      domNode.style.opacity = effectivelyVisible ? '1' : '0.45';
     }
   }
 
