@@ -14,6 +14,17 @@
         0.054
       ],
       "mass": 0.3829,
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mounts": [
         {
           "label": "battery",
@@ -70,6 +81,17 @@
         0.02
       ],
       "mass": 0.0425,
+      "pos": [
+        -0.075,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "joint": "left_wheel",
       "mounts": [
         {
@@ -97,6 +119,17 @@
         0.02
       ],
       "mass": 0.0425,
+      "pos": [
+        0.075,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "joint": "right_wheel",
       "mounts": [
         {
@@ -144,7 +177,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_left_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_left_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_left_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_left_wheel.stl",
+          "parent_body": "base"
+        }
+      ]
     },
     {
       "name": "right_wheel",
@@ -176,7 +231,29 @@
         "voltage": 12.0,
         "gear_ratio": 345.0,
         "mass": 0.055
-      }
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_right_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_right_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_right_wheel.stl",
+          "parent_body": "base"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_right_wheel.stl",
+          "parent_body": "base"
+        }
+      ]
     }
   ],
   "parts": [
@@ -210,6 +287,17 @@
       "parent_body": "base",
       "joint": "left_wheel",
       "mesh": "horn_left_wheel.stl",
+      "pos": [
+        -0.069,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
       "shapescript_component": "horn:STS3215"
     },
     {
@@ -242,6 +330,17 @@
       "parent_body": "base",
       "joint": "right_wheel",
       "mesh": "horn_right_wheel.stl",
+      "pos": [
+        0.069,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
       "shapescript_component": "horn:STS3215"
     },
     {
@@ -257,6 +356,12 @@
         0.0,
         -0.0178
       ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mass": 0.055,
       "shapescript_component": "LiPo2S-1000"
     },
@@ -271,6 +376,12 @@
       "pos": [
         0.0,
         0.04845,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
         0.0
       ],
       "mass": 0.003,
@@ -303,6 +414,12 @@
         0.0,
         0.024875
       ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mass": 0.01,
       "shapescript_component": "RaspberryPiZero2W",
       "meshes": [
@@ -333,6 +450,12 @@
         0.0,
         0.0
       ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mass": 0.022,
       "shapescript_component": "Pololu 90x10mm Wheel"
     },
@@ -349,6 +472,12 @@
         0.0,
         0.0
       ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
       "mass": 0.022,
       "shapescript_component": "Pololu 90x10mm Wheel"
     },
@@ -359,7 +488,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        0.01025,
+        -0.0045
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_ear_1",
@@ -368,7 +508,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        0.01025,
+        0.0125
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_ear_2",
@@ -377,7 +528,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        -0.01025,
+        -0.0045
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_ear_3",
@@ -386,7 +548,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        -0.01025,
+        0.0125
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_ear_4",
@@ -395,7 +568,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        0.01025,
+        0.0295
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_ear_5",
@@ -404,7 +588,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.0315,
+        -0.01025,
+        0.0295
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_horn_0",
@@ -413,7 +608,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.065,
+        0.0,
+        -0.007
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_horn_1",
@@ -422,7 +628,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.065,
+        0.0,
+        0.007
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_horn_2",
@@ -431,7 +648,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.065,
+        -0.007,
+        0.0
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_horn_3",
@@ -440,7 +668,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.065,
+        0.007,
+        0.0
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_rear_0",
@@ -449,7 +688,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.033,
+        0.0,
+        -0.007
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_rear_1",
@@ -458,7 +708,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.033,
+        0.0,
+        0.007
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_rear_2",
@@ -467,7 +728,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.033,
+        -0.007,
+        -0.0
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_left_wheel_rear_3",
@@ -476,7 +748,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "left_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.033,
+        0.007,
+        -0.0
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_0",
@@ -485,7 +768,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        -0.01025,
+        -0.0045
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_1",
@@ -494,7 +788,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        -0.01025,
+        0.0125
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_2",
@@ -503,7 +808,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        0.01025,
+        -0.0045
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_3",
@@ -512,7 +828,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        0.01025,
+        0.0125
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_4",
@@ -521,7 +848,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        -0.01025,
+        0.0295
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_ear_5",
@@ -530,7 +868,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.0315,
+        0.01025,
+        0.0295
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_horn_0",
@@ -539,7 +888,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.065,
+        0.0,
+        -0.007
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_horn_1",
@@ -548,7 +908,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.065,
+        0.0,
+        0.007
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_horn_2",
@@ -557,7 +928,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.065,
+        0.007,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_horn_3",
@@ -566,7 +948,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.065,
+        -0.007,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_rear_0",
@@ -575,7 +968,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.033,
+        0.0,
+        -0.007
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_rear_1",
@@ -584,7 +988,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.033,
+        0.0,
+        0.007
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_rear_2",
@@ -593,7 +1008,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.033,
+        0.007,
+        -0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_wheel_rear_3",
@@ -602,7 +1028,18 @@
       "category": "fastener",
       "parent_body": "base",
       "joint": "right_wheel",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.033,
+        -0.007,
+        -0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_camera_0",
@@ -611,7 +1048,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.0105,
+        0.04845,
+        0.0095
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_camera_1",
@@ -620,7 +1068,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0105,
+        0.04845,
+        0.0095
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_camera_2",
@@ -629,7 +1088,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.0105,
+        0.04845,
+        -0.003
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_camera_3",
@@ -638,7 +1108,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "camera",
-      "mesh": "hardware_M2_shc.stl"
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0105,
+        0.04845,
+        -0.003
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_0",
@@ -647,7 +1128,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        0.0115,
+        -0.029,
+        0.024875
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_1",
@@ -656,7 +1148,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        0.0115,
+        0.029,
+        0.024875
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_2",
@@ -665,7 +1168,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        -0.0115,
+        -0.029,
+        0.024875
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_base_pi_3",
@@ -674,7 +1188,18 @@
       "category": "fastener",
       "parent_body": "base",
       "mount_label": "pi",
-      "mesh": "hardware_M2.5_shc.stl"
+      "mesh": "hardware_M2.5_shc.stl",
+      "pos": [
+        -0.0115,
+        0.029,
+        0.024875
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_0",
@@ -683,7 +1208,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.06865,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_1",
@@ -692,7 +1228,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.070225,
+        0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_2",
@@ -701,7 +1248,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.079775,
+        0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_3",
@@ -710,7 +1268,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.08135,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_4",
@@ -719,7 +1288,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.079775,
+        -0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_left_rim_wheel_5",
@@ -728,7 +1308,18 @@
       "category": "fastener",
       "parent_body": "left_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.070225,
+        -0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_0",
@@ -737,7 +1328,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.08135,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_1",
@@ -746,7 +1348,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.079775,
+        0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_2",
@@ -755,7 +1368,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.070225,
+        0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_3",
@@ -764,7 +1388,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.06865,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_4",
@@ -773,7 +1408,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.070225,
+        -0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "fastener_right_rim_wheel_5",
@@ -782,7 +1428,18 @@
       "category": "fastener",
       "parent_body": "right_rim",
       "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl"
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.079775,
+        -0.008271,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     },
     {
       "id": "wire_servo_bus_base_0",

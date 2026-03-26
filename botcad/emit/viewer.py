@@ -137,6 +137,26 @@ def _build_materials_dict(bot: Bot, mm_cache: dict) -> dict:
     return materials
 
 
+def _transform_fastener_pos(
+    mp_pos: tuple, servo_quat: tuple, servo_center: tuple, body_world_pos: tuple
+) -> list:
+    """Transform a fastener mount-point position to world frame.
+
+    mp_pos is in the servo's local frame. We rotate by the servo's solved
+    quaternion, add the servo center (body-local), then add body world pos.
+    """
+    from botcad.geometry import rotate_vec
+
+    rotated = rotate_vec(servo_quat, mp_pos)
+    return _round_vec(
+        (
+            body_world_pos[0] + servo_center[0] + rotated[0],
+            body_world_pos[1] + servo_center[1] + rotated[1],
+            body_world_pos[2] + servo_center[2] + rotated[2],
+        )
+    )
+
+
 def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     """Generate viewer_manifest.json in the bot's output directory."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
@@ -169,6 +189,8 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
             "shape": str(body.shape),
             "dimensions": _round_vec(body.dimensions),
             "mass": round(body.solved_mass, 4),
+            "pos": _round_vec(body.world_pos),
+            "quat": _round_vec(body.world_quat),
         }
         if joint:
             body_entry["joint"] = joint.name
@@ -213,6 +235,28 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                     "gear_ratio": joint.servo.gear_ratio,
                     "mass": round(joint.servo.mass, 4),
                 },
+                "design_layers": [
+                    {
+                        "kind": "bracket",
+                        "mesh": f"bracket_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "coupler",
+                        "mesh": f"coupler_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "clearance",
+                        "mesh": f"clearance_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                    {
+                        "kind": "insertion",
+                        "mesh": f"insertion_{joint.name}.stl",
+                        "parent_body": parent_name,
+                    },
+                ],
             }
             manifest["joints"].append(joint_entry)
 
@@ -297,6 +341,8 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 "parent_body": body.parent_body_name,
                 "joint": joint_name,
                 "mesh": body.mesh_file,
+                "pos": _round_vec(body.world_pos),
+                "quat": _round_vec(body.world_quat),
                 "shapescript_component": f"horn:{comp.name}" if comp else body.name,
             }
             manifest["parts"].append(part_entry)
@@ -322,6 +368,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                 "mount_label": mount_label,
                 "mesh": body.mesh_file,
                 "pos": _round_vec(body.world_pos),
+                "quat": [1.0, 0.0, 0.0, 0.0],
                 "mass": round(comp.mass, 4) if comp else 0.0,
                 "shapescript_component": comp.name if comp else body.name,
             }
@@ -348,6 +395,9 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     for body in bot.all_bodies:
         for joint in body.joints:
             servo = joint.servo
+            sq = joint.solved_servo_quat
+            sc = joint.solved_servo_center
+            bwp = body.world_pos
             for i, ear in enumerate(servo.mounting_ears):
                 manifest["parts"].append(
                     {
@@ -358,6 +408,8 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         "parent_body": body.name,
                         "joint": joint.name,
                         "mesh": f"{fastener_stl_stem(ear)}.stl",
+                        "pos": _transform_fastener_pos(ear.pos, sq, sc, bwp),
+                        "quat": _round_vec(sq),
                     }
                 )
             for i, mp in enumerate(servo.horn_mounting_points):
@@ -370,6 +422,8 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         "parent_body": body.name,
                         "joint": joint.name,
                         "mesh": f"{fastener_stl_stem(mp)}.stl",
+                        "pos": _transform_fastener_pos(mp.pos, sq, sc, bwp),
+                        "quat": _round_vec(sq),
                     }
                 )
             for i, mp in enumerate(servo.rear_horn_mounting_points):
@@ -382,13 +436,26 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         "parent_body": body.name,
                         "joint": joint.name,
                         "mesh": f"{fastener_stl_stem(mp)}.stl",
+                        "pos": _transform_fastener_pos(mp.pos, sq, sc, bwp),
+                        "quat": _round_vec(sq),
                     }
                 )
 
     # 3b. Fasteners for mounted components
     for body in bot.all_bodies:
+        bwp = body.world_pos
         for mount in body.mounts:
+            rp = mount.resolved_pos
             for i, mp in enumerate(mount.component.mounting_points):
+                # Rotate mount point from component-local to body frame
+                rotated = mount.rotate_point(mp.pos)
+                fastener_pos = _round_vec(
+                    (
+                        bwp[0] + rp[0] + rotated[0],
+                        bwp[1] + rp[1] + rotated[1],
+                        bwp[2] + rp[2] + rotated[2],
+                    )
+                )
                 manifest["parts"].append(
                     {
                         "id": f"fastener_{body.name}_{mount.label}_{i}",
@@ -398,6 +465,8 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
                         "parent_body": body.name,
                         "mount_label": mount.label,
                         "mesh": f"{fastener_stl_stem(mp)}.stl",
+                        "pos": fastener_pos,
+                        "quat": [1.0, 0.0, 0.0, 0.0],
                     }
                 )
 
