@@ -1,11 +1,29 @@
-"""Material and print process definitions.
+"""Material definitions — unified visual + physical properties.
 
-Data module — declares physical properties that affect mass computation.
+Every material has both visual properties (color, metallic, roughness, opacity)
+for rendering and physical properties (density, print process) for mass/sim.
+
+The material catalog provides real-world materials for purchased components
+(PCB substrate, IC packages, rubber, metal) and fabricated parts (PLA, TPU).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from botcad.colors import (
+    BP_BLUE3,
+    BP_DARK_GRAY1,
+    BP_DARK_GRAY3,
+    BP_FOREST3,
+    BP_GOLD3,
+    BP_GRAY4,
+    BP_GRAY5,
+    BP_GREEN3,
+    BP_LIGHT_GRAY1,
+)
+
+RGBA = tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -19,17 +37,173 @@ class PrintProcess:
 
 @dataclass(frozen=True)
 class Material:
-    """Physical material with density and optional print process."""
+    """Unified material: visual + physical properties.
+
+    Visual properties drive rendering (viewer MeshPhysicalMaterial, MuJoCo rgba).
+    Physical properties drive mass computation and sim fidelity.
+    """
 
     name: str
-    density: float  # kg/m^3
+    # Visual
+    color: RGBA = (0.541, 0.608, 0.659, 1.0)  # default gray
+    metallic: float = 0.0
+    roughness: float = 0.7
+    opacity: float = 1.0
+    # Physical
+    density: float | None = None  # kg/m^3; None for purchased materials
     youngs_modulus: float = 2.3e9  # Pa (default PLA)
     poisson_ratio: float = 0.35
     yield_strength: float = 40e6  # Pa
-    process: PrintProcess | None = None
+    process: PrintProcess | None = None  # FDM params; None for purchased
+
+    @property
+    def effective_youngs_modulus(self) -> float:
+        """Young's modulus scaled by infill (Gibson-Ashby bending-dominated).
+
+        E_eff = E_solid * infill^2. Conservative for FDM grid/rectilinear.
+        """
+        if self.process is None:
+            return self.youngs_modulus
+        return self.youngs_modulus * self.process.infill**2
+
+    @property
+    def effective_yield_strength(self) -> float:
+        """Yield strength scaled by infill (Gibson-Ashby bending-dominated).
+
+        sigma_eff = sigma_solid * infill^1.5. Conservative for FDM.
+        """
+        if self.process is None:
+            return self.yield_strength
+        return self.yield_strength * self.process.infill**1.5
 
 
-# Standard instances
-PLA = Material("PLA", 1200.0, 2.3e9, 0.35, 40e6, PrintProcess())
-TPU = Material("TPU", 1120.0, 0.1e9, 0.45, 15e6, PrintProcess(infill=0.15))
-ALUMINUM = Material("aluminum", 2700.0, 70e9, 0.33, 270e6, None)
+# ── Fabricated materials (with density + print process) ──
+
+PLA = Material(
+    "PLA",
+    color=(*BP_LIGHT_GRAY1, 1.0),
+    roughness=0.8,
+    density=1200.0,
+    youngs_modulus=2.3e9,
+    poisson_ratio=0.35,
+    yield_strength=40e6,
+    process=PrintProcess(),
+)
+TPU = Material(
+    "TPU",
+    color=(*BP_DARK_GRAY3, 1.0),
+    roughness=0.9,
+    density=1120.0,
+    youngs_modulus=0.1e9,
+    poisson_ratio=0.45,
+    yield_strength=15e6,
+    process=PrintProcess(infill=0.15),
+)
+ALUMINUM = Material(
+    "aluminum",
+    color=(*BP_GRAY4, 1.0),
+    metallic=0.9,
+    roughness=0.3,
+    density=2700.0,
+    youngs_modulus=70e9,
+    poisson_ratio=0.33,
+    yield_strength=270e6,
+)
+
+# ── Material catalog: purchased component materials ──
+
+# PCB substrate — green solder mask
+MAT_FR4_GREEN = Material(
+    "fr4_green",
+    color=(*BP_GREEN3, 1.0),
+    roughness=0.85,
+)
+
+# IC package epoxy — dark matte
+MAT_IC_PACKAGE = Material(
+    "ic_package",
+    color=(*BP_DARK_GRAY1, 1.0),
+    roughness=0.9,
+)
+
+# Nickel plating — connector pins, shield cans
+MAT_NICKEL = Material(
+    "nickel",
+    color=(*BP_GRAY4, 1.0),
+    metallic=0.85,
+    roughness=0.25,
+)
+
+# ABS dark — servo housing, camera body
+MAT_ABS_DARK = Material(
+    "abs_dark",
+    color=(*BP_DARK_GRAY1, 1.0),
+    roughness=0.6,
+)
+
+# Rubber — tire surface
+MAT_RUBBER = Material(
+    "rubber",
+    color=(*BP_DARK_GRAY3, 1.0),
+    roughness=0.95,
+)
+
+# Polycarbonate clear — camera lens
+MAT_POLYCARBONATE_CLEAR = Material(
+    "polycarbonate_clear",
+    color=(0.2, 0.2, 0.25, 0.7),
+    roughness=0.1,
+    opacity=0.7,
+)
+
+# PLA light — 3D printed structural parts (same as PLA)
+MAT_PLA_LIGHT = PLA
+
+# Steel — fastener bodies
+MAT_STEEL = Material(
+    "steel",
+    color=(*BP_GRAY4, 1.0),
+    metallic=0.9,
+    roughness=0.35,
+    density=7800.0,
+)
+
+# Aluminum — servo horns, brackets (same as ALUMINUM)
+MAT_ALUMINUM = ALUMINUM
+
+# Battery — blue LiPo wrap
+MAT_LIPO_WRAP = Material(
+    "lipo_wrap",
+    color=(*BP_BLUE3, 1.0),
+    roughness=0.7,
+)
+
+# Electronics controller PCB — darker green
+MAT_PCB_DARK_GREEN = Material(
+    "pcb_dark_green",
+    color=(*BP_FOREST3, 1.0),
+    roughness=0.85,
+)
+
+# Bearing steel
+MAT_BEARING_STEEL = Material(
+    "bearing_steel",
+    color=(*BP_GRAY4, 1.0),
+    metallic=1.0,
+    roughness=0.3,
+)
+
+# Brass — decorative fasteners
+MAT_BRASS = Material(
+    "brass",
+    color=(*BP_GOLD3, 1.0),
+    metallic=0.9,
+    roughness=0.3,
+)
+
+# Tube default — gray structural tube
+MAT_TUBE_DEFAULT = Material(
+    "tube_default",
+    color=(*BP_GRAY5, 1.0),
+    roughness=0.7,
+)

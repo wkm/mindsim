@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from botcad.shapescript.ops import ALIGN_MIN_Z, Align3
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import MultiMaterialResult, ShapeScript
 
 if TYPE_CHECKING:
     from botcad.component import (
@@ -832,3 +832,129 @@ def wheel_component_script(comp) -> ShapeScript:
     radius = dims[0] / 2
     width = dims[2]
     return wheel_script(radius, width)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Multi-material emitters — produce separate ShapeScript per material region
+# ══════════════════════════════════════════════════════════════════════════
+
+
+def compute_multi_material(comp) -> MultiMaterialResult:
+    """Multi-material Pi board: PCB + IC packages + metal connectors.
+
+    Three material regions, each a separate ShapeScript program:
+    1. FR4 green PCB substrate (with mounting holes)
+    2. IC packages: SoC
+    3. Nickel-plated connectors: ports block + GPIO header
+    """
+    from botcad.materials import MAT_FR4_GREEN, MAT_IC_PACKAGE, MAT_NICKEL
+    from botcad.shapescript.program import MaterialProgram, MultiMaterialResult
+
+    # -- Program 1: PCB substrate (FR4 green) --
+    pcb_prog = ShapeScript()
+    pcb = pcb_prog.box(0.065, 0.030, 0.0015, tag="pcb")
+    pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.003)
+
+    hole_r = 0.00275 / 2.0
+    hole_depth = 0.002
+    hole_proto = pcb_prog.cylinder(hole_r, hole_depth, tag="mounting_hole")
+    for i, (_label, pos) in enumerate(
+        [
+            ("hole_bl", (-0.029, -0.0115, 0)),
+            ("hole_br", (0.029, -0.0115, 0)),
+            ("hole_tl", (-0.029, 0.0115, 0)),
+            ("hole_tr", (0.029, 0.0115, 0)),
+        ]
+    ):
+        hole = pcb_prog.instance(hole_proto, i)
+        hole = pcb_prog.locate(hole, pos=pos)
+        pcb = pcb_prog.cut(pcb, hole)
+    pcb_prog.output_ref = pcb
+
+    # -- Program 2: IC packages (dark epoxy) --
+    ic_prog = ShapeScript()
+    soc = ic_prog.box(0.012, 0.012, 0.0015, tag="soc")
+    soc = ic_prog.locate(soc, pos=(0, 0, 0.0015))
+    ic_prog.output_ref = soc
+
+    # -- Program 3: Metal connectors (nickel) --
+    metal_prog = ShapeScript()
+    ports = metal_prog.box(0.040, 0.007, 0.003, tag="ports")
+    ports = metal_prog.locate(ports, pos=(0, -0.0115, 0.002))
+    gpio = metal_prog.box(0.051, 0.005, 0.003, tag="gpio")
+    gpio = metal_prog.locate(gpio, pos=(0, 0.0125, 0.002))
+    metal_result = metal_prog.fuse(ports, gpio)
+    metal_prog.output_ref = metal_result
+
+    return MultiMaterialResult(
+        primary=compute_script(comp),  # full union for bbox
+        material_programs=[
+            MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
+            MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
+            MaterialProgram(material=MAT_NICKEL, program=metal_prog),
+        ],
+    )
+
+
+def camera_multi_material(comp) -> MultiMaterialResult:
+    """Multi-material camera: PCB + lens housing + metal connector.
+
+    Three material regions:
+    1. FR4 green PCB (with mounting holes)
+    2. ABS dark lens housing + barrel
+    3. Nickel connector
+    """
+    from botcad.materials import MAT_ABS_DARK, MAT_FR4_GREEN, MAT_NICKEL
+    from botcad.shapescript.program import MaterialProgram, MultiMaterialResult
+
+    pcb_w, pcb_h, _pcb_t = comp.dimensions
+    pcb_thick = 0.0016
+
+    # -- Program 1: PCB (FR4 green) --
+    pcb_prog = ShapeScript()
+    pcb = pcb_prog.box(pcb_w, pcb_h, pcb_thick)
+    if comp.mounting_points:
+        hole_proto = pcb_prog.cylinder(
+            comp.mounting_points[0].diameter / 2, pcb_thick + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(comp.mounting_points):
+            hole = pcb_prog.instance(hole_proto, i)
+            hole = pcb_prog.locate(hole, pos=mp.pos)
+            pcb = pcb_prog.cut(pcb, hole)
+    pcb_prog.output_ref = pcb
+
+    # -- Program 2: Lens housing (ABS dark) --
+    lens_prog = ShapeScript()
+    base_size = 0.0085
+    base_height = 0.0050
+    lens_y_offset = 0.0025
+    lens_base = lens_prog.box(base_size, base_size, base_height, align=Align3(z="min"))
+    lens_base = lens_prog.locate(lens_base, pos=(0, lens_y_offset, pcb_thick / 2))
+    barrel_r = 0.00325
+    barrel_h = 0.0025
+    lens_barrel = lens_prog.cylinder(barrel_r, barrel_h, align=Align3(z="min"))
+    lens_barrel = lens_prog.locate(
+        lens_barrel, pos=(0, lens_y_offset, pcb_thick / 2 + base_height)
+    )
+    lens_result = lens_prog.fuse(lens_base, lens_barrel)
+    lens_prog.output_ref = lens_result
+
+    # -- Program 3: Metal connector (nickel) --
+    conn_prog = ShapeScript()
+    conn_w = 0.016
+    conn_h_dim = 0.005
+    conn_t = 0.002
+    connector = conn_prog.box(
+        conn_w, conn_t, conn_h_dim, align=Align3(y="max", z="min")
+    )
+    connector = conn_prog.locate(connector, pos=(0, -pcb_h / 2, pcb_thick / 2))
+    conn_prog.output_ref = connector
+
+    return MultiMaterialResult(
+        primary=camera_script(comp),
+        material_programs=[
+            MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
+            MaterialProgram(material=MAT_ABS_DARK, program=lens_prog),
+            MaterialProgram(material=MAT_NICKEL, program=conn_prog),
+        ],
+    )

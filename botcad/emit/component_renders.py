@@ -59,7 +59,11 @@ WIDTH, HEIGHT = 800, 800  # per-view resolution
 
 def _body_render_color(component: Component) -> Color:
     """Compute a render-safe body color, lightening very dark components."""
-    c = component.appearance.color
+    c = (
+        component.default_material.color
+        if component.default_material
+        else (0.541, 0.608, 0.659, 1.0)
+    )
     min_lum = 0.35
     r, g, b = c[0], c[1], c[2]
     lum = 0.299 * r + 0.587 * g + 0.114 * b

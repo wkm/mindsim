@@ -76,6 +76,12 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
     group.traverse((child: any) => {
       if (!child.isMesh) return;
 
+      // Skip meshes replaced by multi-material sub-meshes — keep hidden
+      if (child._multiMaterialReplaced) {
+        child.visible = false;
+        return;
+      }
+
       const mat = ensureCloned(child);
       const origOpacity = mat[ORIG_OPACITY] ?? 1.0;
 

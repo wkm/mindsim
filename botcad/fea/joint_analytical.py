@@ -63,7 +63,7 @@ def _analyze_side(joint: Joint, body: Body, side: str) -> StressResult | None:
         return None
 
     mat = body.material
-    yield_strength = mat.yield_strength
+    yield_strength = mat.effective_yield_strength
 
     if mat and mat.process:
         wall_thick = mat.process.wall_layers * mat.process.nozzle_width

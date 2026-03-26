@@ -28,6 +28,165 @@ import { Viewport3D } from './viewport3d.ts';
 const SIDE_PANEL_WIDTH = 320;
 const TREE_PANEL_WIDTH = 280;
 
+// ---------------------------------------------------------------------------
+// Multi-material mesh enhancement
+// ---------------------------------------------------------------------------
+
+interface ManifestMesh {
+  file: string;
+  material: string;
+}
+
+interface ManifestMaterial {
+  color: number[];
+  metallic: number;
+  roughness: number;
+  opacity: number;
+}
+
+interface ManifestPart {
+  id: string;
+  name?: string;
+  kind?: string;
+  category?: string;
+  mesh?: string;
+  meshes?: ManifestMesh[];
+  parent_body?: string;
+  joint?: string;
+  mount_label?: string;
+  pos?: number[];
+  quat?: number[];
+  mass?: number;
+  shapescript_component?: string;
+  bus_type?: string;
+}
+
+/**
+ * Replace single-color MuJoCo component meshes with per-material sub-meshes.
+ *
+ * For each component part that has a `meshes` array in the manifest, we:
+ * 1. Load each per-material STL directly via fetch
+ * 2. Create a MeshPhysicalMaterial with the material's visual properties
+ * 3. Replace the existing MuJoCo geom mesh with a Group of sub-meshes
+ */
+async function enhanceMultiMaterialParts(
+  manifest: any,
+  bodies: Record<number, any>,
+  botName: string,
+  getMujocoName: (adrArray: any, index: number) => string,
+  model: any,
+): Promise<void> {
+  const materials: Record<string, ManifestMaterial> = manifest.materials || {};
+  const parts: ManifestPart[] = manifest.parts || [];
+
+  // Find parts with multi-material meshes
+  const multiMaterialParts = parts.filter((p: ManifestPart) => p.meshes && p.meshes.length > 0);
+  if (multiMaterialParts.length === 0) return;
+
+  // Build a name→bodyID lookup
+  const nameToBody: Record<string, number> = {};
+  for (let b = 0; b < model.nbody; b++) {
+    const name = getMujocoName(model.name_bodyadr, b);
+    if (name) nameToBody[name] = b;
+  }
+
+  // Build a geomName→geom mesh lookup within each body group
+  const { STLLoader } = await import('three/addons/loaders/STLLoader.js');
+  const stlLoader = new STLLoader();
+
+  for (const part of multiMaterialParts) {
+    // Find the parent body that contains this component's MuJoCo geom
+    const parentBodyName = part.parent_body;
+    if (!parentBodyName) {
+      console.warn('[multi-mat] no parent_body for', part.id);
+      continue;
+    }
+
+    const parentBodyId = nameToBody[parentBodyName];
+    if (parentBodyId === undefined) {
+      console.warn('[multi-mat] no body ID for', parentBodyName);
+      continue;
+    }
+    const parentGroup = bodies[parentBodyId];
+    if (!parentGroup) {
+      console.warn('[multi-mat] no group for body', parentBodyId);
+      continue;
+    }
+
+    // Find the MuJoCo geom mesh for this component (by geomName matching part.id)
+    let existingMesh: any = null;
+    const geomNames: string[] = [];
+    parentGroup.traverse((child: any) => {
+      if (child.isMesh) {
+        geomNames.push(child.geomName ?? '(none)');
+        if (child.geomName === part.id) {
+          existingMesh = child;
+        }
+      }
+    });
+    if (!existingMesh) {
+      console.warn('[multi-mat] no geom match for', part.id, '— available:', geomNames);
+      continue;
+    }
+    console.log('[multi-mat] replacing', part.id, 'with', part.meshes!.length, 'sub-meshes');
+
+    // Load per-material STLs in parallel
+    const meshEntries = part.meshes!;
+    const loadPromises = meshEntries.map(async (entry: ManifestMesh) => {
+      const matDef = materials[entry.material];
+      try {
+        const resp = await fetch(`/api/bots/${botName}/meshes/${entry.file}`);
+        if (!resp.ok) return null;
+        const buf = await resp.arrayBuffer();
+        const geometry = stlLoader.parse(buf);
+        geometry.computeVertexNormals();
+
+        const color = matDef
+          ? new THREE.Color(matDef.color[0], matDef.color[1], matDef.color[2])
+          : new THREE.Color(0.7, 0.7, 0.7);
+
+        const mat = new THREE.MeshPhysicalMaterial({
+          color,
+          metalness: matDef?.metallic ?? 0.0,
+          roughness: matDef?.roughness ?? 0.7,
+          transparent: (matDef?.opacity ?? 1.0) < 1.0,
+          opacity: matDef?.opacity ?? 1.0,
+        });
+
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        return mesh;
+      } catch {
+        return null;
+      }
+    });
+
+    const subMeshes = (await Promise.all(loadPromises)).filter(Boolean);
+    if (subMeshes.length === 0) continue;
+
+    // Tag original mesh so sync() keeps it hidden (replaced by multi-material)
+    (existingMesh as any)._multiMaterialReplaced = true;
+    existingMesh.visible = false;
+
+    // Add sub-meshes to the parent group with the geom's position offset
+    // but NOT its quaternion. The per-material STLs already have mount
+    // rotation baked in (from _apply_mount_rotation in build_cad), same as
+    // the original STL. The MuJoCo geom quaternion represents the same
+    // rotation, so copying it would double-apply it. But the position offset
+    // (geom center relative to body origin) is still needed.
+    for (const subMesh of subMeshes) {
+      subMesh.position.copy(existingMesh.position);
+      subMesh.scale.copy(existingMesh.scale);
+      // Tag sub-meshes with the same body/geom metadata
+      (subMesh as any).bodyID = (existingMesh as any).bodyID;
+      (subMesh as any).geomGroup = (existingMesh as any).geomGroup;
+      (subMesh as any).geomName = `${part.id}_multi`;
+      parentGroup.add(subMesh);
+    }
+  }
+}
+
 export async function initBotViewer(botName: string) {
   // ---------------------------------------------------------------------------
   // Globals shared across modes
@@ -464,7 +623,9 @@ export async function initBotViewer(botName: string) {
       syncScene,
     };
 
+    // Multi-material: replace single-color component meshes with per-material sub-meshes
     if (manifest) {
+      await enhanceMultiMaterialParts(manifest, bodies, botName, getMujocoName, model);
       modes.explore = new ExploreMode(ctx, manifest);
     }
     modes.joint = new JointMode(ctx);

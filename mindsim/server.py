@@ -167,7 +167,9 @@ def _component_to_json(comp, category: str) -> dict:
         "dimensions_mm": [round(d * 1000, 1) for d in comp.dimensions],
         "mass_g": round(comp.mass * 1000, 1),
         "is_servo": comp.kind == ComponentKind.SERVO,
-        "color": list(comp.appearance.color),
+        "color": list(comp.default_material.color)
+        if comp.default_material
+        else [0.541, 0.608, 0.659, 1.0],
         "layers": _component_layers(comp),
     }
     if comp.kind == ComponentKind.SERVO:
@@ -226,7 +228,12 @@ def _layer_color(comp, layer_id: str) -> tuple[int, int, int]:
     """Return RGB color for a component layer."""
     if layer_id in _LAYER_COLORS:
         return _LAYER_COLORS[layer_id]
-    r, g, b = comp.appearance.color[:3]
+    color = (
+        comp.default_material.color
+        if comp.default_material
+        else (0.541, 0.608, 0.659, 1.0)
+    )
+    r, g, b = color[:3]
     return (int(r * 255), int(g * 255), int(b * 255))
 
 
@@ -348,6 +355,16 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
     # applied in build_cad via _apply_mount_rotation).
     if stem in body_solids:
         return _solid_to_stl_bytes(body_solids[stem])
+
+    # Multi-material component mesh: e.g. comp_base_pi__fr4_green
+    # Look up in cad.multi_material_solids by body_name + material_name.
+    if "__" in stem:
+        body_name, mat_name = stem.rsplit("__", 1)
+        mat_solids = cad.multi_material_solids.get(body_name, [])
+        for ms in mat_solids:
+            if ms.material_name == mat_name:
+                return _solid_to_stl_bytes(ms.solid)
+        return None
 
     # Servo mesh: servo_{servo_name}
     if stem.startswith("servo_"):

@@ -54,7 +54,7 @@
             0.005
           ],
           "mass": 0.01,
-          "component_type": "component"
+          "component_type": "compute"
         }
       ]
     },
@@ -274,13 +274,27 @@
         0.0
       ],
       "mass": 0.003,
-      "shapescript_component": "OV5647"
+      "shapescript_component": "OV5647",
+      "meshes": [
+        {
+          "file": "comp_base_camera__fr4_green.stl",
+          "material": "fr4_green"
+        },
+        {
+          "file": "comp_base_camera__abs_dark.stl",
+          "material": "abs_dark"
+        },
+        {
+          "file": "comp_base_camera__nickel.stl",
+          "material": "nickel"
+        }
+      ]
     },
     {
       "id": "comp_base_pi",
       "name": "RaspberryPiZero2W",
       "kind": "purchased",
-      "category": "component",
+      "category": "compute",
       "parent_body": "base",
       "mount_label": "pi",
       "mesh": "comp_base_pi.stl",
@@ -290,7 +304,21 @@
         0.024875
       ],
       "mass": 0.01,
-      "shapescript_component": "RaspberryPiZero2W"
+      "shapescript_component": "RaspberryPiZero2W",
+      "meshes": [
+        {
+          "file": "comp_base_pi__fr4_green.stl",
+          "material": "fr4_green"
+        },
+        {
+          "file": "comp_base_pi__ic_package.stl",
+          "material": "ic_package"
+        },
+        {
+          "file": "comp_base_pi__nickel.stl",
+          "material": "nickel"
+        }
+      ]
     },
     {
       "id": "comp_left_rim_wheel",
@@ -892,5 +920,73 @@
       "description": "Attach via STS3215 at joint right_wheel"
     }
   ],
-  "ik_chains": []
+  "ik_chains": [],
+  "materials": {
+    "lipo_wrap": {
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.7,
+      "opacity": 1.0
+    },
+    "abs_dark": {
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.6,
+      "opacity": 1.0
+    },
+    "fr4_green": {
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.85,
+      "opacity": 1.0
+    },
+    "rubber": {
+      "color": [
+        0.1608,
+        0.2157,
+        0.2588,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.95,
+      "opacity": 1.0
+    },
+    "nickel": {
+      "color": [
+        0.6549,
+        0.7137,
+        0.7608,
+        1.0
+      ],
+      "metallic": 0.85,
+      "roughness": 0.25,
+      "opacity": 1.0
+    },
+    "ic_package": {
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.9,
+      "opacity": 1.0
+    }
+  }
 }
