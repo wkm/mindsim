@@ -154,12 +154,12 @@ export class OverlayViz {
         mesh.position.set(fastener.pos[0], fastener.pos[1], fastener.pos[2]);
       }
 
-      // Orient: fastener STL has head at +Z, shank extends in -Z.
+      // Orient: fastener STL has head top face at Z=0, entire body in -Z.
       // Manifest axis = insertion direction (into the hole).
-      // Align +Z (head) opposite to insertion → head faces outward.
-      const axis = new THREE.Vector3(fastener.axis![0], fastener.axis![1], fastener.axis![2]).normalize();
-      const posZ = new THREE.Vector3(0, 0, 1);
-      const quatFromAxis = new THREE.Quaternion().setFromUnitVectors(posZ, axis);
+      // Align -Z (screw body) with insertion axis → head surface faces outward.
+      const insertDir = new THREE.Vector3(fastener.axis![0], fastener.axis![1], fastener.axis![2]).normalize();
+      const negZ = new THREE.Vector3(0, 0, -1);
+      const quatFromAxis = new THREE.Quaternion().setFromUnitVectors(negZ, insertDir);
       mesh.quaternion.copy(quatFromAxis);
 
       group.add(mesh);
