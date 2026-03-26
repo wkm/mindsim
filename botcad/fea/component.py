@@ -119,9 +119,78 @@ def analyze_component(
     t_asm_end = time.monotonic()
     timings["assembly"] = round(t_asm_end - t_asm_start, 2)
 
-    # Simple test load
+    # --- Build load vector from torque and load mask ---
     load_vec_np = np.zeros((space.node_count(), 3), dtype=np.float32)
-    load_vec_np[:, 2] = -1.0
+
+    # Find centroids of fixed and loaded regions
+    load_mask_np = load_mask.numpy()
+    fixed_mask_np = fixed_mask.numpy()
+    res_arr = [vd.grid.res[0], vd.grid.res[1], vd.grid.res[2]]
+    lo = vd.grid.bounds_lo
+    hi = vd.grid.bounds_hi
+    dx_arr = [(hi[i] - lo[i]) / res_arr[i] for i in range(3)]
+
+    def _cell_positions(mask_np):
+        idxs = np.where(mask_np == 1)[0]
+        if len(idxs) == 0:
+            return np.zeros((0, 3))
+        iz = idxs % res_arr[2]
+        iy = (idxs // res_arr[2]) % res_arr[1]
+        ix = idxs // (res_arr[1] * res_arr[2])
+        return np.column_stack(
+            [
+                lo[0] + (ix + 0.5) * dx_arr[0],
+                lo[1] + (iy + 0.5) * dx_arr[1],
+                lo[2] + (iz + 0.5) * dx_arr[2],
+            ]
+        )
+
+    fixed_pos = _cell_positions(fixed_mask_np)
+    load_pos = _cell_positions(load_mask_np)
+
+    if len(fixed_pos) == 0 or len(load_pos) == 0:
+        return None
+
+    fixed_centroid = fixed_pos.mean(axis=0)
+    load_centroid = load_pos.mean(axis=0)
+
+    # Arm direction: from fixed toward load region
+    arm_dir = load_centroid - fixed_centroid
+    arm_length = float(np.linalg.norm(arm_dir))
+    if arm_length < 1e-9:
+        return None
+    arm_dir = arm_dir / arm_length
+
+    # Force direction: PERPENDICULAR to arm (bending, not axial)
+    # Cross arm with Z-up to get perpendicular; if arm is nearly vertical, use X
+    up = np.array([0.0, 0.0, 1.0])
+    if abs(np.dot(arm_dir, up)) > 0.9:
+        up = np.array([1.0, 0.0, 0.0])
+    force_dir = np.cross(arm_dir, up)
+    force_dir = force_dir / np.linalg.norm(force_dir)
+
+    # Force magnitude from torque: F = T / r
+    force_magnitude = torque_nm / arm_length
+
+    # Select load nodes: nodes whose position falls within load region AABB
+    node_positions = space.node_positions().numpy()
+    load_aabb_lo = load_pos.min(axis=0) - np.array(dx_arr) * 0.5
+    load_aabb_hi = load_pos.max(axis=0) + np.array(dx_arr) * 0.5
+    in_load = (
+        (node_positions[:, 0] >= load_aabb_lo[0])
+        & (node_positions[:, 0] <= load_aabb_hi[0])
+        & (node_positions[:, 1] >= load_aabb_lo[1])
+        & (node_positions[:, 1] <= load_aabb_hi[1])
+        & (node_positions[:, 2] >= load_aabb_lo[2])
+        & (node_positions[:, 2] <= load_aabb_hi[2])
+    )
+    n_load_nodes = int(np.sum(in_load))
+    if n_load_nodes == 0:
+        print("  Warning: no nodes found in load region AABB")
+        return None
+    per_node_force = force_magnitude / n_load_nodes
+    load_vec_np[in_load] = (force_dir * per_node_force).astype(np.float32)
+
     load_wp = wp.from_numpy(load_vec_np, dtype=wp.vec3f)
 
     t_proj_start = time.monotonic()
