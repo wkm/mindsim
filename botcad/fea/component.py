@@ -77,15 +77,82 @@ def analyze_component(
     space = fem.make_polynomial_space(vd.grid, degree=1, dtype=wp.vec3)
     domain = fem.Cells(vd.grid)
 
-    # 1. Identify Fixed BCs
-    fixed_mask = vd.tag_masks.get("fastener_hole")
-    n_fixed = np.sum(fixed_mask.numpy()) if fixed_mask is not None else 0
+    # 1. Identify Fixed and Load BCs from available tags
+    #
+    # Tag-to-BC mapping (priority order):
+    #   Fixed (anchored) side:
+    #     - "fastener_hole" — bolt holes (ideal, but rarely emitted currently)
+    #     - "coupler" — where body connects to parent joint's horn
+    #   Load (force) side:
+    #     - "bracket_*" (excluding "bracket_env_*") — servo bracket interfaces
+    #     - "front_plate", "pocket", "horn_hole" — bracket sub-features
+    #
+    # For base bodies (no coupler): largest bracket region = fixed, others = load.
 
-    if n_fixed == 0:
+    fixed_mask = None
+    load_mask = None
+
+    # Collect candidate masks
+    FIXED_KEYWORDS = ["fastener_hole", "coupler"]
+    LOAD_KEYWORDS = ["front_plate", "pocket", "horn_hole"]
+
+    bracket_masks: list[tuple[str, int]] = []  # (tag_name, voxel_count)
+
+    for tag, mask in vd.tag_masks.items():
+        mask_count = int(np.sum(mask.numpy()))
+        if mask_count == 0:
+            continue
+
+        # Skip envelope tags and wire tags — not structural
+        if "env" in tag or "wire" in tag:
+            continue
+
+        if any(kw in tag for kw in FIXED_KEYWORDS):
+            if fixed_mask is None:
+                fixed_mask = mask
+                print(f"  Fixed BC: {tag} ({mask_count} voxels)")
+            continue
+
+        if "bracket" in tag or any(kw in tag for kw in LOAD_KEYWORDS):
+            bracket_masks.append((tag, mask_count))
+            continue
+
+    # Assign load from bracket masks
+    if bracket_masks:
+        # Sort by voxel count descending
+        bracket_masks.sort(key=lambda x: x[1], reverse=True)
+
+        if fixed_mask is None:
+            # No coupler/fastener — base body. Use largest bracket as fixed.
+            fixed_tag, fixed_count = bracket_masks[0]
+            fixed_mask = vd.tag_masks[fixed_tag]
+            print(f"  Fixed BC (fallback): {fixed_tag} ({fixed_count} voxels)")
+            # Use next bracket as load
+            if len(bracket_masks) > 1:
+                load_tag, load_count = bracket_masks[1]
+                load_mask = vd.tag_masks[load_tag]
+                print(f"  Load BC: {load_tag} ({load_count} voxels)")
+        else:
+            # Have a proper fixed BC — use first bracket as load
+            load_tag, load_count = bracket_masks[0]
+            load_mask = vd.tag_masks[load_tag]
+            print(f"  Load BC: {load_tag} ({load_count} voxels)")
+
+    if fixed_mask is None:
         available = list(vd.tag_masks.keys()) if vd.tag_masks else []
-        print(f"  No 'fastener_hole' tag found. Available tags: {available}")
+        print(f"  No fixed BC tags found. Available tags: {available}")
         return None
 
+    n_fixed = int(np.sum(fixed_mask.numpy()))
+    if n_fixed == 0:
+        return None
+
+    if load_mask is None:
+        available = list(vd.tag_masks.keys()) if vd.tag_masks else []
+        print(f"  No load BC tags found. Available tags: {available}")
+        return None
+
+    # Build Dirichlet projector for fixed BCs
     fixed_subdomain = fem.Subdomain(domain, element_mask=fixed_mask)
     u_fixed_test = fem.make_test(space=space, domain=fixed_subdomain)
     u_fixed_trial = fem.make_trial(space=space, domain=fixed_subdomain)
@@ -95,19 +162,6 @@ def analyze_component(
         output_dtype=wp.float32,
     )
     fem.normalize_dirichlet_projector(bd_matrix)
-
-    # 2. Identify Loads
-    load_mask = None
-    for tag, mask in vd.tag_masks.items():
-        if any(
-            keyword in tag
-            for keyword in ["front_plate", "pocket", "horn_hole", "bracket"]
-        ):
-            load_mask = mask
-            break
-
-    if not load_mask:
-        return None
 
     # Final Solve
     t_asm_start = time.monotonic()
