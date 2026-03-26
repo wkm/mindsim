@@ -648,7 +648,7 @@ export class Viewport3D {
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._ren.setSize(w, h);
     this._ren.shadowMap.enabled = true;
-    this._ren.shadowMap.type = THREE.PCFShadowMap;
+    this._ren.shadowMap.type = THREE.PCFSoftShadowMap;
     this._ren.localClippingEnabled = true;
     this._ren.toneMapping = THREE.ACESFilmicToneMapping;
     this._ren.toneMappingExposure = 1.0;
@@ -666,6 +666,18 @@ export class Viewport3D {
     dir.position.set(0.3, 0.5, 0.4);
     this._scene.add(dir);
     this._dirLight = dir;
+    dir.castShadow = true;
+    dir.shadow.mapSize.width = 1024;
+    dir.shadow.mapSize.height = 1024;
+    dir.shadow.bias = -0.0005;
+    // Shadow camera frustum — sized for typical bot (~0.3m).
+    // Covers a 0.4m box centered on origin, 0.5m tall.
+    dir.shadow.camera.left = -0.2;
+    dir.shadow.camera.right = 0.2;
+    dir.shadow.camera.top = 0.5;
+    dir.shadow.camera.bottom = -0.05;
+    dir.shadow.camera.near = 0.01;
+    dir.shadow.camera.far = 1.5;
     const fill = new THREE.DirectionalLight(0xffffff, 0.3);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
