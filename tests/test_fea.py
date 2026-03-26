@@ -36,13 +36,12 @@ def test_fea_safety_factor_low_strength():
 
     bot2 = Bot("weak_bot")
     base2 = bot2.body("base")
-    base2.material = TPU
     j2 = base2.joint("j", servo=STS3215())
     j2.body("child")
-    child2 = j2.child
-    if child2:
-        child2.material = TPU
     bot2.solve()
+    # Set material AFTER solve — solve() overwrites materials based on body kind
+    for body in bot2.all_bodies:
+        body.material = TPU
     sf_weak = bot2.analyze_stresses()[0].safety_factor
 
     # TPU (15 MPa) vs PLA (40 MPa)
