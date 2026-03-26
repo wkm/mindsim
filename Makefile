@@ -57,10 +57,21 @@ lint:
 	pnpm exec biome check --write viewer/
 	pnpm exec tsc --noEmit
 
+# Port assignment: hash worktree path for deterministic per-worktree ports.
+# Main worktree (master/main) gets the defaults (8081/5173).
+# Other worktrees get offset ports to avoid conflicts.
+API_PORT := $(shell \
+	if [ -d .git ]; then echo 8081; \
+	else echo $$(( 8082 + $$(pwd | cksum | cut -d' ' -f1) % 100 )); fi)
+VITE_PORT := $(shell \
+	if [ -d .git ]; then echo 5173; \
+	else echo $$(( 5174 + $$(pwd | cksum | cut -d' ' -f1) % 100 )); fi)
+
 web:
-	pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \
-		"uv run uvicorn mindsim.server:app --host 0.0.0.0 --port 8081 --reload --reload-dir botcad --reload-dir mindsim" \
-		"while ! curl -sf http://localhost:8081/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --open /viewer/"
+	@echo "API port: $(API_PORT)  Vite port: $(VITE_PORT)"
+	API_PORT=$(API_PORT) pnpm exec concurrently --kill-others --names api,vite --prefix-colors blue,green \
+		"uv run uvicorn mindsim.server:app --host 0.0.0.0 --port $(API_PORT) --reload --reload-dir botcad --reload-dir mindsim" \
+		"while ! curl -sf http://localhost:$(API_PORT)/api/bots >/dev/null 2>&1; do sleep 0.2; done && pnpm exec vite --port $(VITE_PORT) --open /viewer/"
 
 test-viewer:
 	pnpm exec playwright test --config viewer/tests/playwright.config.mjs
