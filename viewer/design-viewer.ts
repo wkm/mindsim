@@ -10,6 +10,7 @@ import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
 import { DesignScene, NodeKind } from './design-scene.ts';
 import type { ManifestPart, ViewerManifest } from './manifest-types.ts';
+import { OverlayViz } from './overlay-viz.ts';
 import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
@@ -228,6 +229,11 @@ export async function initDesignViewer(
   // Wait for all eager meshes
   await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
 
+  // Step 5c: Build overlay viz (wire stubs + fastener instances)
+  const overlayViz = new OverlayViz(bodyGroups, botName);
+  overlayViz.buildWireStubs(partsList, designScene);
+  await overlayViz.buildFasteners(partsList, designScene);
+
   // Step 6: Sync initial visibility
   function syncVisibility(): void {
     designScene.syncVisibility();
@@ -332,6 +338,63 @@ export async function initDesignViewer(
     } else {
       tree.clearFocus();
     }
+  });
+
+  // Step 8b: Tooltip on hover for overlay meshes (wire stubs + fasteners)
+  let tooltipEl: HTMLDivElement | null = null;
+  const tooltipRaycaster = new THREE.Raycaster();
+  const tooltipPointer = new THREE.Vector2();
+
+  function getTooltipEl(): HTMLDivElement {
+    if (!tooltipEl) {
+      const el = document.createElement('div');
+      el.style.cssText = `
+        position: fixed; z-index: 1000; pointer-events: none;
+        background: rgba(24, 32, 38, 0.92); color: #E1E8ED;
+        font-size: 11px; font-family: var(--font, sans-serif);
+        padding: 4px 8px; border-radius: 4px;
+        white-space: nowrap; display: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      `;
+      document.body.appendChild(el);
+      tooltipEl = el;
+    }
+    return tooltipEl;
+  }
+
+  function showTooltip(x: number, y: number, text: string): void {
+    const el = getTooltipEl();
+    el.textContent = text;
+    el.style.display = 'block';
+    el.style.left = `${x + 12}px`;
+    el.style.top = `${y - 8}px`;
+  }
+
+  function hideTooltip(): void {
+    if (tooltipEl) tooltipEl.style.display = 'none';
+  }
+
+  canvas.addEventListener('pointermove', (e: PointerEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    tooltipPointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    tooltipPointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    tooltipRaycaster.setFromCamera(tooltipPointer, viewport.camera);
+
+    const overlayTargets = overlayViz.getRaycastTargets();
+    if (overlayTargets.length > 0) {
+      const hits = tooltipRaycaster.intersectObjects(overlayTargets, false);
+      if (hits.length > 0) {
+        const text = OverlayViz.formatTooltip(hits[0].object as THREE.Mesh);
+        if (text) {
+          showTooltip(e.clientX, e.clientY, text);
+          canvas.style.cursor = 'pointer';
+          return;
+        }
+      }
+    }
+
+    hideTooltip();
+    canvas.style.cursor = '';
   });
 
   // Step 9: Frame camera on loaded geometry

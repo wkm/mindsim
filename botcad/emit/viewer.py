@@ -157,6 +157,21 @@ def _transform_fastener_pos(
     )
 
 
+def _transform_fastener_axis(mp_axis: tuple, servo_quat: tuple) -> list:
+    """Transform a fastener mount-point axis direction to body-local frame."""
+    from botcad.geometry import rotate_vec
+
+    return _round_vec(rotate_vec(servo_quat, mp_axis))
+
+
+# Context labels for fastener categories
+_FASTENER_CONTEXT = {
+    "ear": "bracket ear -> servo case",
+    "horn": "coupler -> horn",
+    "rear": "rear horn -> servo case",
+}
+
+
 def _build_joint_fastener_entry(
     joint_name: str,
     tag: str,
@@ -182,6 +197,9 @@ def _build_joint_fastener_entry(
             mp.pos, servo_quat, servo_center, body_world_pos
         ),
         "quat": _round_vec(servo_quat),
+        "axis": _transform_fastener_axis(mp.axis, servo_quat),
+        "material": "steel",
+        "context": _FASTENER_CONTEXT.get(tag, "fastener"),
     }
 
 
@@ -191,6 +209,7 @@ def _build_mount_fastener_entry(
     index: int,
     mp,
     fastener_pos: list,
+    fastener_axis: list,
 ) -> dict:
     """Build a manifest entry for a mount-attached fastener."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
@@ -205,6 +224,9 @@ def _build_mount_fastener_entry(
         "mesh": f"{fastener_stl_stem(mp)}.stl",
         "pos": fastener_pos,
         "quat": [1.0, 0.0, 0.0, 0.0],
+        "axis": fastener_axis,
+        "material": "steel",
+        "context": f"{mount_label} mount -> {body_name}",
     }
 
 
@@ -501,9 +523,10 @@ def build_viewer_manifest(bot: Bot) -> dict:
                         bwp[2] + rp[2] + rotated[2],
                     )
                 )
+                fastener_axis = _round_vec(mount.rotate_point(mp.axis))
                 manifest["parts"].append(
                     _build_mount_fastener_entry(
-                        body.name, mount.label, i, mp, fastener_pos
+                        body.name, mount.label, i, mp, fastener_pos, fastener_axis
                     )
                 )
 
@@ -524,6 +547,9 @@ def build_viewer_manifest(bot: Bot) -> dict:
                 }
             )
 
+    # 5. Wire stubs at connector sockets
+    _emit_wire_stubs(bot, manifest)
+
     # Build IK chains — find longest serial chains of hinge joints
     _build_ik_chains(bot, manifest)
 
@@ -535,6 +561,68 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     manifest = build_viewer_manifest(bot)
     out_path = output_dir / "viewer_manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
+    """Emit short wire stub entries at each component's WirePort.
+
+    Wire stubs are short segments (~25mm) extending from connector sockets
+    along the wire exit direction. They let the viewer show "there's a wire
+    here, does it collide?" without full cable routing.
+
+    Position and direction are in body-local frame.
+    """
+    for body in bot.all_bodies:
+        for mount in body.mounts:
+            comp = mount.component
+            for wp in comp.wire_ports:
+                if not wp.connector_type:
+                    continue
+
+                # Look up connector spec for wire exit direction
+                try:
+                    from botcad.connectors import connector_spec
+
+                    cspec = connector_spec(wp.connector_type)
+                except KeyError:
+                    log.debug(
+                        "Unknown connector_type %r on %s/%s, skipping wire stub",
+                        wp.connector_type,
+                        comp.name,
+                        wp.label,
+                    )
+                    continue
+
+                # Transform port position and exit direction from component-local
+                # to body-local frame:
+                #   1. Apply mount.rotate_point (handles rotate_z + face rotation)
+                #   2. Translate by mount.resolved_pos
+                rotated_pos = mount.rotate_point(wp.pos)
+                rp = mount.resolved_pos
+                body_pos = (
+                    rotated_pos[0] + rp[0],
+                    rotated_pos[1] + rp[1],
+                    rotated_pos[2] + rp[2],
+                )
+
+                # Direction is a vector (no translation), only rotation
+                body_dir = mount.rotate_point(cspec.wire_exit_direction)
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
+                        "name": wp.label,
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "stub",
+                        "parent_body": body.name,
+                        "position": _round_vec(body_pos),
+                        "direction": _round_vec(body_dir),
+                        "length": 0.025,
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                    }
+                )
 
 
 def _build_ik_chains(bot: Bot, manifest: dict) -> None:

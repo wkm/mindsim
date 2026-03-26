@@ -63,9 +63,20 @@ export interface ManifestPart {
   joint?: string;
   mount_label?: string;
   mesh: string;
-  pos: number[];
-  quat: number[]; // wxyz
+  pos?: number[];
+  quat?: number[]; // wxyz
   meshes?: ManifestMesh[];
+  // Fastener-specific fields
+  axis?: number[];
+  material?: string;
+  context?: string;
+  // Wire stub-specific fields
+  wire_kind?: string;
+  position?: number[];
+  direction?: number[];
+  length?: number;
+  bus_type?: string;
+  connector_type?: string;
 }
 
 export interface ManifestDesignLayer {
