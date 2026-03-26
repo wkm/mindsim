@@ -655,12 +655,19 @@ export class Viewport3D {
     this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
-    // Lighting
-    this._scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.6);
-    dir.position.set(0.3, 0.5, 0.4);
-    this._scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    // Lighting — CAD-style: hemisphere ambient + camera headlight + key/fill
+    this._scene.add(new THREE.HemisphereLight(0xf0f0f0, 0x808080, 1.0));
+    // Camera headlight — moves with the camera so surfaces always have detail
+    const headlight = new THREE.DirectionalLight(0xffffff, 1.2);
+    headlight.position.set(0, 0, 1); // in camera space: forward
+    this._cam.add(headlight);
+    this._scene.add(this._cam); // camera must be in scene graph for children to render
+    // Key light at ~45 degrees
+    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    key.position.set(0.3, 0.5, 0.4);
+    this._scene.add(key);
+    // Fill light opposite the key
+    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
     this._gridHelper = null;
@@ -1618,54 +1625,65 @@ export class Viewport3D {
 
     const plane = this._secPlane;
 
-    // DEBUG: collect ALL segments across all meshes, log counts
+    // Collect segments per group so each group gets its own cap color
     const allSegments = [];
-    for (const { mesh } of allMeshes) {
-      this._computeMeshPlaneContour(mesh, plane, allSegments);
+    const segmentsByGroup: Record<string, number[]> = {};
+    for (const { mesh, groupName } of allMeshes) {
+      if (!segmentsByGroup[groupName]) segmentsByGroup[groupName] = [];
+      const before = segmentsByGroup[groupName].length;
+      this._computeMeshPlaneContour(mesh, plane, segmentsByGroup[groupName]);
+      // Also collect into allSegments for contour lines
+      const added = segmentsByGroup[groupName].slice(before);
+      allSegments.push(...added);
     }
 
-    // Chain into closed polygons
-    const polygons = this._chainSegments(allSegments);
+    // Create per-group hatched cap meshes, each with its own color
+    if (!this._hatchTextures) this._hatchTextures = [];
+    let anyCapCreated = false;
 
-    // Triangulate and create hatched cap meshes
-    if (polygons.length > 0) {
+    for (const [groupName, groupSegments] of Object.entries(segmentsByGroup)) {
+      if (groupSegments.length === 0) continue;
+
+      const polygons = this._chainSegments(groupSegments);
+      if (polygons.length === 0) continue;
+
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
-      if (capGeom) {
-        // Hide the section viz plane — caps show the cut position
-        if (this._secViz) this._secViz.visible = false;
+      if (!capGeom) continue;
 
-        // Cap color — darker than the body for clear contrast
-        let capColor: THREE.Color | undefined;
-        if (this._sectionCapColorFn) {
-          const firstGroupName = Object.keys(layerMeshes)[0];
-          capColor = this._sectionCapColorFn(firstGroupName);
-        }
-        if (capColor == null) {
-          const firstMat = allMeshes[0]?.mesh?.material;
-          const baseHex = firstMat?.color ? firstMat.color.getHex() : 0xced9e0;
-          // Darken the body color (blend toward dark gray, not white)
-          const base = new THREE.Color(baseHex);
-          capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
-        }
+      anyCapCreated = true;
 
-        const hatchTex = this._createHatchTexture(capColor);
-        const capMat = new THREE.MeshBasicMaterial({
-          map: hatchTex,
-          side: THREE.DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: 1,
-          polygonOffsetUnits: 1,
-        });
-        const capMesh = new THREE.Mesh(capGeom, capMat);
-        capMesh.raycast = () => {};
-        capMesh.userData._vpCap = true;
-        this._capGroup.add(capMesh);
-
-        // Track hatch textures for zoom-dependent repeat update
-        if (!this._hatchTextures) this._hatchTextures = [];
-        this._hatchTextures.push(hatchTex);
+      // Determine cap color for this group
+      let capColor: THREE.Color | undefined;
+      if (this._sectionCapColorFn) {
+        capColor = this._sectionCapColorFn(groupName);
       }
+      if (capColor == null) {
+        // Derive from the first mesh in this group
+        const groupMesh = layerMeshes[groupName]?.[0];
+        const mat = groupMesh?.material;
+        const baseHex = mat?.color ? mat.color.getHex() : 0xced9e0;
+        const base = new THREE.Color(baseHex);
+        capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
+      }
+
+      const hatchTex = this._createHatchTexture(capColor);
+      const capMat = new THREE.MeshBasicMaterial({
+        map: hatchTex,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+      const capMesh = new THREE.Mesh(capGeom, capMat);
+      capMesh.raycast = () => {};
+      capMesh.userData._vpCap = true;
+      this._capGroup.add(capMesh);
+
+      this._hatchTextures.push(hatchTex);
     }
+
+    // Hide the section viz plane when caps are showing the cut position
+    if (anyCapCreated && this._secViz) this._secViz.visible = false;
 
     // Contour lines (keep for now)
     if (allSegments.length > 0) {

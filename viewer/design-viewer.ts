@@ -357,7 +357,66 @@ export async function initDesignViewer(
   tree.build();
   tree.updateFromDesignScene(designScene.tree);
 
-  // Step 8: Frame camera on loaded geometry
+  // Step 8: Click-to-select — raycast against body group meshes
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const pointerDown = new THREE.Vector2();
+  let selectedMesh: THREE.Mesh | null = null;
+  const CLICK_THRESHOLD = 5; // pixels — ignore drag gestures
+
+  const canvas = viewport.renderer.domElement;
+  canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+    pointerDown.set(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('pointerup', (e: PointerEvent) => {
+    // Only treat as click if pointer didn't move much (ignore drags)
+    const dx = e.clientX - pointerDown.x;
+    const dy = e.clientY - pointerDown.y;
+    if (dx * dx + dy * dy > CLICK_THRESHOLD * CLICK_THRESHOLD) return;
+
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, viewport.camera);
+
+    // Collect all visible meshes from body groups
+    const targets: THREE.Mesh[] = [];
+    for (const group of Object.values(bodyGroups)) {
+      group.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && child.visible) {
+          targets.push(child as THREE.Mesh);
+        }
+      });
+    }
+
+    const hits = raycaster.intersectObjects(targets, false);
+
+    // Clear previous highlight
+    if (selectedMesh) {
+      const mat = selectedMesh.material as THREE.MeshPhysicalMaterial;
+      if (mat.emissive) mat.emissive.setHex(0x000000);
+      selectedMesh = null;
+    }
+
+    if (hits.length > 0) {
+      const hitMesh = hits[0].object as THREE.Mesh;
+      const nodeId = designScene.meshToNode.get(hitMesh.uuid);
+
+      // Highlight mesh with emissive tint
+      selectedMesh = hitMesh;
+      const mat = hitMesh.material as THREE.MeshPhysicalMaterial;
+      if (mat.emissive) mat.emissive.setHex(0x333333);
+
+      // Highlight corresponding tree node
+      if (nodeId) {
+        tree.setFocused(nodeId);
+      }
+    } else {
+      tree.clearFocus();
+    }
+  });
+
+  // Step 9: Frame camera on loaded geometry
   const box = new THREE.Box3();
   for (const mesh of designScene.meshes.values()) {
     box.expandByObject(mesh);
