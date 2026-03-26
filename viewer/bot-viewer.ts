@@ -186,7 +186,12 @@ async function enhanceMultiMaterialParts(
   }
 }
 
-export async function initBotViewer(botName: string) {
+export interface BotViewerHandle {
+  pause(): void;
+  resume(): void;
+}
+
+export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
   // ---------------------------------------------------------------------------
   // Globals shared across modes
   // ---------------------------------------------------------------------------
@@ -670,7 +675,10 @@ export async function initBotViewer(botName: string) {
     switchMode(manifest ? 'explore' : 'joint');
     document.getElementById('loading').style.display = 'none';
 
+    let paused = false;
+
     viewport.animate(() => {
+      if (paused) return;
       initialFocus.update(); // drive initial camera animation
       if (currentMode?.update) currentMode.update();
     });
@@ -684,8 +692,23 @@ export async function initBotViewer(botName: string) {
         (modes.explore as ExploreMode).refocusCurrent();
       }
     });
+
+    return {
+      pause() {
+        paused = true;
+        // Deactivate current mode to clean up event listeners
+        if (currentMode) currentMode.deactivate();
+      },
+      resume() {
+        paused = false;
+        // Re-activate current mode
+        if (currentMode) currentMode.activate();
+        updateCanvasLayout();
+      },
+    };
   } catch (err) {
     console.error('Failed to initialize viewer:', err);
     document.getElementById('loading-text').textContent = `Error: ${err.message}`;
+    return { pause() {}, resume() {} };
   }
 }
