@@ -204,10 +204,13 @@ export async function initDesignViewer(
     }
   });
 
-  // Step 5b: Load fastener/wire part meshes (only these remain in parts[])
+  // Step 5b: Load remaining part meshes (fasteners + anything else in parts[])
+  // Wire stubs are handled by OverlayViz (they're generated geometry, not STLs).
   const partsList = manifest.parts ?? [];
   const partMeshPromises = partsList.map(async (part) => {
-    // Skip parts without positioning data (e.g., wire segments)
+    // Skip wires — OverlayViz generates wire stub cylinders
+    if (part.category === 'wire') return;
+    // Skip parts without positioning data
     if (!part.pos || !part.quat) return;
 
     const nodeId = resolvePartNodeId(part);
@@ -216,12 +219,28 @@ export async function initDesignViewer(
     const geometry = await fetchSTL(botName, part.mesh);
     if (!geometry) return;
 
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: 0x333333,
-      roughness: 0.5,
-      metalness: 0.1,
-    });
-    const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
+    const mat = part.category === 'fastener'
+      ? new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 })
+      : new THREE.MeshPhysicalMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.1 });
+
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.set(part.pos[0], part.pos[1], part.pos[2]);
+
+    if (part.category === 'fastener') {
+      // Fastener STL: head at Z=0, shank in -Z.
+      // Manifest quat = servo placement quat (rotates servo-canonical → body-local).
+      // MountingEar default axis = (0,0,-1) in servo-local, meaning the screw's
+      // Z-axis should map to -Z in servo-local. So we need a 180° flip around X
+      // BEFORE applying the servo quat: fastener_quat = servo_quat * Rx(180°).
+      const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+      const servoQuat = manifestQuatToThree(part.quat);
+      mesh.quaternion.copy(servoQuat.multiply(flip));
+    } else {
+      mesh.quaternion.copy(manifestQuatToThree(part.quat));
+    }
+
     group.add(mesh);
     designScene.registerMesh(nodeId, mesh);
   });
@@ -229,10 +248,9 @@ export async function initDesignViewer(
   // Wait for all eager meshes
   await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
 
-  // Step 5c: Build overlay viz (wire stubs + fastener instances)
+  // Step 5c: Build overlay viz (wire stubs only — fasteners handled in 5b)
   const overlayViz = new OverlayViz(bodyGroups, botName);
   overlayViz.buildWireStubs(partsList, designScene);
-  await overlayViz.buildFasteners(partsList, designScene);
 
   // Step 6: Sync initial visibility
   function syncVisibility(): void {
