@@ -902,6 +902,25 @@ async def run_fea(bot: str):
             sf = float(eff_yield / max_stress) if max_stress > 0 else 99.0
 
             print(f"[fea] Generating PLY meshes for {target_body.name}...")
+            # Find the fixed BC mask (coupler, fastener_hole, or largest bracket)
+            import numpy as np
+
+            fixed_tag_mask = None
+            for tag in ["fastener_hole", "coupler"]:
+                if tag in vd.tag_masks:
+                    fixed_tag_mask = vd.tag_masks[tag]
+                    break
+            if fixed_tag_mask is None:
+                # Fallback: largest non-envelope bracket
+                for tag, mask in sorted(
+                    vd.tag_masks.items(),
+                    key=lambda kv: int(np.sum(kv[1].numpy())),
+                    reverse=True,
+                ):
+                    if "bracket" in tag and "env" not in tag:
+                        fixed_tag_mask = mask
+                        break
+
             files = {
                 f"{target_body.name}_stress_heatmap.ply": _get_ply_bytes(
                     lambda *a: export_stress_mesh(*a, yield_strength=eff_yield),
@@ -910,16 +929,14 @@ async def run_fea(bot: str):
                     u_field,
                     stress_array,
                 ),
-                f"{target_body.name}_fixed_voxels.ply": _get_ply_bytes(
-                    export_voxel_mesh,
-                    vd,
-                    vd.tag_masks["fastener_hole"],
-                    [0, 255, 0, 255],
-                ),
                 f"{target_body.name}_structure_voxels.ply": _get_ply_bytes(
                     export_voxel_mesh, vd, vd.inside_mask, [200, 200, 200, 100]
                 ),
             }
+            if fixed_tag_mask is not None:
+                files[f"{target_body.name}_fixed_voxels.ply"] = _get_ply_bytes(
+                    export_voxel_mesh, vd, fixed_tag_mask, [0, 255, 0, 255]
+                )
 
             with _fea_cache_lock:
                 for fname, bdata in files.items():

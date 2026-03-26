@@ -55,7 +55,9 @@ def export_voxel_mesh(vd, mask, color, path: str):
     print(f"Exported voxel mesh to {path}")
 
 
-def export_stress_mesh(solid, space, u_field, stress_array, path: str):
+def export_stress_mesh(
+    solid, space, u_field, stress_array, path: str, yield_strength: float = 40e6
+):
     """Interpolate stress onto CAD mesh and export as vertex-colored PLY."""
     verts, faces = solid.tessellate(tolerance=0.0005)  # high res for heatmap
     verts_np = np.array([(v.X, v.Y, v.Z) for v in verts], dtype=np.float32)
@@ -87,9 +89,8 @@ def export_stress_mesh(solid, space, u_field, stress_array, path: str):
     vertex_stresses = stress_vals[cell_indices]
 
     # Normalize stress for heatmap (0.0 to 1.0)
-    # We use yield strength (40MPa) as the 1.0 mark
-    max_range = 40e6  # 40 MPa
-    normalized = np.clip(vertex_stresses / max_range, 0, 1)
+    # Use actual material yield strength as the 1.0 mark
+    normalized = np.clip(vertex_stresses / yield_strength, 0, 1)
 
     # Map to colors (Blue -> Cyan -> Green -> Yellow -> Red)
     from matplotlib import cm
