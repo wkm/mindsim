@@ -5,7 +5,7 @@
     {
       "name": "base",
       "mesh": "base.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": null,
       "shape": "box",
       "dimensions": [
@@ -24,6 +24,12 @@
         0.0,
         0.0,
         0.0
+      ],
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
       ],
       "mounts": [
         {
@@ -72,7 +78,7 @@
     {
       "name": "left_rim",
       "mesh": "left_rim.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "base",
       "shape": "cylinder",
       "dimensions": [
@@ -92,6 +98,12 @@
         0.0,
         0.0
       ],
+      "color": [
+        0.1608,
+        0.2157,
+        0.2588,
+        1.0
+      ],
       "joint": "left_wheel",
       "mounts": [
         {
@@ -110,7 +122,7 @@
     {
       "name": "right_rim",
       "mesh": "right_rim.stl",
-      "kind": "fabricated",
+      "role": "structure",
       "parent": "base",
       "shape": "cylinder",
       "dimensions": [
@@ -130,6 +142,12 @@
         0.0,
         0.0
       ],
+      "color": [
+        0.1608,
+        0.2157,
+        0.2588,
+        1.0
+      ],
       "joint": "right_wheel",
       "mounts": [
         {
@@ -144,6 +162,116 @@
           "component_type": "wheel"
         }
       ]
+    },
+    {
+      "name": "servo_left_wheel",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "base",
+      "category": "servo",
+      "joint": "left_wheel",
+      "pos": [
+        -0.049,
+        0.0,
+        0.0125
+      ],
+      "quat": [
+        0.0,
+        -0.707107,
+        0.0,
+        0.707107
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_left_wheel",
+      "mesh": "horn_left_wheel.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "base",
+      "category": "horn",
+      "joint": "left_wheel",
+      "pos": [
+        -0.069,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
+    },
+    {
+      "name": "servo_right_wheel",
+      "mesh": "servo_STS3215.stl",
+      "role": "component",
+      "component": "STS3215",
+      "parent": "base",
+      "category": "servo",
+      "joint": "right_wheel",
+      "pos": [
+        0.049,
+        0.0,
+        0.0125
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.055,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "STS3215"
+    },
+    {
+      "name": "horn_right_wheel",
+      "mesh": "horn_right_wheel.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "base",
+      "category": "horn",
+      "joint": "right_wheel",
+      "pos": [
+        0.069,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:STS3215"
     }
   ],
   "joints": [
@@ -256,100 +384,12 @@
       ]
     }
   ],
-  "parts": [
+  "mounts": [
     {
-      "id": "servo_left_wheel",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "base",
-      "joint": "left_wheel",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        -0.049,
-        0.0,
-        0.0125
-      ],
-      "quat": [
-        0.0,
-        -0.707107,
-        0.0,
-        0.707107
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_left_wheel",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "base",
-      "joint": "left_wheel",
-      "mesh": "horn_left_wheel.stl",
-      "pos": [
-        -0.069,
-        0.0,
-        0.0
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        -0.707107,
-        0.0
-      ],
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "servo_right_wheel",
-      "name": "STS3215",
-      "kind": "purchased",
-      "category": "servo",
-      "parent_body": "base",
-      "joint": "right_wheel",
-      "mesh": "servo_STS3215.stl",
-      "pos": [
-        0.049,
-        0.0,
-        0.0125
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "mass": 0.055,
-      "shapescript_component": "STS3215"
-    },
-    {
-      "id": "horn_right_wheel",
-      "name": "Horn disc",
-      "kind": "purchased",
-      "category": "horn",
-      "parent_body": "base",
-      "joint": "right_wheel",
-      "mesh": "horn_right_wheel.stl",
-      "pos": [
-        0.069,
-        0.0,
-        0.0
-      ],
-      "quat": [
-        0.707107,
-        0.0,
-        0.707107,
-        0.0
-      ],
-      "shapescript_component": "horn:STS3215"
-    },
-    {
-      "id": "comp_base_battery",
-      "name": "LiPo2S-1000",
-      "kind": "purchased",
+      "body": "base",
+      "label": "battery",
+      "component": "LiPo2S-1000",
       "category": "battery",
-      "parent_body": "base",
-      "mount_label": "battery",
       "mesh": "comp_base_battery.stl",
       "pos": [
         0.0,
@@ -363,15 +403,19 @@
         0.0
       ],
       "mass": 0.055,
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
+      ],
       "shapescript_component": "LiPo2S-1000"
     },
     {
-      "id": "comp_base_camera",
-      "name": "OV5647",
-      "kind": "purchased",
+      "body": "base",
+      "label": "camera",
+      "component": "OV5647",
       "category": "camera",
-      "parent_body": "base",
-      "mount_label": "camera",
       "mesh": "comp_base_camera.stl",
       "pos": [
         0.0,
@@ -385,6 +429,12 @@
         0.0
       ],
       "mass": 0.003,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
       "shapescript_component": "OV5647",
       "meshes": [
         {
@@ -402,12 +452,10 @@
       ]
     },
     {
-      "id": "comp_base_pi",
-      "name": "RaspberryPiZero2W",
-      "kind": "purchased",
+      "body": "base",
+      "label": "pi",
+      "component": "RaspberryPiZero2W",
       "category": "compute",
-      "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "comp_base_pi.stl",
       "pos": [
         0.0,
@@ -421,6 +469,12 @@
         0.0
       ],
       "mass": 0.01,
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
       "shapescript_component": "RaspberryPiZero2W",
       "meshes": [
         {
@@ -438,12 +492,10 @@
       ]
     },
     {
-      "id": "comp_left_rim_wheel",
-      "name": "Pololu 90x10mm Wheel",
-      "kind": "purchased",
+      "body": "left_rim",
+      "label": "wheel",
+      "component": "Pololu 90x10mm Wheel",
       "category": "wheel",
-      "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "comp_left_rim_wheel.stl",
       "pos": [
         -0.075,
@@ -457,15 +509,19 @@
         0.0
       ],
       "mass": 0.022,
+      "color": [
+        0.1608,
+        0.2157,
+        0.2588,
+        1.0
+      ],
       "shapescript_component": "Pololu 90x10mm Wheel"
     },
     {
-      "id": "comp_right_rim_wheel",
-      "name": "Pololu 90x10mm Wheel",
-      "kind": "purchased",
+      "body": "right_rim",
+      "label": "wheel",
+      "component": "Pololu 90x10mm Wheel",
       "category": "wheel",
-      "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "comp_right_rim_wheel.stl",
       "pos": [
         0.075,
@@ -479,8 +535,16 @@
         0.0
       ],
       "mass": 0.022,
+      "color": [
+        0.1608,
+        0.2157,
+        0.2588,
+        1.0
+      ],
       "shapescript_component": "Pololu 90x10mm Wheel"
-    },
+    }
+  ],
+  "parts": [
     {
       "id": "fastener_left_wheel_ear_0",
       "name": "M3 SHC",

@@ -86,6 +86,9 @@ export class ComponentTree {
   bodiesByName: Record<string, any>;
   jointsByName: Record<string, any>;
   childJointsOf: Record<string, any[]>;
+  servosByJoint: Record<string, any[]>;
+  hornsByJoint: Record<string, any[]>;
+  mountsByBody: Record<string, any[]>;
   partsByBody: Record<string, any[]>;
   partsByJoint: Record<string, any[]>;
 
@@ -136,7 +139,28 @@ export class ComponentTree {
       this.childJointsOf[j.parent_body].push(j);
     }
 
-    // Index parts by parent_body
+    // Index component bodies (servos, horns) by joint
+    this.servosByJoint = {};
+    this.hornsByJoint = {};
+    for (const b of manifest.bodies) {
+      if (b.role !== 'component' || !b.joint) continue;
+      if (b.category === 'servo') {
+        if (!this.servosByJoint[b.joint]) this.servosByJoint[b.joint] = [];
+        this.servosByJoint[b.joint].push(b);
+      } else if (b.category === 'horn') {
+        if (!this.hornsByJoint[b.joint]) this.hornsByJoint[b.joint] = [];
+        this.hornsByJoint[b.joint].push(b);
+      }
+    }
+
+    // Index mounts by parent body
+    this.mountsByBody = {};
+    for (const m of manifest.mounts || []) {
+      if (!this.mountsByBody[m.body]) this.mountsByBody[m.body] = [];
+      this.mountsByBody[m.body].push(m);
+    }
+
+    // Index parts (fasteners + wires only) by parent_body
     this.partsByBody = {}; // bodyName -> [part]
     this.partsByJoint = {}; // jointName -> [part]
     for (const p of manifest.parts || []) {
@@ -172,7 +196,7 @@ export class ComponentTree {
       }
     } else {
       // Auto-generate assemblies from kinematic structure
-      const rootBody = this.manifest.bodies.find((b) => b.parent === null);
+      const rootBody = this.manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
       if (!rootBody) return;
       const autoAsm = this._buildAutoAssemblyFromKinematics(rootBody);
       this._treeRoot.appendChild(autoAsm);
@@ -273,6 +297,7 @@ export class ComponentTree {
   _resolveBodyName(nodeId, data) {
     const [type, ...rest] = nodeId.split(':');
     if (type === 'body') return rest[0];
+    if (type === 'mount') return rest[0]; // mount:{bodyName}:{label}
     if (type === 'joint') return data?.parent_body;
     if (type === 'part' || type === 'fastener-group' || type === 'wire-group') return data?.parent_body;
     if (type === 'assembly') {
@@ -420,7 +445,7 @@ export class ComponentTree {
       const asmBodySet = new Set(bodyNames);
       const rootBodies = bodyNames
         .map((n) => this.bodiesByName[n])
-        .filter((b) => b && (b.parent === null || !asmBodySet.has(b.parent)));
+        .filter((b) => b && b.role === 'structure' && (b.parent === null || !asmBodySet.has(b.parent)));
 
       for (const body of rootBodies) {
         childrenEl.appendChild(this._buildBodyNode(body, asmBodySet));
@@ -479,7 +504,7 @@ export class ComponentTree {
     const nodeId = `body:${body.name}`;
     const data = { ...body, _type: 'body' };
     const shapescriptUrl =
-      body.kind === 'fabricated'
+      body.role === 'structure'
         ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
         : null;
 
@@ -488,32 +513,24 @@ export class ComponentTree {
     });
   }
 
-  /** Append mounted component nodes (non-servo, non-horn, non-fastener, non-wire, non-joint) to a parent element. */
+  /** Append mounted component nodes from mounts[] to a parent element. */
   _appendMountedComponents(body, parentEl) {
+    const bodyMounts = this.mountsByBody[body.name] || [];
     const parts = this.partsByBody[body.name] || [];
-
-    const mountedComps = parts.filter(
-      (p) =>
-        p.category !== 'servo' &&
-        p.category !== 'horn' &&
-        p.category !== 'fastener' &&
-        p.category !== 'wire' &&
-        !p.joint,
-    );
     const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
 
-    for (const comp of mountedComps) {
-      const compNodeId = `part:${comp.id}`;
-      const iconType = comp.category || 'mount';
-      const compData = { ...comp, _type: 'part' };
-      const compSsUrl = comp.shapescript_component
-        ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+    for (const mount of bodyMounts) {
+      const compNodeId = `mount:${mount.body}:${mount.label}`;
+      const iconType = mount.category || 'mount';
+      const compData = { ...mount, _type: 'mount' };
+      const compSsUrl = mount.shapescript_component
+        ? `?cadsteps=component:${encodeURIComponent(mount.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
         : null;
 
-      const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
+      const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
       const hasCompChildren = compFasteners.length > 0;
 
-      const compNode = this._createNode(compNodeId, comp.name, iconType, compData, hasCompChildren, compSsUrl, {
+      const compNode = this._createNode(compNodeId, mount.component, iconType, compData, hasCompChildren, compSsUrl, {
         startExpanded: false,
         bodyName: body.name,
       });
@@ -521,7 +538,7 @@ export class ComponentTree {
         const compChildrenEl = compNode.querySelector('.tree-node-children');
         const grouped = this._groupFasteners(compFasteners);
         for (const group of grouped) {
-          const fNodeId = `fastener-group:${comp.id}:${group.key}`;
+          const fNodeId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
           const fData = { ...group, _type: 'fastener-group' };
           const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
             bodyName: body.name,
@@ -570,16 +587,17 @@ export class ComponentTree {
     });
     const childrenEl = node.querySelector('.tree-node-children');
 
-    // Servo components with horn/fastener sub-parts
+    // Servo and horn component bodies from bodies[] (role="component")
+    const servos = this.servosByJoint[joint.name] || [];
+    const horns = this.hornsByJoint[joint.name] || [];
+    // Fasteners still come from parts[]
     const jointParts = this.partsByJoint[joint.name] || [];
-    const servos = jointParts.filter((p) => p.category === 'servo');
-    const horns = jointParts.filter((p) => p.category === 'horn');
     const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
     for (const servo of servos) {
-      const servoNodeId = `part:${servo.id}`;
-      const servoLabel = `${servo.name} @ ${joint.name}`;
-      const servoData = { ...servo, _type: 'part', servo_specs: joint.servo_specs };
+      const servoNodeId = `body:${servo.name}`;
+      const servoLabel = `${servo.component ?? servo.name} @ ${joint.name}`;
+      const servoData = { ...servo, _type: 'component-body', servo_specs: joint.servo_specs };
       const servoSsUrl = servo.shapescript_component
         ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
         : null;
@@ -593,14 +611,22 @@ export class ComponentTree {
         const servoChildrenEl = servoNode.querySelector('.tree-node-children');
 
         for (const horn of horns) {
-          const hornNodeId = `part:${horn.id}`;
-          const hornData = { ...horn, _type: 'part' };
+          const hornNodeId = `body:${horn.name}`;
+          const hornData = { ...horn, _type: 'component-body' };
           const hornSsUrl = horn.shapescript_component
             ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
             : null;
-          const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl, {
-            bodyName: joint.parent_body,
-          });
+          const hornNode = this._createNode(
+            hornNodeId,
+            horn.component ?? 'Horn disc',
+            'horn',
+            hornData,
+            false,
+            hornSsUrl,
+            {
+              bodyName: joint.parent_body,
+            },
+          );
           servoChildrenEl.appendChild(hornNode);
         }
 
@@ -640,38 +666,18 @@ export class ComponentTree {
     const nodeId = `body:${body.name}`;
     const parts = this.partsByBody[body.name] || [];
     const childJoints = this.childJointsOf[body.name] || [];
+    const bodyMounts = this.mountsByBody[body.name] || [];
 
-    const mountedComps = parts.filter(
-      (p) =>
-        p.category !== 'servo' &&
-        p.category !== 'horn' &&
-        p.category !== 'fastener' &&
-        p.category !== 'wire' &&
-        !p.joint,
-    );
     const wires = parts.filter((p) => p.category === 'wire');
-
-    const servosByJoint = {};
-    for (const p of parts) {
-      if (p.joint && (p.category === 'servo' || p.category === 'horn' || p.category === 'fastener')) {
-        if (!servosByJoint[p.joint]) servosByJoint[p.joint] = [];
-        servosByJoint[p.joint].push(p);
-      }
-    }
-
     const mountFasteners = parts.filter((p) => p.category === 'fastener' && !p.joint);
 
     const hasChildren =
-      mountedComps.length > 0 ||
-      Object.keys(servosByJoint).length > 0 ||
-      wires.length > 0 ||
-      childJoints.length > 0 ||
-      mountFasteners.length > 0;
+      bodyMounts.length > 0 || childJoints.length > 0 || wires.length > 0 || mountFasteners.length > 0;
 
     const labelText = body.name;
     const data = { ...body, _type: 'body' };
     const shapescriptUrl =
-      body.kind === 'fabricated'
+      body.role === 'structure'
         ? `?cadsteps=${encodeURIComponent(this.manifest.bot_name)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(this.manifest.bot_name)}`
         : null;
 
@@ -683,19 +689,19 @@ export class ComponentTree {
     if (hasChildren) {
       const childrenEl = node.querySelector('.tree-node-children');
 
-      // 1. Mounted components
-      for (const comp of mountedComps) {
-        const compNodeId = `part:${comp.id}`;
-        const iconType = comp.category || 'mount';
-        const compData = { ...comp, _type: 'part' };
-        const compSsUrl = comp.shapescript_component
-          ? `?cadsteps=component:${encodeURIComponent(comp.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
+      // 1. Mounted components from mounts[]
+      for (const mount of bodyMounts) {
+        const compNodeId = `mount:${mount.body}:${mount.label}`;
+        const iconType = mount.category || 'mount';
+        const compData = { ...mount, _type: 'mount' };
+        const compSsUrl = mount.shapescript_component
+          ? `?cadsteps=component:${encodeURIComponent(mount.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
           : null;
 
-        const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
+        const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
         const hasCompChildren = compFasteners.length > 0;
 
-        const compNode = this._createNode(compNodeId, comp.name, iconType, compData, hasCompChildren, compSsUrl, {
+        const compNode = this._createNode(compNodeId, mount.component, iconType, compData, hasCompChildren, compSsUrl, {
           startExpanded: false,
           bodyName: body.name,
         });
@@ -703,7 +709,7 @@ export class ComponentTree {
           const compChildrenEl = compNode.querySelector('.tree-node-children');
           const grouped = this._groupFasteners(compFasteners);
           for (const group of grouped) {
-            const fNodeId = `fastener-group:${comp.id}:${group.key}`;
+            const fNodeId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
             const fData = { ...group, _type: 'fastener-group' };
             const fNode = this._createNode(fNodeId, group.label, 'fastener', fData, false, null, {
               bodyName: body.name,
@@ -714,17 +720,17 @@ export class ComponentTree {
         childrenEl.appendChild(compNode);
       }
 
-      // 2. Servo groups per joint
+      // 2. Servo groups per joint (from component bodies)
       for (const joint of childJoints) {
-        const jointParts = servosByJoint[joint.name] || [];
-        const servos = jointParts.filter((p) => p.category === 'servo');
-        const horns = jointParts.filter((p) => p.category === 'horn');
-        const fasteners = jointParts.filter((p) => p.category === 'fastener');
+        const servos = this.servosByJoint[joint.name] || [];
+        const horns = this.hornsByJoint[joint.name] || [];
+        const jParts = this.partsByJoint[joint.name] || [];
+        const fasteners = jParts.filter((p) => p.category === 'fastener');
 
         for (const servo of servos) {
-          const servoNodeId = `part:${servo.id}`;
-          const servoLabel = `${servo.name} @ ${joint.name}`;
-          const servoData = { ...servo, _type: 'part', servo_specs: joint.servo_specs };
+          const servoNodeId = `body:${servo.name}`;
+          const servoLabel = `${servo.component ?? servo.name} @ ${joint.name}`;
+          const servoData = { ...servo, _type: 'component-body', servo_specs: joint.servo_specs };
           const servoSsUrl = servo.shapescript_component
             ? `?cadsteps=component:${encodeURIComponent(servo.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
             : null;
@@ -743,14 +749,22 @@ export class ComponentTree {
             const servoChildrenEl = servoNode.querySelector('.tree-node-children');
 
             for (const horn of horns) {
-              const hornNodeId = `part:${horn.id}`;
-              const hornData = { ...horn, _type: 'part' };
+              const hornNodeId = `body:${horn.name}`;
+              const hornData = { ...horn, _type: 'component-body' };
               const hornSsUrl = horn.shapescript_component
                 ? `?cadsteps=component:${encodeURIComponent(horn.shapescript_component)}&from=${encodeURIComponent(this.manifest.bot_name)}`
                 : null;
-              const hornNode = this._createNode(hornNodeId, horn.name, 'horn', hornData, false, hornSsUrl, {
-                bodyName: body.name,
-              });
+              const hornNode = this._createNode(
+                hornNodeId,
+                horn.component ?? 'Horn disc',
+                'horn',
+                hornData,
+                false,
+                hornSsUrl,
+                {
+                  bodyName: body.name,
+                },
+              );
               servoChildrenEl.appendChild(hornNode);
             }
 

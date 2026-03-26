@@ -28,7 +28,7 @@ import { NodeKind, SceneTree } from './design-scene.ts';
 // Manifest types (minimal — just what buildSceneTree reads)
 // ---------------------------------------------------------------------------
 
-interface ManifestMount {
+interface ManifestBodyMount {
   label: string;
   component_name: string;
   component_type: string;
@@ -37,10 +37,13 @@ interface ManifestMount {
 interface ManifestBody {
   name: string;
   mesh: string;
-  kind: string;
+  role: 'structure' | 'component';
   parent: string | null;
-  mounts?: ManifestMount[];
+  mounts?: ManifestBodyMount[];
   joint?: string;
+  component?: string;
+  category?: string;
+  shapescript_component?: string;
 }
 
 interface ManifestDesignLayer {
@@ -55,6 +58,15 @@ interface ManifestJoint {
   child_body: string;
   servo: string;
   design_layers?: ManifestDesignLayer[];
+}
+
+interface ManifestMount {
+  body: string;
+  label: string;
+  component: string;
+  category: string;
+  mesh: string;
+  shapescript_component?: string;
 }
 
 interface ManifestPart {
@@ -78,6 +90,7 @@ interface ViewerManifest {
   assemblies?: ManifestAssembly[];
   bodies: ManifestBody[];
   joints: ManifestJoint[];
+  mounts?: ManifestMount[];
   parts?: ManifestPart[];
 }
 
@@ -116,6 +129,7 @@ function groupFasteners(fasteners: ManifestPart[]): FastenerGroup[] {
 export function buildSceneTree(manifest: ViewerManifest): SceneTree {
   const tree = new SceneTree();
   const parts = manifest.parts || [];
+  const mounts = manifest.mounts || [];
 
   // Index helpers
   const bodiesByName: Record<string, ManifestBody> = {};
@@ -127,6 +141,28 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     childJointsOf[j.parent_body].push(j);
   }
 
+  // Component bodies indexed by joint name (servos, horns)
+  const servosByJoint: Record<string, ManifestBody[]> = {};
+  const hornsByJoint: Record<string, ManifestBody[]> = {};
+  for (const b of manifest.bodies) {
+    if (b.role !== 'component' || !b.joint) continue;
+    if (b.category === 'servo') {
+      if (!servosByJoint[b.joint]) servosByJoint[b.joint] = [];
+      servosByJoint[b.joint].push(b);
+    } else if (b.category === 'horn') {
+      if (!hornsByJoint[b.joint]) hornsByJoint[b.joint] = [];
+      hornsByJoint[b.joint].push(b);
+    }
+  }
+
+  // Mounts indexed by parent body name
+  const mountsByBody: Record<string, ManifestMount[]> = {};
+  for (const m of mounts) {
+    if (!mountsByBody[m.body]) mountsByBody[m.body] = [];
+    mountsByBody[m.body].push(m);
+  }
+
+  // Fastener parts indexed by body and joint
   const partsByBody: Record<string, ManifestPart[]> = {};
   const partsByJoint: Record<string, ManifestPart[]> = {};
   for (const p of parts) {
@@ -175,29 +211,20 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     return bodyId;
   }
 
-  // Build mounted component nodes for a body, adding them as children of parentId
+  // Build mounted component nodes for a body from mounts[], adding them as children of parentId
   function buildMountedComponents(body: ManifestBody, parentId: string, parentChildren: string[]): void {
+    const bodyMounts = mountsByBody[body.name] || [];
     const bodyParts = partsByBody[body.name] || [];
-
-    const mountedComps = bodyParts.filter(
-      (p) =>
-        p.category !== 'servo' &&
-        p.category !== 'horn' &&
-        p.category !== 'fastener' &&
-        p.category !== 'wire' &&
-        !p.joint,
-    );
-
     const mountFasteners = bodyParts.filter((p) => p.category === 'fastener' && !p.joint);
 
-    for (const comp of mountedComps) {
-      const compId = `part:${comp.id}`;
+    for (const mount of bodyMounts) {
+      const compId = `mount:${mount.body}:${mount.label}`;
       const compChildren: string[] = [];
 
-      const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
+      const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
       const grouped = groupFasteners(compFasteners);
       for (const group of grouped) {
-        const fId = `fastener-group:${comp.id}:${group.key}`;
+        const fId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
         tree.addNode({
           id: fId,
           kind: NodeKind.SubPart,
@@ -213,7 +240,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       tree.addNode({
         id: compId,
         kind: NodeKind.Component,
-        label: comp.name,
+        label: mount.component,
         children: compChildren,
         hidden: false,
         parentId: parentId,
@@ -247,22 +274,23 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     const asmId = `assembly:joint:${joint.name}`;
     const asmChildren: string[] = [];
 
-    // Servo component with horn/fastener sub-parts
+    // Servo and horn component bodies from bodies[] (role="component")
+    const servos = servosByJoint[joint.name] || [];
+    const horns = hornsByJoint[joint.name] || [];
+    // Fasteners still come from parts[]
     const jointParts = partsByJoint[joint.name] || [];
-    const servos = jointParts.filter((p) => p.category === 'servo');
-    const horns = jointParts.filter((p) => p.category === 'horn');
     const fasteners = jointParts.filter((p) => p.category === 'fastener');
 
     for (const servo of servos) {
-      const servoId = `part:${servo.id}`;
+      const servoId = `body:${servo.name}`;
       const servoChildren: string[] = [];
 
       for (const horn of horns) {
-        const hornId = `part:${horn.id}`;
+        const hornId = `body:${horn.name}`;
         tree.addNode({
           id: hornId,
           kind: NodeKind.SubPart,
-          label: horn.name,
+          label: horn.component ?? 'Horn disc',
           children: [],
           hidden: false,
           parentId: servoId,
@@ -289,7 +317,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       tree.addNode({
         id: servoId,
         kind: NodeKind.Component,
-        label: `${servo.name} @ ${joint.name}`,
+        label: `${servo.component ?? servo.name} @ ${joint.name}`,
         children: servoChildren,
         hidden: false,
         parentId: asmId,
@@ -394,23 +422,17 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       const bodyParts = partsByBody[body.name] || [];
       const joints = childJointsOf[body.name] || [];
 
-      const mountedComps = bodyParts.filter(
-        (p) =>
-          p.category !== 'servo' &&
-          p.category !== 'horn' &&
-          p.category !== 'fastener' &&
-          p.category !== 'wire' &&
-          !p.joint,
-      );
+      // Mounted components from mounts[]
+      const bodyMounts = mountsByBody[body.name] || [];
       const mountFasteners = bodyParts.filter((p) => p.category === 'fastener' && !p.joint);
 
-      for (const comp of mountedComps) {
-        const compId = `part:${comp.id}`;
+      for (const mount of bodyMounts) {
+        const compId = `mount:${mount.body}:${mount.label}`;
         const compChildren: string[] = [];
-        const compFasteners = mountFasteners.filter((f) => f.mount_label === comp.mount_label);
+        const compFasteners = mountFasteners.filter((f) => f.mount_label === mount.label);
         const grouped = groupFasteners(compFasteners);
         for (const group of grouped) {
-          const fId = `fastener-group:${comp.id}:${group.key}`;
+          const fId = `fastener-group:mount:${mount.body}:${mount.label}:${group.key}`;
           tree.addNode({
             id: fId,
             kind: NodeKind.SubPart,
@@ -425,7 +447,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
         tree.addNode({
           id: compId,
           kind: NodeKind.Component,
-          label: comp.name,
+          label: mount.component,
           children: compChildren,
           hidden: false,
           parentId: bodyId,
@@ -435,20 +457,21 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       }
 
       for (const joint of joints) {
-        const jointParts = partsByJoint[joint.name] || [];
-        const servos = jointParts.filter((p) => p.category === 'servo');
-        const horns = jointParts.filter((p) => p.category === 'horn');
-        const fasteners = jointParts.filter((p) => p.category === 'fastener');
+        // Servo and horn bodies from bodies[] (role="component")
+        const servos = servosByJoint[joint.name] || [];
+        const horns = hornsByJoint[joint.name] || [];
+        const jParts = partsByJoint[joint.name] || [];
+        const fasteners = jParts.filter((p) => p.category === 'fastener');
 
         for (const servo of servos) {
-          const servoId = `part:${servo.id}`;
+          const servoId = `body:${servo.name}`;
           const servoChildren: string[] = [];
           for (const horn of horns) {
-            const hornId = `part:${horn.id}`;
+            const hornId = `body:${horn.name}`;
             tree.addNode({
               id: hornId,
               kind: NodeKind.SubPart,
-              label: horn.name,
+              label: horn.component ?? 'Horn disc',
               children: [],
               hidden: false,
               parentId: servoId,
@@ -473,7 +496,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
           tree.addNode({
             id: servoId,
             kind: NodeKind.Component,
-            label: `${servo.name} @ ${joint.name}`,
+            label: `${servo.component ?? servo.name} @ ${joint.name}`,
             children: servoChildren,
             hidden: false,
             parentId: bodyId,
@@ -540,7 +563,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       const asmBodySet = new Set(asm.bodies);
       const rootBodies = asm.bodies
         .map((name) => bodiesByName[name])
-        .filter((b) => b && (b.parent === null || !asmBodySet.has(b.parent)));
+        .filter((b) => b && b.role === 'structure' && (b.parent === null || !asmBodySet.has(b.parent)));
 
       for (const body of rootBodies) {
         const bodyId = buildBodyLegacy(body, asmId);
@@ -565,7 +588,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     }
   } else {
     // Auto-generate assemblies from kinematic structure
-    const rootBody = manifest.bodies.find((b) => b.parent === null);
+    const rootBody = manifest.bodies.find((b) => b.parent === null && b.role === 'structure');
     if (rootBody) {
       const asmId = buildAutoAssemblyTree(rootBody);
       rootChildren.push(asmId);

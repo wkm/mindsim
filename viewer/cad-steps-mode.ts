@@ -706,19 +706,25 @@ class CadStepsViewer {
         const manifest = await resp.json();
         this.allBodies = (manifest.bodies || []).map((b) => b.name);
 
-        // Collect parts with shapescript_component, grouped by category
-        const parts = manifest.parts || [];
+        // Collect shapescript_component refs from bodies + mounts
         const seen = new Set();
         this.ssServos = [];
         this.ssComponents = [];
-        for (const p of parts) {
-          if (!p.shapescript_component || seen.has(p.shapescript_component)) continue;
-          seen.add(p.shapescript_component);
-          if (p.category === 'servo' || p.category === 'horn') {
-            this.ssServos.push(p.shapescript_component);
+        // Component bodies (servos, horns)
+        for (const b of manifest.bodies || []) {
+          if (b.role !== 'component' || !b.shapescript_component || seen.has(b.shapescript_component)) continue;
+          seen.add(b.shapescript_component);
+          if (b.category === 'servo' || b.category === 'horn') {
+            this.ssServos.push(b.shapescript_component);
           } else {
-            this.ssComponents.push(p.shapescript_component);
+            this.ssComponents.push(b.shapescript_component);
           }
+        }
+        // Mounted components
+        for (const m of manifest.mounts || []) {
+          if (!m.shapescript_component || seen.has(m.shapescript_component)) continue;
+          seen.add(m.shapescript_component);
+          this.ssComponents.push(m.shapescript_component);
         }
       }
     } catch {

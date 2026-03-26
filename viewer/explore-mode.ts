@@ -410,7 +410,9 @@ export class ExploreMode {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${body.name}</h2>`;
     html += '<span class="prop-badge body-badge">Body</span>';
-    if (body.kind) {
+    if (body.role) {
+      html += ` <span style="font-size:11px;color:#5C7080;">${body.role}</span>`;
+    } else if (body.kind) {
       html += ` <span style="font-size:11px;color:#5C7080;">${body.kind}</span>`;
     }
 
@@ -447,7 +449,7 @@ export class ExploreMode {
     // Actions row
     html += '<div style="display:flex;gap:4px;margin-top:8px;">';
     html += `<button id="isolate-btn" class="btn btn-sm">${this.ctx.botScene.isIsolated() ? 'Show All' : 'Isolate'}</button>`;
-    if (body.kind === 'fabricated') {
+    if (body.role === 'structure' || body.kind === 'fabricated') {
       const botName = this.manifest.bot_name;
       html += `<a href="?cadsteps=${encodeURIComponent(botName)}:${encodeURIComponent(body.name)}&from=${encodeURIComponent(botName)}" class="btn btn-sm" style="text-decoration:none;">View ShapeScript</a>`;
     }
