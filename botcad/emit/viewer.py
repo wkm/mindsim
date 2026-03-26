@@ -21,6 +21,13 @@ from botcad.component import ComponentKind
 
 log = logging.getLogger(__name__)
 
+# Wire stub colors by bus type (RGBA, 0-1 range)
+_BUS_TYPE_COLORS: dict[str, list[float]] = {
+    "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],  # blue — servo bus
+    "csi": [0.40, 0.73, 0.42, 1.0],  # green — camera ribbon
+    "power": [0.90, 0.30, 0.25, 1.0],  # red — power
+}
+
 
 def _material_to_dict(mat) -> dict:
     """Convert a Material to a viewer-serializable dict."""
@@ -157,13 +164,6 @@ def _transform_fastener_pos(
     )
 
 
-def _transform_fastener_axis(mp_axis: tuple, servo_quat: tuple) -> list:
-    """Transform a fastener mount-point axis direction to body-local frame."""
-    from botcad.geometry import rotate_vec
-
-    return _round_vec(rotate_vec(servo_quat, mp_axis))
-
-
 # Context labels for fastener categories
 _FASTENER_CONTEXT = {
     "ear": "bracket ear -> servo case",
@@ -184,6 +184,12 @@ def _build_joint_fastener_entry(
 ) -> dict:
     """Build a manifest entry for a joint-mounted fastener (bracket/horn/rear)."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
+    from botcad.geometry import quat_multiply, rotation_between
+
+    # Align fastener +Z (head top face) to the mount point axis direction,
+    # then compose with servo orientation to get world-frame quaternion.
+    axis_align = rotation_between((0.0, 0.0, 1.0), mp.axis)
+    final_quat = quat_multiply(servo_quat, axis_align)
 
     return {
         "id": f"fastener_{joint_name}_{tag}_{index}",
@@ -196,8 +202,7 @@ def _build_joint_fastener_entry(
         "pos": _transform_fastener_pos(
             mp.pos, servo_quat, servo_center, body_world_pos
         ),
-        "quat": _round_vec(servo_quat),
-        "axis": _transform_fastener_axis(mp.axis, servo_quat),
+        "quat": _round_vec(final_quat),
         "material": "steel",
         "context": _FASTENER_CONTEXT.get(tag, "fastener"),
     }
@@ -209,10 +214,11 @@ def _build_mount_fastener_entry(
     index: int,
     mp,
     fastener_pos: list,
-    fastener_axis: list,
+    fastener_axis: tuple,
 ) -> dict:
     """Build a manifest entry for a mount-attached fastener."""
     from botcad.fasteners import fastener_key, fastener_stl_stem
+    from botcad.geometry import rotation_between
 
     return {
         "id": f"fastener_{body_name}_{mount_label}_{index}",
@@ -223,8 +229,7 @@ def _build_mount_fastener_entry(
         "mount_label": mount_label,
         "mesh": f"{fastener_stl_stem(mp)}.stl",
         "pos": fastener_pos,
-        "quat": [1.0, 0.0, 0.0, 0.0],
-        "axis": fastener_axis,
+        "quat": _round_vec(rotation_between((0.0, 0.0, 1.0), fastener_axis)),
         "material": "steel",
         "context": f"{mount_label} mount -> {body_name}",
     }
@@ -523,7 +528,7 @@ def build_viewer_manifest(bot: Bot) -> dict:
                         bwp[2] + rp[2] + rotated[2],
                     )
                 )
-                fastener_axis = _round_vec(mount.rotate_point(mp.axis))
+                fastener_axis = tuple(mount.rotate_point(mp.axis))
                 manifest["parts"].append(
                     _build_mount_fastener_entry(
                         body.name, mount.label, i, mp, fastener_pos, fastener_axis
@@ -566,12 +571,15 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
 def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
     """Emit short wire stub entries at each component's WirePort.
 
-    Wire stubs are short segments (~25mm) extending from connector sockets
+    Wire stubs are short cylinders (~25mm) extending from connector sockets
     along the wire exit direction. They let the viewer show "there's a wire
     here, does it collide?" without full cable routing.
 
-    Position and direction are in body-local frame.
+    Each stub is emitted as a proper part with pos/quat/mesh so the viewer
+    can render it the same way as any other part.
     """
+    from botcad.geometry import rotation_between
+
     for body in bot.all_bodies:
         for mount in body.mounts:
             comp = mount.component
@@ -608,6 +616,17 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 # Direction is a vector (no translation), only rotation
                 body_dir = mount.rotate_point(cspec.wire_exit_direction)
 
+                # Quaternion aligning cylinder +Z to the wire exit direction
+                stub_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_dir))
+
+                # Position the stub center halfway along the 25mm length
+                half_len = 0.0125  # 25mm / 2
+                stub_center = (
+                    body_pos[0] + body_dir[0] * half_len,
+                    body_pos[1] + body_dir[1] * half_len,
+                    body_pos[2] + body_dir[2] * half_len,
+                )
+
                 manifest["parts"].append(
                     {
                         "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
@@ -616,11 +635,14 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                         "category": "wire",
                         "wire_kind": "stub",
                         "parent_body": body.name,
-                        "position": _round_vec(body_pos),
-                        "direction": _round_vec(body_dir),
-                        "length": 0.025,
+                        "mesh": "wire_stub.stl",
+                        "pos": _round_vec(stub_center),
+                        "quat": _round_vec(stub_quat),
                         "bus_type": str(wp.bus_type),
                         "connector_type": wp.connector_type,
+                        "color": _BUS_TYPE_COLORS.get(
+                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                        ),
                     }
                 )
 

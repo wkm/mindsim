@@ -491,6 +491,17 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
                     return _generate_design_layer_mesh(joint, layer_kind)
             return None
 
+    # Wire stub mesh: shared cylinder for all wire stubs
+    if stem == "wire_stub":
+        from botcad.shapescript.backend_occt import OcctBackend
+        from botcad.shapescript.program import ShapeScript
+
+        prog = ShapeScript()
+        stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
+        prog.output_ref = stub
+        result = OcctBackend().execute(prog)
+        return _solid_to_stl_bytes(result.shapes[stub.id])
+
     # Wire mesh: wire_{label}_{body}_{idx}
     if stem.startswith("wire_"):
         from botcad.component import BusType
