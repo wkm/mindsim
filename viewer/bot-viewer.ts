@@ -17,6 +17,7 @@ import { IKMode } from './ik-mode.ts';
 import { JointMode } from './joint-mode.ts';
 import { sync } from './scene-sync.ts';
 import { SectionCutter } from './section-cutter.ts';
+import { StressMode } from './stress-mode.ts';
 import type { ViewerContext, ViewerMode as ViewerModeInterface } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
@@ -630,6 +631,7 @@ export async function initBotViewer(botName: string) {
     modes.joint = new JointMode(ctx);
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
+    modes.stress = new StressMode(ctx);
 
     document.querySelectorAll('#mode-tabs .btn-ghost').forEach((tab) => {
       tab.addEventListener('click', () => switchMode((tab as HTMLElement).dataset.mode!));

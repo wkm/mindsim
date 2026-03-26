@@ -39,6 +39,8 @@ snapshot_report.html
 
 # Node (viewer tests)
 node_modules/
+.pnpm-store/
+test-results/
 
 # Viewer artifacts
 viewer/test_screenshots/

@@ -51,7 +51,30 @@ class Material:
     opacity: float = 1.0
     # Physical
     density: float | None = None  # kg/m^3; None for purchased materials
+    youngs_modulus: float = 2.3e9  # Pa (default PLA)
+    poisson_ratio: float = 0.35
+    yield_strength: float = 40e6  # Pa
     process: PrintProcess | None = None  # FDM params; None for purchased
+
+    @property
+    def effective_youngs_modulus(self) -> float:
+        """Young's modulus scaled by infill (Gibson-Ashby bending-dominated).
+
+        E_eff = E_solid * infill^2. Conservative for FDM grid/rectilinear.
+        """
+        if self.process is None:
+            return self.youngs_modulus
+        return self.youngs_modulus * self.process.infill**2
+
+    @property
+    def effective_yield_strength(self) -> float:
+        """Yield strength scaled by infill (Gibson-Ashby bending-dominated).
+
+        sigma_eff = sigma_solid * infill^1.5. Conservative for FDM.
+        """
+        if self.process is None:
+            return self.yield_strength
+        return self.yield_strength * self.process.infill**1.5
 
 
 # ── Fabricated materials (with density + print process) ──
@@ -61,6 +84,9 @@ PLA = Material(
     color=(*BP_LIGHT_GRAY1, 1.0),
     roughness=0.8,
     density=1200.0,
+    youngs_modulus=2.3e9,
+    poisson_ratio=0.35,
+    yield_strength=40e6,
     process=PrintProcess(),
 )
 TPU = Material(
@@ -68,6 +94,9 @@ TPU = Material(
     color=(*BP_DARK_GRAY3, 1.0),
     roughness=0.9,
     density=1120.0,
+    youngs_modulus=0.1e9,
+    poisson_ratio=0.45,
+    yield_strength=15e6,
     process=PrintProcess(infill=0.15),
 )
 ALUMINUM = Material(
@@ -76,6 +105,9 @@ ALUMINUM = Material(
     metallic=0.9,
     roughness=0.3,
     density=2700.0,
+    youngs_modulus=70e9,
+    poisson_ratio=0.33,
+    yield_strength=270e6,
 )
 
 # ── Material catalog: purchased component materials ──
