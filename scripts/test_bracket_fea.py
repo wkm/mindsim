@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Run FEA on an STS3215 bracket component."""
 
+import argparse
+from pathlib import Path
+
 from botcad.bracket import BracketSpec, bracket_solid
 from botcad.components.servo import STS3215
 from botcad.fea.component import analyze_component
@@ -8,6 +11,14 @@ from botcad.shapescript.backend_occt import OcctBackend
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Run FEA on an STS3215 bracket component."
+    )
+    parser.add_argument(
+        "--bot", type=str, default="so101_arm", help="Bot name for output directory"
+    )
+    args = parser.parse_args()
+
     print("Generating STS3215 bracket IR...")
     servo = STS3215()
     spec = BracketSpec()
@@ -32,11 +43,9 @@ def main():
         print(f"Safety Factor: {40e6 / stress_np.max():.2f}")
 
         # --- Visualization Export ---
-        from pathlib import Path
-
         from botcad.fea.export import export_stress_mesh, export_voxel_mesh
 
-        output_dir = Path("bots/so101_arm")
+        output_dir = Path("bots") / args.bot
         output_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"\nExporting visualization assets to {output_dir}...")
@@ -75,9 +84,12 @@ def main():
             stress_array,
             str(output_dir / "stress_heatmap.ply"),
         )
+
         print(
-            "\nDone. Load .ply files into a 3D viewer (e.g. MeshLab or CloudCompare) to see results."
+            "\nDone. Load .ply files into a 3D viewer or the MindSim web viewer Stress tab."
         )
+    else:
+        print("FEA Solve failed.")
 
 
 if __name__ == "__main__":

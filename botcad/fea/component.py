@@ -49,10 +49,22 @@ def von_mises_integrand(s: fem.Sample, u: fem.Field, lame: wp.vec2):
     return v_m
 
 
-def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), material=PLA):
-    """Run FEA on a single CAD component."""
+def analyze_component(
+    solid, result, torque_nm: float, res=(20, 20, 20), material=PLA, body=None
+):
+    """Run FEA on a single CAD component.
+
+    Returns (u_field, stress_array, voxel_domain, timings_dict)
+    """
+    import time
+
+    timings = {}
+
+    t0 = time.monotonic()
     print(f"Voxelizing component at resolution {res}...")
-    vd = voxelize_solid(solid, res, tags=result.tags, shapes=result.shapes)
+    vd = voxelize_solid(solid, res, tags=result.tags, shapes=result.shapes, body=body)
+    t1 = time.monotonic()
+    timings["voxelization"] = round(t1 - t0, 2)
 
     # Material properties
     lame = wp.vec2(
@@ -64,13 +76,11 @@ def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), materia
     space = fem.make_polynomial_space(vd.grid, degree=1, dtype=wp.vec3)
     domain = fem.Cells(vd.grid)
 
-    # 1. Identify Fixed BCs (from fastener_hole tag)
+    # 1. Identify Fixed BCs
     fixed_mask = vd.tag_masks.get("fastener_hole")
-    n_fixed = np.sum(fixed_mask.numpy()) if fixed_mask else 0
-    print(f"Fixed cells (tags): {n_fixed}")
+    n_fixed = np.sum(fixed_mask.numpy()) if fixed_mask is not None else 0
 
     if n_fixed == 0:
-        print("Warning: No 'fastener_hole' tag found. Simulation will likely fail.")
         return None
 
     fixed_subdomain = fem.Subdomain(domain, element_mask=fixed_mask)
@@ -83,21 +93,21 @@ def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), materia
     )
     fem.normalize_dirichlet_projector(bd_matrix)
 
-    # 2. Identify Loads (from horn_hole or front_plate or pocket)
-    load_mask = (
-        vd.tag_masks.get("front_plate")
-        or vd.tag_masks.get("pocket")
-        or vd.tag_masks.get("horn_hole")
-    )
-    n_load = np.sum(load_mask.numpy()) if load_mask else 0
-    print(f"Load cells (tags): {n_load}")
+    # 2. Identify Loads
+    load_mask = None
+    for tag, mask in vd.tag_masks.items():
+        if any(
+            keyword in tag
+            for keyword in ["front_plate", "pocket", "horn_hole", "bracket"]
+        ):
+            load_mask = mask
+            break
 
     if not load_mask:
-        print("Warning: No load-bearing tag found (front_plate, pocket, horn_hole).")
         return None
 
     # Final Solve
-    print("Assembling system...")
+    t_asm_start = time.monotonic()
     u_test = fem.make_test(space=space)
     u_trial = fem.make_trial(space=space)
     stiffness = fem.integrate(
@@ -106,25 +116,39 @@ def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), materia
         values={"lame": lame, "mask": vd.inside_mask},
         output_dtype=wp.float32,
     )
+    t_asm_end = time.monotonic()
+    timings["assembly"] = round(t_asm_end - t_asm_start, 2)
 
     # Simple test load
     load_vec_np = np.zeros((space.node_count(), 3), dtype=np.float32)
     load_vec_np[:, 2] = -1.0
     load_wp = wp.from_numpy(load_vec_np, dtype=wp.vec3f)
 
-    print("Projecting...")
+    t_proj_start = time.monotonic()
     fem.project_linear_system(stiffness, load_wp, bd_matrix)
+    t_proj_end = time.monotonic()
+    timings["projection"] = round(t_proj_end - t_proj_start, 2)
 
-    print("Solving...")
-    data = stiffness.values.numpy().reshape(-1, 3, 3)
-    cols = stiffness.columns.numpy()
+    data_raw = stiffness.values.numpy()
+    cols_raw = stiffness.columns.numpy()
     offsets = stiffness.offsets.numpy()
+    nnz = offsets[-1]
+
+    data = data_raw[:nnz]
+    cols = cols_raw[:nnz]
+
+    if len(data.shape) == 1:
+        data = data.reshape(-1, 3, 3)
+
     A_scipy = bsr_matrix(
         (data, cols, offsets), shape=(space.node_count() * 3, space.node_count() * 3)
     )
     b_scipy = load_wp.numpy().flatten().astype(np.float64)
+
+    t_sol_start = time.monotonic()
     x_sol, info = cg(A_scipy, b_scipy, rtol=1e-8)
-    print(f"Solver status: info={info}")
+    t_sol_end = time.monotonic()
+    timings["solve"] = round(t_sol_end - t_sol_start, 2)
 
     if info == 0:
         u_field = fem.make_discrete_field(space)
@@ -132,7 +156,8 @@ def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), materia
             x_sol.reshape(-1, 3).astype(np.float32), dtype=wp.vec3
         )
         stress_array = wp.zeros(domain.element_count(), dtype=float)
-        print("Computing stress heatmap...")
+
+        t_heat_start = time.monotonic()
         fem.interpolate(
             von_mises_integrand,
             dest=stress_array,
@@ -140,5 +165,8 @@ def analyze_component(solid, result, torque_nm: float, res=(20, 20, 20), materia
             fields={"u": u_field},
             values={"lame": lame},
         )
-        return u_field, stress_array, vd
+        t_heat_end = time.monotonic()
+        timings["heatmap"] = round(t_heat_end - t_heat_start, 2)
+
+        return u_field, stress_array, vd, timings
     return None

@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three';
-import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader';
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import type { ViewerContext, ViewerMode } from './types.ts';
 
 export class StressMode implements ViewerMode {
@@ -14,6 +14,7 @@ export class StressMode implements ViewerMode {
   stressGroup: THREE.Group;
   loader: PLYLoader;
   loadedFiles: Set<string> = new Set();
+  hiddenBodyIds: number[] = [];
 
   constructor(ctx: ViewerContext) {
     this.ctx = ctx;
@@ -32,8 +33,8 @@ export class StressMode implements ViewerMode {
     this.stressGroup.scale.copy(this.ctx.mujocoRoot.scale);
     this.stressGroup.updateWorldMatrix(true, true);
 
-    // Dim the main bot to make the stress heatmap pop
-    this.ctx.botScene.ghostAll();
+    // Dim the main bot
+    this.ctx.botScene.ghostAllExcept([]);
     this.ctx.syncScene();
     
     this._showStressPanel();
@@ -45,19 +46,49 @@ export class StressMode implements ViewerMode {
     
     // Restore bot visibility
     this.ctx.botScene.unghost();
+    for (const id of this.hiddenBodyIds) {
+        if (this.ctx.botScene.bodies[id]) {
+            this.ctx.botScene.bodies[id].visible = true;
+        }
+    }
+    this.hiddenBodyIds = [];
     this.ctx.syncScene();
     
     const panel = document.getElementById('side-panel');
     if (panel) panel.innerHTML = '';
   }
 
-  _showStressPanel() {
+  _showStressPanel(stats?: any) {
     const panel = document.getElementById('side-panel');
     if (!panel) return;
 
     let html = '<h2>Stress Analysis</h2>';
-    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">Visualizing 3D stress propagation from Warp FEM.</p>';
+    html += '<p style="font-size:12px;color:#5C7080;margin-bottom:16px;">3D High-Res FEA propagation (Warp FEM).</p>';
     
+    if (stats) {
+        html += '<div style="background:#182026;padding:12px;border-radius:4px;margin-bottom:16px;border-left:4px solid #48AFF0;">';
+        html += `<div style="font-size:11px;color:#A7B6C2;text-transform:uppercase;">Target: <b>${stats.body}</b></div>`;
+        html += `<div style="font-size:18px;color:#fff;margin:4px 0;">${stats.max_stress_mpa} <span style="font-size:12px;color:#A7B6C2;">MPa Max</span></div>`;
+        const sfColor = stats.safety_factor < 1.0 ? '#FF7373' : stats.safety_factor < 2.0 ? '#FFB366' : '#3DCC91';
+        html += `<div style="font-size:13px;color:${sfColor};">Safety Factor: <b>${stats.safety_factor}</b></div>`;
+        if (stats.timings?.total) {
+            html += `<div style="font-size:11px;color:#5C7080;margin-top:8px;">Total time: ${stats.timings.total}s</div>`;
+        }
+        html += '</div>';
+    }
+
+    html += '<h3>Heatmap Legend</h3>';
+    html += `
+      <div style="margin-bottom:20px;">
+        <div style="height:12px; width:100%; background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000); border-radius:2px; margin-bottom:4px;"></div>
+        <div style="display:flex; justify-content:space-between; font-size:10px; color:#A7B6C2;">
+          <span>0 MPa</span>
+          <span>20 MPa</span>
+          <span>40 MPa (Yield)</span>
+        </div>
+      </div>
+    `;
+
     html += '<h3>Overlays</h3>';
     html += '<div class="prop-grid">';
     html += `
@@ -74,49 +105,131 @@ export class StressMode implements ViewerMode {
     `;
     html += '</div>';
     
-    html += '<button id="load-fea-btn" class="btn btn-sm btn-primary" style="margin-top:16px;width:100%;">Load FEA Results</button>';
+    html += '<button id="load-fea-btn" class="btn btn-sm btn-primary" style="margin-top:16px;width:100%;">Run 3D FEA Solve</button>';
+    html += '<div id="fea-log" style="font-family:monospace;font-size:10px;color:#3DCC91;margin-top:12px;max-height:150px;overflow-y:auto;border-top:1px solid #30404D;padding-top:8px;"></div>';
 
     panel.innerHTML = html;
 
     document.getElementById('load-fea-btn')?.addEventListener('click', () => this.loadAllFEA());
     
     document.getElementById('toggle-heatmap')?.addEventListener('change', (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
         this.stressGroup.traverse((child) => {
-            if (child.name.includes('heatmap')) child.visible = (e.target as HTMLInputElement).checked;
+            if (child.name.includes('heatmap')) child.visible = checked;
         });
     });
     
     document.getElementById('toggle-voxels')?.addEventListener('change', (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
         this.stressGroup.traverse((child) => {
-            if (child.name.includes('voxels')) child.visible = (e.target as HTMLInputElement).checked;
+            if (child.name.includes('voxels')) child.visible = checked;
         });
     });
   }
 
-  async loadAllFEA() {
-    // In a real integration, we'd fetch paths from the manifest.
-    // For the POC, we assume standard filenames in the bot's folder.
-    const baseUrl = `../bots/${this.ctx.botName}`;
-    
-    const files = [
-        { name: 'stress_heatmap.ply', label: 'heatmap' },
-        { name: 'fixed_voxels.ply', label: 'voxels_fixed' },
-        { name: 'loaded_voxels.ply', label: 'voxels_loaded' },
-        { name: 'structure_voxels.ply', label: 'voxels_structure' }
-    ];
+  _log(msg: string, color?: string) {
+    const log = document.getElementById('fea-log');
+    if (log) {
+        const style = color ? `style="color:${color}"` : '';
+        log.innerHTML += `<div ${style}>> ${msg}</div>`;
+        log.scrollTop = log.scrollHeight;
+    }
+  }
 
-    for (const file of files) {
-        try {
-            await this.loadPLY(`${baseUrl}/${file.name}`, file.label);
-        } catch (err) {
-            console.warn(`Could not load FEA file ${file.name}:`, err);
+  async loadAllFEA() {
+    const btn = document.getElementById('load-fea-btn') as HTMLButtonElement;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Solver Running...';
+    }
+
+    const logEl = document.getElementById('fea-log');
+    if (logEl) logEl.innerHTML = '';
+
+    try {
+        this._log('Connecting to Warp FEM engine...');
+        
+        // 1. Trigger the analysis on the server
+        const runResp = await fetch(`/api/bots/${this.ctx.botName}/fea/run`, { method: 'POST' });
+        if (!runResp.ok) throw new Error(await runResp.text());
+        
+        const runData = await runResp.json();
+        const t = runData.timings;
+        
+        this._log(`CAD Generation: ${t.cad_gen}s`);
+        this._log(`Voxelization (20x20x20): ${t.voxelization}s`);
+        this._log(`Assembly: ${t.assembly}s`);
+        this._log(`Projection: ${t.projection}s`);
+        this._log(`Solve: ${t.solve}s`);
+        this._log(`Heatmap: ${t.heatmap}s`);
+        this._log(`Mesh Export: ${t.mesh_export}s`);
+        this._log(`Total Server Time: ${t.total}s`, '#48AFF0');
+
+        // Hide original body to prevent Z-fighting with heatmap
+        // Find the body ID in botScene
+        for (let i=0; i < this.ctx.botScene.bodies.length; i++) {
+            if (this.ctx.botScene.bodies[i].name === runData.body) {
+                this.ctx.botScene.bodies[i].visible = false;
+                this.hiddenBodyIds.push(i);
+            }
+        }
+        this.ctx.syncScene();
+
+        // Find the parent group for this body in the MuJoCo scene to get its transform
+        let bodyGroup: THREE.Object3D | null = null;
+        this.ctx.mujocoRoot.traverse((obj) => {
+            if (obj.name === runData.body) {
+                bodyGroup = obj;
+            }
+        });
+
+        // 2. Load the resulting PLY files
+        const baseUrl = `/api/bots/${this.ctx.botName}/fea`;
+        const files = [
+            { name: 'stress_heatmap.ply', label: 'heatmap' },
+            { name: 'fixed_voxels.ply', label: 'voxels_fixed' },
+            { name: 'loaded_voxels.ply', label: 'voxels_loaded' },
+            { name: 'structure_voxels.ply', label: 'voxels_structure' }
+        ];
+
+        // Clear existing overlays
+        while(this.stressGroup.children.length > 0) {
+            this.stressGroup.remove(this.stressGroup.children[0]);
+        }
+
+        for (const file of files) {
+            try {
+                this._log(`Loading ${file.name}...`);
+                const mesh = await this.loadPLY(`${baseUrl}/${file.name}`, file.label) as THREE.Mesh;
+                
+                if (bodyGroup) {
+                    mesh.position.copy(bodyGroup.position);
+                    mesh.quaternion.copy(bodyGroup.quaternion);
+                    mesh.scale.copy(bodyGroup.scale);
+                }
+                
+                this.stressGroup.add(mesh);
+            } catch (err) {
+                console.warn(`Could not load FEA file ${file.name}:`, err);
+            }
+        }
+        
+        this._log('Analysis successful.', '#3DCC91');
+        
+        // Re-render panel with stats
+        this._showStressPanel(runData);
+        
+    } catch (err) {
+        console.error('FEA failed:', err);
+        this._log(`ERROR: ${err.message}`, '#FF7373');
+        if (btn) {
+            btn.textContent = 'FEA Failed';
+            btn.classList.add('btn-danger');
         }
     }
   }
 
   async loadPLY(url: string, label: string) {
-    if (this.loadedFiles.has(url)) return;
-
     return new Promise((resolve, reject) => {
       this.loader.load(url, (geometry) => {
         geometry.computeVertexNormals();
@@ -125,22 +238,26 @@ export class StressMode implements ViewerMode {
             vertexColors: true,
             transparent: label.includes('structure'),
             opacity: label.includes('structure') ? 0.3 : 1.0,
-            shininess: 10
+            shininess: 10,
+            depthTest: true,
+            depthWrite: true
         });
         
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = label;
         
-        // Match the bot's coordinate system (assuming FEA is in world or local)
-        // For the POC, scripts/test_bracket_fea.py uses world-ish CAD coords.
-        this.stressGroup.add(mesh);
-        this.loadedFiles.add(url);
+        // Initial visibility from checkboxes
+        const heatmapChecked = (document.getElementById('toggle-heatmap') as HTMLInputElement)?.checked ?? true;
+        const voxelsChecked = (document.getElementById('toggle-voxels') as HTMLInputElement)?.checked ?? false;
+        
+        if (label.includes('heatmap')) mesh.visible = heatmapChecked;
+        if (label.includes('voxels')) mesh.visible = voxelsChecked;
+
         resolve(mesh);
       }, undefined, reject);
     });
   }
 
   update() {
-    // Keep overlays synced if the bot moves (though FEA is usually static for a pose)
   }
 }

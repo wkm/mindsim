@@ -44,7 +44,8 @@ def export_voxel_mesh(vd, mask, color, path: str):
             ]
         )
 
-        cube = trimesh.creation.box(extents=cube_size * 0.9)  # gap for visibility
+        # Shrink voxels to 40% size to see deeper into model
+        cube = trimesh.creation.box(extents=cube_size * 0.4)
         cube.apply_translation(pos)
         cubes.append(cube)
 
