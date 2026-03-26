@@ -174,6 +174,7 @@ def build_viewer_manifest(bot: Bot) -> dict:
         "assemblies": _build_assembly_tree(bot),
         "bodies": [],
         "joints": [],
+        "mounts": [],
         "parts": [],
         "assembly_steps": [],
         "ik_chains": [],
@@ -184,11 +185,11 @@ def build_viewer_manifest(bot: Bot) -> dict:
     step_num = [0]
 
     def _walk_body(body: Body, parent_name: str | None, joint: Joint | None) -> None:
-        # Body entry — enriched with shape, dimensions, mass, mounts
+        # Body entry — enriched with shape, dimensions, mass
         body_entry = {
             "name": body.name,
             "mesh": f"{body.name}.stl",
-            "kind": "fabricated",
+            "role": "structure",
             "parent": parent_name,
             "shape": str(body.shape),
             "dimensions": _round_vec(body.dimensions),
@@ -196,23 +197,26 @@ def build_viewer_manifest(bot: Bot) -> dict:
             "pos": _round_vec(body.world_pos),
             "quat": _round_vec(body.world_quat),
         }
+        # Emit body material color for rendering
+        if body.material is not None:
+            body_entry["color"] = list(body.material.color)
         if joint:
             body_entry["joint"] = joint.name
 
-        # Mounts with full component metadata
-        mounts = []
+        # Inline mount metadata on the body (for component details)
+        body_mounts = []
         for mount in body.mounts:
             comp = mount.component
-            mount_entry = {
+            mount_meta = {
                 "label": mount.label,
                 "component_name": comp.name,
                 "dimensions": _round_vec(comp.dimensions),
                 "mass": round(comp.mass, 4),
             }
-            mount_entry.update(_component_specs(comp))
-            mounts.append(mount_entry)
-        if mounts:
-            body_entry["mounts"] = mounts
+            mount_meta.update(_component_specs(comp))
+            body_mounts.append(mount_meta)
+        if body_mounts:
+            body_entry["mounts"] = body_mounts
 
         manifest["bodies"].append(body_entry)
 
@@ -307,53 +311,64 @@ def build_viewer_manifest(bot: Bot) -> dict:
     if bot.root:
         _walk_body(bot.root, None, None)
 
-    # --- Build parts list: every physical object that isn't a structural body ---
+    # --- Build component bodies and mounts ---
 
-    # 1 & 2. Servos, horns, and mounted components from purchased bodies
     from botcad.skeleton import BodyKind
+
+    # 1. Component bodies: servos, horns, and purchased bodies that are their
+    #    own kinematic node (e.g. wheels).  These go into bodies[] with
+    #    role="component" instead of the old parts[] array.
+    # 2. Mounts: purchased bodies that share a structural body's kinematic node
+    #    (camera, battery, compute mounted ON a structural body).  These go into
+    #    the new mounts[] array.
 
     for body in bot.all_bodies:
         if body.kind != BodyKind.PURCHASED:
             continue
 
-        # Derive category and extra fields from body name / component
+        comp = body.component
+
         if body.name.startswith("servo_"):
             joint_name = body.name[len("servo_") :]
-            comp = body.component
-            part_entry = {
-                "id": body.name,
-                "name": comp.name if comp else body.name,
-                "kind": "purchased",
-                "category": "servo",
-                "parent_body": body.parent_body_name,
-                "joint": joint_name,
-                "mesh": body.mesh_file,
-                "pos": _round_vec(body.world_pos),
-                "quat": _round_vec(body.world_quat),
-                "mass": round(comp.mass, 4) if comp else 0.0,
-                "shapescript_component": comp.name if comp else body.name,
-            }
-            manifest["parts"].append(part_entry)
+            manifest["bodies"].append(
+                {
+                    "name": body.name,
+                    "mesh": body.mesh_file,
+                    "role": "component",
+                    "component": comp.name if comp else body.name,
+                    "parent": body.parent_body_name,
+                    "category": "servo",
+                    "joint": joint_name,
+                    "pos": _round_vec(body.world_pos),
+                    "quat": _round_vec(body.world_quat),
+                    "mass": round(comp.mass, 4) if comp else 0.0,
+                    "color": list(comp.default_material.color)
+                    if comp and comp.default_material
+                    else None,
+                    "shapescript_component": comp.name if comp else body.name,
+                }
+            )
         elif body.name.startswith("horn_"):
             joint_name = body.name[len("horn_") :]
-            comp = body.component
-            part_entry = {
-                "id": body.name,
-                "name": "Horn disc",
-                "kind": "purchased",
-                "category": "horn",
-                "parent_body": body.parent_body_name,
-                "joint": joint_name,
-                "mesh": body.mesh_file,
-                "pos": _round_vec(body.world_pos),
-                "quat": _round_vec(body.world_quat),
-                "shapescript_component": f"horn:{comp.name}" if comp else body.name,
-            }
-            manifest["parts"].append(part_entry)
+            manifest["bodies"].append(
+                {
+                    "name": body.name,
+                    "mesh": body.mesh_file,
+                    "role": "component",
+                    "component": "Horn disc",
+                    "parent": body.parent_body_name,
+                    "category": "horn",
+                    "joint": joint_name,
+                    "pos": _round_vec(body.world_pos),
+                    "quat": _round_vec(body.world_quat),
+                    "color": list(comp.default_material.color)
+                    if comp and comp.default_material
+                    else None,
+                    "shapescript_component": f"horn:{comp.name}" if comp else body.name,
+                }
+            )
         elif body.name.startswith("comp_"):
-            comp = body.component
-            # Extract mount_label: body name is "comp_{parent}_{label}"
-            # parent_body_name is known, so strip "comp_{parent}_" prefix
+            # Mounted component — goes into mounts[]
             prefix = f"comp_{body.parent_body_name}_"
             mount_label = (
                 body.name[len(prefix) :] if body.name.startswith(prefix) else body.name
@@ -363,22 +378,22 @@ def build_viewer_manifest(bot: Bot) -> dict:
                 if comp
                 else "component"
             )
-            part_entry = {
-                "id": body.name,
-                "name": comp.name if comp else body.name,
-                "kind": "purchased",
+            mount_entry = {
+                "body": body.parent_body_name,
+                "label": mount_label,
+                "component": comp.name if comp else body.name,
                 "category": category,
-                "parent_body": body.parent_body_name,
-                "mount_label": mount_label,
                 "mesh": body.mesh_file,
                 "pos": _round_vec(body.world_pos),
                 "quat": [1.0, 0.0, 0.0, 0.0],
                 "mass": round(comp.mass, 4) if comp else 0.0,
+                "color": list(comp.default_material.color)
+                if comp and comp.default_material
+                else None,
                 "shapescript_component": comp.name if comp else body.name,
             }
 
-            # Multi-material meshes: if this component has per-material
-            # programs, add a `meshes` array alongside the legacy `mesh`.
+            # Multi-material meshes
             if comp is not None:
                 mm_result = _get_multi_material_result(comp, mm_cache)
                 if mm_result is not None:
@@ -391,9 +406,9 @@ def build_viewer_manifest(bot: Bot) -> dict:
                             }
                         )
                     if meshes:
-                        part_entry["meshes"] = meshes
+                        mount_entry["meshes"] = meshes
 
-            manifest["parts"].append(part_entry)
+            manifest["mounts"].append(mount_entry)
 
     # 3. Fasteners at each joint (bracket screws + horn screws + rear horn screws)
     for body in bot.all_bodies:

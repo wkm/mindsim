@@ -265,34 +265,21 @@ export async function initDesignViewer(
     return bodyGroups[bodyName] ?? Object.values(bodyGroups)[0];
   }
 
-  // Step 4: Load body meshes
-  // Detect bodies whose sole purpose is hosting a single purchased component.
-  // These bodies produce an identical mesh to their component (e.g., left_rim
-  // body = Pololu wheel). Skip the body mesh — the component renders instead.
-  // Only skip if the body has EXACTLY ONE comp_* part (structural bodies like
-  // "base" with multiple comp_* mounts must NOT be skipped).
-  const compCountPerBody = new Map<string, number>();
-  for (const part of manifest.parts ?? []) {
-    if (part.id.startsWith('comp_') && part.parent_body) {
-      compCountPerBody.set(part.parent_body, (compCountPerBody.get(part.parent_body) ?? 0) + 1);
-    }
-  }
-
+  // Step 4: Load body meshes — both structure and component bodies.
+  // No skip hack needed: bodies[] now has role="structure" vs "component",
+  // and mounts[] is a separate array. No duplication.
   const bodyMeshPromises = manifest.bodies.map(async (body) => {
-    if (compCountPerBody.get(body.name) === 1) {
-      // Single-component body — the component mesh will render with material
-      return;
-    }
     const geometry = await fetchSTL(botName, body.mesh);
     if (!geometry) return;
 
-    // Use body color or default gray for fabricated bodies
+    // Use body color from manifest (default: light gray for structure, medium gray for components)
+    const defaultColor = body.role === 'component' ? 0x808080 : 0xd9d9d9;
     const bodyColor = body.color
       ? new THREE.Color(body.color[0], body.color[1], body.color[2])
-      : new THREE.Color(0.85, 0.85, 0.85);
+      : new THREE.Color(defaultColor);
     const mat = new THREE.MeshPhysicalMaterial({
       color: bodyColor,
-      roughness: 0.6,
+      roughness: body.role === 'component' ? 0.5 : 0.6,
       metalness: 0.0,
     });
 
@@ -302,50 +289,69 @@ export async function initDesignViewer(
     designScene.registerMesh(nodeId, mesh);
   });
 
-  // Step 5: Load component part meshes
-  const partsList = manifest.parts ?? [];
-  const partMeshPromises = partsList.map(async (part) => {
-    // Skip parts without positioning data (e.g., wire segments)
-    if (!part.pos || !part.quat) return;
+  // Step 5a: Load mount meshes (components mounted ON structural bodies)
+  const mountsList = manifest.mounts ?? [];
+  const mountMeshPromises = mountsList.map(async (mount) => {
+    if (!mount.pos || !mount.quat) return;
 
-    // Determine the tree node ID — mirrors build-scene-tree.ts convention
-    const nodeId = resolvePartNodeId(part);
-    const group = getBodyGroup(part.parent_body);
+    const nodeId = `mount:${mount.body}:${mount.label}`;
+    const group = getBodyGroup(mount.body);
 
-    if (part.meshes && part.meshes.length > 0) {
-      // Multi-material part: load each sub-mesh with its own material
-      const subPromises = part.meshes.map(async (sub) => {
+    if (mount.meshes && mount.meshes.length > 0) {
+      // Multi-material mount: load each sub-mesh with its own material
+      const subPromises = mount.meshes.map(async (sub) => {
         const geometry = await fetchSTL(botName, sub.file);
         if (!geometry) return;
 
         const matDef = materials[sub.material];
         const mat = makeMaterial(matDef);
-        const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
+        const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
         group.add(mesh);
         designScene.registerMesh(nodeId, mesh);
       });
       await Promise.all(subPromises);
     } else {
-      // Single-mesh part
-      const geometry = await fetchSTL(botName, part.mesh);
+      const geometry = await fetchSTL(botName, mount.mesh);
       if (!geometry) return;
 
-      // Use default gray for parts — the manifest materials dict is keyed
-      // by material name, not part name, so parts without meshes[] use a
-      // generic appearance.
+      const mountColor = (mount as any).color
+        ? new THREE.Color((mount as any).color[0], (mount as any).color[1], (mount as any).color[2])
+        : new THREE.Color(0x808080);
       const mat = new THREE.MeshPhysicalMaterial({
-        color: 0x333333,
+        color: mountColor,
         roughness: 0.5,
-        metalness: 0.1,
+        metalness: 0.0,
       });
-      const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
+      const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
       group.add(mesh);
       designScene.registerMesh(nodeId, mesh);
     }
   });
 
+  // Step 5b: Load fastener/wire part meshes (only these remain in parts[])
+  const partsList = manifest.parts ?? [];
+  const partMeshPromises = partsList.map(async (part) => {
+    // Skip parts without positioning data (e.g., wire segments)
+    if (!part.pos || !part.quat) return;
+
+    const nodeId = resolvePartNodeId(part);
+    const group = getBodyGroup(part.parent_body);
+
+    const geometry = await fetchSTL(botName, part.mesh);
+    if (!geometry) return;
+
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: 0x333333,
+      roughness: 0.5,
+      metalness: 0.1,
+    });
+    const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
+    group.add(mesh);
+    designScene.registerMesh(nodeId, mesh);
+  });
+
   // Wait for all eager meshes
-  await Promise.all([...bodyMeshPromises, ...partMeshPromises]);
+  await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
 
   // Step 6: Sync initial visibility
   function syncVisibility(): void {
@@ -477,17 +483,14 @@ export async function initDesignViewer(
 /**
  * Resolve the SceneTree node ID for a manifest part.
  *
- * build-scene-tree.ts uses `part:${part.id}` for servo/mounted/horn parts
- * and `fastener-group:` for grouped fasteners.
+ * With the new model, parts[] only contains fasteners and wires.
+ * Servos, horns, and wheels are in bodies[]; mounted components are in mounts[].
  */
 function resolvePartNodeId(part: ManifestPart): string {
-  if (part.category === 'horn') {
-    return `part:${part.id}`;
-  }
   if (part.category === 'fastener') {
-    // Fasteners are grouped — use the joint-scoped or component-scoped group key
+    // Fasteners are grouped — use the joint-scoped or mount-scoped group key
     return part.joint ? `fastener-group:${part.joint}:${part.name}` : `fastener-group:${part.id}:${part.name}`;
   }
-  // servo, camera, compute, battery, wheel, component — all use part: prefix
+  // Wire segments and any remaining parts
   return `part:${part.id}`;
 }
