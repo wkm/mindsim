@@ -650,8 +650,8 @@ export class Viewport3D {
     this._ren.shadowMap.enabled = true;
     this._ren.shadowMap.type = THREE.PCFSoftShadowMap;
     this._ren.localClippingEnabled = true;
-    this._ren.toneMapping = THREE.ACESFilmicToneMapping;
-    this._ren.toneMappingExposure = 1.0;
+    this._ren.toneMapping = THREE.AgXToneMapping;
+    this._ren.toneMappingExposure = 0.9;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
     this._ctrl.enableDamping = true;
