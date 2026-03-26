@@ -617,7 +617,7 @@ export class Viewport3D {
       this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     }
     // Reconnect measure tool camera reference
-    this._meas._camera = this._cam;
+    this._meas.camera = this._cam;
   }
 
   // ── Scene init ──

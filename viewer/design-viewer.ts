@@ -158,6 +158,7 @@ async function lazyLoadLayerMesh(
   designScene: DesignScene,
   viewport: Viewport3D,
   botName: string,
+  bodyGroups: Record<string, THREE.Group>,
 ): Promise<void> {
   if (layerLoadState.has(nodeId)) return;
   layerLoadState.set(nodeId, 'loading');
@@ -204,7 +205,12 @@ async function lazyLoadLayerMesh(
   });
 
   const mesh = createPositionedMesh(geometry, mat, pos, quat);
-  viewport.scene.add(mesh);
+  const group = bodyGroups[layer.parent_body] ?? Object.values(bodyGroups)[0];
+  if (group) {
+    group.add(mesh);
+  } else {
+    viewport.scene.add(mesh);
+  }
   designScene.registerMesh(nodeId, mesh);
   layerLoadState.set(nodeId, 'loaded');
 }
@@ -230,7 +236,19 @@ export async function initDesignViewer(
   const sceneTree = buildSceneTree(manifest as any);
   const designScene = new DesignScene(sceneTree);
 
-  // Step 3: Load body meshes
+  // Step 3: Create a viewport group per body so Viewport3D tracks them for
+  // bounding box computation, section cap generation, and raycasting.
+  const bodyGroups: Record<string, THREE.Group> = {};
+  for (const body of manifest.bodies) {
+    bodyGroups[body.name] = viewport.addGroup(`body:${body.name}`);
+  }
+
+  // Helper: find the group for a given body name (falls back to first group)
+  function getBodyGroup(bodyName: string): THREE.Group {
+    return bodyGroups[bodyName] ?? Object.values(bodyGroups)[0];
+  }
+
+  // Step 4: Load body meshes
   const bodyMeshPromises = manifest.bodies.map(async (body) => {
     const geometry = await fetchSTL(botName, body.mesh);
     if (!geometry) return;
@@ -247,11 +265,11 @@ export async function initDesignViewer(
 
     const mesh = createPositionedMesh(geometry, mat, body.pos, body.quat);
     const nodeId = `body:${body.name}`;
-    viewport.scene.add(mesh);
+    getBodyGroup(body.name).add(mesh);
     designScene.registerMesh(nodeId, mesh);
   });
 
-  // Step 4: Load component part meshes
+  // Step 5: Load component part meshes
   const partsList = manifest.parts ?? [];
   const partMeshPromises = partsList.map(async (part) => {
     // Skip parts without positioning data (e.g., wire segments)
@@ -259,6 +277,7 @@ export async function initDesignViewer(
 
     // Determine the tree node ID — mirrors build-scene-tree.ts convention
     const nodeId = resolvePartNodeId(part);
+    const group = getBodyGroup(part.parent_body);
 
     if (part.meshes && part.meshes.length > 0) {
       // Multi-material part: load each sub-mesh with its own material
@@ -269,7 +288,7 @@ export async function initDesignViewer(
         const matDef = materials[sub.material];
         const mat = makeMaterial(matDef);
         const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
-        viewport.scene.add(mesh);
+        group.add(mesh);
         designScene.registerMesh(nodeId, mesh);
       });
       await Promise.all(subPromises);
@@ -287,7 +306,7 @@ export async function initDesignViewer(
         metalness: 0.1,
       });
       const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
-      viewport.scene.add(mesh);
+      group.add(mesh);
       designScene.registerMesh(nodeId, mesh);
     }
   });
@@ -295,13 +314,13 @@ export async function initDesignViewer(
   // Wait for all eager meshes
   await Promise.all([...bodyMeshPromises, ...partMeshPromises]);
 
-  // Step 5: Sync initial visibility
+  // Step 6: Sync initial visibility
   function syncVisibility(): void {
     designScene.syncVisibility();
   }
   syncVisibility();
 
-  // Step 6: Build component tree and wire callbacks
+  // Step 7: Build component tree and wire callbacks
   const tree = new ComponentTree(
     treePanelEl,
     manifest as any,
@@ -315,7 +334,7 @@ export async function initDesignViewer(
         // Lazy-load layer mesh on first show
         const node = designScene.tree.getNode(nodeId);
         if (node && node.kind === NodeKind.Layer && node.meshIds.length === 0 && !node.hidden) {
-          lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, botName).then(() => {
+          lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, botName, bodyGroups).then(() => {
             syncVisibility();
           });
         }
@@ -338,7 +357,7 @@ export async function initDesignViewer(
   tree.build();
   tree.updateFromDesignScene(designScene.tree);
 
-  // Step 7: Frame camera on loaded geometry
+  // Step 8: Frame camera on loaded geometry
   const box = new THREE.Box3();
   for (const mesh of designScene.meshes.values()) {
     box.expandByObject(mesh);
