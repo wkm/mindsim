@@ -157,8 +157,12 @@ def _transform_fastener_pos(
     )
 
 
-def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
-    """Generate viewer_manifest.json in the bot's output directory."""
+def build_viewer_manifest(bot: Bot) -> dict:
+    """Build the viewer manifest dict from a Bot object.
+
+    Returns the manifest as a plain dict, ready for JSON serialization
+    or direct use as an API response.
+    """
     from botcad.fasteners import fastener_key, fastener_stl_stem
 
     # Cache multi-material emitter results (keyed by ComponentKind value)
@@ -490,6 +494,12 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     # Build IK chains — find longest serial chains of hinge joints
     _build_ik_chains(bot, manifest)
 
+    return manifest
+
+
+def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
+    """Generate viewer_manifest.json in the bot's output directory."""
+    manifest = build_viewer_manifest(bot)
     out_path = output_dir / "viewer_manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
