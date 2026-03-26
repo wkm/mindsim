@@ -618,14 +618,6 @@ export class ComponentTree {
       childrenEl.appendChild(servoNode);
     }
 
-    // Joint node
-    const jointNodeId = `joint:${joint.name}`;
-    const jointData = { ...joint, _type: 'joint' };
-    const jointNode = this._createNode(jointNodeId, joint.name, 'joint', jointData, false, null, {
-      bodyName: joint.parent_body,
-    });
-    childrenEl.appendChild(jointNode);
-
     // Child body + its components
     const childBody = this.bodiesByName[joint.child_body];
     if (childBody) {

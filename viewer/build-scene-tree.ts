@@ -298,19 +298,6 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       asmChildren.push(servoId);
     }
 
-    // Joint node
-    const jointId = `joint:${joint.name}`;
-    tree.addNode({
-      id: jointId,
-      kind: NodeKind.Joint,
-      label: joint.name,
-      children: [],
-      hidden: false,
-      parentId: asmId,
-      meshIds: [],
-    });
-    asmChildren.push(jointId);
-
     // Child body
     const childBody = bodiesByName[joint.child_body];
     if (childBody) {

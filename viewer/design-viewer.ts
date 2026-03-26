@@ -249,7 +249,21 @@ export async function initDesignViewer(
   }
 
   // Step 4: Load body meshes
+  // Build a set of bodies that exist solely to host a purchased component.
+  // When a body has a comp_* part mounted on it, the body mesh and the
+  // component mesh are identical — skip the body mesh to avoid double-rendering.
+  const bodiesWithCompPart = new Set<string>();
+  for (const part of manifest.parts ?? []) {
+    if (part.id.startsWith('comp_') && part.parent_body) {
+      bodiesWithCompPart.add(part.parent_body);
+    }
+  }
+
   const bodyMeshPromises = manifest.bodies.map(async (body) => {
+    if (bodiesWithCompPart.has(body.name)) {
+      // Component mesh will render with proper material instead
+      return;
+    }
     const geometry = await fetchSTL(botName, body.mesh);
     if (!geometry) return;
 
