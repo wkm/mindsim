@@ -15,8 +15,9 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { Earcut } from 'three/src/extras/Earcut.js';
+import { loadEnvironment } from './environment.ts';
 import { MeasureTool } from './measure-tool.ts';
-import { BP, createEdgeComposer, RENDER_ORDER } from './presentation.ts';
+import { BP, RENDER_ORDER } from './presentation.ts';
 
 const VIEW_PRESETS = {
   iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
@@ -131,11 +132,11 @@ export class Viewport3D {
   _followBadge: any;
   _onFollowChange: any;
   _sectionCapColorFn: any;
+  _dirLight: THREE.DirectionalLight | null;
   _scene: any;
   _cam: any;
   _ctrl: any;
   _ren: any;
-  _edgeC: any;
   _meas: any;
   _gridHelper: any;
   _overlay: any;
@@ -161,7 +162,6 @@ export class Viewport3D {
   _settingsPopover: any;
   _perspBtn: any;
   _orthoBtn: any;
-  _edgeCb: any;
   _gridCb: any;
   _onResize: any;
   _onKey: any;
@@ -202,6 +202,7 @@ export class Viewport3D {
     this._onFollowChange = null; // callback when follow mode changes
     // Section cap callback — lets external code provide per-group cap colors
     this._sectionCapColorFn = null;
+    this._dirLight = null;
 
     this._initScene(options);
     this._initOverlay();
@@ -530,7 +531,6 @@ export class Viewport3D {
       this._cam.updateProjectionMatrix();
     }
     this._ren.setSize(w, h);
-    if (this._edgeC) this._edgeC.resize(w, h);
     if (this._contourLineMat) {
       this._contourLineMat.resolution.set(w, h);
     }
@@ -612,12 +612,8 @@ export class Viewport3D {
     this._ctrl.target.copy(target);
     this._ctrl.update();
 
-    // Reconnect edge composer if active
-    if (this._edgeC) {
-      this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
-    }
     // Reconnect measure tool camera reference
-    this._meas.camera = this._cam;
+    this._meas._camera = this._cam;
   }
 
   // ── Scene init ──
@@ -645,8 +641,10 @@ export class Viewport3D {
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._ren.setSize(w, h);
     this._ren.shadowMap.enabled = true;
-    this._ren.shadowMap.type = THREE.PCFShadowMap;
+    this._ren.shadowMap.type = THREE.PCFSoftShadowMap;
     this._ren.localClippingEnabled = true;
+    this._ren.toneMapping = THREE.AgXToneMapping;
+    this._ren.toneMappingExposure = 0.9;
     c.appendChild(this._ren.domElement);
     this._ctrl = new OrbitControls(this._cam, this._ren.domElement);
     this._ctrl.enableDamping = true;
@@ -655,20 +653,25 @@ export class Viewport3D {
     this._ctrl.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this._ctrl.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this._ctrl.update();
-    // Lighting — CAD-style: strong ambient + camera headlight + key/fill
-    // Higher ambient so dark materials (servos, IC packages) remain visible
-    this._scene.add(new THREE.HemisphereLight(0xffffff, 0xb0b0b0, 1.5));
-    // Camera headlight — moves with the camera so surfaces always have detail
-    const headlight = new THREE.DirectionalLight(0xffffff, 0.8);
-    headlight.position.set(0, 0, 1); // in camera space: forward
-    this._cam.add(headlight);
-    this._scene.add(this._cam); // camera must be in scene graph for children to render
-    // Key light at ~45 degrees
-    const key = new THREE.DirectionalLight(0xffffff, 0.6);
-    key.position.set(0.3, 0.5, 0.4);
-    this._scene.add(key);
-    // Fill light opposite the key
-    const fill = new THREE.DirectionalLight(0xffffff, 0.4);
+    // Lighting
+    this._scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+    dir.position.set(0.3, 0.5, 0.4);
+    this._scene.add(dir);
+    this._dirLight = dir;
+    dir.castShadow = true;
+    dir.shadow.mapSize.width = 1024;
+    dir.shadow.mapSize.height = 1024;
+    dir.shadow.bias = -0.0005;
+    // Shadow camera frustum — sized for typical bot (~0.3m).
+    // Covers a 0.4m box centered on origin, 0.5m tall.
+    dir.shadow.camera.left = -0.2;
+    dir.shadow.camera.right = 0.2;
+    dir.shadow.camera.top = 0.5;
+    dir.shadow.camera.bottom = -0.05;
+    dir.shadow.camera.near = 0.01;
+    dir.shadow.camera.far = 1.5;
+    const fill = new THREE.DirectionalLight(0xffffff, 0.3);
     fill.position.set(-0.3, -0.2, -0.4);
     this._scene.add(fill);
     this._gridHelper = null;
@@ -677,8 +680,8 @@ export class Viewport3D {
       this._gridHelper.rotation.x = Math.PI / 2;
       this._scene.add(this._gridHelper);
     }
-    if (opts.edges) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
     this._meas = new MeasureTool(this._cam, this._scene, c);
+    loadEnvironment(this._ren, this._scene);
   }
 
   // ── Overlay controls ──
@@ -1302,29 +1305,6 @@ export class Viewport3D {
     this._settingsPopover.appendChild(camRow);
     updateCamBtns();
 
-    // Edge rendering checkbox
-    const edgeRow = document.createElement('label');
-    edgeRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;';
-    this._edgeCb = document.createElement('input');
-    this._edgeCb.type = 'checkbox';
-    this._edgeCb.checked = !!this._edgeC;
-    this._edgeCb.style.cssText = 'width:12px;height:12px;accent-color:#137CBD;cursor:pointer;';
-    this._edgeCb.addEventListener('change', () => {
-      if (this._edgeCb.checked) {
-        if (!this._edgeC) this._edgeC = createEdgeComposer(this._ren, this._scene, this._cam);
-      } else {
-        if (this._edgeC) {
-          this._edgeC = null;
-        }
-      }
-    });
-    edgeRow.appendChild(this._edgeCb);
-    const edgeLabel = document.createElement('span');
-    edgeLabel.textContent = 'Edge detection';
-    edgeLabel.style.cssText = 'color:#CED9E0;font-size:12px;';
-    edgeRow.appendChild(edgeLabel);
-    this._settingsPopover.appendChild(edgeRow);
-
     // Grid checkbox
     const gridRow = document.createElement('label');
     gridRow.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;';
@@ -1592,6 +1572,7 @@ export class Viewport3D {
 
     // Collect all visible meshes grouped by layer
     const allMeshes = [];
+    const layerMeshes = {};
 
     // Collect meshes from named groups AND from ungrouped scene children
     const sources = [];
@@ -1617,79 +1598,62 @@ export class Viewport3D {
       node.traverse((child) => {
         if (child.isMesh && child.geometry && !child.userData._vpSec && !child.userData._vpCap) {
           allMeshes.push({ mesh: child, groupName });
+          if (!layerMeshes[groupName]) layerMeshes[groupName] = [];
+          layerMeshes[groupName].push(child);
         }
       });
     }
 
     const plane = this._secPlane;
 
-    // Collect segments per mesh so each mesh gets its own cap color
-    const segmentsByMesh: Map<number, number[]> = new Map();
-    const meshById: Map<number, THREE.Mesh> = new Map();
-    const meshGroupName: Map<number, string> = new Map();
-
-    for (const { mesh, groupName } of allMeshes) {
-      if (!segmentsByMesh.has(mesh.id)) {
-        segmentsByMesh.set(mesh.id, []);
-        meshById.set(mesh.id, mesh);
-        meshGroupName.set(mesh.id, groupName);
-      }
-      this._computeMeshPlaneContour(mesh, plane, segmentsByMesh.get(mesh.id)!);
+    // DEBUG: collect ALL segments across all meshes, log counts
+    const allSegments = [];
+    for (const { mesh } of allMeshes) {
+      this._computeMeshPlaneContour(mesh, plane, allSegments);
     }
 
-    // Flatten all segments for contour lines
-    const allSegments: number[] = [];
-    for (const segs of segmentsByMesh.values()) {
-      allSegments.push(...segs);
-    }
+    // Chain into closed polygons
+    const polygons = this._chainSegments(allSegments);
 
-    // Create per-mesh hatched cap meshes, each with its own color
-    if (!this._hatchTextures) this._hatchTextures = [];
-    let anyCapCreated = false;
-
-    for (const [meshId, meshSegments] of segmentsByMesh) {
-      if (meshSegments.length === 0) continue;
-
-      const polygons = this._chainSegments(meshSegments);
-      if (polygons.length === 0) continue;
-
+    // Triangulate and create hatched cap meshes
+    if (polygons.length > 0) {
       const capGeom = this._triangulateCapsOnPlane(polygons, plane);
-      if (!capGeom) continue;
+      if (capGeom) {
+        // Hide the section viz plane — caps show the cut position
+        if (this._secViz) this._secViz.visible = false;
 
-      anyCapCreated = true;
+        // Cap color — darker than the body for clear contrast
+        let capColor: THREE.Color | undefined;
+        if (this._sectionCapColorFn) {
+          const firstGroupName = Object.keys(layerMeshes)[0];
+          capColor = this._sectionCapColorFn(firstGroupName);
+        }
+        if (capColor == null) {
+          const firstMat = allMeshes[0]?.mesh?.material;
+          const baseHex = firstMat?.color ? firstMat.color.getHex() : 0xced9e0;
+          // Darken the body color (blend toward dark gray, not white)
+          const base = new THREE.Color(baseHex);
+          capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
+        }
 
-      // Determine cap color: prefer callback (pass group name), else derive from mesh material
-      let capColor: THREE.Color | undefined;
-      const groupName = meshGroupName.get(meshId)!;
-      if (this._sectionCapColorFn) {
-        capColor = this._sectionCapColorFn(groupName);
+        const hatchTex = this._createHatchTexture(capColor);
+        const capMat = new THREE.MeshBasicMaterial({
+          map: hatchTex,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
+        });
+        const capMesh = new THREE.Mesh(capGeom, capMat);
+        capMesh.raycast = () => {};
+        capMesh.userData._vpCap = true;
+        this._capGroup.add(capMesh);
+
+        // Track hatch textures for zoom-dependent repeat update
+        if (!this._hatchTextures) this._hatchTextures = [];
+        this._hatchTextures.push(hatchTex);
       }
-      if (capColor == null) {
-        const sourceMesh = meshById.get(meshId)!;
-        const mat = sourceMesh.material as THREE.MeshPhysicalMaterial;
-        const baseHex = mat?.color ? mat.color.getHex() : 0xced9e0;
-        const base = new THREE.Color(baseHex);
-        capColor = base.clone().lerp(new THREE.Color(0x394b59), 0.5);
-      }
-
-      const hatchTex = this._createHatchTexture(capColor);
-      const capMat = new THREE.MeshBasicMaterial({
-        map: hatchTex,
-        side: THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
-      });
-      const capMesh = new THREE.Mesh(capGeom, capMat);
-      capMesh.raycast = () => {};
-      capMesh.userData._vpCap = true;
-      this._capGroup.add(capMesh);
-
-      this._hatchTextures.push(hatchTex);
     }
-
-    // Hide the section viz plane when caps are showing the cut position
-    if (anyCapCreated && this._secViz) this._secViz.visible = false;
 
     // Contour lines (keep for now)
     if (allSegments.length > 0) {
@@ -2096,11 +2060,7 @@ export class Viewport3D {
     // consistent screen-space density regardless of camera distance
     this._updateHatchRepeat();
     // Edge detection works with section caps (no stencil dependency)
-    if (this._edgeC) {
-      this._edgeC.render();
-    } else {
-      this._ren.render(this._scene, this._cam);
-    }
+    this._ren.render(this._scene, this._cam);
     if (this._meas.enabled || this._meas.measurements.length > 0) this._meas.update();
     // Sync orientation cube
     this._syncOrientationCube();

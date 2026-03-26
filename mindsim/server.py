@@ -612,6 +612,33 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
 # ---------------------------------------------------------------------------
 
 
+@app.get("/api/dev-info")
+def get_dev_info():
+    """Return git branch and worktree info for the dev UI banner."""
+    import subprocess
+
+    def _run(cmd: list[str]) -> str:
+        try:
+            return subprocess.check_output(
+                cmd, cwd=str(PROJECT_ROOT), text=True
+            ).strip()
+        except Exception:
+            return ""
+
+    branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    worktree = _run(["git", "rev-parse", "--show-toplevel"])
+    # The "main" worktree is the one without a .git file (it has a .git directory)
+    git_path = Path(worktree) / ".git" if worktree else None
+    is_main_worktree = git_path.is_dir() if git_path and git_path.exists() else True
+    is_default = branch in ("master", "main") and is_main_worktree
+
+    return {
+        "branch": branch,
+        "worktree": worktree,
+        "is_default": is_default,
+    }
+
+
 @app.get("/api/bots")
 def get_bots():
     global _bots_json

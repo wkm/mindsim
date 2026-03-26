@@ -48,7 +48,18 @@
       -webkit-font-smoothing: antialiased;
     }
     #canvas-container { position: absolute; top: 40px; bottom: 0; left: 0; right: 0; z-index: 1; }
+    body.has-branch-banner #canvas-container { top: 62px; }
     canvas { display: block; }
+
+    /* ── Branch banner (non-default worktree indicator) ── */
+    #branch-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1001;
+      height: 22px; line-height: 22px;
+      background: #D99E0B; color: #182026;
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      text-align: left; padding: 0 12px; letter-spacing: 0.5px;
+    }
+    body.has-branch-banner nav#top-bar { top: 22px; }
 
     /* ── Buttons (shadcn menubar style) ── */
     .btn {
@@ -337,7 +348,11 @@
     </div>
   </div>
 
+  <!-- Branch indicator for non-default worktrees -->
+  <div id="branch-banner" style="display:none"></div>
+
   <script type="module" src="viewer.ts"></script>
   <script type="module" src="quick-switcher.ts"></script>
+  <script type="module" src="dev-info.ts"></script>
 </body>
 </html>

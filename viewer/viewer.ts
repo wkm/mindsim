@@ -91,7 +91,6 @@ if (cadstepsParam) {
     const designViewport = new Viewport3D(container, {
       cameraType: 'perspective',
       grid: true,
-      edges: true,
     });
 
     // Load Design viewer immediately
