@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-26
 **Status:** Draft
-**Replaces:** Component tree workstream (exp/260324-component-tree)
+**Replaces:** Component tree workstream (exp/260324-component-tree), component browser
 
 ## Problem
 
@@ -17,133 +17,166 @@ The bot viewer uses MuJoCo WASM for rendering, which limits visibility to per-bo
 | **Design** (default) | Three.js, no MuJoCo | Component inspection, per-mesh visibility, materials, design layers, wiring, fasteners |
 | **Sim** | MuJoCo WASM | Joint control, IK, physics, controller testing |
 
-Both tabs share: camera controls, section cutter, component tree panel.
+Both tabs share a single `Viewport3D` instance (scene, renderer, camera, controls). Tab switching swaps the scene content but preserves camera position/orientation. MuJoCo's animation loop pauses when Sim is not active.
 
-The Design tab replaces both the current bot viewer's Explore mode AND the standalone component browser. When `?bot=X`, it shows the full bot. When `?component=X`, it shows a single component with its design layers (effectively a "mini bot").
+The Design tab replaces both the current bot viewer's Explore mode AND the standalone component browser. When `?bot=X`, it shows the full bot. When `?component=X`, it shows a single component with its design layers.
+
+### Manifest Enhancements
+
+The manifest currently lacks positioning data for bodies and some parts. The Design Viewer needs complete transforms to place every mesh without MuJoCo.
+
+**Add to manifest:**
+- **Bodies:** `pos` and `quat` fields, derived from `body.world_pos` and `body.world_quat` (already computed by `bot.solve()`)
+- **Component parts (`comp_*`):** Add `quat` (currently only `pos` is emitted)
+- **Horn parts:** Add `pos` and `quat`
+- **Fastener parts:** Add `pos` and `quat` derived from mounting point positions/axes in body-local frame
+- **Design layers:** Bracket, coupler, clearance meshes are emitted in body-local frame (same as the body they attach to). Position using the parent body's world transform.
+
+**New API endpoint:** `/api/bots/{bot}/viewer_manifest` — calls `emit_viewer_manifest()` on demand and returns JSON. No static file generation.
 
 ### Design Viewer Architecture
 
-The Design Viewer loads meshes directly from the API — no MuJoCo involved.
-
 **Loading flow:**
-1. Fetch `viewer_manifest.json` from `/api/bots/{bot}/viewer_manifest`
-2. Build `SceneTree` from manifest (reuse existing `buildSceneTree`)
-3. For each body in the manifest:
-   - Fetch body mesh STL from `/api/bots/{bot}/meshes/{body_name}.stl`
-   - For each mounted component, fetch component mesh(es):
-     - Single-material: `/api/bots/{bot}/meshes/{comp_id}.stl`
-     - Multi-material: `/api/bots/{bot}/meshes/{comp_id}__{material}.stl` for each material
-   - For each servo joint, fetch: servo mesh, horn mesh
-   - Position each mesh using `pos` and `quat` from the manifest part entry
-4. For design layers (hidden by default, loaded on demand):
-   - Bracket: `/api/bots/{bot}/meshes/bracket_{joint}.stl`
-   - Coupler: `/api/bots/{bot}/meshes/coupler_{joint}.stl`
-   - Clearance: loaded when user toggles visibility
-   - Fasteners: `/api/bots/{bot}/meshes/hardware_{spec}.stl`
+1. Fetch manifest from `/api/bots/{bot}/viewer_manifest`
+2. Build `SceneTree` from manifest (new code — see Data Model section)
+3. For each body: fetch STL from `/api/bots/{bot}/meshes/{body_name}.stl`, position using body's `pos`/`quat`
+4. For each component part: fetch component mesh(es), position using part's `pos`/`quat` relative to parent body
+5. For multi-material components: fetch per-material STLs, position same as parent component
+6. For servo joints: fetch servo + horn meshes, position using joint's `pos`/`quat`
+7. Design layers (lazy): fetch bracket/coupler/clearance/insertion_channel STLs on demand when user toggles visible
 
-**Key difference from MuJoCo viewer:** Each component/layer is its own Three.js Mesh with its own visibility flag. No body-level grouping constraint.
+**Each part = its own Three.js Mesh** with independent visibility. No body-level grouping constraint.
 
-### Per-Mesh Visibility via SceneTree
+### Server Mesh Endpoints
 
-Each `SceneNode` maps to one or more Three.js meshes (not MuJoCo bodies). The `bodyNames` field on SceneNode is replaced with `meshIds: string[]` — direct references to Three.js mesh objects.
+The server's `_generate_bot_mesh()` already handles: body solids, `servo_*`, `horn_*`, `hardware_*`, `wire_*`, and multi-material `__` stems.
 
-**Visibility toggle (Fusion 360 style):**
-- Right-aligned filled circle (●) = visible, empty circle (○) = hidden
-- Click circle to toggle
-- Cascades to children: hiding a parent hides all descendants
-- Unhiding a parent restores children to their previous state (independently hidden children stay hidden)
+**Add handlers for design layers:**
+- `bracket_{joint}` — bracket solid for a joint's servo
+- `coupler_{joint}` — coupler solid
+- `clearance_{joint}` — clearance envelope solid
+- `insertion_{joint}` — insertion channel solid
 
-**Solo (right-click):**
-- Right-click a node → hide everything except this node's subtree
-- Right-click again (or press Escape) → un-solo, restore previous state
+Design layer meshes are generated in body-local frame (same coordinate system as the parent body mesh). The viewer positions them using the parent body's world transform — no additional offset needed.
 
-**Design layers as tree children:**
-Components that have design layers (servos with brackets/couplers/clearance) show them as collapsible children:
+### Data Model
+
+**New code** (not yet on master — partially exists on component tree branch, will be rewritten):
+
+```typescript
+enum NodeKind {
+    Robot, Assembly, Body, Component, SubPart, Joint, Layer
+}
+
+interface SceneNode {
+    id: string;
+    kind: NodeKind;
+    label: string;
+    children: string[];
+    hidden: boolean;        // user's explicit toggle
+    parentId: string | null;
+    meshIds: string[];      // Three.js mesh UUIDs this node controls
+}
+
+class SceneTree {
+    nodes: Map<string, SceneNode>;
+    soloedId: string | null;  // right-click solo (replaces additive isolate)
+    resolveVisibility(nodeId: string): boolean;
+    toggleHidden(nodeId: string): void;
+    solo(nodeId: string): void;
+    unsolo(): void;
+}
+```
+
+**DesignScene** — new data model for the Design tab (separate from `BotScene`):
+
+```typescript
+class DesignScene {
+    tree: SceneTree;
+    meshes: Map<string, THREE.Mesh>;  // meshId → Three.js mesh
+    // Per-mesh state
+    setMeshVisible(meshId: string, visible: boolean): void;
+    getMeshVisible(meshId: string): boolean;
+}
+```
+
+`BotScene` continues to exist unchanged for the Sim tab with body-level visibility.
+
+### Component Tree UI
+
+**Right-aligned ● / ○ toggles:**
+- Filled circle (●) = visible, empty circle (○) = hidden
+- Click to toggle, cascades to children
+- Unhiding parent restores children to previous state
+
+**Right-click Solo:**
+- Right-click a node → hide everything except this subtree
+- Right-click again or Escape → unsolo
+
+**Design layers as children:**
+Components with design layers show them as collapsible children, hidden by default:
 
 ```
-STS3215 @ left_wheel (Component)     ●
-  ├── Bracket (Layer)                ●
-  ├── Coupler (Layer)                ●
-  ├── Clearance Envelope (Layer)     ○  ← hidden by default
-  ├── Horn (SubPart)                 ●
-  └── 6× M3 SHC (Fasteners)         ●
+STS3215 @ left_wheel                          ●
+  ├── Bracket                                 ○  ← hidden, lazy-loaded
+  ├── Coupler                                 ○
+  ├── Clearance Envelope                      ○
+  ├── Horn                                    ●
+  └── 6× M3 SHC                              ●
 ```
 
-Design layers are hidden by default and loaded on-demand when the user toggles them visible (lazy STL fetch).
+### Component Browser Consolidation
 
-### Mesh Positioning
+The `?component=X` route currently loads `component-browser.ts` (~1400 lines). The Design Viewer replaces it.
 
-The manifest provides `pos` (position) and `quat` (quaternion) for each part entry. The Design Viewer uses these directly to place Three.js meshes — no MuJoCo transform pipeline.
+**Features preserved in Design tab's component mode:**
+- Layer toggles (body, bracket, coupler, clearance, insertion channel, fasteners, horn)
+- Material rendering (multi-material support from workstream 1)
+- Section cutter
+- Camera focus/orbit
 
-For bodies: position at origin (body meshes are in body-local frame). Apply body's kinematic transform from the manifest's solved joint positions.
-
-For components on bodies: position using the part's `pos` field (body-local offset).
-
-For multi-material sub-meshes: same position as parent component (mount rotation already baked into STL).
+**Deferred to future work:**
+- SVG overlay annotations (mounting points, wire ports as labeled circles)
+- Measurement tool
+- Technical drawing links
 
 ### Sim Tab
 
-The existing MuJoCo viewer becomes the Sim tab. It keeps:
-- Joint mode (slider control)
-- IK mode
-- Assembly mode
-- Physics simulation
+The existing MuJoCo viewer (`bot-viewer.ts`) becomes the Sim tab. It keeps Joint mode, IK mode, Assembly mode. Body-level visibility is fine here.
 
-Body-level visibility is fine in Sim (you're thinking in physics terms). The component tree in Sim mode falls back to the existing body-level visibility behavior.
+When Sim tab is active, the MuJoCo animation loop runs. When Design tab is active, it pauses.
 
 ### Tab Switching
 
-Both tabs share the same component tree panel. When switching tabs:
-- Camera position/orientation is preserved
-- Component tree state (expanded/collapsed) is preserved
-- Visibility state is per-tab (Design and Sim have independent visibility)
+Single `Viewport3D`. Switching tabs:
+1. Pause/resume MuJoCo animation loop
+2. Swap scene content (Design scene ↔ MuJoCo scene)
+3. Camera position preserved (shared camera object)
+4. Component tree state (expanded/collapsed) preserved
+5. Visibility state is per-tab (independent)
 
-### Shared Infrastructure (reused from existing code)
-
-- `SceneTree`, `NodeKind`, `SceneNode` — from component tree branch
-- `buildSceneTree` — manifest → tree builder
-- `ComponentTree` — DOM rendering with right-aligned indicators
-- `FocusController` — camera focus on node
-- `SectionCutter` — cross-section view
-- Orbit controls, lighting, ground plane
-
-## Mesh Loading Strategy
-
-All meshes loaded on-demand from `/api/bots/{bot}/meshes/` endpoints. No static files.
-
-**Eager load (on viewer init):**
-- Body meshes (structural shells)
-- Component meshes (servos, Pi, camera, etc.)
-- Horn meshes
-
-**Lazy load (when user toggles visible):**
-- Design layers (bracket, coupler, clearance envelope, insertion channels)
-- Fastener meshes
-- Wire stub meshes
-
-**Caching:** Browser HTTP cache handles repeat loads. Server caches generated solids in memory.
-
-## Files Changed
+## Files
 
 | File | Change |
 |------|--------|
 | `viewer/design-viewer.ts` | **New.** Three.js scene loader, mesh positioning, per-mesh visibility |
-| `viewer/viewer.ts` | Route to Design tab (default) or Sim tab |
-| `viewer/bot-scene.ts` | SceneNode.meshIds replaces bodyNames for Design mode |
+| `viewer/design-scene.ts` | **New.** `DesignScene` data model, `SceneTree`, `SceneNode`, `NodeKind` |
+| `viewer/build-scene-tree.ts` | **New.** Build SceneTree from manifest, including design layer nodes |
+| `viewer/viewer.ts` | Tab routing: Design (default) + Sim. Shared Viewport3D. |
 | `viewer/component-tree.ts` | Right-aligned ● / ○ toggles, right-click Solo, design layer children |
-| `viewer/build-scene-tree.ts` | Add design layer nodes as children of components |
-| `viewer/scene-sync.ts` | Design mode: per-mesh sync from SceneTree |
-| `viewer/bot-viewer.ts` | Becomes Sim tab — minimal changes, just tab wrapper |
-| `botcad/emit/viewer.py` | Ensure manifest has all positioning data (pos, quat per part) |
+| `viewer/bot-viewer.ts` | Becomes Sim tab — wrap in tab lifecycle (pause/resume) |
+| `botcad/emit/viewer.py` | Add pos/quat to bodies, comp parts, horns, fasteners. Design layer metadata. |
+| `mindsim/server.py` | Add `/api/bots/{bot}/viewer_manifest` endpoint. Add bracket/coupler/clearance mesh handlers. |
 
 ## Dependencies
 
-- Materials system (merged — provides multi-material manifest + STL serving)
-- Wire/fastener viz (can integrate after — independent workstream)
+- Materials system (merged)
+- Wire/fastener viz (integrates after — independent)
 
 ## Non-Goals
 
 - Physics simulation in Design tab
-- Joint manipulation in Design tab (that's Sim)
-- Full cable routing visualization (future)
-- Assembly sequence animation (future)
+- Joint manipulation in Design tab
+- Full cable routing visualization
+- Assembly sequence animation
+- SVG annotation overlays (deferred from component browser)
