@@ -8,10 +8,80 @@ Used by both the MuJoCo emitter (green servo boxes) and the CAD emitter
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from botcad.component import Vec3
 
+if TYPE_CHECKING:
+    from botcad.component import MountPoint
+    from botcad.skeleton import Joint, Mount
+
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
+
+
+# ---------------------------------------------------------------------------
+# Pose / Placement / PackingResult — structured packing output
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Pose:
+    """Position + orientation in a parent frame."""
+
+    pos: Vec3
+    quat: Quat
+
+
+POSE_IDENTITY = Pose(pos=(0.0, 0.0, 0.0), quat=(1.0, 0.0, 0.0, 0.0))
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Solved placement of a component: pose in the parent body frame + bbox."""
+
+    pose: Pose
+    bbox: Vec3  # axis-aligned bounding box dimensions
+
+
+@dataclass
+class PackingResult:
+    """Result of the packing solver — maps joints/mounts to their placements."""
+
+    placements: dict[Joint | Mount, Placement]
+
+
+def pose_transform_point(pose: Pose, local_point: Vec3) -> Vec3:
+    """Transform a local-frame point to the pose's frame (rotate + translate)."""
+    rotated = rotate_vec(pose.quat, local_point)
+    return (
+        pose.pos[0] + rotated[0],
+        pose.pos[1] + rotated[1],
+        pose.pos[2] + rotated[2],
+    )
+
+
+def pose_transform_dir(pose: Pose, local_dir: Vec3) -> Vec3:
+    """Rotate a direction vector by a pose's orientation (no translation)."""
+    return rotate_vec(pose.quat, local_dir)
+
+
+def fastener_pose(parent_pose: Pose, mp: MountPoint) -> Pose:
+    """Compute world-frame fastener pose from a parent placement and mount point.
+
+    The fastener's position is the mount point position transformed by the
+    parent pose. The fastener's orientation aligns +Z to the mount point's
+    axis direction, composed with the parent orientation.
+    """
+    # Position: transform mount point pos by parent pose
+    pos = pose_transform_point(parent_pose, mp.pos)
+
+    # Orientation: align +Z to mp.axis, then compose with parent rotation
+    axis_align = rotation_between((0.0, 0.0, 1.0), mp.axis)
+    final_quat = quat_multiply(parent_pose.quat, axis_align)
+
+    return Pose(pos=pos, quat=final_quat)
+
 
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)

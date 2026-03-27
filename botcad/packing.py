@@ -21,6 +21,7 @@ from botcad.geometry import (
     DIR_POS_X,
     DIR_POS_Y,
     DIR_POS_Z,
+    PackingResult,
 )
 
 if TYPE_CHECKING:
@@ -39,10 +40,86 @@ _POSITION_AXES: dict[str, Vec3] = {
 }
 
 
-def solve_packing(bot: Bot) -> None:
-    """Solve packing for all bodies in the bot."""
+def solve_packing(bot: Bot) -> PackingResult:
+    """Solve packing for all bodies in the bot.
+
+    Returns a PackingResult mapping each Joint and Mount to its solved Placement.
+    Also stores the result on bot.packing_result for convenient access.
+    """
+    from botcad.geometry import Placement, Pose
+
+    result = PackingResult(placements={})
     for body in bot.all_bodies:
         _solve_body(body)
+
+    # Build PackingResult from solved state (dual-write bridge)
+    for body in bot.all_bodies:
+        for joint in body.joints:
+            result.placements[joint] = Placement(
+                pose=Pose(
+                    pos=joint.solved_servo_center,
+                    quat=joint.solved_servo_quat,
+                ),
+                bbox=joint.servo.dimensions,
+            )
+        for mount in body.mounts:
+            # Build the mount quaternion from rotate_point logic
+            # Mount rotation is encoded in rotate_point(); we derive
+            # a quaternion by rotating the 3 basis vectors.
+            mount_quat = _mount_rotation_quat(mount)
+            result.placements[mount] = Placement(
+                pose=Pose(pos=mount.resolved_pos, quat=mount_quat),
+                bbox=mount.placed_dimensions,
+            )
+
+    bot.packing_result = result
+    return result
+
+
+def _mount_rotation_quat(mount) -> tuple[float, float, float, float]:
+    """Derive a quaternion from a Mount's rotate_point transform.
+
+    Rotates the three basis vectors through mount.rotate_point() and
+    constructs a rotation matrix, then converts to quaternion.
+    """
+    import math
+
+    # Get the rotated basis vectors
+    rx = mount.rotate_point((1.0, 0.0, 0.0))
+    ry = mount.rotate_point((0.0, 1.0, 0.0))
+    rz = mount.rotate_point((0.0, 0.0, 1.0))
+
+    # Rotation matrix columns are the rotated basis vectors
+    # R = [rx | ry | rz] (column-major)
+    # Convert rotation matrix to quaternion (Shepperd's method)
+    trace = rx[0] + ry[1] + rz[2]
+
+    if trace > 0:
+        s = 0.5 / math.sqrt(trace + 1.0)
+        w = 0.25 / s
+        x = (ry[2] - rz[1]) * s
+        y = (rz[0] - rx[2]) * s
+        z = (rx[1] - ry[0]) * s
+    elif rx[0] > ry[1] and rx[0] > rz[2]:
+        s = 2.0 * math.sqrt(1.0 + rx[0] - ry[1] - rz[2])
+        w = (ry[2] - rz[1]) / s
+        x = 0.25 * s
+        y = (rx[1] + ry[0]) / s
+        z = (rz[0] + rx[2]) / s
+    elif ry[1] > rz[2]:
+        s = 2.0 * math.sqrt(1.0 + ry[1] - rx[0] - rz[2])
+        w = (rz[0] - rx[2]) / s
+        x = (rx[1] + ry[0]) / s
+        y = 0.25 * s
+        z = (ry[2] + rz[1]) / s
+    else:
+        s = 2.0 * math.sqrt(1.0 + rz[2] - rx[0] - ry[1])
+        w = (rx[1] - ry[0]) / s
+        x = (rz[0] + rx[2]) / s
+        y = (ry[2] + rz[1]) / s
+        z = 0.25 * s
+
+    return (w, x, y, z)
 
 
 def _solve_body(body: Body) -> None:

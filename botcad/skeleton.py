@@ -233,6 +233,12 @@ class Mount:
                 p = xform(p[0], p[1], p[2])
         return p
 
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
+
 
 @dataclass
 class Joint:
@@ -541,6 +547,9 @@ class Bot:
     all_bodies: list[Body] = field(default_factory=list)
     all_joints: list[Joint] = field(default_factory=list)
     wire_routes: list = field(default_factory=list)
+    packing_result: object = field(
+        default=None, init=False, repr=False
+    )  # PackingResult
 
     _assemblies: dict[str, Assembly] = field(default_factory=dict)
     _clearance_constraints: list[ClearanceConstraint] = field(default_factory=list)
