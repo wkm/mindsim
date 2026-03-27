@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from botcad.geometry import PackingResult, Pose
     from botcad.skeleton import Body, Bot, Joint
 
 import logging
@@ -26,7 +27,6 @@ _BUS_TYPE_COLORS: dict[str, list[float]] = {
     "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],  # blue — servo bus
     "csi": [0.40, 0.73, 0.42, 1.0],  # green — camera ribbon
     "power": [0.90, 0.30, 0.25, 1.0],  # red — power
-    "usb": [0.55, 0.35, 0.75, 1.0],  # purple — USB data/power
 }
 
 
@@ -145,138 +145,58 @@ def _build_materials_dict(bot: Bot, mm_cache: dict) -> dict:
     return materials
 
 
-def _transform_fastener_pos(
-    mp_pos: tuple, servo_quat: tuple, servo_center: tuple, body_world_pos: tuple
-) -> list:
-    """Transform a fastener mount-point position to world frame.
-
-    mp_pos is in the servo's local frame. We rotate by the servo's solved
-    quaternion, add the servo center (body-local), then add body world pos.
-    """
-    from botcad.geometry import rotate_vec
-
-    rotated = rotate_vec(servo_quat, mp_pos)
-    return _round_vec(
-        (
-            body_world_pos[0] + servo_center[0] + rotated[0],
-            body_world_pos[1] + servo_center[1] + rotated[1],
-            body_world_pos[2] + servo_center[2] + rotated[2],
-        )
-    )
-
-
-# Context labels for fastener categories
-_FASTENER_CONTEXT = {
-    "ear": "bracket ear -> servo case",
-    "horn": "coupler -> horn",
-    "rear": "rear horn -> servo case",
-}
-
-
-def _fastener_total_length(mp) -> float:
-    """Total screw length (head + shank) for a mount point's fastener."""
-    from botcad.fasteners import resolve_fastener
-
-    try:
-        spec = resolve_fastener(mp)
-        head_h = spec.head_height
-    except KeyError:
-        head_h = 0.003
-    shank = 0.004  # default shank length (matches screw_solid default)
-    return head_h + shank
-
-
-def _build_joint_fastener_entry(
-    joint_name: str,
+def _fastener_entry(
+    owner_name: str,
     tag: str,
     index: int,
     mp,
-    servo_quat: tuple,
-    servo_center: tuple,
-    body_world_pos: tuple,
+    fp: Pose,
     body_name: str,
 ) -> dict:
-    """Build a manifest entry for a joint-mounted fastener (bracket/horn/rear)."""
+    """Build a manifest entry for a fastener at a computed Pose.
+
+    Works for both joint-mounted fasteners (bracket/horn/rear) and
+    mount-attached fasteners.  The Pose is computed by fastener_pose().
+    """
     from botcad.fasteners import fastener_key, fastener_stl_stem
-    from botcad.geometry import quat_multiply, rotate_vec, rotation_between
 
-    # Align fastener +Z (head top face) to the mount point axis direction,
-    # then compose with servo orientation to get world-frame quaternion.
-    axis_align = rotation_between(
-        (0.0, 0.0, 1.0), mp.axis
-    )  # plint: disable=no-rotation-between-in-emitters
-    final_quat = quat_multiply(servo_quat, axis_align)
+    # Context labels for fastener categories
+    context_labels = {
+        "ear": "bracket ear -> servo case",
+        "horn": "coupler -> horn",
+        "rear": "rear horn -> servo case",
+        "mount": f"{owner_name} mount -> {body_name}",
+    }
 
-    # Position: mount hole center, then offset so screw tip sits at hole depth
-    # and head protrudes outward. The screw STL extends from Z=0 (head) to
-    # Z=-total_length (tip). After quat rotation, the head faces along the
-    # mount axis. Offset along the axis by total_length so the tip aligns
-    # with the original mount hole position.
-    base_pos = _transform_fastener_pos(mp.pos, servo_quat, servo_center, body_world_pos)
-    total_len = _fastener_total_length(mp)
-    # The mount axis in world frame = servo_quat applied to mp.axis
-    world_axis = rotate_vec(servo_quat, mp.axis)
-    offset_pos = (
-        base_pos[0] + world_axis[0] * total_len,
-        base_pos[1] + world_axis[1] * total_len,
-        base_pos[2] + world_axis[2] * total_len,
-    )
-
-    return {
-        "id": f"fastener_{joint_name}_{tag}_{index}",
+    entry: dict = {
+        "id": f"fastener_{owner_name}_{tag}_{index}",
         "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
         "kind": "purchased",
         "category": "fastener",
         "parent_body": body_name,
-        "joint": joint_name,
         "mesh": f"{fastener_stl_stem(mp)}.stl",
-        "pos": _round_vec(offset_pos),
-        "quat": _round_vec(final_quat),
+        "pos": _round_vec(fp.pos),
+        "quat": _round_vec(fp.quat),
         "material": "steel",
-        "context": _FASTENER_CONTEXT.get(tag, "fastener"),
+        "context": context_labels.get(tag, "fastener"),
     }
+    # For joint fasteners, include the joint reference
+    if tag in ("ear", "horn", "rear"):
+        entry["joint"] = owner_name
+    else:
+        entry["mount_label"] = owner_name
+    return entry
 
 
-def _build_mount_fastener_entry(
-    body_name: str,
-    mount_label: str,
-    index: int,
-    mp,
-    fastener_pos: list,
-    fastener_axis: tuple,
-) -> dict:
-    """Build a manifest entry for a mount-attached fastener."""
-    from botcad.fasteners import fastener_key, fastener_stl_stem
-    from botcad.geometry import rotation_between
-
-    # MountPoint.axis = insertion direction (where shank goes).
-    # Screw STL head faces +Z, so align +Z with head direction = -axis.
-    # (Same convention as MuJoCo emitter, see mujoco.py line 665-668.)
-    head_axis = (-fastener_axis[0], -fastener_axis[1], -fastener_axis[2])
-
-    return {
-        "id": f"fastener_{body_name}_{mount_label}_{index}",
-        "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
-        "kind": "purchased",
-        "category": "fastener",
-        "parent_body": body_name,
-        "mount_label": mount_label,
-        "mesh": f"{fastener_stl_stem(mp)}.stl",
-        "pos": fastener_pos,
-        "quat": _round_vec(
-            rotation_between((0.0, 0.0, 1.0), head_axis)
-        ),  # plint: disable=no-rotation-between-in-emitters
-        "material": "steel",
-        "context": f"{mount_label} mount -> {body_name}",
-    }
-
-
-def build_viewer_manifest(bot: Bot) -> dict:
+def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dict:
     """Build the viewer manifest dict from a Bot object.
 
     Returns the manifest as a plain dict, ready for JSON serialization
     or direct use as an API response.
     """
+
+    if packing is None:
+        packing = bot.packing_result
 
     # Cache multi-material emitter results (keyed by ComponentKind value)
     # so we call each emitter at most once across materials + parts.
@@ -491,6 +411,21 @@ def build_viewer_manifest(bot: Bot) -> dict:
                 if comp
                 else "component"
             )
+
+            # Look up mount orientation from PackingResult
+            mount_quat = [1.0, 0.0, 0.0, 0.0]
+            if packing is not None:
+                # Find the mount matching this label on the parent body
+                parent_body = next(
+                    (b for b in bot.all_bodies if b.name == body.parent_body_name),
+                    None,
+                )
+                if parent_body is not None:
+                    for m in parent_body.mounts:
+                        if m.label == mount_label and m in packing.placements:
+                            mount_quat = list(packing.placements[m].pose.quat)
+                            break
+
             mount_entry = {
                 "body": body.parent_body_name,
                 "label": mount_label,
@@ -498,12 +433,7 @@ def build_viewer_manifest(bot: Bot) -> dict:
                 "category": category,
                 "mesh": body.mesh_file,
                 "pos": _round_vec(body.world_pos),
-                "quat": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                ],  # plint: disable=no-hardcoded-identity-quat
+                "quat": _round_vec(mount_quat),
                 "mass": round(comp.mass, 4) if comp else 0.0,
                 "color": list(comp.default_material.color)
                 if comp and comp.default_material
@@ -529,58 +459,66 @@ def build_viewer_manifest(bot: Bot) -> dict:
             manifest["mounts"].append(mount_entry)
 
     # 3. Fasteners at each joint (bracket screws + horn screws + rear horn screws)
-    for body in bot.all_bodies:
-        for joint in body.joints:
-            servo = joint.servo
-            sq = joint.solved_servo_quat
-            sc = joint.solved_servo_center
+    if packing is not None:
+        from botcad.geometry import fastener_pose
+
+        for body in bot.all_bodies:
+            for joint in body.joints:
+                if joint not in packing.placements:
+                    continue
+                servo = joint.servo
+                servo_pose = packing.placements[joint].pose
+                # Servo pose is in body-local frame; shift to world frame
+                bwp = body.world_pos
+                from botcad.geometry import Pose
+
+                world_servo_pose = Pose(
+                    pos=(
+                        bwp[0] + servo_pose.pos[0],
+                        bwp[1] + servo_pose.pos[1],
+                        bwp[2] + servo_pose.pos[2],
+                    ),
+                    quat=servo_pose.quat,
+                )
+                for i, ear in enumerate(servo.mounting_ears):
+                    fp = fastener_pose(world_servo_pose, ear)
+                    manifest["parts"].append(
+                        _fastener_entry(joint.name, "ear", i, ear, fp, body.name)
+                    )
+                for i, mp in enumerate(servo.horn_mounting_points):
+                    fp = fastener_pose(world_servo_pose, mp)
+                    manifest["parts"].append(
+                        _fastener_entry(joint.name, "horn", i, mp, fp, body.name)
+                    )
+                for i, mp in enumerate(servo.rear_horn_mounting_points):
+                    fp = fastener_pose(world_servo_pose, mp)
+                    manifest["parts"].append(
+                        _fastener_entry(joint.name, "rear", i, mp, fp, body.name)
+                    )
+
+        # 3b. Fasteners for mounted components
+        for body in bot.all_bodies:
             bwp = body.world_pos
-            for i, ear in enumerate(servo.mounting_ears):
-                manifest["parts"].append(
-                    _build_joint_fastener_entry(
-                        joint.name, "ear", i, ear, sq, sc, bwp, body.name
-                    )
+            for mount in body.mounts:
+                if mount not in packing.placements:
+                    continue
+                mount_pose = packing.placements[mount].pose
+                # Mount pose is in body-local frame; shift to world frame
+                world_mount_pose = Pose(
+                    pos=(
+                        bwp[0] + mount_pose.pos[0],
+                        bwp[1] + mount_pose.pos[1],
+                        bwp[2] + mount_pose.pos[2],
+                    ),
+                    quat=mount_pose.quat,
                 )
-            for i, mp in enumerate(servo.horn_mounting_points):
-                manifest["parts"].append(
-                    _build_joint_fastener_entry(
-                        joint.name, "horn", i, mp, sq, sc, bwp, body.name
+                for i, mp in enumerate(mount.component.mounting_points):
+                    fp = fastener_pose(world_mount_pose, mp)
+                    manifest["parts"].append(
+                        _fastener_entry(mount.label, "mount", i, mp, fp, body.name)
                     )
-                )
-            for i, mp in enumerate(servo.rear_horn_mounting_points):
-                manifest["parts"].append(
-                    _build_joint_fastener_entry(
-                        joint.name, "rear", i, mp, sq, sc, bwp, body.name
-                    )
-                )
 
-    # 3b. Fasteners for mounted components
-    for body in bot.all_bodies:
-        bwp = body.world_pos
-        for mount in body.mounts:
-            rp = mount.resolved_pos
-            for i, mp in enumerate(mount.component.mounting_points):
-                # Rotate mount point from component-local to body frame
-                rotated = mount.rotate_point(mp.pos)
-                fastener_pos = _round_vec(
-                    (
-                        bwp[0] + rp[0] + rotated[0],
-                        bwp[1] + rp[1] + rotated[1],
-                        bwp[2] + rp[2] + rotated[2],
-                    )
-                )
-                fastener_axis = tuple(
-                    mount.rotate_point(mp.axis)
-                )  # plint: disable=no-rotate-point-for-axes
-                manifest["parts"].append(
-                    _build_mount_fastener_entry(
-                        body.name, mount.label, i, mp, fastener_pos, fastener_axis
-                    )
-                )
-
-    # 4. Wire segments — identity pos/quat because geometry is already
-    # in body-local frame in the per-segment STL. The viewer parents
-    # each part under its body group via parent_body.
+    # 4. Wire segments
     for route in bot.wire_routes:
         for i, seg in enumerate(route.segments):
             if seg.straight_length < 0.001:
@@ -591,25 +529,14 @@ def build_viewer_manifest(bot: Bot) -> dict:
                     "name": route.label,
                     "kind": "fabricated",
                     "category": "wire",
-                    "wire_kind": "segment",
                     "parent_body": seg.body_name,
                     "bus_type": str(route.bus_type),
                     "mesh": f"wire_{route.label}_{seg.body_name}_{i}.stl",
-                    "pos": [0.0, 0.0, 0.0],
-                    "quat": [
-                        1.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                    ],  # plint: disable=no-hardcoded-identity-quat
-                    "color": _BUS_TYPE_COLORS.get(
-                        str(route.bus_type), [0.53, 0.53, 0.53, 1.0]
-                    ),
                 }
             )
 
     # 5. Wire stubs at connector sockets
-    _emit_wire_stubs(bot, manifest)
+    _emit_wire_stubs(bot, manifest, packing)
 
     # Build IK chains — find longest serial chains of hinge joints
     _build_ik_chains(bot, manifest)
@@ -624,7 +551,7 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     out_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
-def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
+def _emit_wire_stubs(bot: Bot, manifest: dict, packing) -> None:
     """Emit short wire stub entries at each component's WirePort.
 
     Wire stubs are short cylinders (~25mm) extending from connector sockets
@@ -634,18 +561,31 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
     Each stub is emitted as a proper part with pos/quat/mesh so the viewer
     can render it the same way as any other part.
     """
-    from botcad.connectors import connector_spec
-    from botcad.geometry import rotate_vec, rotation_between
+    from botcad.geometry import (
+        pose_transform_dir,
+        pose_transform_point,
+        rotation_between,
+    )
 
     for body in bot.all_bodies:
         for mount in body.mounts:
             comp = mount.component
+
+            # Get mount pose from packing if available
+            mount_pose = (
+                packing.placements[mount].pose
+                if (packing and mount in packing.placements)
+                else None
+            )
+
             for wp in comp.wire_ports:
                 if not wp.connector_type:
                     continue
 
                 # Look up connector spec for wire exit direction
                 try:
+                    from botcad.connectors import connector_spec
+
                     cspec = connector_spec(wp.connector_type)
                 except KeyError:
                     log.debug(
@@ -657,23 +597,12 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                     continue
 
                 # Transform port position and exit direction from component-local
-                # to body-local frame:
-                #   1. Apply mount.rotate_point (handles rotate_z + face rotation)
-                #   2. Translate by mount.resolved_pos
-                rotated_pos = mount.rotate_point(wp.pos)
-                rp = mount.resolved_pos
-                body_pos = (
-                    rotated_pos[0] + rp[0],
-                    rotated_pos[1] + rp[1],
-                    rotated_pos[2] + rp[2],
-                )
-
-                # Direction is a vector (no translation), only rotation
-                body_dir = mount.rotate_point(
-                    cspec.wire_exit_direction
-                )  # plint: disable=no-rotate-point-for-axes
+                # to body-local frame using the mount's Pose
+                body_pos = pose_transform_point(mount_pose, wp.pos)
+                body_dir = pose_transform_dir(mount_pose, cspec.wire_exit_direction)
 
                 # Quaternion aligning cylinder +Z to the wire exit direction
+
                 stub_quat = rotation_between(
                     (0.0, 0.0, 1.0), tuple(body_dir)
                 )  # plint: disable=no-rotation-between-in-emitters
@@ -684,10 +613,6 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                     body_pos[0] + body_dir[0] * half_len,
                     body_pos[1] + body_dir[1] * half_len,
                     body_pos[2] + body_dir[2] * half_len,
-                )
-
-                bus_color = _BUS_TYPE_COLORS.get(
-                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
                 )
 
                 manifest["parts"].append(
@@ -703,123 +628,9 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                         "quat": _round_vec(stub_quat),
                         "bus_type": str(wp.bus_type),
                         "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-                # Connector housing at wire port position
-                conn_quat = rotation_between(
-                    (0.0, 0.0, 1.0), cspec.mating_direction
-                )  # plint: disable=no-rotation-between-in-emitters
-                # Apply mount rotation to connector orientation
-                body_mate_dir = mount.rotate_point(
-                    cspec.mating_direction
-                )  # plint: disable=no-rotate-point-for-axes
-                conn_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_conn_{body.name}_{mount.label}_{wp.label}",
-                        "name": f"{wp.label} connector",
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "connector",
-                        "parent_body": body.name,
-                        "mesh": f"connector_{wp.connector_type}.stl",
-                        "pos": _round_vec(body_pos),
-                        "quat": _round_vec(conn_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-        # --- Servo wire ports (on joints, not mounts) ---
-        for joint in body.joints:
-            servo = joint.servo
-            for wp in servo.wire_ports:
-                if not wp.connector_type:
-                    continue
-
-                try:
-                    cspec = connector_spec(wp.connector_type)
-                except KeyError:
-                    log.debug(
-                        "Unknown connector_type %r on servo %s/%s, skipping",
-                        wp.connector_type,
-                        servo.name,
-                        wp.label,
-                    )
-                    continue
-
-                # Transform from servo-local to body-local frame
-                rotated_pos = rotate_vec(joint.solved_servo_quat, wp.pos)
-                sc = joint.solved_servo_center
-                body_pos = (
-                    rotated_pos[0] + sc[0],
-                    rotated_pos[1] + sc[1],
-                    rotated_pos[2] + sc[2],
-                )
-
-                body_dir = rotate_vec(
-                    joint.solved_servo_quat, cspec.wire_exit_direction
-                )
-                stub_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                half_len = 0.0125
-                stub_center = (
-                    body_pos[0] + body_dir[0] * half_len,
-                    body_pos[1] + body_dir[1] * half_len,
-                    body_pos[2] + body_dir[2] * half_len,
-                )
-
-                bus_color = _BUS_TYPE_COLORS.get(
-                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                )
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_stub_{body.name}_{joint.name}_{wp.label}",
-                        "name": wp.label,
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "stub",
-                        "parent_body": body.name,
-                        "mesh": "wire_stub.stl",
-                        "pos": _round_vec(stub_center),
-                        "quat": _round_vec(stub_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-                # Connector housing at wire port position
-                body_mate_dir = rotate_vec(
-                    joint.solved_servo_quat, cspec.mating_direction
-                )
-                conn_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_conn_{body.name}_{joint.name}_{wp.label}",
-                        "name": f"{wp.label} connector",
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "connector",
-                        "parent_body": body.name,
-                        "mesh": f"connector_{wp.connector_type}.stl",
-                        "pos": _round_vec(body_pos),
-                        "quat": _round_vec(conn_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
+                        "color": _BUS_TYPE_COLORS.get(
+                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                        ),
                     }
                 )
 

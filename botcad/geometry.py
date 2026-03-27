@@ -269,17 +269,6 @@ def euler_to_quat(euler_deg: tuple[float, float, float]) -> Quat:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class Pose:
-    """Position + orientation in a single frame."""
-
-    pos: Vec3
-    quat: Quat
-
-
-POSE_IDENTITY = Pose((0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0))
-
-
 def pose_transform_point(pose: Pose, local_point: Vec3) -> Vec3:
     """Rotate then translate a point from local to world frame."""
     rotated = rotate_vec(pose.quat, local_point)
