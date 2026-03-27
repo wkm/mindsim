@@ -54,6 +54,7 @@ validate: lint test renders
 lint:
 	uv run ruff check --fix .
 	uv run ruff format .
+	uv run python tools/lint_project.py
 	pnpm exec biome check --write viewer/
 	pnpm exec tsc --noEmit
 

@@ -660,7 +660,9 @@ def _emit_mounting_hardware(
 
         for mp in mount.component.mounting_points:
             mp_pos = body.to_body_frame(mount.rotate_point(mp.pos))
-            mp_axis = body.to_body_frame(mount.rotate_point(mp.axis))
+            mp_axis = body.to_body_frame(
+                mount.rotate_point(mp.axis)
+            )  # plint: disable=no-rotate-point-for-axes
             pos = _add_vec3(base_pos, mp_pos)
             # MountPoint.axis = insertion direction (where shank goes).
             # Screw STL head is at +Z, so we align +Z with the head
@@ -853,7 +855,9 @@ def _z_to_axis_quat(
         if az < 0:
             return (0.0, 1.0, 0.0, 0.0)  # 180° around X
         return None  # identity, no rotation needed
-    q = rotation_between((0.0, 0.0, 1.0), axis)
+    q = rotation_between(
+        (0.0, 0.0, 1.0), axis
+    )  # plint: disable=no-rotation-between-in-emitters
     return q
 
 

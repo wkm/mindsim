@@ -202,7 +202,9 @@ def _build_joint_fastener_entry(
 
     # Align fastener +Z (head top face) to the mount point axis direction,
     # then compose with servo orientation to get world-frame quaternion.
-    axis_align = rotation_between((0.0, 0.0, 1.0), mp.axis)
+    axis_align = rotation_between(
+        (0.0, 0.0, 1.0), mp.axis
+    )  # plint: disable=no-rotation-between-in-emitters
     final_quat = quat_multiply(servo_quat, axis_align)
 
     # Position: mount hole center, then offset so screw tip sits at hole depth
@@ -247,6 +249,11 @@ def _build_mount_fastener_entry(
     from botcad.fasteners import fastener_key, fastener_stl_stem
     from botcad.geometry import rotation_between
 
+    # MountPoint.axis = insertion direction (where shank goes).
+    # Screw STL head faces +Z, so align +Z with head direction = -axis.
+    # (Same convention as MuJoCo emitter, see mujoco.py line 665-668.)
+    head_axis = (-fastener_axis[0], -fastener_axis[1], -fastener_axis[2])
+
     return {
         "id": f"fastener_{body_name}_{mount_label}_{index}",
         "name": f"{fastener_key(mp)[0]} {fastener_key(mp)[1] or 'SHC'}",
@@ -256,7 +263,9 @@ def _build_mount_fastener_entry(
         "mount_label": mount_label,
         "mesh": f"{fastener_stl_stem(mp)}.stl",
         "pos": fastener_pos,
-        "quat": _round_vec(rotation_between((0.0, 0.0, 1.0), fastener_axis)),
+        "quat": _round_vec(
+            rotation_between((0.0, 0.0, 1.0), head_axis)
+        ),  # plint: disable=no-rotation-between-in-emitters
         "material": "steel",
         "context": f"{mount_label} mount -> {body_name}",
     }
@@ -489,7 +498,12 @@ def build_viewer_manifest(bot: Bot) -> dict:
                 "category": category,
                 "mesh": body.mesh_file,
                 "pos": _round_vec(body.world_pos),
-                "quat": [1.0, 0.0, 0.0, 0.0],
+                "quat": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ],  # plint: disable=no-hardcoded-identity-quat
                 "mass": round(comp.mass, 4) if comp else 0.0,
                 "color": list(comp.default_material.color)
                 if comp and comp.default_material
@@ -555,7 +569,9 @@ def build_viewer_manifest(bot: Bot) -> dict:
                         bwp[2] + rp[2] + rotated[2],
                     )
                 )
-                fastener_axis = tuple(mount.rotate_point(mp.axis))
+                fastener_axis = tuple(
+                    mount.rotate_point(mp.axis)
+                )  # plint: disable=no-rotate-point-for-axes
                 manifest["parts"].append(
                     _build_mount_fastener_entry(
                         body.name, mount.label, i, mp, fastener_pos, fastener_axis
@@ -580,7 +596,12 @@ def build_viewer_manifest(bot: Bot) -> dict:
                     "bus_type": str(route.bus_type),
                     "mesh": f"wire_{route.label}_{seg.body_name}_{i}.stl",
                     "pos": [0.0, 0.0, 0.0],
-                    "quat": [1.0, 0.0, 0.0, 0.0],
+                    "quat": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                    ],  # plint: disable=no-hardcoded-identity-quat
                     "color": _BUS_TYPE_COLORS.get(
                         str(route.bus_type), [0.53, 0.53, 0.53, 1.0]
                     ),
@@ -648,10 +669,14 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 )
 
                 # Direction is a vector (no translation), only rotation
-                body_dir = mount.rotate_point(cspec.wire_exit_direction)
+                body_dir = mount.rotate_point(
+                    cspec.wire_exit_direction
+                )  # plint: disable=no-rotate-point-for-axes
 
                 # Quaternion aligning cylinder +Z to the wire exit direction
-                stub_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_dir))
+                stub_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
 
                 # Position the stub center halfway along the 25mm length
                 half_len = 0.0125  # 25mm / 2
@@ -683,10 +708,16 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 )
 
                 # Connector housing at wire port position
-                conn_quat = rotation_between((0.0, 0.0, 1.0), cspec.mating_direction)
+                conn_quat = rotation_between(
+                    (0.0, 0.0, 1.0), cspec.mating_direction
+                )  # plint: disable=no-rotation-between-in-emitters
                 # Apply mount rotation to connector orientation
-                body_mate_dir = mount.rotate_point(cspec.mating_direction)
-                conn_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_mate_dir))
+                body_mate_dir = mount.rotate_point(
+                    cspec.mating_direction
+                )  # plint: disable=no-rotate-point-for-axes
+                conn_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
 
                 manifest["parts"].append(
                     {
@@ -735,7 +766,9 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 body_dir = rotate_vec(
                     joint.solved_servo_quat, cspec.wire_exit_direction
                 )
-                stub_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_dir))
+                stub_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
 
                 half_len = 0.0125
                 stub_center = (
@@ -769,7 +802,9 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                 body_mate_dir = rotate_vec(
                     joint.solved_servo_quat, cspec.mating_direction
                 )
-                conn_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_mate_dir))
+                conn_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
 
                 manifest["parts"].append(
                     {
