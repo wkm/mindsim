@@ -32,9 +32,11 @@ from enum import StrEnum
 from typing import Literal
 
 from botcad.component import (
+    POSE_IDENTITY,
     Component,
     ComponentKind,
     MountOrientation,
+    Pose,
     ServoSpec,
     Vec3,
     get_component_meta,
@@ -386,8 +388,7 @@ class Body:
     is_wheel_body: bool = False
 
     # World-frame placement (computed during solve/build_cad)
-    world_pos: Vec3 = (0.0, 0.0, 0.0)
-    world_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    world_pose: Pose = POSE_IDENTITY
 
     # ShapeScript program that generates this body's geometry (set during build_cad)
     shapescript: object | None = None
@@ -406,6 +407,16 @@ class Body:
     # `material` provides both physical props (density, print process) and
     # visual props (color, metallic, roughness) for rendering.
     material: Material = PLA
+
+    @property
+    def world_pos(self) -> Vec3:
+        """Compat: read position from world_pose."""
+        return self.world_pose.pos
+
+    @property
+    def world_quat(self) -> tuple[float, float, float, float]:
+        """Compat: read orientation from world_pose."""
+        return self.world_pose.quat
 
     @property
     def component(self) -> Component | None:
@@ -819,7 +830,7 @@ class Bot:
         self._generate_implicit_constraints()
 
     def _compute_world_transforms(self) -> None:
-        """Walk kinematic tree and set world_pos/world_quat on each structural body.
+        """Walk kinematic tree and set world_pose on each structural body.
 
         At rest pose (all joints at 0 deg), body frames are axis-aligned with
         their parents, so world position is the cumulative sum of joint.pos
@@ -828,10 +839,9 @@ class Bot:
         """
 
         def _walk(body: Body, parent_world_pos: Vec3) -> None:
-            body.world_pos = parent_world_pos
             # Structural bodies at rest have identity orientation (frame_quat
             # describes local geometry rotation, not world orientation).
-            body.world_quat = (1.0, 0.0, 0.0, 0.0)
+            body.world_pose = Pose(parent_world_pos)
             for joint in body.joints:
                 if joint.child is not None:
                     child = joint.child
@@ -879,12 +889,10 @@ class Bot:
                 )
                 # Servo center is in the parent body frame; transform to world
                 sc = joint.solved_servo_center
-                servo_body.world_pos = (
-                    bwp[0] + sc[0],
-                    bwp[1] + sc[1],
-                    bwp[2] + sc[2],
+                servo_body.world_pose = Pose(
+                    (bwp[0] + sc[0], bwp[1] + sc[1], bwp[2] + sc[2]),
+                    joint.solved_servo_quat,
                 )
-                servo_body.world_quat = joint.solved_servo_quat
                 servo_body.mesh_file = f"servo_{joint.servo.name}.stl"
                 servo_body._component = joint.servo
                 self.all_bodies.append(servo_body)
@@ -906,15 +914,13 @@ class Bot:
                     boss_h = joint.servo.shaft_boss_height or 0.0
                     half_t = params.thickness / 2
                     outboard = boss_h + half_t
-                    horn_body.world_pos = (
-                        jx + ax * outboard,
-                        jy + ay * outboard,
-                        jz + az * outboard,
-                    )
                     # Orientation: Z-up rotated to joint axis
                     from botcad.geometry import rotation_between
 
-                    horn_body.world_quat = rotation_between((0.0, 0.0, 1.0), joint.axis)
+                    horn_body.world_pose = Pose(
+                        (jx + ax * outboard, jy + ay * outboard, jz + az * outboard),
+                        rotation_between((0.0, 0.0, 1.0), joint.axis),
+                    )
                     horn_body.mesh_file = f"horn_{joint.name}.stl"
                     horn_body._component = joint.servo  # horn is derived from servo
                     self.all_bodies.append(horn_body)
@@ -927,12 +933,10 @@ class Bot:
                     parent_body_name=body.name,
                 )
                 rp = mount.resolved_pos
-                comp_body.world_pos = (
-                    bwp[0] + rp[0],
-                    bwp[1] + rp[1],
-                    bwp[2] + rp[2],
+                comp_body.world_pose = Pose(
+                    (bwp[0] + rp[0], bwp[1] + rp[1], bwp[2] + rp[2]),
+                    body.world_quat,  # same orientation as parent
                 )
-                comp_body.world_quat = body.world_quat  # same orientation
                 comp_body.mesh_file = f"comp_{body.name}_{mount.label}.stl"
                 comp_body._component = mount.component
                 self.all_bodies.append(comp_body)

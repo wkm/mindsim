@@ -100,10 +100,10 @@ def validate_clearances(bot: Bot, body_solids: dict) -> list[ClearanceResult]:
 
         # Position solids in world frame
         placed_a = solid_a.moved(
-            Location(body_a.world_pos, quat_to_euler(body_a.world_quat))
+            Location(body_a.world_pose.pos, quat_to_euler(body_a.world_pose.quat))
         )
         placed_b = solid_b.moved(
-            Location(body_b.world_pos, quat_to_euler(body_b.world_quat))
+            Location(body_b.world_pose.pos, quat_to_euler(body_b.world_pose.quat))
         )
 
         intersects, int_vol, distance = _check_clearance(placed_a, placed_b)

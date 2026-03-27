@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import math
 
-from botcad.component import Vec3
-
-Quat = tuple[float, float, float, float]  # (w, x, y, z)
+from botcad.component import POSE_IDENTITY as POSE_IDENTITY
+from botcad.component import Pose as Pose
+from botcad.component import Quat, Vec3
 
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
