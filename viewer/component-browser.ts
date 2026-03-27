@@ -793,24 +793,34 @@ class ComponentBrowser {
       if (!resp.ok) return;
       const data = await resp.json();
 
-      // Load shared wire stub STL
-      const stubUrl = data.wires[0]?.stl_url;
-      if (!stubUrl || data.wires.length === 0) return;
+      // Collect all unique STL URLs (stubs + connectors)
+      const allItems = [...(data.wires || []), ...(data.connectors || [])];
+      const uniqueUrls: string[] = [...new Set(allItems.map((item: any) => item.stl_url))] as string[];
+      const geomCache: Record<string, THREE.BufferGeometry> = {};
 
-      const stlResp = await fetch(stubUrl);
-      if (!stlResp.ok) return;
-      const buf = await stlResp.arrayBuffer();
-      const stubGeom = this.stlLoader.parse(buf);
-      stubGeom.computeVertexNormals();
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const stlResp = await fetch(url);
+          if (!stlResp.ok) return;
+          const buf = await stlResp.arrayBuffer();
+          const geom = this.stlLoader.parse(buf);
+          geom.computeVertexNormals();
+          geomCache[url] = geom;
+        }),
+      );
 
-      for (const w of data.wires) {
-        const color = new THREE.Color(w.color[0], w.color[1], w.color[2]);
+      // Place all items (stubs and connector housings)
+      for (const item of allItems) {
+        const srcGeom = geomCache[item.stl_url];
+        if (!srcGeom) continue;
+
+        const color = new THREE.Color(item.color[0], item.color[1], item.color[2]);
         const mat = createMaterial(tintColor(color));
-        const mesh = new THREE.Mesh(stubGeom.clone(), mat);
+        const mesh = new THREE.Mesh(srcGeom.clone(), mat);
         mesh.castShadow = true;
-        mesh.position.set(w.pos[0], w.pos[1], w.pos[2]);
-        if (w.quat) {
-          mesh.quaternion.set(w.quat[1], w.quat[2], w.quat[3], w.quat[0]);
+        mesh.position.set(item.pos[0], item.pos[1], item.pos[2]);
+        if (item.quat) {
+          mesh.quaternion.set(item.quat[1], item.quat[2], item.quat[3], item.quat[0]);
         }
         group.add(mesh);
       }
