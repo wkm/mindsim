@@ -178,10 +178,14 @@ def MountingEar(
     label: str,
     pos: Vec3,
     hole_diameter: float,
-    axis: Vec3 = (0.0, 0.0, -1.0),
+    axis: Vec3 = (0.0, 0.0, 1.0),
     fastener_type: str = "M3",
 ) -> MountPoint:
-    """Factory for servo mounting ear points (returns MountPoint)."""
+    """Factory for servo mounting ear points (returns MountPoint).
+
+    axis = insertion direction (where the shank goes into material).
+    Default +Z means screws insert upward through the ear into the bracket.
+    """
     return MountPoint(
         label=label,
         pos=pos,
