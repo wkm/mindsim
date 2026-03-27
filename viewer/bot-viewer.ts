@@ -17,6 +17,7 @@ import { IKMode } from './ik-mode.ts';
 import { JointMode } from './joint-mode.ts';
 import { sync } from './scene-sync.ts';
 import { SectionCutter } from './section-cutter.ts';
+import { StressMode } from './stress-mode.ts';
 import type { ViewerContext, ViewerMode as ViewerModeInterface } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
@@ -596,7 +597,7 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
 
-    document.querySelectorAll('#mode-tabs .btn-ghost').forEach((tab) => {
+    document.querySelectorAll('#sim-mode-tabs .btn-ghost').forEach((tab) => {
       tab.classList.toggle('active', (tab as HTMLElement).dataset.mode === modeName);
     });
   }
@@ -651,10 +652,38 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     modes.joint = new JointMode(ctx);
     modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
+    modes.stress = new StressMode(ctx);
 
-    document.querySelectorAll('#mode-tabs .btn-ghost').forEach((tab) => {
-      tab.addEventListener('click', () => switchMode((tab as HTMLElement).dataset.mode!));
-    });
+    // Build sim mode tabs dynamically (the #mode-tabs div is shared with Design/Sim
+    // tab buttons, so we create a separate container for Explore/Stress/etc.)
+    let simModeTabs = document.getElementById('sim-mode-tabs');
+    if (!simModeTabs) {
+      simModeTabs = document.createElement('div');
+      simModeTabs.id = 'sim-mode-tabs';
+      simModeTabs.className = 'nav-right';
+      simModeTabs.style.cssText = 'display:flex;gap:2px;';
+      const topBar = document.getElementById('top-bar');
+      // Insert before the Design/Sim tabs
+      const modeTabsEl = document.getElementById('mode-tabs');
+      if (modeTabsEl) {
+        topBar.insertBefore(simModeTabs, modeTabsEl);
+      } else {
+        topBar.appendChild(simModeTabs);
+      }
+    }
+    simModeTabs.innerHTML = '';
+    const simModeNames = ['explore', 'stress', 'joint', 'assembly', 'ik'];
+    const simModeLabels: Record<string, string> = {
+      explore: 'Explore', stress: 'Stress', joint: 'Joints', assembly: 'Assembly', ik: 'IK',
+    };
+    for (const name of simModeNames) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-ghost';
+      btn.dataset.mode = name;
+      btn.textContent = simModeLabels[name] || name;
+      btn.addEventListener('click', () => switchMode(name));
+      simModeTabs.appendChild(btn);
+    }
 
     // Auto-focus camera on the bot before showing the scene
     const initialFocus = new FocusController(ctx);
