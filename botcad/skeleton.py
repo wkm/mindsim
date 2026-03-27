@@ -46,6 +46,7 @@ from botcad.geometry import (
     EULER_RX_POS90,
     EULER_RY_NEG90,
     EULER_RY_POS90,
+    PackingResult,
 )
 from botcad.materials import PLA, Material
 
@@ -232,6 +233,12 @@ class Mount:
             if xform is not None:
                 p = xform(p[0], p[1], p[2])
         return p
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
 
 
 @dataclass
@@ -541,6 +548,7 @@ class Bot:
     all_bodies: list[Body] = field(default_factory=list)
     all_joints: list[Joint] = field(default_factory=list)
     wire_routes: list = field(default_factory=list)
+    packing_result: PackingResult | None = None
 
     _assemblies: dict[str, Assembly] = field(default_factory=dict)
     _clearance_constraints: list[ClearanceConstraint] = field(default_factory=list)
@@ -802,7 +810,7 @@ class Bot:
         self._collect_tree()
         self._validate_bracket_rom()
         self._compute_component_dimensions()
-        solve_packing(self)
+        self.packing_result = solve_packing(self)
         self._assign_materials()
 
         # After packing has positioned servos and components, compute

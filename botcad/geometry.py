@@ -8,10 +8,55 @@ Used by both the MuJoCo emitter (green servo boxes) and the CAD emitter
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from botcad.component import Vec3
 
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
+
+
+def euler_to_quat(euler_deg: tuple[float, float, float]) -> Quat:
+    """Convert Euler angles (rx, ry, rz) in degrees to quaternion (w, x, y, z).
+
+    Uses intrinsic XYZ convention matching build123d's Location(pos, euler).
+    """
+    rx, ry, rz = (math.radians(d) for d in euler_deg)
+    cx, sx = math.cos(rx / 2), math.sin(rx / 2)
+    cy, sy = math.cos(ry / 2), math.sin(ry / 2)
+    cz, sz = math.cos(rz / 2), math.sin(rz / 2)
+    return (
+        cx * cy * cz - sx * sy * sz,
+        sx * cy * cz + cx * sy * sz,
+        cx * sy * cz - sx * cy * sz,
+        cx * cy * sz + sx * sy * cz,
+    )
+
+
+@dataclass(frozen=True)
+class Pose:
+    """Position + orientation in 3D space."""
+
+    pos: Vec3
+    quat: Quat  # (w, x, y, z)
+
+
+POSE_IDENTITY = Pose(pos=(0.0, 0.0, 0.0), quat=(1.0, 0.0, 0.0, 0.0))
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Solver output for any placed component -- servo or mount."""
+
+    pose: Pose
+    bbox: Vec3  # axis-aligned bounding box in world frame
+
+
+@dataclass(frozen=True)
+class PackingResult:
+    """Complete solver output. Returned by pack(), consumed by all emitters."""
+
+    placements: dict  # Mount | Joint -> Placement
+
 
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
