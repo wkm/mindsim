@@ -378,13 +378,9 @@ class TrainingDashboard(Screen):
                     )
             with Vertical(id="log-panel"), TabbedContent(id="log-tabs"):
                 with TabPane("Log", id="tab-log"):
-                    yield RichLog(
-                        id="log-area", wrap=True, max_lines=1000, markup=True
-                    )
+                    yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
                 with TabPane("AI", id="tab-ai"):
-                    yield RichLog(
-                        id="ai-area", wrap=True, max_lines=200, markup=True
-                    )
+                    yield RichLog(id="ai-area", wrap=True, max_lines=200, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:

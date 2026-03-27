@@ -375,9 +375,7 @@ class TrainingEnv:
                 stage3_progress = (
                     self.curriculum_stage_progress if effective_stage == 3 else 1.0
                 )
-                n_distractors = max(
-                    1, round(stage3_progress * self.max_distractors)
-                )
+                n_distractors = max(1, round(stage3_progress * self.max_distractors))
                 self._place_distractors(n_distractors, target_x, target_y)
             else:
                 self._hide_distractors()

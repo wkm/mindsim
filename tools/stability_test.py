@@ -59,7 +59,9 @@ def compute_support_polygon_margin(
     for i in range(data.ncon):
         contact = data.contact[i]
         g1, g2 = contact.geom1, contact.geom2
-        if (g1 == floor_geom_id and g2 in foot_geom_ids) or (g2 == floor_geom_id and g1 in foot_geom_ids):
+        if (g1 == floor_geom_id and g2 in foot_geom_ids) or (
+            g2 == floor_geom_id and g1 in foot_geom_ids
+        ):
             foot_contacts.append(contact.pos[:2].copy())
 
     if len(foot_contacts) < 2:
