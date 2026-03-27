@@ -115,6 +115,8 @@ if (cadstepsParam) {
       activeTab = tab;
       updateTabUI();
 
+      const simModeTabs = document.getElementById('sim-mode-tabs');
+
       if (tab === 'sim') {
         // Hide Design scene
         designViewport.scene.visible = false;
@@ -124,6 +126,7 @@ if (cadstepsParam) {
         // Show Sim UI
         document.getElementById('side-panel').style.display = '';
         document.getElementById('loading').style.display = '';
+        if (simModeTabs) simModeTabs.style.display = '';
 
         if (!simHandle) {
           // First time — lazy-load MuJoCo viewer
@@ -141,6 +144,7 @@ if (cadstepsParam) {
         // Hide Sim scene (the MuJoCo root group)
         document.getElementById('side-panel').style.display = 'none';
         document.getElementById('bot-tools-group').style.display = 'none';
+        if (simModeTabs) simModeTabs.style.display = 'none';
 
         // Show Design scene
         designViewport.scene.visible = true;
