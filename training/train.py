@@ -5,6 +5,7 @@ Policy networks are in policies.py, episode collection in collection.py,
 and training algorithms (REINFORCE, PPO) in algorithms.py.
 """
 
+import contextlib
 import logging
 import os
 import platform
@@ -20,7 +21,7 @@ import numpy as np
 import torch
 import wandb
 
-from training.algorithms import (  # noqa: F401 — re-export
+from training.algorithms import (
     train_step_batched,
     train_step_ppo,
 )
@@ -698,12 +699,10 @@ def _train_loop_body(
 
         _wandb_run_path = ""
         if wandb.run and not wandb.run.disabled:
-            try:
+            with contextlib.suppress(Exception):
                 _wandb_run_path = (
                     f"{wandb.run.entity}/{wandb.run.project}/{wandb.run.id}"
                 )
-            except Exception:
-                pass
 
         run_context = RunContext(
             run_name=run_name,
@@ -984,10 +983,11 @@ def _train_loop_body(
 
         # Update observation normalizer for MLPPolicy
         if cfg.policy.use_mlp:
-            all_sensors = []
-            for ep in episode_batch:
-                if "sensor_data" in ep:
-                    all_sensors.append(torch.from_numpy(np.array(ep["sensor_data"])))
+            all_sensors = [
+                torch.from_numpy(np.array(ep["sensor_data"]))
+                for ep in episode_batch
+                if "sensor_data" in ep
+            ]
             if all_sensors:
                 policy.update_normalizer(torch.cat(all_sensors, dim=0).to(device))
 

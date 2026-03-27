@@ -87,9 +87,10 @@ def main() -> None:
     ]
 
     # Actuator indices
-    act_names = []
-    for i in range(model.nu):
-        act_names.append(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i))
+    act_names = [
+        mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+        for i in range(model.nu)
+    ]
     left_wheel_idx = act_names.index("left_wheel_motor")
     right_wheel_idx = act_names.index("right_wheel_motor")
 

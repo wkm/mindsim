@@ -575,7 +575,7 @@ if __name__ == "__main__":
         print("\n  Scenarios (per-step reward):")
         active = h.active_components()
 
-        def scenario(label, values):
+        def scenario(label, values, active=active):
             """Sum reward given {component_name: raw_value} overrides."""
             total = 0.0
             for c in active:

@@ -58,7 +58,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a dresser (solid body + drawer fronts + handles + opt mirror).
 
     Uses a single solid body box for efficiency, with contrasting drawer

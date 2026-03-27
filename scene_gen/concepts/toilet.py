@@ -59,7 +59,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a toilet (up to 6 prims: base + bowl + seat + lid + tank + tank cap)."""
     prims: list[Prim] = []
 

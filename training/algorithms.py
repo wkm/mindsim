@@ -59,7 +59,7 @@ def train_step_batched(
     # preventing long episodes from dominating the gradient.
     total_steps = sum(len(ep["rewards"]) for ep in episode_batch)
     total_loss = 0.0
-    for episode_data, advantage in zip(episode_batch, all_rtg):
+    for episode_data, advantage in zip(episode_batch, all_rtg, strict=False):
         observations = torch.from_numpy(np.array(episode_data["observations"]))
         actions = torch.from_numpy(np.array(episode_data["actions"]))
         sensors = None

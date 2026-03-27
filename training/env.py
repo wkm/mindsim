@@ -376,7 +376,7 @@ class TrainingEnv:
                     self.curriculum_stage_progress if effective_stage == 3 else 1.0
                 )
                 n_distractors = max(
-                    1, int(round(stage3_progress * self.max_distractors))
+                    1, round(stage3_progress * self.max_distractors)
                 )
                 self._place_distractors(n_distractors, target_x, target_y)
             else:
@@ -387,7 +387,7 @@ class TrainingEnv:
                 stage4_progress = (
                     self.curriculum_stage_progress if effective_stage == 4 else 1.0
                 )
-                n_moving = max(1, int(round(stage4_progress * self.max_distractors)))
+                n_moving = max(1, round(stage4_progress * self.max_distractors))
                 for i in range(self.max_distractors):
                     if i < n_moving:
                         speed = (
@@ -483,7 +483,7 @@ class TrainingEnv:
 
         # Restore distractor positions
         for mid, pos in zip(
-            self.env.distractor_mocap_ids, config["distractor_positions"]
+            self.env.distractor_mocap_ids, config["distractor_positions"], strict=False
         ):
             self.env.data.mocap_pos[mid] = pos
 
@@ -663,9 +663,8 @@ class TrainingEnv:
             min_height = self.fall_height_fraction * self.initial_torso_height
             if current_position[2] < min_height:
                 is_healthy = False
-        if self.fall_up_z_threshold > 0:
-            if up_z < self.fall_up_z_threshold:
-                is_healthy = False
+        if self.fall_up_z_threshold > 0 and up_z < self.fall_up_z_threshold:
+            is_healthy = False
         alive_reward = self.alive_bonus if is_healthy else 0.0
 
         # 6. Energy penalty (biped only, 0 when disabled)

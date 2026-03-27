@@ -12,7 +12,7 @@ from textual.widgets import Footer, OptionList, Static
 class MainMenuScreen(Screen):
     """Top-level menu: smoketest, new run, browse runs, quit."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("s", "select('smoketest')", "Smoketest", priority=True),
         Binding("n", "select('new')", "New Run", priority=True),
         Binding("g", "select('scene')", "Scene Gen", priority=True),

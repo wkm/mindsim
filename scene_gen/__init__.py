@@ -16,10 +16,10 @@ from scene_gen.composer import PlacedObject, SceneComposer, describe_scene, scen
 from scene_gen.primitives import GeomType, Prim
 
 __all__ = [
-    "SceneComposer",
+    "GeomType",
     "PlacedObject",
     "Prim",
-    "GeomType",
+    "SceneComposer",
     "describe_scene",
     "scene_id",
 ]

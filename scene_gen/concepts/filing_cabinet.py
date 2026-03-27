@@ -50,7 +50,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a filing cabinet (body + N drawer fronts + N handles).
 
     Total prims: 1 body + N drawers + min(N, remaining) handles.

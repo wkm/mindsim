@@ -14,7 +14,7 @@ from training.run_manager import bot_display_name
 class BotSelectorScreen(Screen):
     """Select a bot for training or viewing."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
         Binding("enter", "confirm", "Select", priority=True),
