@@ -105,11 +105,10 @@ def solve_packing(bot: Bot) -> PackingResult:
 def _solve_body(body: Body, placements: dict) -> None:
     """Solve packing for a single body."""
     # Internal components that need to fit inside this body
-    internal_items: list[tuple[str, Vec3, float]] = []
-    for mount in body.mounts:
-        internal_items.append(
-            (mount.label, mount.placed_dimensions, mount.component.mass)
-        )
+    internal_items: list[tuple[str, Vec3, float]] = [
+        (mount.label, mount.placed_dimensions, mount.component.mass)
+        for mount in body.mounts
+    ]
 
     # Servo center positions — the body needs structural material reaching
     # to each servo center (not the shaft/joint position). The bracket

@@ -390,14 +390,13 @@ def build_viewer_manifest(bot: Bot) -> dict:
         }
 
         # Components mounted in this body
-        components = []
-        for mount in body.mounts:
-            components.append(
-                {
-                    "label": mount.label,
-                    "component": mount.component.name,
-                }
-            )
+        components = [
+            {
+                "label": mount.label,
+                "component": mount.component.name,
+            }
+            for mount in body.mounts
+        ]
         if components:
             step["components"] = components
 
@@ -515,14 +514,13 @@ def build_viewer_manifest(bot: Bot) -> dict:
             if comp is not None:
                 mm_result = _get_multi_material_result(comp, mm_cache)
                 if mm_result is not None:
-                    meshes = []
-                    for mp in mm_result.material_programs:
-                        meshes.append(
-                            {
-                                "file": f"{body.name}__{mp.material.name}.stl",
-                                "material": mp.material.name,
-                            }
-                        )
+                    meshes = [
+                        {
+                            "file": f"{body.name}__{mp.material.name}.stl",
+                            "material": mp.material.name,
+                        }
+                        for mp in mm_result.material_programs
+                    ]
                     if meshes:
                         mount_entry["meshes"] = meshes
 

@@ -171,11 +171,10 @@ class TestTrainingStep:
         hierarchy = _make_hierarchy(cfg)
 
         # Collect a small batch
-        batch = []
-        for _ in range(2):
-            batch.append(
-                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
-            )
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
 
         loss, grad_norm, policy_std, entropy = train_step_batched(
             policy, optimizer, batch
@@ -323,13 +322,12 @@ class TestEndToEnd:
             env.set_curriculum_stage(1, min(1.0, batch_idx * 0.5))
 
             # Collect batch
-            batch = []
-            for _ in range(cfg.training.batch_size):
-                batch.append(
-                    collect_episode(
-                        env, policy, deterministic=False, hierarchy=hierarchy
-                    )
+            batch = [
+                collect_episode(
+                    env, policy, deterministic=False, hierarchy=hierarchy
                 )
+                for _ in range(cfg.training.batch_size)
+            ]
 
             # Train
             loss, _grad_norm, _policy_std, _entropy = train_step_batched(

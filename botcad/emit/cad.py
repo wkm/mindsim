@@ -169,18 +169,16 @@ def _update_mass_from_solid(body: Body, solid) -> None:
 
     # --- Component masses at their positions ---
     # (pos, mass, dims) for each component + servo
-    mass_items: list[tuple[Vec3, float, Vec3]] = []
-
-    for mount in body.mounts:
-        mass_items.append(
-            (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
-        )
+    mass_items: list[tuple[Vec3, float, Vec3]] = [
+        (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
+        for mount in body.mounts
+    ]
 
     # Servo mass at servo body center (not shaft/joint position)
-    for joint in body.joints:
-        mass_items.append(
-            (joint.solved_servo_center, joint.servo.mass, joint.servo.dimensions)
-        )
+    mass_items.extend(
+        (joint.solved_servo_center, joint.servo.mass, joint.servo.dimensions)
+        for joint in body.joints
+    )
 
     # --- Composite mass ---
     total_mass = struct_mass + sum(m for _, m, _ in mass_items)

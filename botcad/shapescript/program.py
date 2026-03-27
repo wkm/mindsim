@@ -284,8 +284,10 @@ class ShapeScript:
         hashes so cache invalidates when sub-programs change.
         """
         parts = [self.to_json()]
-        for key in sorted(self.sub_programs):
-            parts.append(f"{key}:{self.sub_programs[key].content_hash()}")
+        parts.extend(
+            f"{key}:{self.sub_programs[key].content_hash()}"
+            for key in sorted(self.sub_programs)
+        )
         return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
     def to_json(self) -> str:

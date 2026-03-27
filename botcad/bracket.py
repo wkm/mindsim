@@ -822,15 +822,15 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
     body_x, _body_y, _body_z = servo.effective_body_dims
 
     # -- Collect horn hole positions in shaft-centered frame --
-    front_holes = []
-    if servo.horn_mounting_points:
-        for mp in servo.horn_mounting_points:
-            front_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+    front_holes = [
+        (mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz)
+        for mp in (servo.horn_mounting_points or [])
+    ]
 
-    rear_holes = []
-    if servo.rear_horn_mounting_points:
-        for mp in servo.rear_horn_mounting_points:
-            rear_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+    rear_holes = [
+        (mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz)
+        for mp in (servo.rear_horn_mounting_points or [])
+    ]
 
     if not front_holes or not rear_holes:
         # Degenerate case - tiny placeholder box

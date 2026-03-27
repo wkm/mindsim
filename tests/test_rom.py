@@ -39,10 +39,9 @@ SWEEP_RESOLUTION = 91  # ~2° per sample over a typical 180° range
 
 def _discover_bots() -> list[tuple[str, Path]]:
     """Find all bots with a scene.xml."""
-    bots = []
-    for scene in sorted(BOTS_DIR.glob("*/scene.xml")):
-        bots.append((scene.parent.name, scene))
-    return bots
+    return [
+        (scene.parent.name, scene) for scene in sorted(BOTS_DIR.glob("*/scene.xml"))
+    ]
 
 
 BOT_SCENES = _discover_bots()

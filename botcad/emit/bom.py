@@ -207,8 +207,7 @@ def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:
         lines.append("\n## Connectors\n")
         lines.append("| Connector | Qty |")
         lines.append("|-----------|-----|")
-        for ct in sorted(connectors):
-            lines.append(f"| {ct} | {connectors[ct]} |")
+        lines.extend(f"| {ct} | {connectors[ct]} |" for ct in sorted(connectors))
 
     return lines
 
