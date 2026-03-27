@@ -89,3 +89,22 @@ def test_material_catalog_has_visual_properties():
         assert len(mat.color) == 4
         assert 0.0 <= mat.roughness <= 1.0
         assert mat.name  # has a meaningful name
+
+
+def test_effective_properties_with_infill():
+    """Infill scaling follows Gibson-Ashby bending-dominated model."""
+    assert PLA.effective_youngs_modulus == pytest.approx(PLA.youngs_modulus * 0.20**2)
+    assert PLA.effective_yield_strength == pytest.approx(PLA.yield_strength * 0.20**1.5)
+    assert ALUMINUM.effective_youngs_modulus == ALUMINUM.youngs_modulus
+
+
+def test_effective_properties_solid():
+    """Solid material (no process) returns unscaled values."""
+    solid_pla = Material(
+        "solid_pla",
+        density=1200.0,
+        youngs_modulus=2.3e9,
+        poisson_ratio=0.35,
+        yield_strength=40e6,
+    )
+    assert solid_pla.effective_youngs_modulus == 2.3e9
