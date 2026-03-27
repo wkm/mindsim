@@ -64,6 +64,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
         camera_script,
         compute_multi_material,
         compute_script,
+        generic_multi_material,
         generic_pcb_script,
         wheel_component_script,
     )
@@ -124,6 +125,7 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=generic_pcb_script,
+            multi_material_emitter=generic_multi_material,
         ),
     }
 
