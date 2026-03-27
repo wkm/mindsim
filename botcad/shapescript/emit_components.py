@@ -825,6 +825,37 @@ def compute_script(comp) -> ShapeScript:
     return prog
 
 
+def generic_pcb_script(comp) -> ShapeScript:
+    """ShapeScript emitter for generic PCB-style components (BEC, controller boards).
+
+    Rounded-corner box with mounting hole cuts. Mirrors _make_generic_pcb_solid()
+    from emit/cad.py but uses ShapeScript IR instead of direct build123d calls.
+    """
+    prog = ShapeScript()
+    dx, dy, dz = comp.dimensions
+
+    # PCB body
+    pcb = prog.box(dx, dy, dz, tag="pcb")
+
+    # Corner fillets on Z-parallel edges (clamped to half shortest XY side)
+    radius = min(dx, dy) * 0.15
+    if radius > 0.0005:
+        pcb = prog.fillet_by_axis(pcb, "z", radius)
+
+    # Cut mounting holes
+    if comp.mounting_points:
+        hole_proto = prog.cylinder(
+            comp.mounting_points[0].diameter / 2, dz + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(comp.mounting_points):
+            hole = prog.instance(hole_proto, i)
+            hole = prog.locate(hole, pos=mp.pos)
+            pcb = prog.cut(pcb, hole)
+
+    prog.output_ref = pcb
+    return prog
+
+
 def wheel_component_script(comp) -> ShapeScript:
     """Wrapper for wheel_script that accepts a Component."""
     # Wheel dimensions: radius from X/2, width from Z
