@@ -661,6 +661,10 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                     body_pos[2] + body_dir[2] * half_len,
                 )
 
+                bus_color = _BUS_TYPE_COLORS.get(
+                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                )
+
                 manifest["parts"].append(
                     {
                         "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
@@ -674,9 +678,30 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                         "quat": _round_vec(stub_quat),
                         "bus_type": str(wp.bus_type),
                         "connector_type": wp.connector_type,
-                        "color": _BUS_TYPE_COLORS.get(
-                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                        ),
+                        "color": bus_color,
+                    }
+                )
+
+                # Connector housing at wire port position
+                conn_quat = rotation_between((0.0, 0.0, 1.0), cspec.mating_direction)
+                # Apply mount rotation to connector orientation
+                body_mate_dir = mount.rotate_point(cspec.mating_direction)
+                conn_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_mate_dir))
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_conn_{body.name}_{mount.label}_{wp.label}",
+                        "name": f"{wp.label} connector",
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "connector",
+                        "parent_body": body.name,
+                        "mesh": f"connector_{wp.connector_type}.stl",
+                        "pos": _round_vec(body_pos),
+                        "quat": _round_vec(conn_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": bus_color,
                     }
                 )
 
@@ -719,6 +744,10 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                     body_pos[2] + body_dir[2] * half_len,
                 )
 
+                bus_color = _BUS_TYPE_COLORS.get(
+                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                )
+
                 manifest["parts"].append(
                     {
                         "id": f"wire_stub_{body.name}_{joint.name}_{wp.label}",
@@ -732,9 +761,30 @@ def _emit_wire_stubs(bot: Bot, manifest: dict) -> None:
                         "quat": _round_vec(stub_quat),
                         "bus_type": str(wp.bus_type),
                         "connector_type": wp.connector_type,
-                        "color": _BUS_TYPE_COLORS.get(
-                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                        ),
+                        "color": bus_color,
+                    }
+                )
+
+                # Connector housing at wire port position
+                body_mate_dir = rotate_vec(
+                    joint.solved_servo_quat, cspec.mating_direction
+                )
+                conn_quat = rotation_between((0.0, 0.0, 1.0), tuple(body_mate_dir))
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_conn_{body.name}_{joint.name}_{wp.label}",
+                        "name": f"{wp.label} connector",
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "connector",
+                        "parent_body": body.name,
+                        "mesh": f"connector_{wp.connector_type}.stl",
+                        "pos": _round_vec(body_pos),
+                        "quat": _round_vec(conn_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": bus_color,
                     }
                 )
 

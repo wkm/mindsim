@@ -495,6 +495,14 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
                     return _generate_design_layer_mesh(joint, layer_kind)
             return None
 
+    # Connector housing mesh: connector_{type}.stl
+    if stem.startswith("connector_"):
+        connector_type = stem[len("connector_") :]
+        from botcad.connectors import connector_solid, connector_spec
+
+        cspec = connector_spec(connector_type)
+        return _solid_to_stl_bytes(connector_solid(cspec))
+
     # Wire stub mesh: shared cylinder for all wire stubs
     if stem == "wire_stub":
         from botcad.shapescript.backend_occt import OcctBackend
