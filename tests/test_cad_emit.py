@@ -162,13 +162,13 @@ class TestWheelerSymmetry:
         left = joints["left_wheel"]
         right = joints["right_wheel"]
 
-        lc, lq = servo_placement(
+        lc, _lq = servo_placement(
             left.servo.shaft_offset,
             left.servo.shaft_axis,
             left.axis,
             left.pos,
         )
-        rc, rq = servo_placement(
+        rc, _rq = servo_placement(
             right.servo.shaft_offset,
             right.servo.shaft_axis,
             right.axis,

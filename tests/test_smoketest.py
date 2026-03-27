@@ -292,7 +292,7 @@ class TestParallelCollection:
         batch = collector.collect_batch(
             policy, batch_size=2, curriculum_stage=1, stage_progress=0.0
         )
-        loss, grad_norm, policy_std, entropy = train_step_batched(
+        loss, _grad_norm, _policy_std, _entropy = train_step_batched(
             policy, optimizer, batch
         )
         assert isinstance(loss, float)
@@ -332,7 +332,7 @@ class TestEndToEnd:
                 )
 
             # Train
-            loss, grad_norm, policy_std, entropy = train_step_batched(
+            loss, _grad_norm, _policy_std, _entropy = train_step_batched(
                 policy, optimizer, batch
             )
             assert not np.isnan(loss)
@@ -374,7 +374,7 @@ class TestBipedEnvironment:
         env = _make_env(cfg)
         env.reset()
         action = [0.0] * 8
-        obs, reward, done, truncated, info = env.step(action)
+        obs, reward, _done, _truncated, info = env.step(action)
         assert obs.shape == (64, 64, 3)
         assert isinstance(reward, float)
         assert "distance" in info
@@ -551,7 +551,7 @@ class TestPPO:
             grad_norm,
             policy_std,
             clip_fraction,
-            approx_kl,
+            _approx_kl,
             explained_variance,
             mean_value,
             mean_return,
@@ -617,14 +617,14 @@ class TestPPO:
             (
                 policy_loss,
                 value_loss,
-                entropy,
-                grad_norm,
-                policy_std,
-                clip_frac,
-                approx_kl,
-                ev,
-                mv,
-                mr,
+                _entropy,
+                _grad_norm,
+                _policy_std,
+                _clip_frac,
+                _approx_kl,
+                _ev,
+                _mv,
+                _mr,
             ) = train_step_ppo(
                 policy, optimizer, batch, ppo_epochs=cfg.training.ppo_epochs
             )

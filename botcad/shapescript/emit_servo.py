@@ -206,7 +206,7 @@ def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
 
         cx, cy, cz = wp.pos
 
-        mx, my, mz = cspec.mating_direction
+        mx, _my, mz = cspec.mating_direction
         if abs(mz) > 0.5:
             flip = 180 if cz < 0 else 0
             euler = (float(flip), 0.0, 90.0)

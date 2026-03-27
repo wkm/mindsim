@@ -268,7 +268,7 @@ def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims):
     aperture_r = 0.004
     wall_depth = max(solved_dims) + 0.002
 
-    ax, ay, az = ins
+    ax, ay, _az = ins
     if abs(ax) > 0.5:
         _euler = (0, 90, 0)
     elif abs(ay) > 0.5:

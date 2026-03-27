@@ -134,7 +134,7 @@ class TestSectionOrientation:
         """Verify the bounding box aspect ratio is consistent with
         the expected cross-section orientation (wider vs taller)."""
         svg, expected_shape = section_svg
-        vb_x, vb_y, vb_w, vb_h = _parse_viewbox(svg)
+        _vb_x, _vb_y, vb_w, vb_h = _parse_viewbox(svg)
 
         if expected_shape == "wider":
             assert vb_w > vb_h, f"Expected wider than tall, got {vb_w:.4f} x {vb_h:.4f}"

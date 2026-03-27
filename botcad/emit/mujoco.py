@@ -850,7 +850,7 @@ def _z_to_axis_quat(
     axis: tuple[float, float, float],
 ) -> tuple[float, float, float, float] | None:
     """Quaternion rotating Z to the given axis. Returns None if already Z-aligned."""
-    ax, ay, az = axis
+    _ax, _ay, az = axis
     if abs(az) > 0.999:
         if az < 0:
             return (0.0, 1.0, 0.0, 0.0)  # 180° around X

@@ -208,7 +208,7 @@ def _emit_connector_port_ir(
 
     tol = spec.tolerance
     wall = spec.wall
-    ax, ay, az = exit_axis
+    ax, _ay, az = exit_axis
 
     clearance = tol + 0.001  # per side
 
@@ -441,7 +441,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
                 shell = prog.cut(shell, port)
             else:
                 # Fallback: rectangular cable slot
-                cx, cy, cz = servo.connector_pos
+                _cx, cy, cz = servo.connector_pos
                 slot_w, slot_h = _cable_slot_dims(servo, spec)
                 slot_depth = wall + tol + 0.002
                 slot = prog.box(slot_depth, slot_w, slot_h, tag="cable_slot")
@@ -743,7 +743,7 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
         spec = BracketSpec()
 
     sx = servo.shaft_offset[0]
-    body_x, body_y, _body_z = servo.effective_body_dims
+    body_x, _body_y, _body_z = servo.effective_body_dims
 
     # Body envelope from shaft center (including ear flanges)
     body_plus_x = body_x / 2 - sx
@@ -819,7 +819,7 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
 
     tol = spec.tolerance
     sx, sy, sz = servo.shaft_offset
-    body_x, body_y, body_z = servo.effective_body_dims
+    body_x, _body_y, _body_z = servo.effective_body_dims
 
     # -- Collect horn hole positions in shaft-centered frame --
     front_holes = []

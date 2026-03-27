@@ -1106,7 +1106,7 @@ async def run_fea(bot: str):
                 )
                 continue
 
-            u_field, stress_array, vd, fea_timings = solve_res_tuple
+            u_field, stress_array, vd, _fea_timings = solve_res_tuple
             max_stress = float(stress_array.numpy().max())
             eff_yield = target_body.material.effective_yield_strength
             sf = float(eff_yield / max_stress) if max_stress > 0 else 99.0

@@ -249,7 +249,7 @@ class TestJointRanges:
 
     def test_all_hinge_joints_have_ranges(self, bot_model):
         """Every hinge joint must have a declared range (or be continuous)."""
-        name, model, data = bot_model
+        name, model, _data = bot_model
         for jid in _hinge_joints(model):
             lo, hi = model.jnt_range[jid]
             jn = _jname(model, jid)
