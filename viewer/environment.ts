@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 
 const HDRI_BASE = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k';
 
@@ -30,7 +30,7 @@ export async function loadEnvironment(
   pmrem.compileEquirectangularShader();
 
   try {
-    const loader = new RGBELoader();
+    const loader = new HDRLoader();
     const hdrTexture = await loader.loadAsync(url);
     const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
     hdrTexture.dispose();
