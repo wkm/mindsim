@@ -34,6 +34,22 @@ class MountRotation:
 MOUNT_NO_ROTATION = MountRotation()
 MOUNT_YAW_90 = MountRotation(yaw=90.0)
 
+
+@dataclass(frozen=True)
+class Placement:
+    """Solver output for any placed component -- servo or mount."""
+
+    pose: Pose
+    bbox: Vec3  # axis-aligned bounding box in world frame
+
+
+@dataclass(frozen=True)
+class PackingResult:
+    """Complete solver output. Returned by pack(), consumed by all emitters."""
+
+    placements: dict  # Mount | Joint -> Placement
+
+
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
 EULER_RX_POS90: tuple[float, float, float] = (90.0, 0.0, 0.0)
