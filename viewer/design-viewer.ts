@@ -277,6 +277,19 @@ export async function initDesignViewer(
         syncVisibility();
         tree.updateFromDesignScene(designScene.tree);
       },
+      onCategoryToggle: (category: string, visible: boolean) => {
+        // Sync SceneTree hidden state for all nodes matching this category
+        for (const [nodeId, node] of designScene.tree.nodes) {
+          if (
+            (category === 'wire' && nodeId.startsWith('wire-group:')) ||
+            (category === 'fastener' && nodeId.startsWith('fastener-group:'))
+          ) {
+            node.hidden = !visible;
+          }
+        }
+        syncVisibility();
+        tree.updateFromDesignScene(designScene.tree);
+      },
       onSolo: (nodeId: string) => {
         if (designScene.tree.soloedId === nodeId) {
           designScene.tree.unsolo();

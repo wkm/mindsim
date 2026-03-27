@@ -114,7 +114,7 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
         kind: NodeKind.Component,
         label: `Wires (${wires.length} segments)`,
         children: [],
-        hidden: false,
+        hidden: true, // off by default, toggled via Wires category chip
         parentId: parentId,
         meshIds: [],
       });

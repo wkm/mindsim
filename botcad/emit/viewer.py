@@ -562,7 +562,9 @@ def build_viewer_manifest(bot: Bot) -> dict:
                     )
                 )
 
-    # 4. Wire segments
+    # 4. Wire segments — identity pos/quat because geometry is already
+    # in body-local frame in the per-segment STL. The viewer parents
+    # each part under its body group via parent_body.
     for route in bot.wire_routes:
         for i, seg in enumerate(route.segments):
             if seg.straight_length < 0.001:
@@ -573,9 +575,15 @@ def build_viewer_manifest(bot: Bot) -> dict:
                     "name": route.label,
                     "kind": "fabricated",
                     "category": "wire",
+                    "wire_kind": "segment",
                     "parent_body": seg.body_name,
                     "bus_type": str(route.bus_type),
                     "mesh": f"wire_{route.label}_{seg.body_name}_{i}.stl",
+                    "pos": [0.0, 0.0, 0.0],
+                    "quat": [1.0, 0.0, 0.0, 0.0],
+                    "color": _BUS_TYPE_COLORS.get(
+                        str(route.bus_type), [0.53, 0.53, 0.53, 1.0]
+                    ),
                 }
             )
 
