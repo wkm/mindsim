@@ -346,7 +346,7 @@ def _generate_stl_bytes(comp, part: str) -> bytes | None:
     return stl_bytes
 
 
-def _generate_design_layer_mesh(joint, layer_kind: str) -> bytes | None:
+def _generate_design_layer_mesh(joint, layer_kind: str, bot=None) -> bytes | None:
     """Generate STL bytes for a design layer solid in body-local frame.
 
     Builds the bracket/coupler/clearance/insertion solid in servo-local frame,
@@ -404,8 +404,17 @@ def _generate_design_layer_mesh(joint, layer_kind: str) -> bytes | None:
         return None
 
     # Transform from servo-local frame to body-local frame using .moved()
-    center = joint.solved_servo_center
-    euler = quat_to_euler(joint.solved_servo_quat)
+    if bot and bot.packing_result:
+        placement = bot.packing_result.placements.get(joint)
+        if placement:
+            center = placement.pose.pos
+            euler = quat_to_euler(placement.pose.quat)
+        else:
+            center = joint.solved_servo_center
+            euler = quat_to_euler(joint.solved_servo_quat)
+    else:
+        center = joint.solved_servo_center
+        euler = quat_to_euler(joint.solved_servo_quat)
     solid = solid.moved(Location(center, euler))
 
     return _solid_to_stl_bytes(solid)
@@ -496,7 +505,7 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
                 for joint in body.joints:
                     if joint.name != joint_name:
                         continue
-                    return _generate_design_layer_mesh(joint, layer_kind)
+                    return _generate_design_layer_mesh(joint, layer_kind, bot=bot)
             return None
 
     # Connector housing mesh: connector_{type}.stl
@@ -1095,7 +1104,7 @@ async def run_fea(bot: str):
             wire_segs = cad.body_wire_segments.get(target_body.name)
             wire_segs_tuple = tuple(wire_segs) if wire_segs else None
 
-            prog = emit_body_ir(target_body, parent_joint, wire_segs_tuple)
+            prog = emit_body_ir(target_body, parent_joint, wire_segs_tuple, bot=bot_obj)
             backend = OcctBackend()
             result = backend.execute(prog)
             solid = result.shapes[prog.output_ref.id]

@@ -41,10 +41,23 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-def _apply_mount_rotation(solid, mount):
-    """Apply rotate_z + face_euler to a component solid, matching pocket orientation."""
+def _apply_mount_rotation(solid, mount, bot=None):
+    """Apply mount orientation to a component solid, matching pocket orientation.
+
+    When bot is provided, uses the Pose from PackingResult (single rotation).
+    Falls back to legacy rotate_z + face_euler when bot is not available.
+    """
     from build123d import Location
 
+    if bot is not None and bot.packing_result is not None:
+        placement = bot.packing_result.placements.get(mount)
+        if placement is not None:
+            euler = quat_to_euler(placement.pose.quat)
+            if euler != (0.0, 0.0, 0.0):
+                solid = solid.moved(Location((0, 0, 0), euler))
+            return solid
+
+    # Legacy fallback
     if mount.rotate_z:
         solid = solid.moved(Location((0, 0, 0), (0, 0, 90)))
     face_euler = mount.face_euler_deg
@@ -124,7 +137,7 @@ def _restore_mass_from_cache(body: Body, cached: dict) -> None:
     body.solved_inertia = cached["inertia"]
 
 
-def _update_mass_from_solid(body: Body, solid) -> None:
+def _update_mass_from_solid(body: Body, solid, bot=None) -> None:
     """Compute mass, COM, and inertia from the actual CAD solid + component masses.
 
     Structural mass uses an FDM print model: 2 perimeter walls + 20% infill.
@@ -170,17 +183,20 @@ def _update_mass_from_solid(body: Body, solid) -> None:
     # --- Component masses at their positions ---
     # (pos, mass, dims) for each component + servo
     mass_items: list[tuple[Vec3, float, Vec3]] = []
+    placements = bot.packing_result.placements if bot and bot.packing_result else {}
 
     for mount in body.mounts:
-        mass_items.append(
-            (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
-        )
+        p = placements[mount].pose.pos if mount in placements else mount.resolved_pos
+        mass_items.append((p, mount.component.mass, mount.placed_dimensions))
 
     # Servo mass at servo body center (not shaft/joint position)
     for joint in body.joints:
-        mass_items.append(
-            (joint.solved_servo_center, joint.servo.mass, joint.servo.dimensions)
+        p = (
+            placements[joint].pose.pos
+            if joint in placements
+            else joint.solved_servo_center
         )
+        mass_items.append((p, joint.servo.mass, joint.servo.dimensions))
 
     # --- Composite mass ---
     total_mass = struct_mass + sum(m for _, m, _ in mass_items)
@@ -310,14 +326,14 @@ def make_component_solid(component: Component):
     )
 
 
-def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
+def _get_body_shapescript(body, parent_joint_map, body_wire_segments, bot=None):
     """Get or create the ShapeScript program for any body (fabricated or purchased)."""
     if body.kind == BodyKind.FABRICATED:
         from botcad.shapescript.emit_body import emit_body_ir
 
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
-        return emit_body_ir(body, pj, wire_segs or None)
+        return emit_body_ir(body, pj, wire_segs or None, bot=bot)
 
     # Purchased body — route to the appropriate script emitter
     comp = body.component
@@ -347,6 +363,7 @@ def _build_multi_material_solids(
     ir_backend: object,
     multi_material_solids: dict[str, list[MaterialSolid]],
     log,
+    bot=None,
 ) -> None:
     """Execute multi-material programs for a component body, if available.
 
@@ -378,7 +395,7 @@ def _build_multi_material_solids(
             if solid is not None:
                 # Apply same mount rotation as primary solid
                 if mount is not None:
-                    solid = _apply_mount_rotation(solid, mount)
+                    solid = _apply_mount_rotation(solid, mount, bot=bot)
                 mat_solids.append(
                     MaterialSolid(
                         material_name=mp.material.name,
@@ -457,7 +474,9 @@ def build_cad(bot: Bot) -> CadModel:
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
 
-        prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
+        prog = _get_body_shapescript(
+            body, parent_joint_map, body_wire_segments, bot=bot
+        )
         if prog is None:
             dt = time.monotonic() - t0
             print(f" {dt:.1f}s (no script)")
@@ -477,7 +496,7 @@ def build_cad(bot: Bot) -> CadModel:
             solid = result.shapes[prog.output_ref.id]
             if solid is not None:
                 if body.kind == BodyKind.FABRICATED:
-                    _update_mass_from_solid(body, solid)
+                    _update_mass_from_solid(body, solid, bot=bot)
                 cache_data = {"brep": _solid_to_brep_bytes(solid)}
                 if body.kind == BodyKind.FABRICATED:
                     cache_data.update(
@@ -498,7 +517,7 @@ def build_cad(bot: Bot) -> CadModel:
             # applied here — not deferred to STL export time.
             mount = comp_mount_map.get(body.name)
             if mount is not None:
-                solid = _apply_mount_rotation(solid, mount)
+                solid = _apply_mount_rotation(solid, mount, bot=bot)
 
             # Purchased comp_ bodies: also apply the parent body's frame_quat
             # so the component STL is oriented consistently with the parent
@@ -522,7 +541,7 @@ def build_cad(bot: Bot) -> CadModel:
             # emitter, execute each material program and store the results.
             if body.component is not None and body.name.startswith("comp_"):
                 _build_multi_material_solids(
-                    body, mount, ir_backend, multi_material_solids, log
+                    body, mount, ir_backend, multi_material_solids, log, bot=bot
                 )
 
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
@@ -1037,7 +1056,10 @@ def _subprocess_bool_cut(shape, tool, timeout_sec: int):
 
 
 def _make_body_solid(
-    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+    body: Body,
+    parent_joint: Joint | None = None,
+    wire_segments: tuple | None = None,
+    bot=None,
 ):
     """Build a body solid by executing its ShapeScript IR.
 
@@ -1046,13 +1068,16 @@ def _make_body_solid(
     from botcad.shapescript.backend_occt import OcctBackend
     from botcad.shapescript.emit_body import emit_body_ir
 
-    prog = emit_body_ir(body, parent_joint, wire_segments)
+    prog = emit_body_ir(body, parent_joint, wire_segments, bot=bot)
     result = OcctBackend().execute(prog)
     return result.shapes[prog.output_ref.id]
 
 
 def make_body_solid_with_steps(
-    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+    body: Body,
+    parent_joint: Joint | None = None,
+    wire_segments: tuple | None = None,
+    bot=None,
 ) -> list[CadStep]:
     """Build a body solid step-by-step via ShapeScript, capturing each intermediate.
 
@@ -1063,7 +1088,7 @@ def make_body_solid_with_steps(
     from botcad.shapescript.cad_steps import shapescript_to_cad_steps
     from botcad.shapescript.emit_body import emit_body_ir
 
-    prog = emit_body_ir(body, parent_joint, wire_segments)
+    prog = emit_body_ir(body, parent_joint, wire_segments, bot=bot)
     result = OcctBackend().execute(prog)
     return shapescript_to_cad_steps(prog, result)
 

@@ -1472,11 +1472,17 @@ def _render_strips(bot_xml: Path):
 
 def _build_comp_axes(bot) -> dict[str, tuple[float, float, float]]:
     """Build lookup of comp geom name → resolved insertion axis from the Bot."""
+    from botcad.geometry import pose_transform_dir
+
+    placements = bot.packing_result.placements if bot.packing_result else {}
     axes: dict[str, tuple[float, float, float]] = {}
     for body in bot.all_bodies:
         for mount in body.mounts:
             key = f"comp_{body.name}_{mount.label}"
-            axes[key] = mount.resolved_insertion_axis
+            if mount in placements:
+                axes[key] = pose_transform_dir(placements[mount].pose, (0.0, 0.0, 1.0))
+            else:
+                axes[key] = mount.resolved_insertion_axis
     return axes
 
 
