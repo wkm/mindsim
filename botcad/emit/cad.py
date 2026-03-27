@@ -253,61 +253,29 @@ def _update_mass_from_solid(body: Body, solid) -> None:
 def make_component_solid(component: Component):
     """Create a build123d solid representing a component's physical geometry.
 
-    Every component must have an explicit CAD solid — no fallback to
-    primitive boxes. Dispatches to shape-specific builders; raises
-    ValueError for unknown components.
+    Routes through the ShapeScript emitter registered in the component
+    registry. Every component kind must have a script_emitter — this is
+    the single code path for both bot viewer and component viewer.
     """
+    from botcad.component import get_component_meta
 
-    dims = component.dimensions
-
-    if component.name == "RaspberryPiZero2W":
-        from botcad.components.compute import raspberry_pi_zero_solid
-
-        return raspberry_pi_zero_solid()
-
-    # Wheels: detailed tire/hub geometry
-    if component.kind == ComponentKind.WHEEL:
-        r = dims[0] / 2
-        w = dims[2]
-        return _make_wheel_solid(r, w)
-
-    # Servos: use detailed solid from bracket module
-    if component.kind == ComponentKind.SERVO:
-        from botcad.bracket import servo_solid
-
-        return servo_solid(component)
-
-    # Cameras: use detailed solid from camera module
-    if component.kind == ComponentKind.CAMERA:
-        from botcad.components.camera import camera_solid
-
-        return camera_solid(component)
-
-    # Batteries: use detailed solid from battery module
-    if component.kind == ComponentKind.BATTERY:
-        from botcad.components.battery import battery_solid
-
-        return battery_solid(component)
-
-    # Bearings: outer ring - inner bore
-    if component.kind == ComponentKind.BEARING:
-        return _make_bearing_solid(component)
-
-    # Test fastener prism: drilled holes at each mount point
-    if component.name == "TestFastenerPrism":
-        from botcad.components.test_fastener import test_fastener_solid
-
-        return test_fastener_solid(component)
-
-    # Generic components: PCB-style box with corner radii and mounting holes
-    if component.kind == ComponentKind.GENERIC:
-        return _make_generic_pcb_solid(component)
+    meta = get_component_meta(component.kind)
+    if meta.script_emitter is not None:
+        return _execute_script_emitter(meta.script_emitter(component))
 
     raise ValueError(
-        f"No CAD solid builder for component {component.name!r}. "
-        f"Every component must have explicit geometry — add a case to "
-        f"make_component_solid() or implement a <component>_solid() factory."
+        f"No ShapeScript emitter for component {component.name!r} "
+        f"(kind={component.kind}). Register a script_emitter in "
+        f"_build_registry()."
     )
+
+
+def _execute_script_emitter(prog):
+    """Execute a ShapeScript program and return the output solid."""
+    from botcad.shapescript.backend_occt import OcctBackend
+
+    result = OcctBackend().execute(prog)
+    return _as_solid(result.shapes[prog.output_ref.id])
 
 
 def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
