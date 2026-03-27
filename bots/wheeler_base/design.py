@@ -19,6 +19,7 @@ from botcad.components import (
     RaspberryPiZero2W,
 )
 from botcad.components.camera import OV5647
+from botcad.geometry import MOUNT_YAW_90
 from botcad.skeleton import BodyShape, Bot
 
 
@@ -40,9 +41,9 @@ def build() -> Bot:
         shape=BodyShape.BOX,
         padding=0.014,
     )
-    base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
+    base.mount(LiPo2S(1000), position="bottom", label="battery", rotation=MOUNT_YAW_90)
     base.mount(OV5647(), position="front", label="camera")
-    base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)
+    base.mount(RaspberryPiZero2W(), position="top", label="pi", rotation=MOUNT_YAW_90)
 
     # --- Wheels (STS3215 in continuous rotation mode) ---
     # Joints at ±65mm to clear rotated electronics with margin.
