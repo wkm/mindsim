@@ -19,9 +19,9 @@ if TYPE_CHECKING:
         axis: Vec3
 
 
-from botcad.component import Vec3
-
-Quat = tuple[float, float, float, float]  # (w, x, y, z)
+from botcad.component import POSE_IDENTITY as POSE_IDENTITY
+from botcad.component import Pose as Pose
+from botcad.component import Quat, Vec3
 
 
 @dataclass(frozen=True)

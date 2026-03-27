@@ -13,6 +13,18 @@ from enum import StrEnum
 from botcad.materials import Material
 
 Vec3 = tuple[float, float, float]
+Quat = tuple[float, float, float, float]  # (w, x, y, z)
+
+
+@dataclass(frozen=True, slots=True)
+class Pose:
+    """Position + orientation in 3D space."""
+
+    pos: Vec3 = (0.0, 0.0, 0.0)
+    quat: Quat = (1.0, 0.0, 0.0, 0.0)  # identity quaternion (w, x, y, z)
+
+
+POSE_IDENTITY = Pose()
 
 
 class ComponentKind(StrEnum):
