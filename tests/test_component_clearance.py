@@ -42,10 +42,10 @@ def _solid_or_none(comp, part):
 
 def _boolean_volume(a, b, op_class) -> float:
     """Compute volume of a boolean operation (Common or Cut) on two solids."""
-    from OCP.BRepGProp import BRepGProp  # noqa: E402
-    from OCP.GProp import GProp_GProps  # noqa: E402
-    from OCP.TopAbs import TopAbs_SOLID  # noqa: E402
-    from OCP.TopExp import TopExp_Explorer  # noqa: E402
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+    from OCP.TopAbs import TopAbs_SOLID
+    from OCP.TopExp import TopExp_Explorer
 
     op = op_class(a.wrapped, b.wrapped)
     op.SetFuzzyValue(1e-6)
@@ -66,14 +66,14 @@ def _boolean_volume(a, b, op_class) -> float:
 
 def _intersection_volume(a, b) -> float:
     """Volume of (a AND b). Zero if no overlap."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common  # noqa: E402
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 
     return _boolean_volume(a, b, BRepAlgoAPI_Common)
 
 
 def _subtraction_volume(a, b) -> float:
     """Volume of (a - b). Zero if b fully contains a."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut  # noqa: E402
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
 
     return _boolean_volume(a, b, BRepAlgoAPI_Cut)
 

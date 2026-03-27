@@ -35,7 +35,7 @@ class DiskCache:
         if not path.exists():
             return None
         with path.open("rb") as f:
-            return pickle.load(f)  # noqa: S301
+            return pickle.load(f)
 
     def put(self, prog: ShapeScript, data: Any) -> None:
         """Store *data* (must be picklable) for *prog*."""

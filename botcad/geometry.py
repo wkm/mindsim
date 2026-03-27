@@ -170,13 +170,7 @@ def servo_placement(
     # right-side up (rotate around Z for horizontal axes, around Y for
     # vertical axes).
     is_negative = False
-    if abs(ax) > 0.5 and ax < 0:
-        is_negative = True
-        positive_axis = (-ax, -ay, -az)
-    elif abs(ay) > 0.5 and ay < 0:
-        is_negative = True
-        positive_axis = (-ax, -ay, -az)
-    elif abs(az) > 0.5 and az < 0:
+    if (abs(ax) > 0.5 and ax < 0) or (abs(ay) > 0.5 and ay < 0) or (abs(az) > 0.5 and az < 0):
         is_negative = True
         positive_axis = (-ax, -ay, -az)
     else:

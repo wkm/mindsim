@@ -55,7 +55,7 @@ class TestEnvironment:
         obs = env.reset()
         assert obs.shape == (64, 64, 3)
         assert obs.dtype == np.float32
-        assert 0.0 <= obs.min() and obs.max() <= 1.0
+        assert obs.min() >= 0.0 and obs.max() <= 1.0
         env.close()
 
     def test_step_returns_five_tuple(self):

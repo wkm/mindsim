@@ -381,16 +381,7 @@ def _generate_design_layer_mesh(joint, layer_kind: str) -> bytes | None:
             # frame by applying shaft_offset.
             sx, sy, sz = servo.shaft_offset
             solid = raw.moved(Location((sx, sy, sz)))
-    elif layer_kind == "clearance":
-        if joint.bracket_style is BracketStyle.COUPLER:
-            from botcad.bracket import cradle_insertion_channel_solid
-
-            solid = cradle_insertion_channel_solid(servo, spec)
-        else:
-            from botcad.bracket import bracket_insertion_channel_solid
-
-            solid = bracket_insertion_channel_solid(servo, spec)
-    elif layer_kind == "insertion":
+    elif layer_kind == "clearance" or layer_kind == "insertion":
         if joint.bracket_style is BracketStyle.COUPLER:
             from botcad.bracket import cradle_insertion_channel_solid
 

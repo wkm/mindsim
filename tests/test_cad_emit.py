@@ -129,10 +129,10 @@ class TestBodySolidBBox:
 
         dims = base.dimensions
         # Mesh should span most of the body's Y extent on both sides
-        assert bb.min.Y < -dims[1] / 4, (
+        assert -dims[1] / 4 > bb.min.Y, (
             f"Missing -Y material: y_min={bb.min.Y:.4f}, expected < {-dims[1] / 4:.4f}"
         )
-        assert bb.max.Y > dims[1] / 4, (
+        assert dims[1] / 4 < bb.max.Y, (
             f"Missing +Y material: y_max={bb.max.Y:.4f}, expected > {dims[1] / 4:.4f}"
         )
 

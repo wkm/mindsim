@@ -191,8 +191,8 @@ class TestAlign3:
     def test_convenience_constants(self):
         from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
 
-        assert ALIGN_CENTER == Align3()
-        assert ALIGN_MIN_Z == Align3(z="min")
+        assert Align3() == ALIGN_CENTER
+        assert Align3(z="min") == ALIGN_MIN_Z
 
 
 class TestCallOp:

@@ -383,7 +383,7 @@ class TestHomePose:
         """Zero pose (all joints at 0) should have no same-branch collision."""
         name, model, data = bot_model
         ranged = _ranged_joints(model)
-        _set_pose_and_step(model, data, {jid: 0.0 for jid in ranged})
+        _set_pose_and_step(model, data, dict.fromkeys(ranged, 0.0))
         cols = _self_collisions(model, data, same_branch_only=True)
         assert not cols, f"{name} same-branch collision at home pose: {cols}"
 
@@ -504,10 +504,10 @@ class TestWorkspace:
             if not found:
                 pytest.skip(f"{name}: no downstream tip for workspace test")
 
-        _set_pose_and_step(model, data, {jid: 0.0 for jid in ranged})
+        _set_pose_and_step(model, data, dict.fromkeys(ranged, 0.0))
         home_pos = data.xpos[tip_body_id].copy()
 
-        pose = {jid: 0.0 for jid in ranged}
+        pose = dict.fromkeys(ranged, 0.0)
         lo, hi = model.jnt_range[target_jid]
         if abs(hi) >= abs(lo):
             pose[target_jid] = min(0.785, hi)
