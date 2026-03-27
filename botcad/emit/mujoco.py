@@ -575,16 +575,16 @@ def _emit_mounting_hardware(
 
     def _screw_attribs(name: str, mesh: str, pos: str, axis_quat):
         """Common geom attributes for a fastener, including orientation."""
-        attribs = dict(
-            name=name,
-            type="mesh",
-            mesh=mesh,
-            pos=pos,
-            rgba=_SCREW_RGBA,
-            contype="0",
-            conaffinity="0",
-            group="1",
-        )
+        attribs = {
+            "name": name,
+            "type": "mesh",
+            "mesh": mesh,
+            "pos": pos,
+            "rgba": _SCREW_RGBA,
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "1",
+        }
         if axis_quat is not None:
             attribs["quat"] = _fmt_quat(axis_quat)
         return attribs

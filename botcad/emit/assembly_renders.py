@@ -200,9 +200,7 @@ def _render_composite(
         if unhide_geom_ids is not None and gid in unhide_geom_ids:
             return False
         # Hide hardware geoms (screws, mounting holes, wires)
-        if any(name.startswith(p) for p in _HARDWARE_PREFIXES):
-            return True
-        return False
+        return any(name.startswith(p) for p in _HARDWARE_PREFIXES)
 
     # ── Pass 1: wireframe context (non-target bodies in light gray) ──
     for gid in range(model.ngeom):
@@ -362,10 +360,7 @@ def _build_assembly_model(
                 target_joint = j
                 parent_body = parent
                 return True
-        for child in body.bodies:
-            if _find_joint(child, name, body):
-                return True
-        return False
+        return any(_find_joint(child, name, body) for child in body.bodies)
 
     for top_body in spec.bodies:
         if _find_joint(top_body, joint_name, None):
@@ -783,7 +778,9 @@ def _composite_collision_pdf(strips, output_dir: Path) -> Path:
                 pdf.text(MARGIN, y + 4, title)
                 y += row_label_h
 
-                for fi, (frame, label, has_col) in enumerate(zip(frames, labels, cols, strict=True)):
+                for fi, (frame, label, has_col) in enumerate(
+                    zip(frames, labels, cols, strict=True)
+                ):
                     x = MARGIN + fi * (frame_w + gap)
                     p = tmp / f"c_{jname}_{row_idx}_{fi}.png"
                     save_png(frame, p)
@@ -871,10 +868,7 @@ def _build_component_model(
                 parent_body = body
                 comp_geom = g
                 return True
-        for child in body.bodies:
-            if _find_comp(child, name):
-                return True
-        return False
+        return any(_find_comp(child, name) for child in body.bodies)
 
     for top_body in spec.bodies:
         if _find_comp(top_body, comp_geom_name):
@@ -915,7 +909,7 @@ def _build_component_model(
         if model.geom_bodyid[gid] != parent_bid:
             continue
         gname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, gid) or ""
-        if gname.endswith("_servo") or gname.endswith("_servo_boss"):
+        if gname.endswith(("_servo", "_servo_boss")):
             servo_gids.add(gid)
         elif gname.startswith("comp_") and gid != comp_gid:
             sibling_comp_gids.add(gid)
@@ -1287,7 +1281,7 @@ def _composite_instructions_pdf(
             title_a = strip.step_a_title or "Insert servo into bracket"
             title_b = strip.step_b_title or f"Attach {child_label} onto horn"
 
-            for row_idx, (frames, labels, title) in enumerate(
+            for row_idx, (frames, _labels, title) in enumerate(
                 [
                     (strip.inst_s_frames, strip.inst_s_labels, title_a),
                     (strip.inst_a_frames, strip.inst_a_labels, title_b),

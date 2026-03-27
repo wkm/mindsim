@@ -708,7 +708,7 @@ class DebugDrawing:
         # Collect section info for cutting lines on projections
         section_info: list[tuple[str, float]] = []  # (letter, Z value)
 
-        for i, (
+        for _i, (
             (col_name, is_section, _data, view),
             (xmin, ymin, xmax, ymax),
             x_off,

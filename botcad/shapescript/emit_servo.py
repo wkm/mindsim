@@ -83,7 +83,7 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
     f_h = f_z_top - f_z_bot
 
     if servo.mounting_ears:
-        for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
+        for ears in _group_ears_by_y_side(servo.mounting_ears).values():
             f_w = 0.004
             f_cy = (
                 (body_y / 2 - f_w / 2)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
@@ -133,10 +134,8 @@ class ShapeScript:
         """
         ref = self._next_ref("pre")
         solid_hash = str(hash(id(solid)))  # identity-based; real hash is volume-based
-        try:
+        with contextlib.suppress(Exception):
             solid_hash = f"vol:{abs(solid.volume):.10e}"
-        except Exception:
-            pass
         self.ops.append(PrebuiltOp(ref=ref, solid_hash=solid_hash, tag=tag))
         self.prebuilt_solids[ref.id] = solid
         return ref
