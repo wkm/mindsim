@@ -641,7 +641,7 @@ export class Viewport3D {
     this._ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._ren.setSize(w, h);
     this._ren.shadowMap.enabled = true;
-    this._ren.shadowMap.type = THREE.PCFSoftShadowMap;
+    this._ren.shadowMap.type = THREE.PCFShadowMap;
     this._ren.localClippingEnabled = true;
     this._ren.toneMapping = THREE.AgXToneMapping;
     this._ren.toneMappingExposure = 0.9;
