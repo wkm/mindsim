@@ -49,7 +49,6 @@ from botcad.geometry import (
     EULER_RY_NEG90,
     EULER_RY_POS90,
     MOUNT_NO_ROTATION,
-    MOUNT_YAW_90,
     MountRotation,
     PackingResult,
 )
@@ -491,15 +490,11 @@ class Body:
         label: str = "",
         insertion_axis: Vec3 | None = None,
         rotation: MountRotation = MOUNT_NO_ROTATION,
-        rotate_z: bool = False,
     ) -> Mount:
         """Mount a component inside this body.
 
         rotation: design-time rotation of the component on its mount surface.
-        rotate_z: deprecated — use rotation=MOUNT_YAW_90 instead.
         """
-        if rotate_z and rotation == MOUNT_NO_ROTATION:
-            rotation = MOUNT_YAW_90
         if not label:
             label = component.name.lower()
         m = Mount(
@@ -895,6 +890,8 @@ class Bot:
         # all_bodies while iterating).
         structural_bodies = list(self.all_bodies)
 
+        placements = self.packing_result.placements if self.packing_result else {}
+
         for body in structural_bodies:
             bwp = body.world_pos
 
@@ -906,10 +903,12 @@ class Bot:
                     parent_body_name=body.name,
                 )
                 # Servo center is in the parent body frame; transform to world
-                sc = joint.solved_servo_center
+                j_place = placements.get(joint)
+                sc = j_place.pose.pos if j_place else joint.solved_servo_center
+                sq = j_place.pose.quat if j_place else joint.solved_servo_quat
                 servo_body.world_pose = Pose(
                     (bwp[0] + sc[0], bwp[1] + sc[1], bwp[2] + sc[2]),
-                    joint.solved_servo_quat,
+                    sq,
                 )
                 servo_body.mesh_file = f"servo_{joint.servo.name}.stl"
                 servo_body._component = joint.servo
@@ -950,10 +949,11 @@ class Bot:
                     kind=BodyKind.PURCHASED,
                     parent_body_name=body.name,
                 )
-                rp = mount.resolved_pos
+                m_place = placements.get(mount)
+                rp = m_place.pose.pos if m_place else mount.resolved_pos
                 comp_body.world_pose = Pose(
                     (bwp[0] + rp[0], bwp[1] + rp[1], bwp[2] + rp[2]),
-                    body.world_quat,  # same orientation as parent
+                    m_place.pose.quat if m_place else body.world_quat,
                 )
                 comp_body.mesh_file = f"comp_{body.name}_{mount.label}.stl"
                 comp_body._component = mount.component
