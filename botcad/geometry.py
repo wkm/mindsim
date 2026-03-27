@@ -23,6 +23,17 @@ from botcad.component import Vec3
 
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
 
+
+@dataclass(frozen=True)
+class MountRotation:
+    """Design-time rotation of a component on its mounting surface."""
+
+    yaw: float = 0.0  # degrees around component local Z
+
+
+MOUNT_NO_ROTATION = MountRotation()
+MOUNT_YAW_90 = MountRotation(yaw=90.0)
+
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
 EULER_RX_POS90: tuple[float, float, float] = (90.0, 0.0, 0.0)

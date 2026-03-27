@@ -1,0 +1,122 @@
+<h2>Manifest Data Model — Current vs Proposed</h2>
+<p class="subtitle">How do we represent a robot's physical parts?</p>
+
+<div class="section">
+  <h3>Current Model (broken)</h3>
+  <div class="mockup">
+    <div class="mockup-header">Two parallel lists that overlap</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 12px; line-height: 1.7;">
+      <div style="display: flex; gap: 24px;">
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #e53e3e;">
+          <div style="color: #fc8181; font-weight: bold; margin-bottom: 12px;">bodies[] — kinematic chain</div>
+          <div style="color: #a0aec0;">{ name: "base", mesh: "base.stl", kind: "fabricated" }</div>
+          <div style="color: #a0aec0;">{ name: "left_rim", mesh: "left_rim.stl", kind: "fabricated" }</div>
+          <div style="color: #a0aec0;">{ name: "right_rim", mesh: "right_rim.stl", kind: "fabricated" }</div>
+          <div style="margin-top: 8px; color: #fc8181; font-size: 11px;">⚠ "left_rim" is really the Pololu wheel — not a separate rim</div>
+        </div>
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #e53e3e;">
+          <div style="color: #fc8181; font-weight: bold; margin-bottom: 12px;">parts[] — things on bodies</div>
+          <div style="color: #a0aec0;">{ id: "comp_base_battery", parent_body: "base", mesh: "comp_base_battery.stl" }</div>
+          <div style="color: #a0aec0;">{ id: "comp_base_camera", parent_body: "base", mesh: "comp_base_camera.stl" }</div>
+          <div style="color: #a0aec0;">{ id: "comp_base_pi", parent_body: "base", mesh: "comp_base_pi.stl" }</div>
+          <div style="color: #fbd38d;">{ id: "comp_left_rim_wheel", parent_body: "left_rim", mesh: "comp_left_rim_wheel.stl" }</div>
+          <div style="color: #fbd38d;">{ id: "comp_right_rim_wheel", parent_body: "right_rim", mesh: "comp_right_rim_wheel.stl" }</div>
+          <div style="color: #a0aec0;">{ id: "servo_left_wheel", ... }</div>
+          <div style="color: #a0aec0;">{ id: "horn_left_wheel", ... }</div>
+          <div style="color: #a0aec0;">fasteners...</div>
+          <div style="margin-top: 8px; color: #fbd38d; font-size: 11px;">⚠ comp_left_rim_wheel.stl is IDENTICAL to left_rim.stl — same bytes</div>
+        </div>
+      </div>
+      <div style="margin-top: 16px; background: #1a2332; border-radius: 8px; padding: 12px; border: 1px solid #e53e3e;">
+        <div style="color: #fc8181; font-size: 12px;"><strong>Problem:</strong> One physical object (the wheel) appears as BOTH a body AND a part. The viewer loads both = double render. The body list is really "kinematic nodes for MuJoCo" not "physical parts to render."</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 32px;">
+  <h3>Proposed Model</h3>
+  <div class="mockup">
+    <div class="mockup-header">One list of bodies — each is a real physical part</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 12px; line-height: 1.7;">
+      <div style="background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #48bb78;">
+        <div style="color: #68d391; font-weight: bold; margin-bottom: 12px;">bodies[] — every rigid body, with its role</div>
+        <div style="color: #a0aec0;">{ name: "base", mesh: "base.stl",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">role: "structure"</span>, shape: "tube",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">mounts: ["battery", "camera", "pi"]</span> }</div>
+        <div style="color: #a0aec0; margin-top: 4px;">{ name: "left_rim", mesh: "left_rim.stl",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">role: "component"</span>, <span style="color: #68d391;">component: "Pololu 90x10mm Wheel"</span> }</div>
+        <div style="color: #a0aec0; margin-top: 4px;">{ name: "right_rim", mesh: "right_rim.stl",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">role: "component"</span>, <span style="color: #68d391;">component: "Pololu 90x10mm Wheel"</span> }</div>
+        <div style="color: #a0aec0; margin-top: 4px;">{ name: "servo_left_wheel", mesh: "servo_STS3215.stl",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">role: "component"</span>, <span style="color: #68d391;">component: "STS3215"</span> }</div>
+        <div style="color: #a0aec0; margin-top: 4px;">{ name: "horn_left_wheel", mesh: "horn_left_wheel.stl",</div>
+        <div style="color: #a0aec0;">  <span style="color: #68d391;">role: "component"</span>, <span style="color: #68d391;">component: "Horn disc"</span> }</div>
+        <div style="color: #a0aec0; margin-top: 4px;">... (same for right side)</div>
+      </div>
+
+      <div style="margin-top: 16px; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #48bb78;">
+        <div style="color: #68d391; font-weight: bold; margin-bottom: 12px;">mounts[] — components mounted ON structural bodies</div>
+        <div style="color: #a0aec0;">{ body: "base", label: "battery", component: "LiPo2S-1000",</div>
+        <div style="color: #a0aec0;">  mesh: "comp_base_battery.stl", pos: [...], quat: [...] }</div>
+        <div style="color: #a0aec0;">{ body: "base", label: "camera", component: "OV5647",</div>
+        <div style="color: #a0aec0;">  mesh: "comp_base_camera.stl", pos: [...], quat: [...] }</div>
+        <div style="color: #a0aec0;">{ body: "base", label: "pi", component: "RaspberryPiZero2W",</div>
+        <div style="color: #a0aec0;">  mesh: "comp_base_pi.stl", pos: [...], quat: [...] }</div>
+        <div style="margin-top: 8px; color: #68d391; font-size: 11px;">✓ Only parts mounted ON a structural body — not bodies that ARE components</div>
+      </div>
+
+      <div style="margin-top: 16px; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #48bb78;">
+        <div style="color: #68d391; font-weight: bold; margin-bottom: 12px;">joints[] — connections between bodies</div>
+        <div style="color: #a0aec0;">{ name: "left_wheel", parent: "base", child: "left_rim", axis: [...] }</div>
+        <div style="color: #a0aec0;">{ name: "right_wheel", parent: "base", child: "right_rim", axis: [...] }</div>
+      </div>
+
+      <div style="margin-top: 16px; background: #1a2332; border-radius: 8px; padding: 12px; border: 1px solid #48bb78;">
+        <div style="color: #68d391; font-size: 12px;"><strong>Key change:</strong> Servos, horns, and wheels are bodies (they're rigid things in the kinematic chain). Battery, camera, Pi are mounts (attached to a structural body, not their own kinematic node). No duplication.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 32px;">
+  <h3>What this means for the tree</h3>
+  <div class="mockup">
+    <div class="mockup-header">wheeler_base — proposed tree</div>
+    <div class="mockup-body" style="padding: 16px; font-family: -apple-system, sans-serif; font-size: 13px; line-height: 2;">
+      <div style="color: #c9d1d9;">
+        <div><strong>Wheeler Base</strong> <span style="color: #484f58;">(assembly)</span></div>
+        <div style="padding-left: 20px;">base <span style="color: #484f58;">(body — structural tube)</span></div>
+        <div style="padding-left: 40px;">LiPo2S-1000 <span style="color: #484f58;">(mount — on base)</span></div>
+        <div style="padding-left: 40px;">OV5647 <span style="color: #484f58;">(mount — on base)</span></div>
+        <div style="padding-left: 40px;">RaspberryPiZero2W <span style="color: #484f58;">(mount — on base)</span></div>
+        <div style="padding-left: 20px;"><strong>Left Wheel</strong> <span style="color: #484f58;">(assembly)</span></div>
+        <div style="padding-left: 40px;">STS3215 <span style="color: #484f58;">(body — servo)</span></div>
+        <div style="padding-left: 40px;">Horn disc <span style="color: #484f58;">(body — horn)</span></div>
+        <div style="padding-left: 40px;">Pololu 90x10mm Wheel <span style="color: #484f58;">(body — wheel)</span></div>
+        <div style="padding-left: 20px;"><strong>Right Wheel</strong> <span style="color: #484f58;">(assembly)</span></div>
+        <div style="padding-left: 40px;">STS3215 <span style="color: #484f58;">(body — servo)</span></div>
+        <div style="padding-left: 40px;">Horn disc <span style="color: #484f58;">(body — horn)</span></div>
+        <div style="padding-left: 40px;">Pololu 90x10mm Wheel <span style="color: #484f58;">(body — wheel)</span></div>
+        <div style="padding-left: 20px; color: #484f58;">Wires <span>(hidden by default)</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>This model is right</h3>
+      <p>Bodies = rigid things in kinematic chain. Mounts = components on structural bodies. No duplication.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="feedback" onclick="toggleSelect(this)">
+    <div class="letter">~</div>
+    <div class="content">
+      <h3>Needs changes</h3>
+      <p>Directionally right but the specifics need adjusting</p>
+    </div>
+  </div>
+</div>

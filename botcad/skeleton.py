@@ -46,6 +46,9 @@ from botcad.geometry import (
     EULER_RX_POS90,
     EULER_RY_NEG90,
     EULER_RY_POS90,
+    MOUNT_NO_ROTATION,
+    MOUNT_YAW_90,
+    MountRotation,
 )
 from botcad.materials import PLA, Material
 
@@ -163,10 +166,15 @@ class Mount:
     insertion_axis: Vec3 | None = (
         None  # explicit override, or None = derive from position
     )
-    rotate_z: bool = False  # if True, swap X/Y dimensions (90° around Z)
+    rotation: MountRotation = MOUNT_NO_ROTATION
     resolved_pos: Vec3 = (0.0, 0.0, 0.0)  # filled by packing solver
     resolved_insertion_axis: Vec3 = (0.0, 0.0, 1.0)  # filled by packing solver
     solved_bbox: Vec3 | None = None  # actual bounding box from ShapeScript execution
+
+    @property
+    def rotate_z(self) -> bool:
+        """Backward-compat: True when mount rotation is 90 deg yaw."""
+        return self.rotation.yaw == 90.0
 
     @property
     def face_outward(self) -> bool:
@@ -464,14 +472,16 @@ class Body:
         position: Position | Vec3 = "center",
         label: str = "",
         insertion_axis: Vec3 | None = None,
+        rotation: MountRotation = MOUNT_NO_ROTATION,
         rotate_z: bool = False,
     ) -> Mount:
         """Mount a component inside this body.
 
-        rotate_z: if True, component is rotated 90° around Z (swaps X/Y dims).
-        Use this when the component's long axis should run along Y (e.g. Pi
-        board running front-to-back in a wheeler chassis).
+        rotation: design-time rotation of the component on its mount surface.
+        rotate_z: deprecated — use rotation=MOUNT_YAW_90 instead.
         """
+        if rotate_z and rotation == MOUNT_NO_ROTATION:
+            rotation = MOUNT_YAW_90
         if not label:
             label = component.name.lower()
         m = Mount(
@@ -479,7 +489,7 @@ class Body:
             label=label,
             position=position,
             insertion_axis=insertion_axis,
-            rotate_z=rotate_z,
+            rotation=rotation,
         )
         self.mounts.append(m)
         return m

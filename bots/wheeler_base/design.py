@@ -23,6 +23,7 @@ from botcad.components import (
     WaveshareSerialBus,
 )
 from botcad.components.camera import OV5647
+from botcad.geometry import MOUNT_YAW_90
 from botcad.skeleton import BodyShape, Bot
 
 
@@ -44,10 +45,12 @@ def build() -> Bot:
         shape=BodyShape.BOX,
         padding=0.014,
     )
-    base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
+    base.mount(LiPo2S(1000), position="bottom", label="battery", rotation=MOUNT_YAW_90)
     base.mount(OV5647(), position="front", label="camera")
-    base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)
-    base.mount(WaveshareSerialBus(), position="back", label="controller", rotate_z=True)
+    base.mount(RaspberryPiZero2W(), position="top", label="pi", rotation=MOUNT_YAW_90)
+    base.mount(
+        WaveshareSerialBus(), position="back", label="controller", rotation=MOUNT_YAW_90
+    )
     # BEC is tiny (13x10x3mm) — tuck beside controller on back face
     base.mount(BEC5V(), position=(0.0, -0.025, 0.015), label="bec")
 

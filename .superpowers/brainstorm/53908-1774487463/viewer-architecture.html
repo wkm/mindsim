@@ -1,0 +1,107 @@
+<h2>Design Viewer vs Sim Viewer — Architecture</h2>
+<p class="subtitle">How should the viewer conceptually split?</p>
+
+<div class="section">
+  <h3>Current Architecture</h3>
+  <div class="mockup">
+    <div class="mockup-header">Today: Everything runs through MuJoCo</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.8;">
+      <div style="display: flex; gap: 24px;">
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #2d3748;">
+          <div style="color: #f6ad55; font-weight: bold; margin-bottom: 8px;">viewer.ts (router)</div>
+          <div style="color: #a0aec0;">?bot=X → bot-viewer.ts (MuJoCo)</div>
+          <div style="color: #a0aec0;">?component=X → component-browser.ts (Three.js)</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; margin-top: 16px;">
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #e53e3e;">
+          <div style="color: #fc8181; font-weight: bold; margin-bottom: 8px;">Bot Viewer (MuJoCo WASM)</div>
+          <div style="color: #a0aec0;">• Loads bot.xml + meshes through MuJoCo</div>
+          <div style="color: #a0aec0;">• Per-body visibility only ⛔</div>
+          <div style="color: #a0aec0;">• Single color per geom ⛔</div>
+          <div style="color: #a0aec0;">• Multi-material = hack overlay ⛔</div>
+          <div style="color: #a0aec0;">• Modes: Explore, Joint, Assembly, IK</div>
+          <div style="color: #a0aec0;">• Component tree can't control individual parts ⛔</div>
+        </div>
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #48bb78;">
+          <div style="color: #68d391; font-weight: bold; margin-bottom: 8px;">Component Browser (Three.js)</div>
+          <div style="color: #a0aec0;">• Loads STLs directly — no MuJoCo</div>
+          <div style="color: #a0aec0;">• Per-layer visibility ✅</div>
+          <div style="color: #a0aec0;">• Design layers (bracket, coupler, clearance) ✅</div>
+          <div style="color: #a0aec0;">• Standalone components only ⛔</div>
+          <div style="color: #a0aec0;">• No assembled bot view ⛔</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 32px;">
+  <h3>Proposed Architecture</h3>
+  <div class="mockup">
+    <div class="mockup-header">New: Design Viewer (Three.js) + Sim Viewer (MuJoCo)</div>
+    <div class="mockup-body" style="padding: 24px; font-family: monospace; font-size: 13px; line-height: 1.8;">
+      <div style="display: flex; gap: 24px;">
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #2d3748;">
+          <div style="color: #f6ad55; font-weight: bold; margin-bottom: 8px;">viewer.ts (router)</div>
+          <div style="color: #a0aec0;">?bot=X → Design tab (default) + Sim tab</div>
+          <div style="color: #a0aec0;">?component=X → Design tab (component scope)</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; margin-top: 16px;">
+        <div style="flex: 1; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #48bb78;">
+          <div style="color: #68d391; font-weight: bold; margin-bottom: 12px;">Design Viewer (Three.js — no MuJoCo)</div>
+          <div style="color: #a0aec0;">• Loads manifest + STLs directly</div>
+          <div style="color: #a0aec0;">• Per-mesh visibility ✅</div>
+          <div style="color: #a0aec0;">• Multi-material native ✅</div>
+          <div style="color: #a0aec0;">• Design layers (bracket, coupler, clearance) ✅</div>
+          <div style="color: #a0aec0;">• Component tree with ● / ○ toggles ✅</div>
+          <div style="color: #a0aec0;">• Wiring + fastener overlays ✅</div>
+          <div style="color: #a0aec0;">• Works at any scope: component → assembly → bot ✅</div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2d3748;">
+            <div style="color: #63b3ed; font-size: 11px;">SCOPE LEVELS:</div>
+            <div style="color: #a0aec0; font-size: 12px;">Full bot → Assembly → Body → Component (zoom in/out)</div>
+          </div>
+        </div>
+        <div style="flex: 0.7; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #805ad5;">
+          <div style="color: #b794f4; font-weight: bold; margin-bottom: 12px;">Sim Viewer (MuJoCo WASM)</div>
+          <div style="color: #a0aec0;">• Joint control + IK</div>
+          <div style="color: #a0aec0;">• Physics simulation</div>
+          <div style="color: #a0aec0;">• Controller testing</div>
+          <div style="color: #a0aec0;">• Collision geometry</div>
+          <div style="color: #a0aec0;">• Body-level visibility (fine here)</div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #2d3748;">
+            <div style="color: #63b3ed; font-size: 11px;">KEEPS:</div>
+            <div style="color: #a0aec0; font-size: 12px;">Joint mode, IK mode, Assembly mode</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 16px; background: #1a2332; border-radius: 8px; padding: 16px; border: 1px solid #2d3748;">
+        <div style="color: #f6ad55; font-weight: bold; margin-bottom: 8px;">Shared Infrastructure</div>
+        <div style="display: flex; gap: 16px;">
+          <div style="color: #a0aec0; flex: 1;">• SceneTree (node visibility)</div>
+          <div style="color: #a0aec0; flex: 1;">• Component tree panel</div>
+          <div style="color: #a0aec0; flex: 1;">• Section cutter</div>
+          <div style="color: #a0aec0; flex: 1;">• Camera / controls</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top: 32px;">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>This split looks right</h3>
+      <p>Design viewer + Sim viewer as separate tabs, shared component tree and camera</p>
+    </div>
+  </div>
+  <div class="option" data-choice="modify" onclick="toggleSelect(this)">
+    <div class="letter">~</div>
+    <div class="content">
+      <h3>Needs changes</h3>
+      <p>The split is directionally right but I have feedback on the specifics</p>
+    </div>
+  </div>
+</div>
