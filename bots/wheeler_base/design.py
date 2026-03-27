@@ -48,7 +48,7 @@ def build() -> Bot:
     base.mount(OV5647(), position="front", label="camera")
     base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)
     base.mount(WaveshareSerialBus(), position="back", label="controller", rotate_z=True)
-    # BEC is tiny (13x10x3mm) — tuck beside controller on back face
+    # BEC is small (12.7x17.8x2.8mm) — tuck beside controller on back face
     base.mount(BEC5V(), position=(0.0, -0.025, 0.015), label="bec")
 
     # --- Wheels (STS3215 in continuous rotation mode) ---
