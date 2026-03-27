@@ -52,6 +52,7 @@ const LAYER_META = {
     opts: { transparent: true, opacity: 0.25 },
   },
   fasteners: { label: 'Fasteners', colorHex: 0xd4a843, opts: {} },
+  wires: { label: 'Wires', colorHex: 0x9179f2, opts: {} },
 };
 const ALL_LAYER_IDS = Object.keys(LAYER_META);
 const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
@@ -734,6 +735,11 @@ class ComponentBrowser {
       return;
     }
 
+    if (layerId === 'wires') {
+      await this._loadWires(compName, group);
+      return;
+    }
+
     const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
     const entityColor =
       meta.colorHex !== null ? meta.colorHex : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
@@ -778,6 +784,38 @@ class ComponentBrowser {
       }
     } catch (err) {
       console.warn('Failed to load fasteners:', err);
+    }
+  }
+
+  async _loadWires(compName: string, group: THREE.Group) {
+    try {
+      const resp = await fetch(`/api/components/${compName}/wires`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      // Load shared wire stub STL
+      const stubUrl = data.wires[0]?.stl_url;
+      if (!stubUrl || data.wires.length === 0) return;
+
+      const stlResp = await fetch(stubUrl);
+      if (!stlResp.ok) return;
+      const buf = await stlResp.arrayBuffer();
+      const stubGeom = this.stlLoader.parse(buf);
+      stubGeom.computeVertexNormals();
+
+      for (const w of data.wires) {
+        const color = new THREE.Color(w.color[0], w.color[1], w.color[2]);
+        const mat = createMaterial(tintColor(color));
+        const mesh = new THREE.Mesh(stubGeom.clone(), mat);
+        mesh.castShadow = true;
+        mesh.position.set(w.pos[0], w.pos[1], w.pos[2]);
+        if (w.quat) {
+          mesh.quaternion.set(w.quat[1], w.quat[2], w.quat[3], w.quat[0]);
+        }
+        group.add(mesh);
+      }
+    } catch (err) {
+      console.warn('Failed to load wires:', err);
     }
   }
 
