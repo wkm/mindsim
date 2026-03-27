@@ -1436,7 +1436,7 @@ export class Viewport3D {
     for (const g of Object.values(this._groups) as any[]) {
       if (!g.visible) continue;
       g.traverse((ch: any) => {
-        if (ch.isMesh && ch.geometry) {
+        if (ch.isMesh && ch.visible && ch.geometry) {
           ch.geometry.computeBoundingBox();
           const b = ch.geometry.boundingBox.clone();
           b.applyMatrix4(ch.matrixWorld);
@@ -1456,7 +1456,7 @@ export class Viewport3D {
         child.name !== 'section-caps'
       ) {
         child.traverse((ch) => {
-          if (ch.isMesh && ch.geometry) {
+          if (ch.isMesh && ch.visible && ch.geometry) {
             ch.geometry.computeBoundingBox();
             const b = ch.geometry.boundingBox.clone();
             b.applyMatrix4(ch.matrixWorld);
