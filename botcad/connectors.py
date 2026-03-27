@@ -22,6 +22,7 @@ class ConnectorType(StrEnum):
     XT30 = "xt30"
     JST_XH_3PIN = "jst_xh_3pin"
     GPIO_2X20 = "gpio_2x20"
+    USB_C = "usb_c"
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,20 @@ GPIO_2X20 = _register(
         wire_exit_offset=(0.0, 0.0, 0.00425),
         cable_bend_radius=0.010,
         mating_direction=(0.0, 0.0, -1.0),
+    )
+)
+
+
+# USB Type-C receptacle
+USB_C_SPEC = _register(
+    ConnectorSpec(
+        connector_type=ConnectorType.USB_C,
+        label="USB Type-C",
+        body_dimensions=(0.0084, 0.0026, 0.0065),  # 8.4 x 2.6 x 6.5mm
+        wire_exit_direction=(-1.0, 0.0, 0.0),
+        wire_exit_offset=(-0.0042, 0.0, 0.0),
+        cable_bend_radius=0.008,
+        mating_direction=(1.0, 0.0, 0.0),
     )
 )
 
@@ -259,6 +274,24 @@ def connector_solid(spec: ConnectorSpec):
             )
             bump = bump.moved(Location((px, 0, -bz / 2)))
             body = body.fuse(bump)
+
+    elif spec.connector_type == ConnectorType.USB_C:
+        # Rounded-rectangle tongue on mating face (+X)
+        # USB-C: bx=8.4mm (long), by=2.6mm (short), bz=6.5mm
+        tongue_d = 0.002  # 2mm protrusion along X (mating axis)
+        tongue = Box(
+            tongue_d,
+            by * 0.6,
+            bz * 0.5,
+            align=C,
+        )
+        tongue = tongue.moved(Location((bx / 2 + tongue_d / 2, 0, 0)))
+        body = body.fuse(tongue)
+
+        # Receptacle cavity on mating face
+        cavity = Box(0.003, by * 0.4, bz * 0.4, align=C)
+        cavity = cavity.moved(Location((bx / 2 - 0.001, 0, 0)))
+        body = body - cavity
 
     elif spec.connector_type == ConnectorType.GPIO_2X20:
         # 2x20 socket connector (female) — shroud with pin cavities

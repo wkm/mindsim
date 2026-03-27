@@ -299,6 +299,10 @@ def make_component_solid(component: Component):
 
         return test_fastener_solid(component)
 
+    # Generic components: PCB-style box with corner radii and mounting holes
+    if component.kind == ComponentKind.GENERIC:
+        return _make_generic_pcb_solid(component)
+
     raise ValueError(
         f"No CAD solid builder for component {component.name!r}. "
         f"Every component must have explicit geometry — add a case to "
@@ -1317,6 +1321,36 @@ def _make_bearing_solid(bearing: BearingSpec):
     inner = Cylinder(bearing.id / 2, bearing.width + 0.001, align=C)
 
     return _as_solid(outer - inner)
+
+
+def _make_generic_pcb_solid(component):
+    """Create a simple PCB-style box for generic components.
+
+    Rounded corners + mounting hole cuts. Works for any component
+    with dimensions and optional mounting_points.
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    dx, dy, dz = component.dimensions
+    pcb = Box(dx, dy, dz, align=C)
+
+    # Corner radii (clamped to half the shortest side)
+    radius = min(dx, dy) * 0.15
+    if radius > 0.0005:
+        z_edges = [
+            e for e in pcb.edges() if e.geom_type == "LINE" and abs(e.direction.Z) > 0.9
+        ]
+        if len(z_edges) == 4:
+            pcb = pcb.fillet(radius, z_edges)
+
+    # Cut mounting holes
+    for mp in component.mounting_points:
+        hole = Cylinder(mp.diameter / 2, dz + 0.001, align=C)
+        hole = hole.moved(Location((mp.pos[0], mp.pos[1], 0)))
+        pcb = pcb - hole
+
+    return _as_solid(pcb)
 
 
 def emit_cad_for_assembly(

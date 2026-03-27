@@ -52,6 +52,7 @@ const LAYER_META = {
     opts: { transparent: true, opacity: 0.25 },
   },
   fasteners: { label: 'Fasteners', colorHex: 0xd4a843, opts: {} },
+  wires: { label: 'Wires', colorHex: 0x9179f2, opts: {} },
 };
 const ALL_LAYER_IDS = Object.keys(LAYER_META);
 const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
@@ -734,6 +735,11 @@ class ComponentBrowser {
       return;
     }
 
+    if (layerId === 'wires') {
+      await this._loadWires(compName, group);
+      return;
+    }
+
     const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
     const entityColor =
       meta.colorHex !== null ? meta.colorHex : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
@@ -778,6 +784,48 @@ class ComponentBrowser {
       }
     } catch (err) {
       console.warn('Failed to load fasteners:', err);
+    }
+  }
+
+  async _loadWires(compName: string, group: THREE.Group) {
+    try {
+      const resp = await fetch(`/api/components/${compName}/wires`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      // Collect all unique STL URLs (stubs + connectors)
+      const allItems = [...(data.wires || []), ...(data.connectors || [])];
+      const uniqueUrls: string[] = [...new Set(allItems.map((item: any) => item.stl_url))] as string[];
+      const geomCache: Record<string, THREE.BufferGeometry> = {};
+
+      await Promise.all(
+        uniqueUrls.map(async (url) => {
+          const stlResp = await fetch(url);
+          if (!stlResp.ok) return;
+          const buf = await stlResp.arrayBuffer();
+          const geom = this.stlLoader.parse(buf);
+          geom.computeVertexNormals();
+          geomCache[url] = geom;
+        }),
+      );
+
+      // Place all items (stubs and connector housings)
+      for (const item of allItems) {
+        const srcGeom = geomCache[item.stl_url];
+        if (!srcGeom) continue;
+
+        const color = new THREE.Color(item.color[0], item.color[1], item.color[2]);
+        const mat = createMaterial(tintColor(color));
+        const mesh = new THREE.Mesh(srcGeom.clone(), mat);
+        mesh.castShadow = true;
+        mesh.position.set(item.pos[0], item.pos[1], item.pos[2]);
+        if (item.quat) {
+          mesh.quaternion.set(item.quat[1], item.quat[2], item.quat[3], item.quat[0]);
+        }
+        group.add(mesh);
+      }
+    } catch (err) {
+      console.warn('Failed to load wires:', err);
     }
   }
 

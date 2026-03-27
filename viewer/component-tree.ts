@@ -67,6 +67,7 @@ interface ComponentTreeOptions {
   onShapeScript?: (url: string) => void;
   onDoubleClick?: (nodeId: string, data: any) => void;
   onToggleNodeHidden?: (nodeId: string) => void;
+  onCategoryToggle?: (category: string, visible: boolean) => void;
   onSolo?: (nodeId: string) => void;
   onUnsolo?: () => void;
 }
@@ -78,6 +79,7 @@ export class ComponentTree {
   onShapeScript: ((url: string) => void) | null;
   onDoubleClick: ((nodeId: string, data: unknown) => void) | null;
   onToggleNodeHidden: ((nodeId: string) => void) | null;
+  onCategoryToggle: ((category: string, visible: boolean) => void) | null;
   onSolo: ((nodeId: string) => void) | null;
   onUnsolo: (() => void) | null;
   focusedNodeId: string | null;
@@ -101,6 +103,7 @@ export class ComponentTree {
     this.onShapeScript = options.onShapeScript || null;
     this.onDoubleClick = options.onDoubleClick || null;
     this.onToggleNodeHidden = options.onToggleNodeHidden || null;
+    this.onCategoryToggle = options.onCategoryToggle || null;
     this.onSolo = options.onSolo || null;
     this.onUnsolo = options.onUnsolo || null;
     this.focusedNodeId = null;
@@ -233,6 +236,7 @@ export class ComponentTree {
         this._filters[key] = !this._filters[key];
         btn.classList.toggle('active', this._filters[key]);
         this._applyFilters();
+        if (this.onCategoryToggle) this.onCategoryToggle(key, this._filters[key]);
       });
 
       chipBar.appendChild(btn);

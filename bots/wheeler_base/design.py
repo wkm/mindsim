@@ -4,6 +4,8 @@
 Drive-only variant of wheeler_arm for independent simulation and training:
 - 2x STS3215 servos for wheels (continuous rotation)
 - Raspberry Pi Zero 2W for compute
+- Waveshare Serial Bus Servo Driver Board (servo control + power distribution)
+- Pololu D24V10F5 BEC (5V regulated power for Pi)
 - LiPo 2S 1000mAh battery
 
 Run this script to generate all outputs:
@@ -13,10 +15,12 @@ Run this script to generate all outputs:
 from pathlib import Path
 
 from botcad.components import (
+    BEC5V,
     STS3215,
     LiPo2S,
     PololuWheel90mm,
     RaspberryPiZero2W,
+    WaveshareSerialBus,
 )
 from botcad.components.camera import OV5647
 from botcad.skeleton import BodyShape, Bot
@@ -43,6 +47,9 @@ def build() -> Bot:
     base.mount(LiPo2S(1000), position="bottom", label="battery", rotate_z=True)
     base.mount(OV5647(), position="front", label="camera")
     base.mount(RaspberryPiZero2W(), position="top", label="pi", rotate_z=True)
+    base.mount(WaveshareSerialBus(), position="back", label="controller", rotate_z=True)
+    # BEC is tiny (13x10x3mm) — tuck beside controller on back face
+    base.mount(BEC5V(), position=(0.0, -0.025, 0.015), label="bec")
 
     # --- Wheels (STS3215 in continuous rotation mode) ---
     # Joints at ±65mm to clear rotated electronics with margin.
