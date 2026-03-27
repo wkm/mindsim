@@ -697,7 +697,7 @@ def get_component_stl(name: str, part: str):
         stl_bytes = _generate_stl_bytes(comp, part)
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"STL generation failed: {e}")
+        raise HTTPException(500, f"STL generation failed: {e}") from e
 
     if stl_bytes is None:
         raise HTTPException(404, f"Part '{part}' not available for {name}")
@@ -896,7 +896,7 @@ async def render_svg(name: str, request: Request):
         )
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"SVG render failed: {e}")
+        raise HTTPException(500, f"SVG render failed: {e}") from e
 
     return Response(content=svg.encode("utf-8"), media_type="image/svg+xml")
 
@@ -907,10 +907,10 @@ def get_viewer_manifest(bot: str):
     try:
         bot_obj, _cad = _load_bot(bot)
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"Viewer manifest generation failed: {e}")
+        raise HTTPException(500, f"Viewer manifest generation failed: {e}") from e
 
     from botcad.emit.viewer import build_viewer_manifest
 
@@ -923,10 +923,10 @@ def get_bot_xml(bot: str):
     try:
         bot_obj, _cad = _load_bot(bot)
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"bot.xml generation failed: {e}")
+        raise HTTPException(500, f"bot.xml generation failed: {e}") from e
 
     from botcad.emit.mujoco import generate_mujoco_xml
 
@@ -940,20 +940,20 @@ def get_bot_mesh(bot: str, mesh_name: str):
     try:
         bot_obj, cad = _load_bot(bot)
     except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"Mesh generation failed: {e}")
+        raise HTTPException(500, f"Mesh generation failed: {e}") from e
 
     stem = mesh_name.removesuffix(".stl")
 
     try:
         stl_bytes = _generate_bot_mesh(bot_obj, cad, stem)
     except KeyError as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"Mesh generation failed for {mesh_name}: {e}")
+        raise HTTPException(500, f"Mesh generation failed for {mesh_name}: {e}") from e
 
     if stl_bytes is None:
         raise HTTPException(404, f"Mesh not found: {mesh_name}")
@@ -971,10 +971,10 @@ def get_cad_steps_meta(bot: str, body: str):
     try:
         steps = _get_cad_steps(bot, body)
     except (FileNotFoundError, KeyError) as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"CAD step generation failed: {e}")
+        raise HTTPException(500, f"CAD step generation failed: {e}") from e
 
     return {
         "bot": bot,
@@ -1018,10 +1018,10 @@ def _serve_cad_step_solid(bot_name: str, body_name: str, step_idx: int, attr: st
     try:
         steps = _get_cad_steps(bot_name, body_name)
     except (FileNotFoundError, KeyError) as e:
-        raise HTTPException(404, str(e))
+        raise HTTPException(404, str(e)) from e
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"CAD step generation failed: {e}")
+        raise HTTPException(500, f"CAD step generation failed: {e}") from e
 
     if step_idx < 0 or step_idx >= len(steps):
         raise HTTPException(404, f"Step {step_idx} out of range (0-{len(steps) - 1})")
@@ -1034,7 +1034,7 @@ def _serve_cad_step_solid(bot_name: str, body_name: str, step_idx: int, attr: st
         stl_bytes = _solid_to_stl_bytes(solid)
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"STL export failed for step {step_idx} {attr}: {e}")
+        raise HTTPException(500, f"STL export failed for step {step_idx} {attr}: {e}") from e
 
     with _stl_cache_lock:
         _stl_cache[cache_key] = stl_bytes
@@ -1056,7 +1056,7 @@ async def run_fea(bot: str):
         bot_obj, cad = _load_bot(bot)
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"Bot load failed: {e}")
+        raise HTTPException(500, f"Bot load failed: {e}") from e
 
     from botcad.skeleton import BodyKind
 
