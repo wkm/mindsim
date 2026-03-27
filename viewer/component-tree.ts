@@ -120,8 +120,8 @@ export class ComponentTree {
       servo: true,
       mount: true,
       horn: true,
-      fastener: false, // off by default
-      wire: false, // off by default
+      fastener: true,
+      wire: true,
     };
 
     this._searchQuery = '';
@@ -159,7 +159,7 @@ export class ComponentTree {
     const autoAsm = this._buildAutoAssemblyFromKinematics(rootBody);
     this._treeRoot.appendChild(autoAsm);
 
-    // Apply initial filter state (hide fasteners + wires by default)
+    // Apply initial filter state
     this._applyFilters();
   }
 
