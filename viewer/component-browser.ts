@@ -740,6 +740,12 @@ class ComponentBrowser {
       return;
     }
 
+    // For body layer, try multi-material rendering first
+    if (layerId === 'body') {
+      const loaded = await this._tryLoadMultiMaterial(compName, group);
+      if (loaded) return;
+    }
+
     const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
     const entityColor =
       meta.colorHex !== null ? meta.colorHex : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
@@ -747,6 +753,34 @@ class ComponentBrowser {
     const renderColor = tintColor(entityColor);
 
     await this._addSTLMesh(compName, layerId, renderColor, meta.opts, group);
+  }
+
+  /** Try loading per-material meshes. Returns true if multi-material was available. */
+  async _tryLoadMultiMaterial(compName: string, group: THREE.Group): Promise<boolean> {
+    try {
+      const resp = await fetch(`/api/components/${compName}/materials`);
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      if (!data.materials || data.materials.length === 0) return false;
+
+      await Promise.all(
+        data.materials.map(async (mat: any) => {
+          const stlResp = await fetch(mat.stl_url);
+          if (!stlResp.ok) return;
+          const buf = await stlResp.arrayBuffer();
+          const geometry = this.stlLoader.parse(buf);
+          geometry.computeVertexNormals();
+          const color = new THREE.Color(mat.color[0], mat.color[1], mat.color[2]);
+          addMeshWithEdges(geometry, tintColor(color), group, {
+            metalness: mat.metallic,
+            roughness: mat.roughness,
+          });
+        }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async _loadFasteners(compName: string, group: THREE.Group) {
