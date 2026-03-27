@@ -474,7 +474,7 @@ class DebugDrawing:
 
         # Add shapes per column
         for (_col_name, is_section, parts_data, _view), x_off in zip(
-            columns, x_offsets
+            columns, x_offsets, strict=True
         ):
             offset_loc = Location((x_off, 0, 0))
             if is_section:
@@ -712,7 +712,7 @@ class DebugDrawing:
             (col_name, is_section, _data, view),
             (xmin, ymin, xmax, ymax),
             x_off,
-        ) in enumerate(zip(columns, col_bounds, x_offsets)):
+        ) in enumerate(zip(columns, col_bounds, x_offsets, strict=True)):
             cx = (xmin + xmax) / 2 + x_off
 
             if is_section:

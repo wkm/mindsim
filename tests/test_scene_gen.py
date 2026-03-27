@@ -132,7 +132,7 @@ class TestComposer:
         s1 = composer.random_scene(seed=123)
         s2 = composer.random_scene(seed=123)
         assert len(s1) == len(s2)
-        for a, b in zip(s1, s2):
+        for a, b in zip(s1, s2, strict=True):
             assert a.concept == b.concept
             assert a.pos == b.pos
 

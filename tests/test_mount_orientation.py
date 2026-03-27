@@ -11,7 +11,7 @@ from botcad.geometry import euler_to_quat, rotate_vec
 
 
 def _vec_close(a, b, tol=1e-6):
-    return all(abs(x - y) < tol for x, y in zip(a, b))
+    return all(abs(x - y) < tol for x, y in zip(a, b, strict=True))
 
 
 class TestFaceQuatMatchesLambda:

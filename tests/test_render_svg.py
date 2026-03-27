@@ -169,7 +169,7 @@ class TestSectionOrientation:
         # ViewBoxes should be identical (same geometry, same orientation)
         vb_front = _parse_viewbox(svg_front)
         vb_side = _parse_viewbox(svg_side)
-        for a, b in zip(vb_front, vb_side):
+        for a, b in zip(vb_front, vb_side, strict=True):
             assert abs(a - b) < 1e-6, (
                 f"ViewBox differs: front={vb_front}, side={vb_side}"
             )

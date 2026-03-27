@@ -323,9 +323,7 @@ class TestEndToEnd:
 
             # Collect batch
             batch = [
-                collect_episode(
-                    env, policy, deterministic=False, hierarchy=hierarchy
-                )
+                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
                 for _ in range(cfg.training.batch_size)
             ]
 
@@ -706,7 +704,7 @@ class TestCheckpoint:
 
         # Verify state matches
         for (n1, p1), (n2, p2) in zip(
-            policy.named_parameters(), policy2.named_parameters()
+            policy.named_parameters(), policy2.named_parameters(), strict=True
         ):
             assert n1 == n2
             assert torch.equal(p1, p2), f"Parameter {n1} mismatch after load"

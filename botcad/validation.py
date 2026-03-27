@@ -80,7 +80,7 @@ class SweepResult:
 
     @property
     def collision_angles(self) -> list[float]:
-        return [a for a, c in zip(self.angles_deg, self.collisions) if c]
+        return [a for a, c in zip(self.angles_deg, self.collisions, strict=True) if c]
 
     def image(self) -> Image.Image:
         """Composite filmstrip with collision indicators."""

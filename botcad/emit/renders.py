@@ -192,7 +192,7 @@ def render_overview(
         font=FONT_TITLE,
     )
 
-    for idx, (img, label) in enumerate(zip(images, labels)):
+    for idx, (img, label) in enumerate(zip(images, labels, strict=True)):
         col = idx % cols
         row = idx // cols
         x = margin + col * (VIEW_W + margin)
@@ -299,7 +299,7 @@ def render_closeups(
             (margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0), font=FONT_LABEL
         )
 
-        for idx, (img, label) in enumerate(zip(imgs, lbls)):
+        for idx, (img, label) in enumerate(zip(imgs, lbls, strict=True)):
             col = idx % cols
             row = idx // cols
             x = margin + col * (VIEW_W + margin)

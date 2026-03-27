@@ -22,7 +22,7 @@ def _approx_vec(v, expected, *, atol=1e-6):
 def _approx_quat(q, expected, *, atol=1e-6):
     """Assert two quaternions are approximately equal (up to sign flip)."""
     # q and -q represent the same rotation
-    dot = sum(a * b for a, b in zip(q, expected))
+    dot = sum(a * b for a, b in zip(q, expected, strict=True))
     if dot < 0:
         q = tuple(-x for x in q)
     for i in range(4):

@@ -783,7 +783,7 @@ def _composite_collision_pdf(strips, output_dir: Path) -> Path:
                 pdf.text(MARGIN, y + 4, title)
                 y += row_label_h
 
-                for fi, (frame, label, has_col) in enumerate(zip(frames, labels, cols)):
+                for fi, (frame, label, has_col) in enumerate(zip(frames, labels, cols, strict=True)):
                     x = MARGIN + fi * (frame_w + gap)
                     p = tmp / f"c_{jname}_{row_idx}_{fi}.png"
                     save_png(frame, p)
