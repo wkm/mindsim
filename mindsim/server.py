@@ -1151,6 +1151,7 @@ def get_assembly_sequence(bot: str):
             "angle": op.angle,
             "prerequisites": list(op.prerequisites),
             "description": op.description,
+            "repr": repr(op),
             "meshes": _meshes_for_op(op),
         }
         ops.append(op_dict)
@@ -1390,6 +1391,8 @@ def get_cad_steps_meta(bot: str, body: str):
                 "label": s.label,
                 "op": s.op,
                 "has_tool": s.tool is not None,
+                "script": s.script,
+                "repr": s.ir_repr,
             }
             for i, s in enumerate(steps)
         ],

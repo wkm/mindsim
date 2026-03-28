@@ -109,6 +109,7 @@ class CadStep:
     tool: object | None = None  # cutting/union tool solid (placed in body frame)
     group: str | None = None  # CallOp sub-program key, for viewer grouping
     script: str = ""  # ShapeScript code line, e.g. "cut_3 = Cut(box_0, loc_2)"
+    ir_repr: str = ""  # repr(original_op), e.g. "BoxOp(ref=..., width=0.06, ...)"
 
 
 def _solid_to_brep_bytes(solid) -> bytes:
