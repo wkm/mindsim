@@ -54,6 +54,7 @@ from botcad.geometry import (
 )
 from botcad.ids import BodyId, JointId
 from botcad.materials import PLA, Material
+from botcad.units import Meters, Radians
 
 Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
 
@@ -81,7 +82,7 @@ class ClearanceConstraint:
 
     body_a: BodyId  # body name
     body_b: BodyId  # body name
-    min_distance: float = 0.0  # meters — minimum acceptable gap
+    min_distance: Meters = 0.0  # meters — minimum acceptable gap
     label: str = ""  # human-readable description
 
 
@@ -263,7 +264,7 @@ class Joint:
     servo: ServoSpec
     axis: Vec3  # rotation axis in parent frame
     pos: Vec3  # joint position relative to parent body origin
-    range_rad: tuple[float, float] | None = None  # override servo default
+    range_rad: tuple[Radians, Radians] | None = None  # override servo default
     grip: bool = False  # force-limited gripper actuator
     bracket_style: BracketStyle = BracketStyle.POCKET
     child: Body | None = None
@@ -275,7 +276,7 @@ class Joint:
     solved_servo_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
 
     @property
-    def effective_range(self) -> tuple[float, float]:
+    def effective_range(self) -> tuple[Radians, Radians]:
         if self.range_rad is not None:
             return self.range_rad
         return self.servo.range_rad
@@ -307,15 +308,15 @@ class Joint:
         name: str,
         shape: BodyShape = BodyShape.BOX,
         *,
-        radius: float = 0.0,
-        width: float = 0.0,
-        height: float = 0.0,
-        length: float = 0.0,
-        outer_r: float = 0.0,
-        jaw_length: float = 0.0,
-        jaw_width: float = 0.0,
-        jaw_thickness: float = 0.0,
-        padding: float = 0.005,
+        radius: Meters = 0.0,
+        width: Meters = 0.0,
+        height: Meters = 0.0,
+        length: Meters = 0.0,
+        outer_r: Meters = 0.0,
+        jaw_length: Meters = 0.0,
+        jaw_width: Meters = 0.0,
+        jaw_thickness: Meters = 0.0,
+        padding: Meters = 0.005,
         dimensions: Vec3 | None = None,
         custom_solid: object | None = None,
         assembly: Assembly | None = None,
@@ -364,15 +365,15 @@ class Body:
     name: BodyId
     shape: BodyShape = BodyShape.BOX
     kind: BodyKind = BodyKind.FABRICATED
-    radius: float = 0.0
-    width: float = 0.0
-    height: float = 0.0
-    length: float = 0.0
-    outer_r: float = 0.0
-    jaw_length: float = 0.0
-    jaw_width: float = 0.0
-    jaw_thickness: float = 0.0
-    padding: float = 0.005  # clearance around components (meters)
+    radius: Meters = 0.0
+    width: Meters = 0.0
+    height: Meters = 0.0
+    length: Meters = 0.0
+    outer_r: Meters = 0.0
+    jaw_length: Meters = 0.0
+    jaw_width: Meters = 0.0
+    jaw_thickness: Meters = 0.0
+    padding: Meters = 0.005  # clearance around components (meters)
     explicit_dimensions: Vec3 | None = None
     custom_solid: object | None = None
     assembly: Assembly | None = None
