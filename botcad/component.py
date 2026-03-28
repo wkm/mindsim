@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from botcad.materials import Material
+from botcad.units import Meters, Radians
 
 Vec3 = tuple[float, float, float]
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
@@ -171,7 +172,7 @@ class MountPoint:
 
     label: str
     pos: Vec3  # position relative to component origin (meters)
-    diameter: float  # hole diameter (meters)
+    diameter: Meters  # hole diameter (meters)
     axis: Vec3 = (0.0, 0.0, 1.0)  # fastener insertion direction
     fastener_type: str = ""  # "M2", "M2.5", "M3", "press_fit", etc.
     head_type: str = ""  # HeadType value, empty = socket_head_cap
@@ -228,9 +229,9 @@ class BearingSpec(Component):
     """A ball bearing with dimensions and mounting type."""
 
     kind: ComponentKind = ComponentKind.BEARING
-    od: float = 0.0  # outer diameter (meters)
-    id: float = 0.0  # inner diameter (meters)
-    width: float = 0.0  # thickness (meters)
+    od: Meters = 0.0  # outer diameter (meters)
+    id: Meters = 0.0  # inner diameter (meters)
+    width: Meters = 0.0  # thickness (meters)
 
 
 @dataclass(frozen=True)
@@ -263,14 +264,14 @@ class ServoSpec(Component):
     bus_type: BusType = BusType.PWM
     shaft_offset: Vec3 = (0.0, 0.0, 0.0)  # output shaft center relative to body origin
     shaft_axis: Vec3 = (0.0, 0.0, 1.0)  # rotation axis (in servo local frame)
-    range_rad: tuple[float, float] = (-3.14159, 3.14159)  # angular range
+    range_rad: tuple[Radians, Radians] = (-3.14159, 3.14159)  # angular range
     gear_ratio: float = 1.0
     continuous: bool = False  # continuous rotation mode (wheels)
 
     # Extended geometry (optional, for detailed CAD / visualization)
     body_dimensions: Vec3 = (0.0, 0.0, 0.0)  # main body only (no ears/horn)
-    shaft_boss_radius: float = 0.0  # bearing housing radius (meters)
-    shaft_boss_height: float = 0.0  # protrusion above body top face (meters)
+    shaft_boss_radius: Meters = 0.0  # bearing housing radius (meters)
+    shaft_boss_height: Meters = 0.0  # protrusion above body top face (meters)
     mounting_ears: tuple[MountPoint, ...] = ()  # bracket attachment tabs
     horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on output horn
     rear_horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on blind side
