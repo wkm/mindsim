@@ -508,6 +508,56 @@ export class Viewport3D {
     if (this._secOn) this._applySection();
   }
 
+  /**
+   * Set section plane state with full control. Handles all computation
+   * (plane position from bounding box, visualization plane positioning,
+   * cap generation). Used by ManifestViewer which has its own section UI.
+   */
+  setSection(opts: { enabled: boolean; axis?: string; fraction?: number; flipped?: boolean }): void {
+    if (opts.enabled) {
+      this._secOn = true;
+      if (opts.axis !== undefined) this._secAxis = opts.axis;
+      if (opts.fraction !== undefined) this._secFrac = opts.fraction;
+      if (opts.flipped !== undefined) this._secFlipped = opts.flipped;
+      this._applySection();
+    } else {
+      this._secOn = false;
+      if (this._secViz) this._secViz.visible = false;
+      this._clearSectionCaps();
+      this._scene.traverse((ch: any) => {
+        if (ch.material) ch.material.clippingPlanes = [];
+      });
+    }
+  }
+
+  /** Whether measure tool is currently enabled. */
+  get measureEnabled(): boolean {
+    return this._meas?.enabled ?? false;
+  }
+
+  /** Clear all measurements without disabling the measure tool. */
+  clearMeasurements(): void {
+    if (this._meas) {
+      if (this._meas.clearAll) this._meas.clearAll();
+      else if (this._meas.measurements) this._meas.measurements.length = 0;
+    }
+  }
+
+  /** Fit orthographic camera frustum to a bounding box. */
+  fitOrthoFrustum(box: THREE.Box3): void {
+    this._fitOrthoFrustum(box);
+  }
+
+  /** All registered mesh groups (read-only reference). */
+  get groups(): Record<string, THREE.Group> {
+    return this._groups;
+  }
+
+  /** The current animation callback, if any. */
+  get animationCallback(): (() => void) | null {
+    return this._animCb;
+  }
+
   animate(cb) {
     this._animCb = cb || null;
     if (!this._animating) {

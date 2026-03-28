@@ -159,19 +159,19 @@ if (cadstepsParam) {
     simTab.addEventListener('click', () => switchTab('sim'));
   });
 } else if (componentParam) {
-  // Component browser — hide landing, show component UI
+  // Component browser — hide landing, show unified layout (tree + canvas + side panel)
   document.getElementById('landing').style.display = 'none';
   document.getElementById('top-bar').style.display = '';
   document.getElementById('side-panel').style.display = '';
-  document.getElementById('component-browser').style.display = 'block';
+  document.getElementById('tree-panel').style.display = 'block';
   document.getElementById('axis-gizmo').style.display = '';
   document.getElementById('bot-name').textContent = 'Components';
-  // Show component browser navbar elements
-  document.getElementById('cb-nav-divider').style.display = '';
-  document.getElementById('cb-view-group').style.display = '';
-  document.getElementById('cb-tools-group').style.display = '';
+  // Offset canvas for tree panel (same as Design mode)
+  document.getElementById('canvas-container').style.left = '280px';
+  // View presets available via 1-7 keyboard shortcuts (Viewport3D)
   import('./component-browser.ts').then((m) => m.initComponentBrowser(componentParam));
 } else {
   // Landing page — already visible by default, hide everything else
-  document.getElementById('component-browser').style.display = 'none';
+  const cbEl = document.getElementById('component-browser');
+  if (cbEl) cbEl.style.display = 'none';
 }
