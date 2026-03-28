@@ -137,10 +137,10 @@ if (cadstepsParam) {
         if (simModeTabs) simModeTabs.style.display = 'none';
       } else if (prevTab === 'dfm') {
         dfmHandle?.pause();
-        if (dfmViewport) dfmViewport.scene.visible = false;
+        if (dfmViewport) dfmViewport.setVisible(false);
       } else {
         // was design
-        designViewport.scene.visible = false;
+        designViewport.setVisible(false);
       }
 
       // Hide common panels between switches
@@ -150,7 +150,7 @@ if (cadstepsParam) {
       if (tab === 'design') {
         // Show Design scene
         updateCanvasLayout(true);
-        designViewport.scene.visible = true;
+        designViewport.setVisible(true);
         treePanel.style.display = 'block';
         designCtx.syncVisibility();
         designViewport.resize();
@@ -168,7 +168,7 @@ if (cadstepsParam) {
           const { initDFMViewer } = await import('./dfm-viewer.ts');
           dfmHandle = await initDFMViewer(botName, dfmViewport, sidePanel);
         } else {
-          dfmViewport!.scene.visible = true;
+          dfmViewport!.setVisible(true);
           dfmHandle.resume();
         }
       } else if (tab === 'sim') {

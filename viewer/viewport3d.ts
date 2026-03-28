@@ -224,6 +224,13 @@ export class Viewport3D {
     return this._ren;
   }
 
+  /** Hide or show the viewport's DOM elements (canvas + overlay). */
+  setVisible(visible: boolean) {
+    const display = visible ? '' : 'none';
+    this._ren.domElement.style.display = display;
+    if (this._overlay) this._overlay.style.display = display;
+  }
+
   addGroup(name) {
     const g = new THREE.Group();
     g.name = name;
