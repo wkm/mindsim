@@ -168,9 +168,7 @@ if (cadstepsParam) {
   document.getElementById('bot-name').textContent = 'Components';
   // Offset canvas for tree panel (same as Design mode)
   document.getElementById('canvas-container').style.left = '280px';
-  // Show component browser navbar elements (view dropdown)
-  const cbViewGroup = document.getElementById('cb-view-group');
-  if (cbViewGroup) cbViewGroup.style.display = '';
+  // View presets available via 1-7 keyboard shortcuts (Viewport3D)
   import('./component-browser.ts').then((m) => m.initComponentBrowser(componentParam));
 } else {
   // Landing page — already visible by default, hide everything else

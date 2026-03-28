@@ -117,36 +117,7 @@ class ComponentBrowser {
   // -----------------------------------------------------------------------
 
   _setupViewToolbar() {
-    // Populate view dropdown from VIEW_PRESETS
-    const dropdown = document.getElementById('view-dropdown');
-    const dropdownBtn = document.getElementById('view-dropdown-btn');
-    if (dropdown) {
-      dropdown.innerHTML = '';
-      for (const [key, preset] of Object.entries(VIEW_PRESETS)) {
-        const li = document.createElement('li');
-        li.innerHTML = `<button class="dropdown-item" data-view="${key}">
-          <span class="text">${preset.label}</span>
-          <span class="dropdown-kbd">${preset.key}</span>
-        </button>`;
-        li.querySelector('button')!.addEventListener('click', () => {
-          this._setViewPreset(key);
-          dropdown.style.display = 'none';
-        });
-        dropdown.appendChild(li);
-      }
-      if (dropdownBtn) {
-        dropdownBtn.addEventListener('click', () => {
-          dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
-        });
-        document.addEventListener('click', (e) => {
-          if (!dropdownBtn.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
-            dropdown.style.display = 'none';
-          }
-        });
-      }
-    }
-
-    // Keyboard shortcuts — view presets, arrow keys
+    // Keyboard shortcuts — view presets (lock rotation for axis-aligned), arrow keys
     const keyMap: Record<string, string> = {
       '1': 'iso',
       '2': 'front',
@@ -236,12 +207,7 @@ class ComponentBrowser {
   }
 
   _updatePresetButtons() {
-    const dropdown = document.getElementById('view-dropdown');
-    if (dropdown) {
-      dropdown.querySelectorAll('[data-view]').forEach((btn) => {
-        btn.classList.toggle('active', (btn as HTMLElement).dataset.view === this.activePreset);
-      });
-    }
+    // View dropdown removed — presets available via 1-7 keyboard shortcuts
   }
 
   // -----------------------------------------------------------------------
