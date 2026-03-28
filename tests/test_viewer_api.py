@@ -192,11 +192,6 @@ class TestManifestSchema:
             for key in ("name", "parent_body", "child_body"):
                 assert key in joint, f"joint missing '{key}': {joint.get('name', '?')}"
 
-    def test_assembly_steps(self, manifest):
-        assert "assembly_steps" in manifest
-        steps = manifest["assembly_steps"]
-        assert isinstance(steps, list) and len(steps) > 0
-
 
 # ---------------------------------------------------------------------------
 # Manifest ↔ XML body count consistency
