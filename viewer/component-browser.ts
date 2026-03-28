@@ -40,7 +40,6 @@ class ComponentBrowser {
   components: any[];
   currentComponent: any;
   stlLoader: STLLoader;
-  stlCache: Record<string, any>;
   activePreset: string;
   stepsMode: boolean;
   stepsData: any;
@@ -57,12 +56,13 @@ class ComponentBrowser {
   _stepsHasFramed: boolean;
   _gizmoSvg: HTMLElement | null;
   _gizmoAxes: any[];
+  _keydownHandler: ((e: KeyboardEvent) => void) | null;
 
   constructor() {
     this.components = [];
     this.currentComponent = null;
     this.stlLoader = new STLLoader();
-    this.stlCache = {};
+
     this.activePreset = 'iso';
     this.stepsMode = false;
     this.stepsData = null;
@@ -80,6 +80,7 @@ class ComponentBrowser {
     this._stepsHasFramed = false;
     this._gizmoSvg = null;
     this._gizmoAxes = [];
+    this._keydownHandler = null;
   }
 
   async init() {
@@ -127,7 +128,11 @@ class ComponentBrowser {
       '6': 'right',
       '7': 'left',
     };
-    document.addEventListener('keydown', (e) => {
+    // Store reference to prevent accumulating listeners on repeated calls
+    if (this._keydownHandler) {
+      document.removeEventListener('keydown', this._keydownHandler);
+    }
+    this._keydownHandler = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
       const ctrl = e.ctrlKey || e.metaKey;
 
@@ -138,7 +143,8 @@ class ComponentBrowser {
         e.preventDefault();
         this._arrowKeyNav(e.key, e.shiftKey);
       }
-    });
+    };
+    document.addEventListener('keydown', this._keydownHandler);
   }
 
   _setViewPreset(key: string) {
