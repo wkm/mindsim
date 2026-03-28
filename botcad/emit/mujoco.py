@@ -734,7 +734,7 @@ def _emit_camera(parent_el: Element, body: Body, bot: Bot) -> None:
                 parent_el,
                 "camera",
                 name=f"{mount.label}_cam",
-                fovy=f"{cam.fov_deg:.1f}",
+                fovy=f"{cam.fov:.1f}",
                 pos=_fmt_vec3(pos),
                 xyaxes=xyaxes,
             )

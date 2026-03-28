@@ -67,6 +67,7 @@ ignore = [
     "RUF002",  # ambiguous unicode in docstrings
     "RUF003",  # ambiguous unicode in comments
     "SIM108",  # if-else vs ternary — readability preference
+    "RUF009",  # NewType calls in dataclass defaults are zero-cost, not mutable
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

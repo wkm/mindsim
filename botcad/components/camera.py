@@ -17,7 +17,7 @@ def OV5647() -> CameraSpec:
         name="OV5647",
         dimensions=(0.025, 0.024, 0.009),
         mass=0.003,
-        fov_deg=72.0,
+        fov=72.0,
         resolution=(2592, 1944),
         wire_ports=(
             # CSI ribbon cable at bottom edge (24mm height -> Y=-12mm)
@@ -131,7 +131,7 @@ def PiCamera2() -> CameraSpec:
         name="PiCamera2",
         dimensions=(0.025, 0.024, 0.009),
         mass=0.003,
-        fov_deg=62.2,
+        fov=62.2,
         resolution=(3280, 2464),
         wire_ports=(
             WirePort(
