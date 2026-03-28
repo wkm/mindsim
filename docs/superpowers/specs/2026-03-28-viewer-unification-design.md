@@ -58,7 +58,6 @@ interface ManifestViewerOptions {
   sidePanelEl: HTMLElement;     // Side panel DOM element
   manifest: ViewerManifest;
   resolveStlUrl: (mesh: string, context: StlUrlContext) => string;
-  sectionCapColorFn?: (groupName: string) => THREE.Color | number | null;
   onNodeSelected?: (nodeId: string | null, manifest: ViewerManifest) => void;
 }
 
@@ -91,7 +90,8 @@ The function:
 5. Sets up shared tools: section plane (S-key), measure (M-key)
 6. Sets up click-to-select raycasting → calls `onNodeSelected`
 7. Sets default visibility (fasteners, wires, design layers hidden)
-8. Registers `sectionCapColorFn` with Viewport3D
+8. Derives section cap colors from manifest (body/mount/material colors)
+   and registers with Viewport3D
 9. Frames camera on visible geometry
 
 `dispose()` must clean up:
@@ -150,11 +150,12 @@ just ensures the default is orthographic.
 **Click-to-select:** Already in both viewers (duplicated). Consolidates
 into ManifestViewer with `onNodeSelected` callback.
 
-**Section cap colors:** ManifestViewer accepts an optional
-`sectionCapColorFn` callback and passes it to Viewport3D. The caller
-provides context-appropriate colors (component viewer uses component
-color for body caps, gold for fasteners, purple for wires; bot viewer
-can provide body-role-based colors).
+**Section cap colors:** ManifestViewer derives cap colors directly from
+the manifest. Each mesh group already has an associated color (body color
+from `ManifestBody.color`, mount color from `ManifestMount.color`,
+material color from the materials dict). Section caps for a group match
+that group's color — no callback needed, the manifest is the source of
+truth.
 
 ### 5. Context panels (what changes per viewer mode)
 
@@ -165,12 +166,13 @@ clicked (in 3D or in tree). The caller decides what to show in the side panel.
 - On load: side panel shows component specs (dimensions, mass, servo data,
   mounting points, wire ports) — same as today
 - 3D markers for mounting points and wire ports — same as today
-- Steps mode: full in-viewport ShapeScript debugger (step slider, tool
-  toggle, per-step STL rendering). This is an interactive feature, not
-  just a link — it replaces the component mesh view with a step-by-step
-  CAD construction visualization. The steps mode code moves from
-  component-browser.ts into a dedicated module or stays in the component
-  context wrapper.
+- Steps mode: a separate per-geometry-body tool, NOT part of
+  ManifestViewer. It's a ShapeScript debugger that swaps out the
+  manifest view for a step-by-step CAD construction visualization
+  (step slider, tool toggle, per-step STLs). It uses the same
+  Viewport3D instance for rendering but is otherwise independent.
+  The component context wrapper manages the toggle between manifest
+  view and steps view.
 
 **Bot context** (`?bot=X`):
 - On component node selected: side panel shows that component's specs
@@ -185,10 +187,10 @@ clicked (in 3D or in tree). The caller decides what to show in the side panel.
 **`component-browser.ts`** shrinks to ~150-200 lines:
 - Fetch component catalog + manifest
 - Call `initManifestViewer` with component-specific `resolveStlUrl`
-  and `sectionCapColorFn`
 - Provide `onNodeSelected` handler that populates specs panel + markers
-- Steps mode (ShapeScript debugger) — stays here as component-specific
-  feature, toggled from a toolbar button
+- Steps mode (ShapeScript debugger) — stays here as a separate tool
+  that shares the Viewport3D but swaps out the manifest view. The
+  component context manages the toggle between the two views.
 
 **From `design-viewer.ts`:** most of the function body moves into
 `manifest-viewer.ts`. What remains:
@@ -236,9 +238,10 @@ and `#canvas-container` elements.
 
 These component-browser features must survive unification:
 
-- **Steps mode** (ShapeScript debugger): full in-viewport step-by-step
-  CAD construction viewer with slider, tool toggle, per-step STLs.
-  Stays in the component context wrapper, not in ManifestViewer.
+- **Steps mode** (ShapeScript debugger): a separate per-geometry-body
+  tool with step slider, tool toggle, per-step STLs. NOT part of
+  ManifestViewer — it shares the Viewport3D but is toggled independently
+  by the component context wrapper.
 - **3D markers**: mounting point cylinders and wire port spheres with
   hover-highlight from the side panel. Stays in component context.
 - **Axis gizmo**: SVG orientation indicator (top-right). Already in
