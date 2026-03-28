@@ -108,16 +108,9 @@ _DESIGN_LAYER_META: dict[str, dict] = {
         "color": [0.961, 0.337, 0.337],
         "opacity": 0.25,
     },
-    "bracket_envelope": {
-        "label": "Bracket Envelope",
-        "color": [0.961, 0.337, 0.337],
-        "opacity": 0.25,
-    },
-    "cradle_envelope": {
-        "label": "Cradle Envelope",
-        "color": [0.961, 0.337, 0.337],
-        "opacity": 0.25,
-    },
+    # bracket_envelope / cradle_envelope omitted — no STL generation exists
+    # for these in _generate_solid(). They're listed in ComponentMeta.layers
+    # but were never implemented.
 }
 
 
