@@ -692,10 +692,23 @@ class ComponentBrowser {
     );
     this._componentTree.build();
 
-    // Set fasteners and wires hidden by default (by ID prefix, not node kind,
-    // because horns are also SubPart but should stay visible).
+    // Hide the redundant body node — meshes are registered under the mount node
+    const bodyRow = treeContainer.querySelector(`[data-node-id="body:${name}"]`);
+    if (bodyRow) (bodyRow as HTMLElement).style.display = 'none';
+
+    // Build a set of mount node IDs that are design layers or clearances
+    const hiddenMountIds = new Set<string>();
+    for (const m of this._manifest.mounts ?? []) {
+      if (m.category === 'design_layer' || m.category === 'clearance') {
+        hiddenMountIds.add(`mount:${m.body}:${m.label}`);
+      }
+    }
+
+    // Set fasteners, wires, design layers, and clearances hidden by default
+    // (by ID prefix / set membership, not node kind, because horns are also SubPart
+    // but should stay visible).
     for (const node of this._designScene.tree.nodes.values()) {
-      if (node.id.startsWith('fastener-group:') || node.id.startsWith('wire-group:')) {
+      if (node.id.startsWith('fastener-group:') || node.id.startsWith('wire-group:') || hiddenMountIds.has(node.id)) {
         node.hidden = true;
       }
     }
@@ -800,7 +813,16 @@ class ComponentBrowser {
     }
     // Wire groups are NodeKind.Component with `wire-group:` prefix
     if (node.id.startsWith('wire-group:')) return 'wire';
-    if (node.kind === NodeKind.Component) return 'mount';
+    if (node.kind === NodeKind.Component) {
+      // Check if this is a design layer or clearance mount
+      if (this._manifest) {
+        const mounts = this._manifest.mounts ?? [];
+        const mount = mounts.find((m: ManifestMount) => `mount:${m.body}:${m.label}` === node.id);
+        if (mount?.category === 'design_layer') return 'design_layer';
+        if (mount?.category === 'clearance') return 'clearance';
+      }
+      return 'mount';
+    }
     return null;
   }
 
@@ -822,6 +844,47 @@ class ComponentBrowser {
     if (nodeId.startsWith('wire-group:')) {
       // Wire group: load ALL wire parts for this body
       matchingParts = allParts.filter((p) => p.category === 'wire');
+    } else if (nodeId.startsWith('mount:')) {
+      // Design layer mount — find the matching mount in manifest
+      const mounts = this._manifest.mounts ?? [];
+      const mount = mounts.find((m: ManifestMount) => `mount:${m.body}:${m.label}` === nodeId);
+      if (!mount) return;
+
+      let group = this._meshGroups[nodeId];
+      if (!group) {
+        group = this.viewport.addGroup(nodeId);
+        this._meshGroups[nodeId] = group;
+      }
+
+      const stlUrl = `/api/components/${compName}/stl/${mount.mesh}`;
+      try {
+        const stlResp = await fetch(stlUrl);
+        if (!stlResp.ok) return;
+        const buf = await stlResp.arrayBuffer();
+        const geometry = this.stlLoader.parse(buf);
+        geometry.computeVertexNormals();
+
+        let color: THREE.Color;
+        const opts: Record<string, unknown> = {};
+        if (mount.color) {
+          color = new THREE.Color(mount.color[0], mount.color[1], mount.color[2]);
+          if (mount.color[3] !== undefined && mount.color[3] < 1) {
+            opts.transparent = true;
+            opts.opacity = mount.color[3];
+          }
+        } else {
+          color = new THREE.Color(0.5, 0.5, 0.5);
+        }
+
+        addMeshWithEdges(geometry, tintColor(color), group, opts);
+
+        for (const child of group.children) {
+          this._designScene.registerMesh(nodeId, child as THREE.Mesh);
+        }
+      } catch (err) {
+        console.warn(`Failed to load mount mesh for ${nodeId}:`, err);
+      }
+      return;
     } else if (nodeId.startsWith('fastener-group:')) {
       // Fastener group: match by group key (last segment of node ID).
       // groupKey comes from groupFasteners() in utils.ts — it's the part name.

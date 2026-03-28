@@ -126,3 +126,38 @@ def test_servo_manifest_has_layers(client):
     assert len(m["bodies"]) == 1
     # The mount should reference the servo component
     assert len(m["mounts"]) >= 1
+
+
+def test_servo_manifest_design_layers(client):
+    """Servo manifest includes design layer mounts (bracket, coupler, etc.)."""
+    resp = client.get("/api/components/STS3215/manifest")
+    m = resp.json()
+
+    mount_labels = [mt["label"] for mt in m["mounts"]]
+    # Should have bracket, coupler, horn etc. as mounts
+    assert "bracket" in mount_labels
+    assert "coupler" in mount_labels
+    assert "horn" in mount_labels
+
+    # Design layers should have correct categories
+    bracket_mount = next(mt for mt in m["mounts"] if mt["label"] == "bracket")
+    assert bracket_mount["category"] == "design_layer"
+
+    # Insertion channels should be clearance category
+    if "bracket_insertion_channel" in mount_labels:
+        bic = next(
+            mt for mt in m["mounts"] if mt["label"] == "bracket_insertion_channel"
+        )
+        assert bic["category"] == "clearance"
+        assert bic["color"][3] == 0.25  # semi-transparent
+
+
+def test_non_servo_no_design_layers(client):
+    """Non-servo components should not have design layer mounts."""
+    resp = client.get("/api/components/BEC5V/manifest")
+    m = resp.json()
+
+    design_mounts = [
+        mt for mt in m["mounts"] if mt.get("category") in ("design_layer", "clearance")
+    ]
+    assert len(design_mounts) == 0

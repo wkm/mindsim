@@ -91,6 +91,35 @@ _LAYER_COLORS: dict[str, tuple[int, int, int]] = {
     "fasteners": (212, 168, 67),
 }
 
+# Design layer metadata for component manifest — color as linear [r,g,b], opacity
+_DESIGN_LAYER_META: dict[str, dict] = {
+    "servo": {"label": "Servo", "color": [0.094, 0.125, 0.149], "opacity": 1.0},
+    "horn": {"label": "Horn", "color": [0.910, 0.910, 0.910], "opacity": 1.0},
+    "bracket": {"label": "Bracket", "color": [0.808, 0.851, 0.878], "opacity": 1.0},
+    "cradle": {"label": "Cradle", "color": [0.808, 0.851, 0.878], "opacity": 1.0},
+    "coupler": {"label": "Coupler", "color": [0.961, 0.337, 0.337], "opacity": 1.0},
+    "bracket_insertion_channel": {
+        "label": "Bracket Insertion Channel",
+        "color": [0.961, 0.337, 0.337],
+        "opacity": 0.25,
+    },
+    "cradle_insertion_channel": {
+        "label": "Cradle Insertion Channel",
+        "color": [0.961, 0.337, 0.337],
+        "opacity": 0.25,
+    },
+    "bracket_envelope": {
+        "label": "Bracket Envelope",
+        "color": [0.961, 0.337, 0.337],
+        "opacity": 0.25,
+    },
+    "cradle_envelope": {
+        "label": "Cradle Envelope",
+        "color": [0.961, 0.337, 0.337],
+        "opacity": 0.25,
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # Registry initialisation
@@ -1103,11 +1132,44 @@ def get_component_manifest(name: str):
             }
         )
 
+    # ── Design layer mounts (servo bracket, coupler, etc.) ──
+    skip_layers = {"body", "fasteners", "wires"}
+    mounts: list[dict] = [mount]
+    for layer_id in meta.layers:
+        if layer_id in skip_layers:
+            continue
+        layer_meta = _DESIGN_LAYER_META.get(layer_id)
+        if not layer_meta:
+            continue
+
+        is_clearance = "insertion" in layer_id or "envelope" in layer_id
+        layer_color = layer_meta["color"] + [layer_meta["opacity"]]
+
+        mounts.append(
+            {
+                "body": name,
+                "label": layer_id,
+                "component": layer_meta["label"],
+                "category": "clearance" if is_clearance else "design_layer",
+                "mesh": layer_id,
+                "pos": [0, 0, 0],
+                "quat": [1, 0, 0, 0],
+                "color": layer_color,
+            }
+        )
+
+        materials[layer_id] = {
+            "color": layer_meta["color"],
+            "metallic": 0.0,
+            "roughness": 0.8,
+            "opacity": layer_meta["opacity"],
+        }
+
     return {
         "bot_name": name,
         "bodies": [body],
         "joints": [],
-        "mounts": [mount],
+        "mounts": mounts,
         "parts": parts,
         "materials": materials,
         "assemblies": [],
