@@ -1,17 +1,19 @@
 /**
  * DFM Viewer — top-level Design for Manufacturing analysis viewer.
  *
- * Loads the same static meshes as the Design viewer, overlays the DFM
- * findings panel (side panel) and assembly step scrubber (bottom bar).
- * Fetches assembly sequence and DFM analysis results from the API.
+ * Loads meshes from the assembly sequence API response. Each assembly op
+ * carries mesh references (file, pos, quat) so the assembly sequence is the
+ * single source of truth for both DFM checks and the viewer's incremental
+ * build-up visualization.
  *
  * Entry point: initDFMViewer(botName, viewport, sidePanelEl)
  */
 
 import * as THREE from 'three';
-import { type AssemblyOpData, AssemblyScrubber } from './assembly-scrubber.ts';
+import type { AssemblyMeshRef, AssemblyOpData } from './assembly-scrubber.ts';
+import { AssemblyScrubber } from './assembly-scrubber.ts';
 import { type DFMFindingData, DFMPanel } from './dfm-panel.ts';
-import type { ViewerManifest } from './manifest-types.ts';
+import type { ManifestMaterial, ViewerManifest } from './manifest-types.ts';
 import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
@@ -26,7 +28,7 @@ export interface DFMHandle {
 }
 
 // ---------------------------------------------------------------------------
-// Mesh helpers (same as design-viewer.ts)
+// Mesh helpers
 // ---------------------------------------------------------------------------
 
 const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
@@ -133,6 +135,40 @@ function flyToBox(
 }
 
 // ---------------------------------------------------------------------------
+// Material helpers
+// ---------------------------------------------------------------------------
+
+function materialForMeshRef(
+  ref: AssemblyMeshRef,
+  action: string,
+  materials: Record<string, ManifestMaterial>,
+): THREE.Material {
+  // Named material from manifest materials dict (multi-material components)
+  if (ref.material && materials[ref.material]) {
+    return makeMaterial(materials[ref.material]);
+  }
+  // Fastener — metallic silver
+  if (action === 'fasten') {
+    return new THREE.MeshPhysicalMaterial({ color: 0xc0c0c0, metalness: 0.9, roughness: 0.2 });
+  }
+  // Wire — use color if provided
+  if (action === 'route_wire' && ref.color) {
+    const c = new THREE.Color(ref.color[0], ref.color[1], ref.color[2]);
+    return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.5, emissive: c, emissiveIntensity: 0.15 });
+  }
+  // Color from the mesh ref (body shell or component color)
+  if (ref.color) {
+    return new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(ref.color[0], ref.color[1], ref.color[2]),
+      roughness: 0.6,
+      metalness: 0.0,
+    });
+  }
+  // Default gray for components
+  return new THREE.MeshPhysicalMaterial({ color: 0xd9d9d9, roughness: 0.6, metalness: 0.0 });
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -141,13 +177,10 @@ export async function initDFMViewer(
   viewport: Viewport3D,
   sidePanelEl: HTMLElement,
 ): Promise<DFMHandle> {
-  // Fetch manifest (same as design-viewer)
-  const resp = await fetch(`/api/bots/${botName}/viewer_manifest`);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch viewer manifest: ${resp.status}`);
-  }
-  const manifest: ViewerManifest = await resp.json();
-  const materials = manifest.materials ?? {};
+  // Fetch manifest for materials dict only (mesh loading is driven by assembly ops)
+  const manifestResp = await fetch(`/api/bots/${botName}/viewer_manifest`);
+  const manifest: ViewerManifest | null = manifestResp.ok ? await manifestResp.json() : null;
+  const materials: Record<string, ManifestMaterial> = manifest?.materials ?? {};
 
   // Camera animation state
   const cameraAnim: CameraAnim = {
@@ -161,139 +194,14 @@ export async function initDFMViewer(
     controls: null,
   };
 
-  // Build body name -> meshes lookup for fly-to on finding click
+  // Meshes tracked per assembly step for visibility toggling
+  const stepMeshes: Map<number, THREE.Mesh[]> = new Map();
+
+  // Body name -> meshes lookup for fly-to on finding click
   const bodyMeshes: Record<string, THREE.Mesh[]> = {};
 
-  // Mount meshes keyed by "body:label" (matches ComponentRef in assembly ops)
-  const mountMeshes: Record<string, THREE.Mesh[]> = {};
-
-  // Part meshes keyed by "fastener:body:index" or "wire:label"
-  const partMeshes: Record<string, THREE.Mesh[]> = {};
-
-  // Create viewport groups per body
-  const bodyGroups: Record<string, THREE.Group> = {};
-  for (const body of manifest.bodies) {
-    bodyGroups[body.name] = viewport.addGroup(`dfm-body:${body.name}`);
-    bodyMeshes[body.name] = [];
-  }
-
-  function getBodyGroup(bodyName: string): THREE.Group {
-    return bodyGroups[bodyName] ?? Object.values(bodyGroups)[0];
-  }
-
-  // Load body meshes
-  const bodyMeshPromises = manifest.bodies.map(async (body) => {
-    const geometry = await fetchSTL(botName, body.mesh);
-    if (!geometry) return;
-
-    const defaultColor = body.role === 'component' ? 0x808080 : 0xd9d9d9;
-    const bodyColor = body.color
-      ? new THREE.Color(body.color[0], body.color[1], body.color[2])
-      : new THREE.Color(defaultColor);
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: bodyColor,
-      roughness: body.role === 'component' ? 0.5 : 0.6,
-      metalness: 0.0,
-    });
-
-    const mesh = createPositionedMesh(geometry, mat, body.pos, body.quat);
-    getBodyGroup(body.name).add(mesh);
-    if (!bodyMeshes[body.name]) bodyMeshes[body.name] = [];
-    bodyMeshes[body.name].push(mesh);
-  });
-
-  // Load mount meshes
-  const mountsList = manifest.mounts ?? [];
-  const mountMeshPromises = mountsList.map(async (mount) => {
-    if (!mount.pos || !mount.quat) return;
-    const group = getBodyGroup(mount.body);
-    const mountKey = `${mount.body}:${mount.label}`;
-
-    function trackMountMesh(m: THREE.Mesh): void {
-      if (!mountMeshes[mountKey]) mountMeshes[mountKey] = [];
-      mountMeshes[mountKey].push(m);
-      if (!bodyMeshes[mount.body]) bodyMeshes[mount.body] = [];
-      bodyMeshes[mount.body].push(m);
-    }
-
-    if (mount.meshes && mount.meshes.length > 0) {
-      const subPromises = mount.meshes.map(async (sub) => {
-        const geometry = await fetchSTL(botName, sub.file);
-        if (!geometry) return;
-        const mat = makeMaterial(materials[sub.material]);
-        const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
-        group.add(mesh);
-        trackMountMesh(mesh);
-      });
-      await Promise.all(subPromises);
-    } else {
-      const geometry = await fetchSTL(botName, mount.mesh);
-      if (!geometry) return;
-      const mountColor = mount.color
-        ? new THREE.Color(mount.color[0], mount.color[1], mount.color[2])
-        : new THREE.Color(0x808080);
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: mountColor,
-        roughness: 0.5,
-        metalness: 0.0,
-      });
-      const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
-      group.add(mesh);
-      trackMountMesh(mesh);
-    }
-  });
-
-  // Load part meshes (fasteners, wires)
-  // Track fastener index per body to match FastenerRef(body, index) from assembly ops
-  const fastenerCountByBody: Record<string, number> = {};
-  const partsList = manifest.parts ?? [];
-  const partMeshPromises = partsList.map(async (part) => {
-    if (!part.pos || !part.quat) return;
-    const group = getBodyGroup(part.parent_body);
-
-    const geometry = await fetchSTL(botName, part.mesh);
-    if (!geometry) return;
-
-    let mat: THREE.Material;
-    if (part.category === 'fastener') {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0xc0c0c0, metalness: 0.9, roughness: 0.2 });
-    } else if (part.color) {
-      const c = new THREE.Color(part.color[0], part.color[1], part.color[2]);
-      mat = new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.5, emissive: c, emissiveIntensity: 0.15 });
-    } else {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x808080, roughness: 0.5, metalness: 0.0 });
-    }
-
-    const mesh = createPositionedMesh(geometry, mat, part.pos, part.quat);
-    group.add(mesh);
-    if (part.parent_body && !bodyMeshes[part.parent_body]) bodyMeshes[part.parent_body] = [];
-    if (part.parent_body) bodyMeshes[part.parent_body].push(mesh);
-
-    // Track part meshes for assembly scrubber visibility
-    let partKey: string | null = null;
-    if (part.category === 'fastener') {
-      const idx = fastenerCountByBody[part.parent_body] ?? 0;
-      fastenerCountByBody[part.parent_body] = idx + 1;
-      partKey = `fastener:${part.parent_body}:${idx}`;
-    } else if (part.category === 'wire') {
-      partKey = `wire:${part.name}`;
-    }
-    if (partKey) {
-      if (!partMeshes[partKey]) partMeshes[partKey] = [];
-      partMeshes[partKey].push(mesh);
-    }
-  });
-
-  await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
-
-  // Frame camera on loaded geometry
-  const box = new THREE.Box3();
-  for (const group of Object.values(bodyGroups)) {
-    box.expandByObject(group);
-  }
-  if (!box.isEmpty()) {
-    viewport.frameOnBox(box);
-  }
+  // Single group for all DFM meshes
+  const dfmGroup = viewport.addGroup('dfm-meshes');
 
   // ---------------------------------------------------------------------------
   // DFM panel + scrubber
@@ -317,39 +225,109 @@ export async function initDFMViewer(
   }
 
   // ---------------------------------------------------------------------------
+  // Assembly sequence loading — meshes come from ops
+  // ---------------------------------------------------------------------------
+
+  async function loadAssemblySequence(): Promise<void> {
+    try {
+      const resp = await fetch(`/api/bots/${botName}/assembly-sequence`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const ops: AssemblyOpData[] = (data.ops ?? data) as AssemblyOpData[];
+      assemblyOps = ops;
+
+      if (scrubber && ops.length > 0) {
+        scrubber.setOps(ops);
+      }
+
+      // Load all meshes referenced by assembly ops
+      const loadPromises: Promise<void>[] = [];
+
+      for (const op of ops) {
+        const meshRefs = op.meshes ?? [];
+        if (meshRefs.length === 0) continue;
+
+        for (const ref of meshRefs) {
+          const promise = (async () => {
+            const geometry = await fetchSTL(botName, ref.file);
+            if (!geometry) return;
+
+            const mat = materialForMeshRef(ref, op.action, materials);
+            const mesh = createPositionedMesh(geometry, mat, ref.pos, ref.quat);
+
+            // Start hidden — onStepChange will reveal
+            mesh.visible = false;
+
+            dfmGroup.add(mesh);
+
+            // Track by step
+            if (!stepMeshes.has(op.step)) {
+              stepMeshes.set(op.step, []);
+            }
+            stepMeshes.get(op.step)!.push(mesh);
+
+            // Track by body for fly-to
+            if (!bodyMeshes[op.body]) {
+              bodyMeshes[op.body] = [];
+            }
+            bodyMeshes[op.body].push(mesh);
+          })();
+          loadPromises.push(promise);
+        }
+      }
+
+      await Promise.all(loadPromises);
+
+      // Show all meshes initially and frame camera
+      showAllMeshes();
+      const box = new THREE.Box3().expandByObject(dfmGroup);
+      if (!box.isEmpty()) {
+        viewport.frameOnBox(box);
+      }
+
+      // If scrubber exists, set to last step (show all)
+      if (scrubber && ops.length > 0) {
+        onStepChange(ops[ops.length - 1].step);
+      }
+    } catch (err) {
+      console.warn('[dfm] assembly-sequence error:', err);
+    }
+  }
+
+  function showAllMeshes(): void {
+    for (const meshes of stepMeshes.values()) {
+      for (const m of meshes) m.visible = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Finding click: ghost other bodies, fly camera to affected body
   // ---------------------------------------------------------------------------
 
   function onFindingClick(finding: DFMFindingData): void {
     const meshesForBody = bodyMeshes[finding.body];
 
-    // Reset all body opacities
-    for (const group of Object.values(bodyGroups)) {
-      group.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mat = (child as THREE.Mesh).material as THREE.MeshPhysicalMaterial;
-          if (mat.opacity !== undefined) {
-            mat.transparent = false;
-            mat.opacity = 1.0;
-          }
+    // Reset all mesh opacities
+    dfmGroup.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mat = (child as THREE.Mesh).material as THREE.MeshPhysicalMaterial;
+        if (mat.opacity !== undefined) {
+          mat.transparent = false;
+          mat.opacity = 1.0;
         }
-      });
-    }
+      }
+    });
 
     if (meshesForBody && meshesForBody.length > 0) {
-      // Ghost everything except the affected body
-      for (const [name, group] of Object.entries(bodyGroups)) {
-        const isTarget = name === finding.body;
-        group.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mat = (child as THREE.Mesh).material as THREE.MeshPhysicalMaterial;
-            if (!isTarget) {
-              mat.transparent = true;
-              mat.opacity = 0.06;
-            }
-          }
-        });
-      }
+      // Ghost everything except the affected body's meshes
+      const targetSet = new Set(meshesForBody);
+      dfmGroup.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && !targetSet.has(child as THREE.Mesh)) {
+          const mat = (child as THREE.Mesh).material as THREE.MeshPhysicalMaterial;
+          mat.transparent = true;
+          mat.opacity = 0.06;
+        }
+      });
 
       // Fly camera to the body's bounding box
       const bodyBox = new THREE.Box3();
@@ -361,10 +339,7 @@ export async function initDFMViewer(
       }
     } else {
       // No specific body — fly to whole bot
-      const allBox = new THREE.Box3();
-      for (const group of Object.values(bodyGroups)) {
-        allBox.expandByObject(group);
-      }
+      const allBox = new THREE.Box3().expandByObject(dfmGroup);
       if (!allBox.isEmpty()) {
         flyToBox(allBox, viewport.camera, viewport.controls as any, cameraAnim);
       }
@@ -378,71 +353,10 @@ export async function initDFMViewer(
 
     if (assemblyOps.length === 0) return;
 
-    // Collect what is visible at this step by scanning ops 0..step
-    const visibleBodies = new Set<string>();
-    const visibleMounts = new Set<string>();
-    const visibleParts = new Set<string>();
-
-    for (let i = 0; i <= step; i++) {
-      const op = assemblyOps[i];
-      if (!op) continue;
-      const t = op.target;
-
-      if (op.action === 'insert') {
-        if (t.type === 'component' && t.mount_label) {
-          // Mount-level component (battery, Pi, camera, etc.)
-          visibleMounts.add(`${t.body}:${t.mount_label}`);
-        }
-        // Body-level component (servo, horn) — always add the body
-        visibleBodies.add(op.body);
-      } else if (op.action === 'fasten' && t.type === 'fastener') {
-        visibleParts.add(`fastener:${t.body}:${t.index}`);
-      } else if (op.action === 'route_wire' && t.type === 'wire') {
-        visibleParts.add(`wire:${t.label}`);
-      }
-    }
-
-    // Structural bodies are always visible
-    for (const body of manifest.bodies) {
-      if (body.role !== 'component') {
-        visibleBodies.add(body.name);
-      }
-    }
-
-    // Apply body group visibility
-    for (const [name, group] of Object.entries(bodyGroups)) {
-      group.visible = visibleBodies.has(name);
-    }
-
-    // Apply mount mesh visibility
-    for (const [key, meshes] of Object.entries(mountMeshes)) {
-      const vis = visibleMounts.has(key);
-      for (const m of meshes) m.visible = vis;
-    }
-
-    // Apply part mesh visibility
-    for (const [key, meshes] of Object.entries(partMeshes)) {
-      const vis = visibleParts.has(key);
-      for (const m of meshes) m.visible = vis;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Assembly sequence loading
-  // ---------------------------------------------------------------------------
-
-  async function loadAssemblySequence(): Promise<void> {
-    try {
-      const resp = await fetch(`/api/bots/${botName}/assembly-sequence`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-      const ops: AssemblyOpData[] = (data.ops ?? data) as AssemblyOpData[];
-      assemblyOps = ops;
-      if (scrubber && ops.length > 0) {
-        scrubber.setOps(ops);
-      }
-    } catch (err) {
-      console.warn('[dfm] assembly-sequence error:', err);
+    // Show meshes for ops 0..step, hide the rest
+    for (const [opStep, meshes] of stepMeshes.entries()) {
+      const visible = opStep <= step;
+      for (const m of meshes) m.visible = visible;
     }
   }
 
@@ -555,10 +469,7 @@ export async function initDFMViewer(
         scrubber.dispose();
         scrubber = null;
       }
-      // Remove body groups from scene
-      for (const group of Object.values(bodyGroups)) {
-        viewport.scene.remove(group);
-      }
+      viewport.scene.remove(dfmGroup);
     },
   };
 }

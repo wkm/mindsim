@@ -14,6 +14,14 @@ export interface AssemblyOpTarget {
   id?: string;
 }
 
+export interface AssemblyMeshRef {
+  file: string;
+  pos: number[];
+  quat: number[];
+  color?: number[];
+  material?: string;
+}
+
 export interface AssemblyOpData {
   step: number;
   action: string;
@@ -21,6 +29,7 @@ export interface AssemblyOpData {
   target: AssemblyOpTarget;
   description: string;
   tool: string | null;
+  meshes?: AssemblyMeshRef[];
 }
 
 export type StepChangeHandler = (step: number) => void;

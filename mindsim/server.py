@@ -984,7 +984,11 @@ def get_viewer_manifest(bot: str):
 
 @app.get("/api/bots/{bot}/assembly-sequence")
 def get_assembly_sequence(bot: str):
-    """Return the assembly sequence for a bot."""
+    """Return the assembly sequence for a bot, enriched with mesh references.
+
+    Each op carries a ``meshes`` array so the viewer can load STLs directly
+    from the assembly sequence without a separate manifest lookup.
+    """
     try:
         bot_obj, _cad = _load_bot(bot)
     except FileNotFoundError as e:
@@ -996,8 +1000,130 @@ def get_assembly_sequence(bot: str):
     from botcad.assembly.build import build_assembly_sequence
     from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
     from botcad.assembly.tools import TOOL_LIBRARY
+    from botcad.emit.viewer import build_viewer_manifest
 
     seq = build_assembly_sequence(bot_obj)
+    manifest = build_viewer_manifest(bot_obj)
+
+    # Build lookup indices from the manifest for fast mesh resolution
+    _body_by_name = {b["name"]: b for b in manifest["bodies"]}
+    _mounts_by_key = {
+        (m["body"], m["label"]): m for m in (manifest.get("mounts") or [])
+    }
+    # Fastener parts indexed by (body, per-body-index)
+    _fastener_parts: dict[tuple[str, int], dict] = {}
+    _fastener_count: dict[str, int] = {}
+    for p in manifest.get("parts") or []:
+        if p.get("category") == "fastener":
+            body = p["parent_body"]
+            idx = _fastener_count.get(body, 0)
+            _fastener_count[body] = idx + 1
+            _fastener_parts[(body, idx)] = p
+    # Wire parts indexed by route label
+    _wire_parts: dict[str, list[dict]] = {}
+    for p in manifest.get("parts") or []:
+        if p.get("category") == "wire" and p.get("wire_kind") != "stub":
+            label = p["name"]
+            _wire_parts.setdefault(label, []).append(p)
+
+    def _round_vec(v):
+        return [round(x, 6) for x in v]
+
+    def _meshes_for_op(op) -> list[dict]:
+        """Resolve mesh file + pos/quat for an assembly op."""
+        meshes: list[dict] = []
+        target = op.target
+
+        if op.action.value == "insert" and isinstance(target, ComponentRef):
+            if target.mount_label == "__body__":
+                # Body shell placement
+                body = _body_by_name.get(str(target.body))
+                if body:
+                    meshes.append(
+                        {
+                            "file": body["mesh"],
+                            "pos": body["pos"],
+                            "quat": body["quat"],
+                        }
+                    )
+                    if body.get("color"):
+                        meshes[-1]["color"] = body["color"]
+            elif target.mount_label.startswith("servo_"):
+                # Servo insertion — look for servo body in manifest
+                joint_name = target.mount_label[len("servo_") :]
+                servo_body = _body_by_name.get(f"servo_{joint_name}")
+                if servo_body:
+                    meshes.append(
+                        {
+                            "file": servo_body["mesh"],
+                            "pos": servo_body["pos"],
+                            "quat": servo_body["quat"],
+                        }
+                    )
+                    if servo_body.get("color"):
+                        meshes[-1]["color"] = servo_body["color"]
+                # Also include the horn if it exists
+                horn_body = _body_by_name.get(f"horn_{joint_name}")
+                if horn_body:
+                    meshes.append(
+                        {
+                            "file": horn_body["mesh"],
+                            "pos": horn_body["pos"],
+                            "quat": horn_body["quat"],
+                        }
+                    )
+                    if horn_body.get("color"):
+                        meshes[-1]["color"] = horn_body["color"]
+            else:
+                # Mounted component (battery, camera, etc.)
+                mount = _mounts_by_key.get((str(target.body), target.mount_label))
+                if mount:
+                    if mount.get("meshes"):
+                        # Multi-material component
+                        meshes.extend(
+                            {
+                                "file": sub["file"],
+                                "pos": mount["pos"],
+                                "quat": mount["quat"],
+                                "material": sub.get("material"),
+                            }
+                            for sub in mount["meshes"]
+                        )
+                    else:
+                        entry: dict = {
+                            "file": mount["mesh"],
+                            "pos": mount["pos"],
+                            "quat": mount["quat"],
+                        }
+                        if mount.get("color"):
+                            entry["color"] = mount["color"]
+                        meshes.append(entry)
+
+        elif op.action.value == "fasten" and isinstance(target, FastenerRef):
+            part = _fastener_parts.get((str(target.body), target.index))
+            if part and part.get("pos") and part.get("quat"):
+                meshes.append(
+                    {
+                        "file": part["mesh"],
+                        "pos": part["pos"],
+                        "quat": part["quat"],
+                    }
+                )
+
+        elif op.action.value == "route_wire" and isinstance(target, WireRef):
+            wire_parts = _wire_parts.get(target.label, [])
+            for wp in wire_parts:
+                entry = {
+                    "file": wp["mesh"],
+                    "pos": wp.get("pos", [0.0, 0.0, 0.0]),
+                    "quat": wp.get("quat", [1.0, 0.0, 0.0, 0.0]),
+                }
+                if wp.get("color"):
+                    entry["color"] = wp["color"]
+                meshes.append(entry)
+
+        # CONNECT and ARTICULATE ops have no mesh
+        return meshes
 
     def _serialize_target(target):
         if isinstance(target, ComponentRef):
@@ -1013,8 +1139,9 @@ def get_assembly_sequence(bot: str):
         # JointId (str subclass)
         return {"type": "joint", "id": str(target)}
 
-    ops = [
-        {
+    ops = []
+    for op in seq.ops:
+        op_dict = {
             "step": op.step,
             "action": op.action.value,
             "target": _serialize_target(op.target),
@@ -1024,9 +1151,9 @@ def get_assembly_sequence(bot: str):
             "angle": op.angle,
             "prerequisites": list(op.prerequisites),
             "description": op.description,
+            "meshes": _meshes_for_op(op),
         }
-        for op in seq.ops
-    ]
+        ops.append(op_dict)
 
     tool_library = {}
     for kind, spec in TOOL_LIBRARY.items():

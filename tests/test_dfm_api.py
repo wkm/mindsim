@@ -64,6 +64,45 @@ class TestAssemblySequenceEndpoint:
             # solid callable should NOT be serialized
             assert "solid" not in spec
 
+    def test_ops_have_meshes_field(self, seq_data):
+        """Every op should have a meshes array (possibly empty)."""
+        for op in seq_data["ops"]:
+            assert "meshes" in op, f"op step {op['step']} missing meshes"
+            assert isinstance(op["meshes"], list)
+
+    def test_insert_body_ops_have_meshes(self, seq_data):
+        """INSERT ops with __body__ target should carry a body shell mesh."""
+        body_ops = [
+            op
+            for op in seq_data["ops"]
+            if op["action"] == "insert"
+            and op["target"].get("mount_label") == "__body__"
+        ]
+        assert len(body_ops) > 0, "expected at least one body placement op"
+        for op in body_ops:
+            assert len(op["meshes"]) > 0, f"body insert step {op['step']} has no meshes"
+            m = op["meshes"][0]
+            assert "file" in m
+            assert "pos" in m
+            assert "quat" in m
+            assert m["file"].endswith(".stl")
+
+    def test_fasten_ops_have_meshes(self, seq_data):
+        """FASTEN ops should carry fastener hardware meshes."""
+        fasten_ops = [op for op in seq_data["ops"] if op["action"] == "fasten"]
+        if not fasten_ops:
+            pytest.skip("no fasten ops in assembly sequence")
+        # At least some fasten ops should have meshes
+        with_meshes = [op for op in fasten_ops if len(op["meshes"]) > 0]
+        assert len(with_meshes) > 0, "expected some fasten ops to have meshes"
+
+    def test_mesh_ref_has_pos_quat(self, seq_data):
+        """Every mesh ref should have pos (3-vec) and quat (4-vec)."""
+        for op in seq_data["ops"]:
+            for m in op["meshes"]:
+                assert len(m["pos"]) == 3, f"bad pos at step {op['step']}"
+                assert len(m["quat"]) == 4, f"bad quat at step {op['step']}"
+
     def test_404_for_unknown_bot(self):
         resp = client.get("/api/bots/nonexistent_bot_xyz/assembly-sequence")
         assert resp.status_code == 404
