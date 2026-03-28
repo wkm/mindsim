@@ -13,7 +13,7 @@ from textual.widgets import Footer, OptionList, Static
 class DirtyTreeScreen(Screen):
     """Shown before training when the git worktree has uncommitted changes."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("c", "commit", "Commit with Claude", priority=True),
         Binding("s", "start_anyway", "Start Anyway", priority=True),
         Binding("escape", "go_back", "Back", priority=True),

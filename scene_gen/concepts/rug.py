@@ -42,7 +42,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a rug (1 prim: flat box or flat cylinder)."""
     ht = params.thickness / 2
 

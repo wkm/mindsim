@@ -14,12 +14,12 @@ import pytest
 b3d = pytest.importorskip("build123d")
 
 from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend  # noqa: E402
-from botcad.shapescript.program import ShapeScript  # noqa: E402
+from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
 
 # -- Helpers --
 
 
-def _exec(prog: ShapeScript) -> ExecutionResult:
+def _exec(prog: ShapeScriptBuilder) -> ExecutionResult:
     return OcctBackend().execute(prog)
 
 
@@ -28,14 +28,14 @@ def _exec(prog: ShapeScript) -> ExecutionResult:
 
 class TestPrimitiveVolume:
     def test_box_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1.0, 2.0, 3.0)
         prog.query_volume(b)
         result = _exec(prog)
         assert result.queries[0] == pytest.approx(6.0, rel=1e-6)
 
     def test_cylinder_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         c = prog.cylinder(1.0, 2.0)
         prog.query_volume(c)
         result = _exec(prog)
@@ -43,7 +43,7 @@ class TestPrimitiveVolume:
         assert result.queries[0] == pytest.approx(expected, rel=1e-4)
 
     def test_sphere_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         s = prog.sphere(1.0)
         prog.query_volume(s)
         result = _exec(prog)
@@ -54,7 +54,7 @@ class TestPrimitiveVolume:
         """MIN_Z aligned box has its bottom at z=0."""
         from botcad.shapescript.ops import Align3
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1.0, 1.0, 2.0, align=Align3(z="min"))
         prog.query_bbox(b)
         result = _exec(prog)
@@ -66,7 +66,7 @@ class TestPrimitiveVolume:
         """MIN X aligned box has its left face at x=0."""
         from botcad.shapescript.ops import Align3
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(2.0, 1.0, 1.0, align=Align3(x="min"))
         prog.query_bbox(b)
         result = _exec(prog)
@@ -78,7 +78,7 @@ class TestPrimitiveVolume:
         """MAX Y aligned box has its top face at y=0."""
         from botcad.shapescript.ops import Align3
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1.0, 3.0, 1.0, align=Align3(y="max"))
         prog.query_bbox(b)
         result = _exec(prog)
@@ -90,7 +90,7 @@ class TestPrimitiveVolume:
         """MIN Z cylinder has bottom at z=0."""
         from botcad.shapescript.ops import Align3
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         c = prog.cylinder(0.5, 2.0, align=Align3(z="min"))
         prog.query_bbox(c)
         result = _exec(prog)
@@ -104,7 +104,7 @@ class TestPrimitiveVolume:
 
 class TestBooleanInvariants:
     def test_cut_reduces_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)
         result = prog.cut(box, hole)
@@ -114,7 +114,7 @@ class TestBooleanInvariants:
         assert r.queries[1] < r.queries[0]
 
     def test_cut_exact_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)  # through-hole
         result = prog.cut(box, hole)
@@ -124,7 +124,7 @@ class TestBooleanInvariants:
         assert r.queries[0] == pytest.approx(expected, rel=0.01)
 
     def test_fuse_nonoverlapping_is_sum(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.box(1, 1, 1)
         b = prog.locate(b, pos=(5.0, 0, 0))
@@ -134,7 +134,7 @@ class TestBooleanInvariants:
         assert r.queries[0] == pytest.approx(2.0, rel=0.001)
 
     def test_fuse_overlapping_less_than_sum(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.box(1, 1, 1)
         b = prog.locate(b, pos=(0.5, 0, 0))  # 50% overlap
@@ -147,7 +147,7 @@ class TestBooleanInvariants:
 
     def test_cut_nonoverlapping_preserves_target(self):
         """Cut with non-overlapping tool should preserve target volume."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1)
         tool = prog.box(0.5, 0.5, 0.5)
         tool = prog.locate(tool, pos=(10, 10, 10))  # far away
@@ -163,7 +163,7 @@ class TestBooleanInvariants:
 
 class TestTransforms:
     def test_locate_preserves_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.locate(a, pos=(10, 20, 30))
         prog.query_volume(a)
@@ -172,30 +172,30 @@ class TestTransforms:
         assert r.queries[0] == pytest.approx(r.queries[1], rel=1e-9)
 
     def test_locate_moves_centroid(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.locate(a, pos=(10, 0, 0))
         prog.query_centroid(b)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, _cy, _cz = r.queries[0]
         assert cx == pytest.approx(10.0, abs=0.01)
 
     def test_locate_rotation(self):
         """90-degree rotation around Z swaps X and Y centroids."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(2, 1, 1)
         a = prog.locate(a, pos=(5, 0, 0))
         b = prog.locate(a, euler_deg=(0, 0, 90))
         prog.query_centroid(b)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, cy, _cz = r.queries[0]
         # After 90 deg Z rotation: x=5 -> y=5, y=0 -> x=0
         assert abs(cx) < 0.1
         assert cy == pytest.approx(5.0, abs=0.1)
 
     def test_locate_preserves_bbox_size(self):
         """Translation should not change bounding box dimensions."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(2, 3, 4)
         b = prog.locate(a, pos=(100, 200, 300))
         prog.query_bbox(a)
@@ -214,7 +214,7 @@ class TestTransforms:
 
 class TestQueries:
     def test_query_bbox(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(2, 4, 6)
         prog.query_bbox(b)
         r = _exec(prog)
@@ -225,14 +225,14 @@ class TestQueries:
         assert mx[1] == pytest.approx(2, abs=0.01)
 
     def test_query_area(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         prog.query_area(b)
         r = _exec(prog)
         assert r.queries[0] == pytest.approx(6.0, rel=1e-6)
 
     def test_query_inertia_returns_3x3(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         prog.query_inertia(b)
         r = _exec(prog)
@@ -241,7 +241,7 @@ class TestQueries:
         assert len(mat[0]) == 3
 
     def test_multiple_queries(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(2, 3, 4)
         prog.query_volume(b)
         prog.query_area(b)
@@ -252,7 +252,7 @@ class TestQueries:
 
     def test_query_centroid_centered_box(self):
         """Centered box should have centroid at origin."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(2, 4, 6)
         prog.query_centroid(b)
         r = _exec(prog)
@@ -263,7 +263,7 @@ class TestQueries:
 
     def test_sphere_area(self):
         """Sphere surface area = 4*pi*r^2."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         s = prog.sphere(1.0)
         prog.query_area(s)
         r = _exec(prog)
@@ -277,7 +277,7 @@ class TestQueries:
 class TestFilletWithTags:
     def test_fillet_reduces_volume_slightly(self):
         """Fillet on a box removes corner material."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1, tag="edges")
         f = prog.fillet(b, tags=("edges",), radius=0.05)
         prog.query_volume(b)
@@ -288,7 +288,7 @@ class TestFilletWithTags:
 
     def test_fillet_on_cut_edges(self):
         """Tags from a cylinder propagate through cut, fillet resolves them."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.2, 2, tag="hole")
         result = prog.cut(box, hole)
@@ -308,7 +308,7 @@ class TestPrebuiltOp:
 
         from botcad.shapescript.ops import PrebuiltOp
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prebuilt_box = Box(1, 1, 1)
         ref = prog._next_ref("pre")
         prog.ops.append(PrebuiltOp(ref=ref, solid_hash="abc123", tag="bracket"))
@@ -322,7 +322,7 @@ class TestPrebuiltOp:
         """PrebuiltOp without associated solid raises ValueError."""
         from botcad.shapescript.ops import PrebuiltOp, ShapeRef
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = ShapeRef("missing_0")
         prog.ops.append(PrebuiltOp(ref=ref, solid_hash="abc123"))
 
@@ -336,7 +336,7 @@ class TestPrebuiltOp:
 class TestTagPropagation:
     def test_tags_propagate_through_cut(self):
         """Tags from tool propagate through cut op."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1, tag="shell")
         hole = prog.cylinder(0.1, 2, tag="pocket")
         result = prog.cut(box, hole)
@@ -347,7 +347,7 @@ class TestTagPropagation:
 
     def test_tags_propagate_through_fuse(self):
         """Tags from both operands propagate through fuse."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1, tag="base")
         b = prog.box(0.5, 0.5, 0.5, tag="mount")
         b = prog.locate(b, pos=(2, 0, 0))
@@ -358,7 +358,7 @@ class TestTagPropagation:
 
     def test_tags_propagate_through_locate(self):
         """Tags survive a locate transform."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.cylinder(0.5, 1.0, tag="shaft")
         b = prog.locate(a, pos=(5, 5, 5))
         r = _exec(prog)
@@ -371,7 +371,7 @@ class TestTagPropagation:
 class TestShapeTable:
     def test_all_shape_producing_ops_in_table(self):
         """Every shape-producing op's ref should be in result.shapes."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.cylinder(0.5, 2)
         c = prog.fuse(a, b)
@@ -382,7 +382,7 @@ class TestShapeTable:
 
     def test_execution_result_has_tags(self):
         """ExecutionResult includes a populated TagRegistry."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.box(1, 1, 1, tag="shell")
         r = _exec(prog)
         assert isinstance(r.tags, type(r.tags))
@@ -395,11 +395,11 @@ class TestShapeTable:
 class TestCallOp:
     def test_call_produces_solid(self):
         """Sub-program box -> query volume = 1.0."""
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         b = sub.box(1.0, 1.0, 1.0)
         sub.output_ref = b
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["unit_box"] = sub
         ref = prog.call("unit_box")
         prog.query_volume(ref)
@@ -408,11 +408,11 @@ class TestCallOp:
 
     def test_call_then_cut(self):
         """Call result usable in subsequent boolean ops."""
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         b = sub.box(2.0, 2.0, 2.0)
         sub.output_ref = b
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["big_box"] = sub
         base = prog.call("big_box")
         hole = prog.cylinder(0.5, 10.0)
@@ -424,26 +424,26 @@ class TestCallOp:
 
     def test_call_with_locate(self):
         """Call result can be moved."""
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         b = sub.box(1.0, 1.0, 1.0)
         sub.output_ref = b
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["unit_box"] = sub
         ref = prog.call("unit_box")
         moved = prog.locate(ref, pos=(10.0, 0, 0))
         prog.query_centroid(moved)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, _cy, _cz = r.queries[0]
         assert cx == pytest.approx(10.0, abs=0.01)
 
     def test_same_sub_program_called_twice(self):
         """Two calls produce independent shapes, fused volume = 2.0."""
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         b = sub.box(1.0, 1.0, 1.0)
         sub.output_ref = b
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["unit_box"] = sub
         a = prog.call("unit_box")
         b = prog.call("unit_box")
@@ -455,18 +455,18 @@ class TestCallOp:
 
     def test_call_missing_sub_program_raises(self):
         """CallOp with missing sub-program raises ValueError."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.call("nonexistent")
         with pytest.raises(ValueError, match="sub-program 'nonexistent' not found"):
             _exec(prog)
 
     def test_call_with_tag(self):
         """CallOp tag is declared in the tag registry."""
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         b = sub.box(1.0, 1.0, 1.0)
         sub.output_ref = b
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["unit_box"] = sub
         ref = prog.call("unit_box", tag="bracket")
         r = _exec(prog)
@@ -479,7 +479,7 @@ class TestCallOp:
 class TestFilletOps:
     def test_fillet_all_reduces_volume(self):
         """FilletAllEdgesOp removes corner material from a box."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         f = prog.fillet_all(b, 0.05)
         prog.query_volume(b)
@@ -489,7 +489,7 @@ class TestFilletOps:
 
     def test_fillet_by_axis_z(self):
         """FilletByAxisOp on Z-aligned edges produces valid geometry."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         f = prog.fillet_by_axis(b, "z", 0.05)
         prog.query_volume(f)
@@ -498,7 +498,7 @@ class TestFilletOps:
 
     def test_fillet_by_axis_removes_less_than_fillet_all(self):
         """Axis-filtered fillet removes less material than fillet-all."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         fa = prog.fillet_all(b, 0.05)
         fz = prog.fillet_by_axis(b, "z", 0.05)

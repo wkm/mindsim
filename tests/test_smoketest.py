@@ -55,7 +55,7 @@ class TestEnvironment:
         obs = env.reset()
         assert obs.shape == (64, 64, 3)
         assert obs.dtype == np.float32
-        assert 0.0 <= obs.min() and obs.max() <= 1.0
+        assert obs.min() >= 0.0 and obs.max() <= 1.0
         env.close()
 
     def test_step_returns_five_tuple(self):
@@ -171,11 +171,10 @@ class TestTrainingStep:
         hierarchy = _make_hierarchy(cfg)
 
         # Collect a small batch
-        batch = []
-        for _ in range(2):
-            batch.append(
-                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
-            )
+        batch = [
+            collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+            for _ in range(2)
+        ]
 
         loss, grad_norm, policy_std, entropy = train_step_batched(
             policy, optimizer, batch
@@ -292,7 +291,7 @@ class TestParallelCollection:
         batch = collector.collect_batch(
             policy, batch_size=2, curriculum_stage=1, stage_progress=0.0
         )
-        loss, grad_norm, policy_std, entropy = train_step_batched(
+        loss, _grad_norm, _policy_std, _entropy = train_step_batched(
             policy, optimizer, batch
         )
         assert isinstance(loss, float)
@@ -323,16 +322,13 @@ class TestEndToEnd:
             env.set_curriculum_stage(1, min(1.0, batch_idx * 0.5))
 
             # Collect batch
-            batch = []
-            for _ in range(cfg.training.batch_size):
-                batch.append(
-                    collect_episode(
-                        env, policy, deterministic=False, hierarchy=hierarchy
-                    )
-                )
+            batch = [
+                collect_episode(env, policy, deterministic=False, hierarchy=hierarchy)
+                for _ in range(cfg.training.batch_size)
+            ]
 
             # Train
-            loss, grad_norm, policy_std, entropy = train_step_batched(
+            loss, _grad_norm, _policy_std, _entropy = train_step_batched(
                 policy, optimizer, batch
             )
             assert not np.isnan(loss)
@@ -374,7 +370,7 @@ class TestBipedEnvironment:
         env = _make_env(cfg)
         env.reset()
         action = [0.0] * 8
-        obs, reward, done, truncated, info = env.step(action)
+        obs, reward, _done, _truncated, info = env.step(action)
         assert obs.shape == (64, 64, 3)
         assert isinstance(reward, float)
         assert "distance" in info
@@ -551,7 +547,7 @@ class TestPPO:
             grad_norm,
             policy_std,
             clip_fraction,
-            approx_kl,
+            _approx_kl,
             explained_variance,
             mean_value,
             mean_return,
@@ -617,14 +613,14 @@ class TestPPO:
             (
                 policy_loss,
                 value_loss,
-                entropy,
-                grad_norm,
-                policy_std,
-                clip_frac,
-                approx_kl,
-                ev,
-                mv,
-                mr,
+                _entropy,
+                _grad_norm,
+                _policy_std,
+                _clip_frac,
+                _approx_kl,
+                _ev,
+                _mv,
+                _mr,
             ) = train_step_ppo(
                 policy, optimizer, batch, ppo_epochs=cfg.training.ppo_epochs
             )
@@ -708,7 +704,7 @@ class TestCheckpoint:
 
         # Verify state matches
         for (n1, p1), (n2, p2) in zip(
-            policy.named_parameters(), policy2.named_parameters()
+            policy.named_parameters(), policy2.named_parameters(), strict=True
         ):
             assert n1 == n2
             assert torch.equal(p1, p2), f"Parameter {n1} mismatch after load"

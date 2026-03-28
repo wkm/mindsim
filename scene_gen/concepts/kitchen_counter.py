@@ -54,7 +54,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a kitchen counter (cabinet + countertop + details, 2-5 prims)."""
     prims: list[Prim] = []
 

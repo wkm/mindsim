@@ -18,7 +18,7 @@ from training.run_manager import RunStatus, bot_display_name
 class RunActionScreen(Screen):
     """Actions for a selected run: play, resume, view, W&B, back."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("p", "play_run", "Play", priority=True),
         Binding("r", "resume_run", "Resume", priority=True),
         Binding("v", "view_run", "View", priority=True),

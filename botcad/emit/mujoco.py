@@ -28,7 +28,7 @@ from botcad.component import BusType
 from botcad.component import Vec3 as Vec3Type
 from botcad.fasteners import fastener_key as _hw_key
 from botcad.fasteners import fastener_stl_stem as _hw_name
-from botcad.geometry import rotate_vec, rotation_between
+from botcad.geometry import Pose, Quat, fastener_pose, rotate_vec
 from botcad.skeleton import BaseType, BodyKind
 
 if TYPE_CHECKING:
@@ -536,25 +536,31 @@ def _emit_mounted_components(
         comp_key = f"comp_{body.name}_{mount.label}"
         mesh_name = f"{comp_key}_mesh"
 
-        # Read position from purchased Body, fall back to mount.resolved_pos
+        # Position from purchased Body, fall back to mount.resolved_pos
         cb = comp_bodies.get(comp_key)
         if cb is not None:
             pos = _relative_pos(cb.world_pos, body.world_pos)
         else:
             pos = mount.resolved_pos
 
-        SubElement(
-            parent_el,
-            "geom",
-            name=comp_key,
-            type="mesh",
-            mesh=mesh_name,
-            pos=_fmt_vec3(pos),
-            rgba=f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
-            contype="0",
-            conaffinity="0",
-            group="1",
-        )
+        # Component meshes are in component-local frame; apply placement
+        # rotation so the mesh is oriented correctly in the body.
+        placements = bot.packing_result.placements if bot.packing_result else {}
+        geom_attribs: dict[str, str] = {
+            "name": comp_key,
+            "type": "mesh",
+            "mesh": mesh_name,
+            "pos": _fmt_vec3(pos),
+            "rgba": f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "1",
+        }
+        if mount in placements:
+            q = placements[mount].pose.quat
+            if q != (1.0, 0.0, 0.0, 0.0):
+                geom_attribs["quat"] = _fmt_quat(q)
+        SubElement(parent_el, "geom", **geom_attribs)
 
 
 def _emit_mounting_hardware(
@@ -573,28 +579,27 @@ def _emit_mounting_hardware(
 
     _SCREW_RGBA = COLOR_METAL_FASTENER.with_alpha(0.9).rgba_str
 
-    def _screw_attribs(name: str, mesh: str, pos: str, axis_quat):
+    def _screw_attribs(name: str, mesh: str, pos: str, quat: Quat):
         """Common geom attributes for a fastener, including orientation."""
-        attribs = dict(
-            name=name,
-            type="mesh",
-            mesh=mesh,
-            pos=pos,
-            rgba=_SCREW_RGBA,
-            contype="0",
-            conaffinity="0",
-            group="1",
-        )
-        if axis_quat is not None:
-            attribs["quat"] = _fmt_quat(axis_quat)
-        return attribs
+        return {
+            "name": name,
+            "type": "mesh",
+            "mesh": mesh,
+            "pos": pos,
+            "quat": _fmt_quat(quat),
+            "rgba": _SCREW_RGBA,
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "1",
+        }
 
     # Servo mounting ears (bracket screw holes on this body's joints)
     for joint in body.joints:
         center, quat = joint_placements[joint.name]
+        servo_pose = Pose(center, quat)
         for ear in joint.servo.mounting_ears:
+            fp = fastener_pose(servo_pose, ear)
             world_pos = _add_vec3(center, rotate_vec(quat, ear.pos))
-            world_axis = rotate_vec(quat, ear.axis)
             SubElement(
                 body_el,
                 "geom",
@@ -602,14 +607,14 @@ def _emit_mounting_hardware(
                     f"screw_{joint.name}_{ear.label}",
                     f"{_hw_name(ear)}_mesh",
                     _fmt_vec3(world_pos),
-                    _z_to_axis_quat(world_axis),
+                    fp.quat,
                 ),
             )
 
         # Horn mounting points (output face screw holes)
         for mp in joint.servo.horn_mounting_points:
+            fp = fastener_pose(servo_pose, mp)
             world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
-            world_axis = rotate_vec(quat, mp.axis)
             SubElement(
                 body_el,
                 "geom",
@@ -617,14 +622,14 @@ def _emit_mounting_hardware(
                     f"horn_{joint.name}_{mp.label}",
                     f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
-                    _z_to_axis_quat(world_axis),
+                    fp.quat,
                 ),
             )
 
         # Rear horn mounting points (blind side screw holes)
         for mp in joint.servo.rear_horn_mounting_points:
+            fp = fastener_pose(servo_pose, mp)
             world_pos = _add_vec3(center, rotate_vec(quat, mp.pos))
-            world_axis = rotate_vec(quat, mp.axis)
             SubElement(
                 body_el,
                 "geom",
@@ -632,7 +637,7 @@ def _emit_mounting_hardware(
                     f"rear_{joint.name}_{mp.label}",
                     f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(world_pos),
-                    _z_to_axis_quat(world_axis),
+                    fp.quat,
                 ),
             )
 
@@ -658,14 +663,11 @@ def _emit_mounting_hardware(
         else:
             base_pos = mount.resolved_pos
 
+        mount_pose = bot.packing_result.placements[mount].pose
         for mp in mount.component.mounting_points:
+            fp = fastener_pose(mount_pose, mp)
             mp_pos = body.to_body_frame(mount.rotate_point(mp.pos))
-            mp_axis = body.to_body_frame(mount.rotate_point(mp.axis))
             pos = _add_vec3(base_pos, mp_pos)
-            # MountPoint.axis = insertion direction (where shank goes).
-            # Screw STL head is at +Z, so we align +Z with the head
-            # direction = opposite of insertion direction.
-            head_axis = (-mp_axis[0], -mp_axis[1], -mp_axis[2])
             SubElement(
                 body_el,
                 "geom",
@@ -673,7 +675,7 @@ def _emit_mounting_hardware(
                     f"mount_{body.name}_{mount.label}_{mp.label}",
                     f"{_hw_name(mp)}_mesh",
                     _fmt_vec3(pos),
-                    _z_to_axis_quat(head_axis),
+                    fp.quat,
                 ),
             )
 
@@ -842,19 +844,6 @@ def _body_color_rgb(body: Body) -> tuple[float, float, float]:
     """Read body color from material. Fallback to shape-based default."""
     r, g, b, _a = body.material.color
     return (r, g, b)
-
-
-def _z_to_axis_quat(
-    axis: tuple[float, float, float],
-) -> tuple[float, float, float, float] | None:
-    """Quaternion rotating Z to the given axis. Returns None if already Z-aligned."""
-    ax, ay, az = axis
-    if abs(az) > 0.999:
-        if az < 0:
-            return (0.0, 1.0, 0.0, 0.0)  # 180° around X
-        return None  # identity, no rotation needed
-    q = rotation_between((0.0, 0.0, 1.0), axis)
-    return q
 
 
 def _fmt_quat(q: tuple[float, float, float, float]) -> str:

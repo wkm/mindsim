@@ -1,4 +1,4 @@
-"""Tests for ShapeScript operation dataclasses, ShapeScript, and TagRegistry."""
+"""Tests for ShapeScript operation dataclasses, ShapeScriptBuilder, and TagRegistry."""
 
 from __future__ import annotations
 
@@ -191,8 +191,8 @@ class TestAlign3:
     def test_convenience_constants(self):
         from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
 
-        assert ALIGN_CENTER == Align3()
-        assert ALIGN_MIN_Z == Align3(z="min")
+        assert Align3() == ALIGN_CENTER
+        assert Align3(z="min") == ALIGN_MIN_Z
 
 
 class TestCallOp:
@@ -220,23 +220,23 @@ class TestCallOp:
 
 # ── Task 2: ShapeScript tests ──
 
-from botcad.shapescript.program import ShapeScript  # noqa: E402
+from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
 
 
 class TestShapeScript:
     def test_box_returns_shape_ref(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = prog.box(0.06, 0.04, 0.02)
         assert isinstance(ref, ShapeRef)
 
     def test_ops_are_recorded(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.box(1, 1, 1)
         assert len(prog.ops) == 1
         assert isinstance(prog.ops[0], BoxOp)
 
     def test_cut_records_both_refs(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.cylinder(0.1, 2)
         c = prog.cut(a, b)
@@ -248,12 +248,12 @@ class TestShapeScript:
         assert cut_op.ref == c
 
     def test_content_hash_deterministic(self):
-        p1 = ShapeScript()
+        p1 = ShapeScriptBuilder()
         a = p1.box(1, 1, 1)
         b = p1.cylinder(0.1, 2)
         p1.cut(a, b)
 
-        p2 = ShapeScript()
+        p2 = ShapeScriptBuilder()
         a = p2.box(1, 1, 1)
         b = p2.cylinder(0.1, 2)
         p2.cut(a, b)
@@ -261,67 +261,67 @@ class TestShapeScript:
         assert p1.content_hash() == p2.content_hash()
 
     def test_content_hash_changes_with_params(self):
-        p1 = ShapeScript()
+        p1 = ShapeScriptBuilder()
         p1.box(1, 1, 1)
 
-        p2 = ShapeScript()
+        p2 = ShapeScriptBuilder()
         p2.box(2, 1, 1)
 
         assert p1.content_hash() != p2.content_hash()
 
     def test_locate_with_defaults(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         _b = prog.locate(a, pos=(0.01, 0, 0))
         assert isinstance(prog.ops[1], LocateOp)
         assert prog.ops[1].euler_deg == (0.0, 0.0, 0.0)
 
     def test_fillet_with_tags(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1, tag="edges")
         _b = prog.fillet(a, tags=("edges",), radius=0.05)
         assert isinstance(prog.ops[1], FilletOp)
         assert prog.ops[1].tags == ("edges",)
 
     def test_query_volume(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         prog.query_volume(a)
         assert len(prog.ops) == 2
         assert isinstance(prog.ops[1], QueryVolumeOp)
 
     def test_to_json_roundtrip(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1, tag="shell")
         b = prog.cylinder(0.1, 2, tag="pocket")
         prog.cut(a, b)
         prog.query_volume(prog.ops[2].ref)
 
         json_str = prog.to_json()
-        prog2 = ShapeScript.from_json(json_str)
+        prog2 = ShapeScriptBuilder.from_json(json_str)
         assert prog.content_hash() == prog2.content_hash()
         assert len(prog2.ops) == len(prog.ops)
 
     def test_output_ref_field(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         assert prog.output_ref is None
         ref = prog.box(1, 1, 1)
         prog.output_ref = ref
         assert prog.output_ref == ref
 
     def test_prebuilt_solids_field(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         assert prog.prebuilt_solids == {}
         prog.prebuilt_solids["pre_0"] = object()
         assert "pre_0" in prog.prebuilt_solids
 
     def test_content_hash_includes_prebuilt_hashes(self):
         """Programs with different prebuilt solid hashes produce different content hashes."""
-        p1 = ShapeScript()
+        p1 = ShapeScriptBuilder()
         p1.ops.append(PrebuiltOp(ref=ShapeRef("pre_0"), solid_hash="hash_a"))
         p1._counter = 1
 
-        p2 = ShapeScript()
+        p2 = ShapeScriptBuilder()
         p2.ops.append(PrebuiltOp(ref=ShapeRef("pre_0"), solid_hash="hash_b"))
         p2._counter = 1
 
@@ -331,8 +331,8 @@ class TestShapeScript:
         """call() builds a CallOp correctly."""
         from botcad.shapescript.ops import CallOp
 
-        prog = ShapeScript()
-        sub = ShapeScript()
+        prog = ShapeScriptBuilder()
+        sub = ShapeScriptBuilder()
         sub_box = sub.box(1, 1, 1)
         sub.output_ref = sub_box
         prog.sub_programs["bracket"] = sub
@@ -345,16 +345,16 @@ class TestShapeScript:
 
     def test_content_hash_includes_sub_programs(self):
         """Different sub-programs produce different content hashes."""
-        p1 = ShapeScript()
+        p1 = ShapeScriptBuilder()
         p1.box(1, 1, 1)
-        sub1 = ShapeScript()
+        sub1 = ShapeScriptBuilder()
         sub1.box(1, 1, 1)
         sub1.output_ref = sub1.ops[0].ref
         p1.sub_programs["sub"] = sub1
 
-        p2 = ShapeScript()
+        p2 = ShapeScriptBuilder()
         p2.box(1, 1, 1)
-        sub2 = ShapeScript()
+        sub2 = ShapeScriptBuilder()
         sub2.box(2, 2, 2)
         sub2.output_ref = sub2.ops[0].ref
         p2.sub_programs["sub"] = sub2
@@ -363,16 +363,16 @@ class TestShapeScript:
 
     def test_content_hash_same_with_same_sub_programs(self):
         """Identical sub-programs produce identical content hashes."""
-        p1 = ShapeScript()
+        p1 = ShapeScriptBuilder()
         p1.box(1, 1, 1)
-        sub1 = ShapeScript()
+        sub1 = ShapeScriptBuilder()
         sub1.box(1, 1, 1)
         sub1.output_ref = sub1.ops[0].ref
         p1.sub_programs["sub"] = sub1
 
-        p2 = ShapeScript()
+        p2 = ShapeScriptBuilder()
         p2.box(1, 1, 1)
-        sub2 = ShapeScript()
+        sub2 = ShapeScriptBuilder()
         sub2.box(1, 1, 1)
         sub2.output_ref = sub2.ops[0].ref
         p2.sub_programs["sub"] = sub2

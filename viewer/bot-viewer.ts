@@ -674,7 +674,11 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     simModeTabs.innerHTML = '';
     const simModeNames = ['explore', 'stress', 'joint', 'assembly', 'ik'];
     const simModeLabels: Record<string, string> = {
-      explore: 'Explore', stress: 'Stress', joint: 'Joints', assembly: 'Assembly', ik: 'IK',
+      explore: 'Explore',
+      stress: 'Stress',
+      joint: 'Joints',
+      assembly: 'Assembly',
+      ik: 'IK',
     };
     for (const name of simModeNames) {
       const btn = document.createElement('button');

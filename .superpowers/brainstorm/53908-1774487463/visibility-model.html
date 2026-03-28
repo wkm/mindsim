@@ -1,0 +1,149 @@
+<h2>Component Tree Visibility — Interaction Model</h2>
+<p class="subtitle">How should visibility toggles work in the Design Viewer?</p>
+
+<div class="section">
+  <h3>Fusion 360 Style: Single Toggle per Node</h3>
+  <div class="mockup">
+    <div class="mockup-header">wheeler_base — Design Viewer</div>
+    <div class="mockup-body" style="padding: 0; font-family: -apple-system, sans-serif; font-size: 13px;">
+
+      <div style="background: #0d1117; padding: 12px 16px; border-bottom: 1px solid #21262d;">
+        <span style="color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Component Tree</span>
+      </div>
+
+      <div style="padding: 8px 0;">
+        <!-- Robot root -->
+        <div style="padding: 4px 12px; display: flex; align-items: center; gap: 8px;">
+          <span style="color: #58a6ff; font-size: 11px;">▾</span>
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9; font-weight: 600;">wheeler_base</span>
+        </div>
+
+        <!-- base body -->
+        <div style="padding: 4px 12px 4px 32px; display: flex; align-items: center; gap: 8px;">
+          <span style="color: #58a6ff; font-size: 11px;">▾</span>
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">🔲 base</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Body</span>
+        </div>
+
+        <!-- Pi -->
+        <div style="padding: 4px 12px 4px 56px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">⬡ RaspberryPi Zero 2W</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Component</span>
+        </div>
+
+        <!-- Camera -->
+        <div style="padding: 4px 12px 4px 56px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">⬡ OV5647 Camera</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Component</span>
+        </div>
+
+        <!-- Battery - hidden -->
+        <div style="padding: 4px 12px 4px 56px; display: flex; align-items: center; gap: 8px; opacity: 0.4;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: transparent; display: inline-block; border: 2px solid #484f58;"></span>
+          <span style="color: #484f58;">⬡ Battery</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Component</span>
+        </div>
+
+        <!-- Servo + children -->
+        <div style="padding: 4px 12px 4px 56px; display: flex; align-items: center; gap: 8px;">
+          <span style="color: #58a6ff; font-size: 11px;">▾</span>
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">⬡ STS3215 @ left_wheel</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Component</span>
+        </div>
+
+        <div style="padding: 4px 12px 4px 80px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #8b949e;">◇ Bracket</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Layer</span>
+        </div>
+
+        <div style="padding: 4px 12px 4px 80px; display: flex; align-items: center; gap: 8px; opacity: 0.4;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: transparent; display: inline-block; border: 2px solid #484f58;"></span>
+          <span style="color: #484f58;">◇ Clearance Envelope</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Layer</span>
+        </div>
+
+        <div style="padding: 4px 12px 4px 80px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #8b949e;">◇ 6× M3 SHC</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Fasteners</span>
+        </div>
+
+        <!-- Joint -->
+        <div style="padding: 4px 12px 4px 56px; display: flex; align-items: center; gap: 8px;">
+          <span style="color: #58a6ff; font-size: 11px;">▾</span>
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">⚙ left_wheel</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Joint</span>
+        </div>
+
+        <!-- Child body -->
+        <div style="padding: 4px 12px 4px 80px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">🔲 left_rim</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Body</span>
+        </div>
+
+        <div style="padding: 4px 12px 4px 104px; display: flex; align-items: center; gap: 8px;">
+          <span style="width: 14px; height: 14px; border-radius: 50%; background: #58a6ff; display: inline-block; border: 2px solid #58a6ff;"></span>
+          <span style="color: #c9d1d9;">⬡ Pololu Wheel</span>
+          <span style="color: #484f58; font-size: 11px; margin-left: auto;">Component</span>
+        </div>
+      </div>
+
+      <div style="background: #0d1117; padding: 12px 16px; border-top: 1px solid #21262d; color: #8b949e; font-size: 11px;">
+        <div style="margin-bottom: 8px;"><strong style="color: #c9d1d9;">Legend:</strong></div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+          <span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #58a6ff; vertical-align: middle;"></span> = visible</span>
+          <span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #484f58; vertical-align: middle;"></span> = hidden</span>
+          <span>Click circle to toggle</span>
+          <span>Cascades to children</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Interaction Rules</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+    <div style="background: #161b22; border-radius: 8px; padding: 16px; border: 1px solid #21262d;">
+      <h4 style="color: #58a6ff; margin: 0 0 8px 0; font-size: 13px;">Click ● on parent</h4>
+      <p style="color: #8b949e; margin: 0; font-size: 12px;">Hides parent + all children. Unhiding parent restores children to their previous state (independently hidden children stay hidden).</p>
+    </div>
+    <div style="background: #161b22; border-radius: 8px; padding: 16px; border: 1px solid #21262d;">
+      <h4 style="color: #58a6ff; margin: 0 0 8px 0; font-size: 13px;">Click ● on leaf</h4>
+      <p style="color: #8b949e; margin: 0; font-size: 12px;">Toggles just that mesh. Parent stays visible. In the 3D view, only that specific mesh disappears.</p>
+    </div>
+    <div style="background: #161b22; border-radius: 8px; padding: 16px; border: 1px solid #21262d;">
+      <h4 style="color: #58a6ff; margin: 0 0 8px 0; font-size: 13px;">Double-click node label</h4>
+      <p style="color: #8b949e; margin: 0; font-size: 12px;">Focus camera on this node (existing behavior, preserved).</p>
+    </div>
+    <div style="background: #161b22; border-radius: 8px; padding: 16px; border: 1px solid #21262d;">
+      <h4 style="color: #58a6ff; margin: 0 0 8px 0; font-size: 13px;">Design layers</h4>
+      <p style="color: #8b949e; margin: 0; font-size: 12px;">Bracket, coupler, clearance, insertion channel — appear as children of their component. Hidden by default, toggle on to inspect design.</p>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="single-toggle" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Single ● / ○ toggle (Fusion 360 style)</h3>
+      <p>One circle per node. Click to toggle. No separate isolate icon. Simple and direct.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="toggle-plus-solo" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>● / ○ toggle + right-click "Solo"</h3>
+      <p>Same toggle, but right-click (or alt-click) a node to "solo" it — hide everything else. Click again to un-solo.</p>
+    </div>
+  </div>
+</div>

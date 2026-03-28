@@ -13,6 +13,18 @@ from enum import StrEnum
 from botcad.materials import Material
 
 Vec3 = tuple[float, float, float]
+Quat = tuple[float, float, float, float]  # (w, x, y, z)
+
+
+@dataclass(frozen=True, slots=True)
+class Pose:
+    """Position + orientation in 3D space."""
+
+    pos: Vec3 = (0.0, 0.0, 0.0)
+    quat: Quat = (1.0, 0.0, 0.0, 0.0)  # identity quaternion (w, x, y, z)
+
+
+POSE_IDENTITY = Pose()
 
 
 class ComponentKind(StrEnum):
@@ -64,6 +76,8 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
         camera_script,
         compute_multi_material,
         compute_script,
+        generic_multi_material,
+        generic_pcb_script,
         wheel_component_script,
     )
     from botcad.shapescript.emit_servo import servo_script
@@ -122,7 +136,8 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             category="component",
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,
-            script_emitter=None,
+            script_emitter=generic_pcb_script,
+            multi_material_emitter=generic_multi_material,
         ),
     }
 
@@ -166,10 +181,14 @@ def MountingEar(
     label: str,
     pos: Vec3,
     hole_diameter: float,
-    axis: Vec3 = (0.0, 0.0, -1.0),
+    axis: Vec3 = (0.0, 0.0, 1.0),
     fastener_type: str = "M3",
 ) -> MountPoint:
-    """Factory for servo mounting ear points (returns MountPoint)."""
+    """Factory for servo mounting ear points (returns MountPoint).
+
+    axis = insertion direction (where the shank goes into material).
+    Default +Z means screws insert upward through the ear into the bracket.
+    """
     return MountPoint(
         label=label,
         pos=pos,

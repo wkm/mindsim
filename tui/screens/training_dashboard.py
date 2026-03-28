@@ -60,7 +60,7 @@ def _color_val(formatted: str, value: float | None, ranges: dict) -> str:
 class TrainingDashboard(Screen):
     """Fullscreen training dashboard with metrics and controls."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("space", "toggle_pause", "Pause/Resume"),
         Binding("n", "step_batch", "Step 1 Batch"),
         Binding("c", "checkpoint", "Checkpoint"),
@@ -376,16 +376,11 @@ class TrainingDashboard(Screen):
                         id="m-timing-throughput",
                         classes="metric-line",
                     )
-            with Vertical(id="log-panel"):
-                with TabbedContent(id="log-tabs"):
-                    with TabPane("Log", id="tab-log"):
-                        yield RichLog(
-                            id="log-area", wrap=True, max_lines=1000, markup=True
-                        )
-                    with TabPane("AI", id="tab-ai"):
-                        yield RichLog(
-                            id="ai-area", wrap=True, max_lines=200, markup=True
-                        )
+            with Vertical(id="log-panel"), TabbedContent(id="log-tabs"):
+                with TabPane("Log", id="tab-log"):
+                    yield RichLog(id="log-area", wrap=True, max_lines=1000, markup=True)
+                with TabPane("AI", id="tab-ai"):
+                    yield RichLog(id="ai-area", wrap=True, max_lines=200, markup=True)
         yield Footer()
 
     def on_mount(self) -> None:

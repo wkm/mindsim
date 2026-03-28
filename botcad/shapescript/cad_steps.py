@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from botcad.emit.cad import CadStep
     from botcad.shapescript.backend_occt import ExecutionResult
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
 
 def shapescript_to_cad_steps(
-    prog: ShapeScript, result: ExecutionResult
+    prog: ShapeScriptBuilder, result: ExecutionResult
 ) -> list[CadStep]:
     """Convert a ShapeScript program + execution result into CadStep objects.
 
@@ -26,7 +26,7 @@ def shapescript_to_cad_steps(
     - tool: for CutOp/FuseOp, the tool solid
     """
     from botcad.emit.cad import CadStep
-    from botcad.shapescript.ops import (  # noqa: F401
+    from botcad.shapescript.ops import (
         BoxOp,
         CallOp,
         CopyOp,
@@ -183,7 +183,7 @@ def format_op(op) -> str:
         cut_3 = Cut(box_0, loc_2)
         loc_5 = Locate(cyl_4, pos=(0.01, 0, 0))
     """
-    from botcad.shapescript.ops import (  # noqa: F401
+    from botcad.shapescript.ops import (
         BoxOp,
         CallOp,
         ChamferByFaceOp,

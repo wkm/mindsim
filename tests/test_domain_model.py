@@ -48,7 +48,7 @@ class TestMountPoint:
         assert ear.label == "ear_1"
         assert ear.pos == (0.01, 0.02, -0.015)
         assert ear.diameter == 0.0042  # hole_diameter → diameter
-        assert ear.axis == (0.0, 0.0, -1.0)  # default for ears
+        assert ear.axis == (0.0, 0.0, 1.0)  # default: insertion direction +Z
         assert ear.fastener_type == "M3"  # default for ears
 
     def test_mounting_ear_custom_axis(self):
@@ -264,7 +264,7 @@ class TestComponentCatalog:
         for ear in servo.mounting_ears:
             assert isinstance(ear, MountPoint)
             assert ear.fastener_type == "M3"
-            assert ear.axis == (0.0, 0.0, -1.0)
+            assert ear.axis == (0.0, 0.0, 1.0)  # insertion direction
 
     def test_all_components_have_fastener_type(self):
         from botcad.components.camera import OV5647
@@ -699,8 +699,8 @@ class TestComponentRegistry:
         meta = get_component_meta(ComponentKind.SERVO)
         assert meta.script_emitter is not None
 
-    def test_generic_meta_has_no_script_emitter(self):
+    def test_generic_meta_has_script_emitter(self):
         from botcad.component import ComponentKind, get_component_meta
 
         meta = get_component_meta(ComponentKind.GENERIC)
-        assert meta.script_emitter is None
+        assert meta.script_emitter is not None

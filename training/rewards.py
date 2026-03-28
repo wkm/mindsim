@@ -37,7 +37,7 @@ STYLE = Priority.STYLE
 GUARD = Priority.GUARD
 
 
-@dataclass
+@dataclass(frozen=True)
 class RewardComponent:
     """A single per-step reward component with metadata."""
 
@@ -67,7 +67,7 @@ class RewardComponent:
             return (self.scale * hi, self.scale * lo)  # hi is closer to 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class BonusEvent:
     """One-time reward event (success, failure, instability)."""
 
@@ -575,7 +575,7 @@ if __name__ == "__main__":
         print("\n  Scenarios (per-step reward):")
         active = h.active_components()
 
-        def scenario(label, values):
+        def scenario(label, values, active=active):
             """Sum reward given {component_name: raw_value} overrides."""
             total = 0.0
             for c in active:

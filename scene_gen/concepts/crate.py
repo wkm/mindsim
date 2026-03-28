@@ -51,7 +51,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a crate (1-3 prims: body + opt lid + opt stripe).
 
     Always within 8 prims (uses at most 3).

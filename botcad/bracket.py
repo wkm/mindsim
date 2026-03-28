@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
 
 def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:
@@ -124,7 +124,7 @@ class BracketSpec:
 
 def bracket_insertion_channel(
     servo: ServoSpec, spec: BracketSpec | None = None
-) -> ShapeScript:
+) -> ShapeScriptBuilder:
     """Return the bracket insertion channel as ShapeScript IR.
 
     The insertion channel is the volume subtracted from the parent body
@@ -135,12 +135,12 @@ def bracket_insertion_channel(
     Used by the CAD emitter to cut the bracket footprint from the parent
     body shell. The insertion channel extends 5x the bracket height above.
     """
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
     if spec is None:
         spec = BracketSpec()
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     body_x, body_y, body_z = servo.effective_body_dims
     tol = spec.tolerance
@@ -208,7 +208,7 @@ def _emit_connector_port_ir(
 
     tol = spec.tolerance
     wall = spec.wall
-    ax, ay, az = exit_axis
+    ax, _ay, az = exit_axis
 
     clearance = tol + 0.001  # per side
 
@@ -265,19 +265,21 @@ def _emit_connector_port_ir(
     return cut
 
 
-def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+def bracket_solid(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScriptBuilder:
     """Build a bracket solid for wheel/linear applications as ShapeScript IR.
 
     Wraps ±X, ±Y, and -Z (unpowered horn side). The +Z face is open
     with a clearance hole for the powered horn disc + shaft boss.
     """
     from botcad.shapescript.ops import ALIGN_MIN_Z
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
     if spec is None:
         spec = BracketSpec()
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     # -- Outer box --
     body_x, body_y, body_z = servo.effective_body_dims
@@ -441,7 +443,7 @@ def bracket_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
                 shell = prog.cut(shell, port)
             else:
                 # Fallback: rectangular cable slot
-                cx, cy, cz = servo.connector_pos
+                _cx, cy, cz = servo.connector_pos
                 slot_w, slot_h = _cable_slot_dims(servo, spec)
                 slot_depth = wall + tol + 0.002
                 slot = prog.box(slot_depth, slot_w, slot_h, tag="cable_slot")
@@ -520,18 +522,20 @@ def horn_disc_params(
 # Coupler (C) bridges both horn faces, rotating around the shaft.
 
 
-def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+def cradle_solid(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScriptBuilder:
     """Build a shallow-tray cradle as ShapeScript IR.
 
     Outer box - pocket - fastener holes - connector passage.
     """
     from botcad.shapescript.ops import ALIGN_MIN_Z
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
     if spec is None:
         spec = BracketSpec()
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     body_x, body_y, body_z = servo.effective_body_dims
     tol = spec.tolerance
@@ -634,7 +638,7 @@ def cradle_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScri
 
 def cradle_insertion_channel(
     servo: ServoSpec, spec: BracketSpec | None = None
-) -> ShapeScript:
+) -> ShapeScriptBuilder:
     """Cradle insertion channel as ShapeScript IR.
 
     The insertion channel is the volume subtracted from the parent body
@@ -644,12 +648,12 @@ def cradle_insertion_channel(
 
     Covers the cradle footprint plus a 5x insertion channel in +X.
     """
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
     if spec is None:
         spec = BracketSpec()
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     body_x, body_y, body_z = servo.effective_body_dims
     tol = spec.tolerance
@@ -743,7 +747,7 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
         spec = BracketSpec()
 
     sx = servo.shaft_offset[0]
-    body_x, body_y, _body_z = servo.effective_body_dims
+    body_x, _body_y, _body_z = servo.effective_body_dims
 
     # Body envelope from shaft center (including ear flanges)
     body_plus_x = body_x / 2 - sx
@@ -800,7 +804,9 @@ def coupler_max_rom_rad(servo: ServoSpec, spec: BracketSpec | None = None) -> fl
     return lo
 
 
-def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScript:
+def coupler_solid(
+    servo: ServoSpec, spec: BracketSpec | None = None
+) -> ShapeScriptBuilder:
     """Build a C-shaped coupler as ShapeScript IR.
 
     Front plate + rear plate + side wall + horn holes + boss clearance,
@@ -810,27 +816,27 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
 
     from botcad.fasteners import resolve_fastener
     from botcad.shapescript.ops import ALIGN_MAX_Z, ALIGN_MIN_Z, Align3
-    from botcad.shapescript.program import ShapeScript
+    from botcad.shapescript.program import ShapeScriptBuilder
 
     if spec is None:
         spec = BracketSpec()
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     tol = spec.tolerance
     sx, sy, sz = servo.shaft_offset
-    body_x, body_y, body_z = servo.effective_body_dims
+    body_x, _body_y, _body_z = servo.effective_body_dims
 
     # -- Collect horn hole positions in shaft-centered frame --
-    front_holes = []
-    if servo.horn_mounting_points:
-        for mp in servo.horn_mounting_points:
-            front_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+    front_holes = [
+        (mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz)
+        for mp in (servo.horn_mounting_points or [])
+    ]
 
-    rear_holes = []
-    if servo.rear_horn_mounting_points:
-        for mp in servo.rear_horn_mounting_points:
-            rear_holes.append((mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz))
+    rear_holes = [
+        (mp.pos[0] - sx, mp.pos[1] - sy, mp.pos[2] - sz)
+        for mp in (servo.rear_horn_mounting_points or [])
+    ]
 
     if not front_holes or not rear_holes:
         # Degenerate case - tiny placeholder box
@@ -1041,7 +1047,7 @@ def coupler_solid(servo: ServoSpec, spec: BracketSpec | None = None) -> ShapeScr
 # circular imports.
 
 
-def _exec_ir(prog: ShapeScript):
+def _exec_ir(prog: ShapeScriptBuilder):
     """Execute ShapeScript IR and return the output Solid."""
     from botcad.shapescript.backend_occt import OcctBackend
 

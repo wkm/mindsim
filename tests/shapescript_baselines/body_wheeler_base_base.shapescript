@@ -14,26 +14,32 @@ cut_12 = Cut(cut_9, loc_11)
 box_13 = Box(w=0.0305, l=0.0655, h=0.0048)
 loc_14 = Locate(box_13, pos=(0.0000, 0.0000, 0.0249))
 cut_15 = Cut(cut_12, loc_14)
-call_16 = Call('bracket_env_STS3215')  # bracket_env_left_wheel
-loc_17 = Locate(call_16, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
-call_18 = Call('bracket_STS3215')  # bracket_left_wheel
-loc_19 = Locate(call_18, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
-cut_20 = Cut(cut_15, loc_17)
-fuse_21 = Fuse(cut_20, loc_19)
-call_22 = Call('bracket_env_STS3215')  # bracket_env_right_wheel
-loc_23 = Locate(call_22, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
-call_24 = Call('bracket_STS3215')  # bracket_right_wheel
-loc_25 = Locate(call_24, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
-cut_26 = Cut(fuse_21, loc_23)
+box_16 = Box(w=0.0335, l=0.0425, h=0.0111)
+loc_17 = Locate(box_16, pos=(0.0000, -0.0320, 0.0000))
+cut_18 = Cut(cut_15, loc_17)
+box_19 = Box(w=0.0132, l=0.0183, h=0.0040)
+loc_20 = Locate(box_19, pos=(0.0000, -0.0250, 0.0150))
+cut_21 = Cut(cut_18, loc_20)
+call_22 = Call('bracket_env_STS3215')  # bracket_env_left_wheel
+loc_23 = Locate(call_22, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
+call_24 = Call('bracket_STS3215')  # bracket_left_wheel
+loc_25 = Locate(call_24, pos=(-0.0490, 0.0000, 0.0125), rot=(0.0, -90.0, -180.0))
+cut_26 = Cut(cut_21, loc_23)
 fuse_27 = Fuse(cut_26, loc_25)
-cyl_28 = Cylinder(r=0.0500, h=0.0150)
-loc_29 = Locate(cyl_28, pos=(0.0000, 0.0000, 0.0025))
-loc_30 = Locate(loc_29, pos=(-0.0750, 0.0000, 0.0000), rot=(0.0, -90.0, -0.0))
-cut_31 = Cut(fuse_27, loc_30)
-cyl_32 = Cylinder(r=0.0500, h=0.0150)
-loc_33 = Locate(cyl_32, pos=(0.0000, 0.0000, 0.0025))
-loc_34 = Locate(loc_33, pos=(0.0750, 0.0000, 0.0000), rot=(0.0, 90.0, 0.0))
-cut_35 = Cut(cut_31, loc_34)
+call_28 = Call('bracket_env_STS3215')  # bracket_env_right_wheel
+loc_29 = Locate(call_28, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
+call_30 = Call('bracket_STS3215')  # bracket_right_wheel
+loc_31 = Locate(call_30, pos=(0.0490, 0.0000, 0.0125), rot=(0.0, 90.0, 0.0))
+cut_32 = Cut(fuse_27, loc_29)
+fuse_33 = Fuse(cut_32, loc_31)
+cyl_34 = Cylinder(r=0.0500, h=0.0150)
+loc_35 = Locate(cyl_34, pos=(0.0000, 0.0000, 0.0025))
+loc_36 = Locate(loc_35, pos=(-0.0750, 0.0000, 0.0000), rot=(0.0, -90.0, -0.0))
+cut_37 = Cut(fuse_33, loc_36)
+cyl_38 = Cylinder(r=0.0500, h=0.0150)
+loc_39 = Locate(cyl_38, pos=(0.0000, 0.0000, 0.0025))
+loc_40 = Locate(loc_39, pos=(0.0750, 0.0000, 0.0000), rot=(0.0, 90.0, 0.0))
+cut_41 = Cut(cut_37, loc_40)
 
 --- sub-program: bracket_STS3215 ---
   box_0 = Box(w=0.0518, l=0.0313, h=0.0411)  # bracket_outer

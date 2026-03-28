@@ -62,7 +62,7 @@ def run_diagnostic():
         )
 
         if solve_res:
-            u_field, stress_array, vd = solve_res
+            _u_field, stress_array, _vd = solve_res
             print(f"SUCCESS: Max Stress {stress_array.numpy().max() / 1e6:.2f} MPa")
         else:
             print("FAILED: FEA solve returned None")

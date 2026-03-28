@@ -51,7 +51,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a bench (seat + legs + optional backrest)."""
     hw = params.width / 2
     hd = params.depth / 2
@@ -78,16 +78,16 @@ def generate(params: Params = Params()) -> tuple[Prim, ...]:
         back_z0 = params.height + slat_half_h
         back_z1 = params.height + params.back_height - slat_half_h
         back_y = hd - slat_thick / 2
-        for z in (back_z0, back_z1):
-            prims.append(
-                Prim(
-                    GeomType.BOX,
-                    (hw, slat_thick / 2, slat_half_h),
-                    (0, back_y, z),
-                    sc,
-                    euler=(0.10, 0, 0),  # slight backward lean
-                )
+        prims.extend(
+            Prim(
+                GeomType.BOX,
+                (hw, slat_thick / 2, slat_half_h),
+                (0, back_y, z),
+                sc,
+                euler=(0.10, 0, 0),  # slight backward lean
             )
+            for z in (back_z0, back_z1)
+        )
 
     # 3. Apron strip under the front edge
     if params.has_apron:

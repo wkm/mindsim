@@ -11,17 +11,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 if TYPE_CHECKING:
-    from botcad.skeleton import Body, Joint
+    from botcad.skeleton import Body, Bot, Joint
 
 
 def emit_body_ir(
     body: Body,
     parent_joint: Joint | None = None,
     wire_segments: tuple | None = None,
-) -> ShapeScript:
+    bot: Bot | None = None,
+) -> ShapeScriptBuilder:
     """Emit a ShapeScript that builds the solid for a single body.
 
     This is a 1:1 translation of cad.py:_make_body_solid(). The result
@@ -43,7 +44,9 @@ def emit_body_ir(
     from botcad.geometry import quat_to_euler
     from botcad.skeleton import BodyShape, BracketStyle
 
-    prog = ShapeScript()
+    placements = bot.packing_result.placements if bot and bot.packing_result else {}
+
+    prog = ShapeScriptBuilder()
     dims = body.dimensions
 
     # ── 1. Base shell (cad.py:748-801) ──
@@ -123,12 +126,19 @@ def emit_body_ir(
                     cd[2] + 0.0005,
                     align=ALIGN_CENTER,
                 )
-            pocket = prog.locate(pocket, pos=mount.resolved_pos)
+            mount_pos = (
+                placements[mount].pose.pos
+                if mount in placements
+                else mount.resolved_pos
+            )
+            pocket = prog.locate(pocket, pos=mount_pos)
             shell = prog.cut(shell, pocket)
 
             # Camera-specific cuts: lens aperture + ribbon cable exit
             if mount.component.kind == ComponentKind.CAMERA:
-                shell = _emit_camera_cuts(prog, shell, mount, body.dimensions, dims)
+                shell = _emit_camera_cuts(
+                    prog, shell, mount, body.dimensions, dims, placements
+                )
 
     # ── 3. Union coupler (cad.py:827-843) ──
 
@@ -138,7 +148,8 @@ def emit_body_ir(
         # Coupler is built in shaft-centered frame; child body origin = shaft
         # position (MuJoCo places child at parent_joint.pos).  Place at origin
         # with servo orientation only.
-        quat = parent_joint.solved_servo_quat
+        pj_pose = placements.get(parent_joint)
+        quat = pj_pose.pose.quat if pj_pose else parent_joint.solved_servo_quat
         center = (0.0, 0.0, 0.0)
         euler = quat_to_euler(quat)
 
@@ -170,8 +181,10 @@ def emit_body_ir(
 
     for joint in body.joints:
         servo = joint.servo
-        center = joint.solved_servo_center
-        euler = quat_to_euler(joint.solved_servo_quat)
+        j_pose = placements.get(joint)
+        center = j_pose.pose.pos if j_pose else joint.solved_servo_center
+        j_quat = j_pose.pose.quat if j_pose else joint.solved_servo_quat
+        euler = quat_to_euler(j_quat)
 
         # Register sub-programs once per servo type (define once, use many)
         if joint.bracket_style is BracketStyle.COUPLER:
@@ -224,7 +237,7 @@ def emit_body_ir(
 
 
 def _emit_orient_z_to_axis(
-    prog: ShapeScript,
+    prog: ShapeScriptBuilder,
     shape_ref,
     axis: tuple[float, float, float],
     quat: tuple[float, float, float, float] | None = None,
@@ -253,22 +266,27 @@ def _emit_orient_z_to_axis(
     return prog.locate(shape_ref, pos=(0, 0, 0), euler_deg=euler)
 
 
-def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims):
+def _emit_camera_cuts(prog, shell, mount, body_dims, solved_dims, placements=None):
     """Emit IR ops for camera lens aperture + ribbon cable slot.
 
     Mirrors cad.py:_cut_camera_features().
     """
     from botcad.component import BusType
+    from botcad.geometry import pose_transform_dir
 
     cd = mount.component.dimensions
-    pos = mount.resolved_pos
-    ins = mount.resolved_insertion_axis
+    if placements and mount in placements:
+        pos = placements[mount].pose.pos
+        ins = pose_transform_dir(placements[mount].pose, (0.0, 0.0, 1.0))
+    else:
+        pos = mount.resolved_pos
+        ins = mount.resolved_insertion_axis
 
     # Lens aperture — 8mm diameter cylinder punched through body wall
     aperture_r = 0.004
     wall_depth = max(solved_dims) + 0.002
 
-    ax, ay, az = ins
+    ax, ay, _az = ins
     if abs(ax) > 0.5:
         _euler = (0, 90, 0)
     elif abs(ay) > 0.5:

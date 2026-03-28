@@ -54,7 +54,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a lamp based on style (3-6 prims)."""
     if params.style == "table":
         return _gen_table_lamp(params)

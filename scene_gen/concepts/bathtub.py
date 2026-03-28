@@ -60,7 +60,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a bathtub from wall panels around a basin floor.
 
     Built from separate panels so the hollow interior is visible:

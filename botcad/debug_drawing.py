@@ -5,9 +5,9 @@ overlaid in distinct colors. Sections include hatching, section labels,
 and a title block with scale indicator and legend.
 
 Usage:
-    from botcad.debug_drawing import DebugDrawing
+    from botcad.debug_drawing import DebugDrawingBuilder
 
-    drawing = DebugDrawing("coupler_debug")
+    drawing = DebugDrawingBuilder("coupler_debug")
     drawing.add_part("coupler", coupler_solid, color=(200, 80, 50))
     drawing.add_part("servo", servo_solid, color=(60, 60, 60))
     drawing.add_section("front_horn", Plane.XY.offset(front_z))
@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import re
 import string
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from build123d import (
@@ -126,21 +126,21 @@ def _dim_line_h(
     if geo_y is not None:
         ext_start = geo_y + gap if y > geo_y else geo_y - gap
         ext_end = y + tick
-        for x in [x1, x2]:
-            els.append(
-                f'  <line x1="{x:.6f}" y1="{ext_start:.6f}" '
-                f'x2="{x:.6f}" y2="{ext_end:.6f}" '
-                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
-                f'stroke-opacity="0.5"/>'
-            )
+        els.extend(
+            f'  <line x1="{x:.6f}" y1="{ext_start:.6f}" '
+            f'x2="{x:.6f}" y2="{ext_end:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+            f'stroke-opacity="0.5"/>'
+            for x in [x1, x2]
+        )
 
     # Ticks at dimension line
-    for x in [x1, x2]:
-        els.append(
-            f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
-            f'x2="{x:.6f}" y2="{y + tick:.6f}" '
-            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
-        )
+    els.extend(
+        f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
+        f'x2="{x:.6f}" y2="{y + tick:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        for x in [x1, x2]
+    )
     # Main dimension line
     els.append(
         f'  <line x1="{x1:.6f}" y1="{y:.6f}" '
@@ -201,21 +201,21 @@ def _dim_line_v(
     if geo_x is not None:
         ext_start = geo_x + gap
         ext_end = x + tick
-        for y in [y1, y2]:
-            els.append(
-                f'  <line x1="{ext_start:.6f}" y1="{y:.6f}" '
-                f'x2="{ext_end:.6f}" y2="{y:.6f}" '
-                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
-                f'stroke-opacity="0.5"/>'
-            )
+        els.extend(
+            f'  <line x1="{ext_start:.6f}" y1="{y:.6f}" '
+            f'x2="{ext_end:.6f}" y2="{y:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+            f'stroke-opacity="0.5"/>'
+            for y in [y1, y2]
+        )
 
     # Ticks at dimension line
-    for y in [y1, y2]:
-        els.append(
-            f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
-            f'x2="{x + tick:.6f}" y2="{y:.6f}" '
-            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
-        )
+    els.extend(
+        f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
+        f'x2="{x + tick:.6f}" y2="{y:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        for y in [y1, y2]
+    )
     # Main dimension line
     els.append(
         f'  <line x1="{x:.6f}" y1="{y1:.6f}" '
@@ -293,20 +293,20 @@ def _project_offset(offset_3d: Vec3, right: Vec3, up: Vec3) -> tuple[float, floa
     return (dx * rx + dy * ry + dz * rz, dx * ux + dy * uy + dz * uz)
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Part:
     name: str
     solid: Solid | Compound
     color: RGB
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Section:
     name: str
     plane: Plane
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Projection:
     """A 2D projection view with visible/hidden line separation."""
 
@@ -319,8 +319,7 @@ class _Projection:
 _View = _Section | _Projection
 
 
-@dataclass
-class DebugDrawing:
+class DebugDrawingBuilder:
     """Accumulates parts and views (sections + projections), exports SVG.
 
     All views are laid out side-by-side in one SVG file with:
@@ -330,27 +329,33 @@ class DebugDrawing:
     - Title text with scale indicator and part legend
     """
 
-    title: str
-    parts: list[_Part] = field(default_factory=list)
-    sections: list[_Section] = field(default_factory=list)
-    projections: list[tuple[int, _Projection]] = field(default_factory=list)
-    scale: float = DEFAULT_SCALE
-    line_weight: float = LINE_WEIGHT_THICK
-    _view_order: list[_View] = field(default_factory=list)
+    def __init__(
+        self,
+        title: str,
+        scale: float = DEFAULT_SCALE,
+        line_weight: float = LINE_WEIGHT_THICK,
+    ) -> None:
+        self.title = title
+        self.parts: list[_Part] = []
+        self.sections: list[_Section] = []
+        self.projections: list[tuple[int, _Projection]] = []
+        self.scale = scale
+        self.line_weight = line_weight
+        self._view_order: list[_View] = []
 
     def add_part(
         self,
         name: str,
         solid: Solid | Compound,
         color: RGB | None = None,
-    ) -> DebugDrawing:
+    ) -> DebugDrawingBuilder:
         """Add a solid to be sectioned. Color auto-assigned if omitted."""
         if color is None:
             color = PALETTE[len(self.parts) % len(PALETTE)]
         self.parts.append(_Part(name=name, solid=solid, color=color))
         return self
 
-    def add_section(self, name: str, plane: Plane) -> DebugDrawing:
+    def add_section(self, name: str, plane: Plane) -> DebugDrawingBuilder:
         """Add a named section plane."""
         sec = _Section(name=name, plane=plane)
         self.sections.append(sec)
@@ -362,7 +367,7 @@ class DebugDrawing:
         name: str,
         origin: Vec3,
         up: Vec3 = (0, 0, 1),
-    ) -> DebugDrawing:
+    ) -> DebugDrawingBuilder:
         """Add a 2D projection view with visible/hidden line separation.
 
         Args:
@@ -474,7 +479,7 @@ class DebugDrawing:
 
         # Add shapes per column
         for (_col_name, is_section, parts_data, _view), x_off in zip(
-            columns, x_offsets
+            columns, x_offsets, strict=True
         ):
             offset_loc = Location((x_off, 0, 0))
             if is_section:
@@ -708,11 +713,11 @@ class DebugDrawing:
         # Collect section info for cutting lines on projections
         section_info: list[tuple[str, float]] = []  # (letter, Z value)
 
-        for i, (
+        for _i, (
             (col_name, is_section, _data, view),
             (xmin, ymin, xmax, ymax),
             x_off,
-        ) in enumerate(zip(columns, col_bounds, x_offsets)):
+        ) in enumerate(zip(columns, col_bounds, x_offsets, strict=True)):
             cx = (xmin + xmax) / 2 + x_off
 
             if is_section:
@@ -829,12 +834,12 @@ class DebugDrawing:
             f'x2="{title_x + bar_len:.6f}" y2="{bar_y:.6f}" '
             f'stroke="#333" stroke-width="{_mm(0.35):.6f}"/>'
         )
-        for bx in [title_x, title_x + bar_len]:
-            elements.append(
-                f'  <line x1="{bx:.6f}" y1="{bar_y - tick:.6f}" '
-                f'x2="{bx:.6f}" y2="{bar_y + tick:.6f}" '
-                f'stroke="#333" stroke-width="{_mm(0.25):.6f}"/>'
-            )
+        elements.extend(
+            f'  <line x1="{bx:.6f}" y1="{bar_y - tick:.6f}" '
+            f'x2="{bx:.6f}" y2="{bar_y + tick:.6f}" '
+            f'stroke="#333" stroke-width="{_mm(0.25):.6f}"/>'
+            for bx in [title_x, title_x + bar_len]
+        )
         elements.append(
             f'  <text x="{title_x + bar_len + _mm(1.5):.6f}" y="{bar_y + _mm(0.7):.6f}" '
             f'font-family="{FONT_FAMILY}" '

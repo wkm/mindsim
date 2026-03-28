@@ -32,6 +32,7 @@ make validate
   4. **Cut** — apply the pre-designed clearance solid to the parent body, using the **same transform** as Place.
 
   The critical invariant: Place and Cut use identical transforms. No axis-sign-dependent logic, no extra shifts at cut time. If a clearance shape needs asymmetry (e.g. outboard-only tolerance), that asymmetry is designed into the cut solid in step 1, in local frame, where it can be seen and validated.
+- **Frozen dataclasses, explicit builders.** All `@dataclass` must use `frozen=True` (enforced by `tools/lint_project.py`). Things that accumulate state are plain classes named `FooBuilder`, not dataclasses. Builders produce frozen dataclasses: accumulate in local variables, construct the frozen result at the end. Suppress with `# plint: disable=frozen-dataclass` only for classes that genuinely need post-construction mutation (skeleton tree, lifecycle records).
 - **`.moved()`, never `.locate()`.** build123d's `.locate()` mutates in place and returns `self`. On `@lru_cache`d solids (bracket, envelope, coupler, servo), this silently corrupts the cached object for all future callers. Always use `.moved()` which creates an independent copy. The CAD steps debug viewer (`?cadsteps=bot:body`) makes this kind of bug visible.
 - **Commit logs are a journal.** Explain _why_, not just _what_.
 - Work with the user on improvement. Emit logs from interactions that will help you understand what a user did and what happened when they report a bug. Don't commit these logs.

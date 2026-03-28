@@ -11,13 +11,13 @@ place and corrupts cached shapes. See memory/feedback_build123d_locate.md.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from botcad.shapescript.program import ShapeScriptBuilder
 
-from botcad.shapescript.ops import (  # noqa: F401
+from botcad.shapescript.ops import (
     Align3,
     BoxOp,
     CallOp,
@@ -43,25 +43,29 @@ from botcad.shapescript.ops import (  # noqa: F401
     RegularPolygonExtrudeOp,
     SphereOp,
 )
-from botcad.shapescript.program import ShapeScript
 from botcad.shapescript.tags import TagRegistry
 
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExecutionResult:
-    """Result of executing a ShapeScript."""
+    """Result of executing a ShapeScript program.
 
-    shapes: dict[str, object] = field(default_factory=dict)  # ref.id -> build123d Solid
-    queries: list[Any] = field(default_factory=list)  # ordered query results
-    tags: TagRegistry = field(default_factory=TagRegistry)
+    Constructed at the end of execution — fields are not reassigned after creation.
+    Note: the dict/list contents are mutable by convention but should not be mutated
+    after construction.
+    """
+
+    shapes: dict[str, object]  # ref.id -> build123d Solid
+    queries: list[Any]  # ordered query results
+    tags: TagRegistry
 
 
 class OcctBackend:
     """Executes ShapeScript ops against build123d/OCCT."""
 
-    def execute(self, program: ShapeScript) -> ExecutionResult:
+    def execute(self, program: ShapeScriptBuilder) -> ExecutionResult:
         import copy
 
         from build123d import (
@@ -81,9 +85,9 @@ class OcctBackend:
         from botcad.cad_utils import as_solid as _as_solid
         from botcad.emit.cad import _bboxes_overlap, _bool_cut, _ensure_solid
 
-        result = ExecutionResult()
-        shapes = result.shapes
-        tags = result.tags
+        shapes: dict[str, object] = {}
+        queries: list[Any] = []
+        tags = TagRegistry()
 
         def _align(a: Align3):
             _MAP = {"center": Align.CENTER, "min": Align.MIN, "max": Align.MAX}
@@ -312,25 +316,23 @@ class OcctBackend:
                 # -- Queries --
                 case QueryVolumeOp(target=t):
                     s = shapes[t.id]
-                    result.queries.append(abs(s.volume))
+                    queries.append(abs(s.volume))
 
                 case QueryCentroidOp(target=t):
                     s = shapes[t.id]
                     c = s.center()
-                    result.queries.append((c.X, c.Y, c.Z))
+                    queries.append((c.X, c.Y, c.Z))
 
                 case QueryInertiaOp(target=t):
                     s = shapes[t.id]
                     # build123d matrix_of_inertia is a gp_Mat
                     m = s.matrix_of_inertia
-                    result.queries.append(
-                        [[m[i][j] for j in range(3)] for i in range(3)]
-                    )
+                    queries.append([[m[i][j] for j in range(3)] for i in range(3)])
 
                 case QueryBBoxOp(target=t):
                     s = shapes[t.id]
                     bb = s.bounding_box()
-                    result.queries.append(
+                    queries.append(
                         (
                             (bb.min.X, bb.min.Y, bb.min.Z),
                             (bb.max.X, bb.max.Y, bb.max.Z),
@@ -339,7 +341,7 @@ class OcctBackend:
 
                 case QueryAreaOp(target=t):
                     s = shapes[t.id]
-                    result.queries.append(abs(s.area))
+                    queries.append(abs(s.area))
 
                 # -- Export --
                 case ExportSTLOp(target=t, path=path):
@@ -353,7 +355,7 @@ class OcctBackend:
                 case _:
                     raise ValueError(f"Unknown op: {op}")
 
-        return result
+        return ExecutionResult(shapes=shapes, queries=queries, tags=tags)
 
 
 def _resolve_tagged_edges(solid, tag_names, tag_registry, shapes):

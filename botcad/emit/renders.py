@@ -192,7 +192,7 @@ def render_overview(
         font=FONT_TITLE,
     )
 
-    for idx, (img, label) in enumerate(zip(images, labels)):
+    for idx, (img, label) in enumerate(zip(images, labels, strict=True)):
         col = idx % cols
         row = idx // cols
         x = margin + col * (VIEW_W + margin)
@@ -299,7 +299,7 @@ def render_closeups(
             (margin, sec_y + 4), f"Joint: {jname}", fill=(0, 0, 0), font=FONT_LABEL
         )
 
-        for idx, (img, label) in enumerate(zip(imgs, lbls)):
+        for idx, (img, label) in enumerate(zip(imgs, lbls, strict=True)):
             col = idx % cols
             row = idx // cols
             x = margin + col * (VIEW_W + margin)
@@ -439,7 +439,7 @@ def render_sweeps(bot_xml: Path, model_base: mujoco.MjModel, output_dir: Path) -
 
             # Camera follows child body, distance from mesh bounds
             child_pos = data.xpos[child_bid].copy()
-            sweep_center, sweep_extent = _mesh_bounds(model, data)
+            _sweep_center, sweep_extent = _mesh_bounds(model, data)
             distance = sweep_extent * 1.5
 
             img = _render(

@@ -19,6 +19,7 @@ Requires mjpython (not plain python) for MuJoCo viewer/play features.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import re
@@ -228,7 +229,7 @@ class MindSimApp(App):
         background: $surface;
     }
     """
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("ctrl+c", "quit", "Quit", show=False),
     ]
 
@@ -352,13 +353,11 @@ class MindSimApp(App):
             )
         except KeyboardInterrupt:
             log.warning("Training interrupted by user")
-            try:
+            with contextlib.suppress(Exception):
                 self.call_from_thread(
                     self.log_message,
                     "[bold yellow]Training interrupted by user[/bold yellow]",
                 )
-            except Exception:
-                pass
         except Exception:
             log.exception("Training crashed in TUI worker thread")
             try:

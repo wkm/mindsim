@@ -110,7 +110,7 @@ def main():
     # Also render combined hub with all 4 brackets
     shell = hub_base
     scene = SceneBuilder()
-    for name, axis, pos in axes:
+    for _name, axis, pos in axes:
         center, quat = servo_placement(shaft_offset, shaft_axis, axis, pos)
         euler = quat_to_euler(quat)
         env = bracket_insertion_channel(servo).locate(Location(center, euler))
@@ -121,7 +121,7 @@ def main():
     export_stl(as_solid(shell), str(stl))
     scene.add_mesh("body", str(stl), hub_color)
 
-    for i, (name, axis, pos) in enumerate(axes):
+    for i, (_name, axis, pos) in enumerate(axes):
         center, quat = servo_placement(shaft_offset, shaft_axis, axis, pos)
         euler = quat_to_euler(quat)
         sv = servo_solid(servo).locate(Location(center, euler))

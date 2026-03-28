@@ -178,7 +178,7 @@ def _add_section_view(svg, solids, section_plane, view_origin, view_up):
     #   +Z, x_dir=(-1,0,0): x×z = (-1,0,0)×(0,0,1) = (0,1,0) ✓
     # Empirically verified x_dir values that produce correct visual
     # orientation for each axis-aligned section.
-    nx, ny, nz = plane_normal
+    nx, ny, _nz = plane_normal
     if abs(nx) > 0.5:
         x_dir = (0, -1, 0)  # X section: up = +Z
     elif abs(ny) > 0.5:

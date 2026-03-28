@@ -66,7 +66,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a chair (up to 8 prims: seat + cushion + back + 4 legs + 2 arms)."""
     hw = params.seat_width / 2
     hd = params.seat_depth / 2

@@ -13,7 +13,7 @@ import warp as wp
 import warp.fem as fem
 
 
-@dataclass
+@dataclass(frozen=True)
 class VoxelDomain:
     grid: fem.Grid3D
     cell_count: int
@@ -44,9 +44,8 @@ def check_inside_kernel(
 
     # Warp SDF query
     query = wp.mesh_query_point(mesh, p, 10.0)
-    if query.result:
-        if query.sign < 0.0:
-            mask[tid] = 1
+    if query.result and query.sign < 0.0:
+        mask[tid] = 1
 
 
 @wp.kernel
@@ -120,7 +119,7 @@ def voxelize_solid(
         # Compute max voxel half-diagonal for proximity threshold
         voxel_diag = float(np.sqrt(dx[0] ** 2 + dx[1] ** 2 + dx[2] ** 2)) * 0.5
 
-        for tag_name in tags._declarations.keys():
+        for tag_name in tags._declarations:
             try:
                 ref = tags.source_ref(tag_name)
                 source_shape = shapes.get(ref.id)

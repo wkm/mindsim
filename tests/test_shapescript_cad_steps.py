@@ -16,7 +16,7 @@ from botcad.shapescript.cad_steps import (  # noqa: E402
     format_op,
     shapescript_to_cad_steps,
 )
-from botcad.shapescript.program import ShapeScript  # noqa: E402
+from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
 
 
 def _exec(prog):
@@ -27,7 +27,7 @@ class TestAllOpTypesConvertToSteps:
     """Every op type must survive shapescript_to_cad_steps + format_op."""
 
     def test_box(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.output_ref = prog.box(1, 1, 1, tag="test")
         result = _exec(prog)
         steps = shapescript_to_cad_steps(prog, result)
@@ -35,21 +35,21 @@ class TestAllOpTypesConvertToSteps:
         assert all(s.script for s in steps)
 
     def test_cylinder(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.output_ref = prog.cylinder(0.5, 1, tag="test")
         result = _exec(prog)
         steps = shapescript_to_cad_steps(prog, result)
         assert len(steps) >= 1
 
     def test_sphere(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.output_ref = prog.sphere(0.5)
         result = _exec(prog)
         steps = shapescript_to_cad_steps(prog, result)
         assert len(steps) >= 1
 
     def test_copy(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1, tag="proto")
         c = prog.copy(b, tag="clone")
         prog.output_ref = c
@@ -58,7 +58,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("Copy" in s.script for s in steps)
 
     def test_cut(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.cylinder(0.1, 2)
         prog.output_ref = prog.cut(a, b)
@@ -67,7 +67,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("Cut" in s.script for s in steps)
 
     def test_fuse(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.box(1, 1, 1)
         b = prog.locate(b, pos=(2, 0, 0))
@@ -77,7 +77,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("Fuse" in s.script for s in steps)
 
     def test_locate(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         prog.output_ref = prog.locate(b, pos=(5, 0, 0))
         result = _exec(prog)
@@ -85,7 +85,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("Locate" in s.script for s in steps)
 
     def test_fillet_all(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         prog.output_ref = prog.fillet_all(b, 0.05)
         result = _exec(prog)
@@ -93,7 +93,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("FilletAll" in s.script for s in steps)
 
     def test_fillet_by_axis(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(1, 1, 1)
         prog.output_ref = prog.fillet_by_axis(b, "z", 0.05)
         result = _exec(prog)
@@ -101,7 +101,7 @@ class TestAllOpTypesConvertToSteps:
         assert any("FilletAxis" in s.script for s in steps)
 
     def test_radial_array(self):
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         b = prog.box(0.01, 0.002, 0.01)
         b = prog.locate(b, pos=(0.05, 0, 0))
         prog.output_ref = prog.radial_array(b, 6, axis="z", tag="spokes")
@@ -110,9 +110,9 @@ class TestAllOpTypesConvertToSteps:
         assert any("RadialArray" in s.script for s in steps)
 
     def test_call(self):
-        sub = ShapeScript()
+        sub = ShapeScriptBuilder()
         sub.output_ref = sub.box(1, 1, 1)
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.sub_programs["test_sub"] = sub
         prog.output_ref = prog.call("test_sub", tag="called")
         result = _exec(prog)
@@ -123,7 +123,7 @@ class TestAllOpTypesConvertToSteps:
         from build123d import Box
 
         solid = Box(1, 1, 1)
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         prog.output_ref = prog.prebuilt(solid, tag="external")
         result = _exec(prog)
         steps = shapescript_to_cad_steps(prog, result)

@@ -8,10 +8,47 @@ Used by both the MuJoCo emitter (green servo boxes) and the CAD emitter
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from botcad.component import Vec3
+if TYPE_CHECKING:
+    from typing import Protocol
 
-Quat = tuple[float, float, float, float]  # (w, x, y, z)
+    class _HasPosAxis(Protocol):
+        pos: Vec3
+        axis: Vec3
+
+
+from botcad.component import POSE_IDENTITY as POSE_IDENTITY
+from botcad.component import Pose as Pose
+from botcad.component import Quat, Vec3
+
+
+@dataclass(frozen=True)
+class MountRotation:
+    """Design-time rotation of a component on its mounting surface."""
+
+    yaw: float = 0.0  # degrees around component local Z
+
+
+MOUNT_NO_ROTATION = MountRotation()
+MOUNT_YAW_90 = MountRotation(yaw=90.0)
+
+
+@dataclass(frozen=True)
+class Placement:
+    """Solver output for any placed component -- servo or mount."""
+
+    pose: Pose
+    bbox: Vec3  # axis-aligned bounding box in world frame
+
+
+@dataclass(frozen=True)
+class PackingResult:
+    """Complete solver output. Returned by pack(), consumed by all emitters."""
+
+    placements: dict  # Mount | Joint -> Placement
+
 
 # Named Euler rotations (degrees) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
@@ -133,13 +170,11 @@ def servo_placement(
     # right-side up (rotate around Z for horizontal axes, around Y for
     # vertical axes).
     is_negative = False
-    if abs(ax) > 0.5 and ax < 0:
-        is_negative = True
-        positive_axis = (-ax, -ay, -az)
-    elif abs(ay) > 0.5 and ay < 0:
-        is_negative = True
-        positive_axis = (-ax, -ay, -az)
-    elif abs(az) > 0.5 and az < 0:
+    if (
+        (abs(ax) > 0.5 and ax < 0)
+        or (abs(ay) > 0.5 and ay < 0)
+        or (abs(az) > 0.5 and az < 0)
+    ):
         is_negative = True
         positive_axis = (-ax, -ay, -az)
     else:
@@ -208,6 +243,63 @@ def quat_to_euler(q: Quat) -> tuple[float, float, float]:
         rz = math.atan2(siny_cosp, cosy_cosp)
 
     return (math.degrees(rx), math.degrees(ry), math.degrees(rz))
+
+
+def euler_to_quat(euler_deg: tuple[float, float, float]) -> Quat:
+    """Convert Euler angles (rx, ry, rz) in degrees to quaternion (w, x, y, z).
+
+    Intrinsic XYZ convention matching build123d's Location(pos, euler).
+    Inverse of quat_to_euler().
+    """
+    rx, ry, rz = (math.radians(a) for a in euler_deg)
+    cx, sx = math.cos(rx / 2), math.sin(rx / 2)
+    cy, sy = math.cos(ry / 2), math.sin(ry / 2)
+    cz, sz = math.cos(rz / 2), math.sin(rz / 2)
+    w = cz * cy * cx + sz * sy * sx
+    x = cz * cy * sx - sz * sy * cx
+    y = cz * sy * cx + sz * cy * sx
+    z = sz * cy * cx - cz * sy * sx
+    return (w, x, y, z)
+
+
+# ---------------------------------------------------------------------------
+# Pose — position + orientation
+# ---------------------------------------------------------------------------
+
+
+def pose_transform_point(pose: Pose, local_point: Vec3) -> Vec3:
+    """Rotate then translate a point from local to world frame."""
+    rotated = rotate_vec(pose.quat, local_point)
+    return (
+        pose.pos[0] + rotated[0],
+        pose.pos[1] + rotated[1],
+        pose.pos[2] + rotated[2],
+    )
+
+
+def pose_transform_dir(pose: Pose, local_dir: Vec3) -> Vec3:
+    """Rotate only (translation ignored) — for direction vectors."""
+    return rotate_vec(pose.quat, local_dir)
+
+
+def pose_compose(parent: Pose, child: Pose) -> Pose:
+    """Compose two poses: parent * child."""
+    pos = pose_transform_point(parent, child.pos)
+    quat = quat_multiply(parent.quat, child.quat)
+    return Pose(pos, quat)
+
+
+def fastener_pose(parent: Pose, mp: _HasPosAxis) -> Pose:
+    """Compute fastener world pose from parent pose and a mount point.
+
+    mp.axis is the insertion direction (shank goes this way).
+    Screw STL has head facing +Z, so we align +Z with -axis (head direction).
+    """
+    pos = pose_transform_point(parent, mp.pos)
+    head_dir: Vec3 = (-mp.axis[0], -mp.axis[1], -mp.axis[2])
+    axis_align = rotation_between((0.0, 0.0, 1.0), head_dir)
+    quat = quat_multiply(parent.quat, axis_align)
+    return Pose(pos, quat)
 
 
 def parallel_axis_inertia(

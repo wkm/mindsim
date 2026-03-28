@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from botcad.component import Vec3
+from botcad.component import MountOrientation, Vec3, get_component_meta
 from botcad.geometry import (
     DIR_NEG_X,
     DIR_NEG_Y,
@@ -21,10 +21,17 @@ from botcad.geometry import (
     DIR_POS_X,
     DIR_POS_Y,
     DIR_POS_Z,
+    PackingResult,
+    Placement,
+    Pose,
+    Quat,
+    euler_to_quat,
+    quat_multiply,
+    rotate_vec,
 )
 
 if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot
+    from botcad.skeleton import Body, Bot, Mount
 
 log = logging.getLogger(__name__)
 
@@ -38,21 +45,71 @@ _POSITION_AXES: dict[str, Vec3] = {
     "center": DIR_POS_Z,
 }
 
+# Face-outward quaternions: position keyword -> rotation that takes
+# component +Z to face the mount surface normal.
+_FACE_QUAT: dict[str, Quat] = {
+    "front": euler_to_quat((-90.0, 0.0, 0.0)),
+    "back": euler_to_quat((90.0, 0.0, 0.0)),
+    "left": euler_to_quat((0.0, -90.0, 0.0)),
+    "right": euler_to_quat((0.0, 90.0, 0.0)),
+    "bottom": euler_to_quat((180.0, 0.0, 0.0)),
+}
 
-def solve_packing(bot: Bot) -> None:
+
+def _mount_quat(mount: Mount, body: Body) -> Quat:
+    """Compute world-frame orientation for a mounted component.
+
+    Composition order (innermost first): yaw -> face rotation -> body frame.
+    """
+    # 1. Yaw rotation (rotate_z legacy flag = 90 degrees)
+    yaw = 90.0 if mount.rotate_z else 0.0
+    quat = euler_to_quat((0.0, 0.0, yaw))
+
+    # 2. Face rotation (only for FACE_NORMAL components like cameras)
+    meta = get_component_meta(mount.component.kind)
+    if meta.mount_orientation == MountOrientation.FACE_NORMAL and isinstance(
+        mount.position, str
+    ):
+        face_q = _FACE_QUAT.get(mount.position)
+        if face_q is not None:
+            quat = quat_multiply(face_q, quat)
+
+    # 3. Body frame rotation (for cylinders/rims)
+    if body.frame_quat != (1.0, 0.0, 0.0, 0.0):
+        quat = quat_multiply(body.frame_quat, quat)
+
+    return quat
+
+
+def _placed_bbox(dims: Vec3, quat: Quat) -> Vec3:
+    """Compute axis-aligned bbox from component dims rotated by quat."""
+    corners = [
+        rotate_vec(quat, (dims[0], 0.0, 0.0)),
+        rotate_vec(quat, (0.0, dims[1], 0.0)),
+        rotate_vec(quat, (0.0, 0.0, dims[2])),
+    ]
+    return (
+        sum(abs(c[0]) for c in corners),
+        sum(abs(c[1]) for c in corners),
+        sum(abs(c[2]) for c in corners),
+    )
+
+
+def solve_packing(bot: Bot) -> PackingResult:
     """Solve packing for all bodies in the bot."""
+    placements: dict = {}
     for body in bot.all_bodies:
-        _solve_body(body)
+        _solve_body(body, placements)
+    return PackingResult(placements=placements)
 
 
-def _solve_body(body: Body) -> None:
+def _solve_body(body: Body, placements: dict) -> None:
     """Solve packing for a single body."""
     # Internal components that need to fit inside this body
-    internal_items: list[tuple[str, Vec3, float]] = []
-    for mount in body.mounts:
-        internal_items.append(
-            (mount.label, mount.placed_dimensions, mount.component.mass)
-        )
+    internal_items: list[tuple[str, Vec3, float]] = [
+        (mount.label, mount.placed_dimensions, mount.component.mass)
+        for mount in body.mounts
+    ]
 
     # Servo center positions — the body needs structural material reaching
     # to each servo center (not the shaft/joint position). The bracket
@@ -68,6 +125,12 @@ def _solve_body(body: Body) -> None:
         j.solved_servo_center = center
         j.solved_servo_quat = quat
         joint_positions.append(center)
+
+        # Dual-write: also store in PackingResult
+        placements[j] = Placement(
+            pose=Pose(center, quat),
+            bbox=_placed_bbox(j.servo.dimensions, quat),
+        )
 
     if not internal_items and not joint_positions and body.explicit_dimensions is None:
         _compute_mass_inertia(body)
@@ -91,6 +154,13 @@ def _solve_body(body: Body) -> None:
         )
         mount.resolved_insertion_axis = _resolve_insertion_axis(
             mount.position, mount.insertion_axis
+        )
+
+        # Dual-write: also store in PackingResult
+        mount_q = _mount_quat(mount, body)
+        placements[mount] = Placement(
+            pose=Pose(mount.resolved_pos, mount_q),
+            bbox=_placed_bbox(mount.component.dimensions, mount_q),
         )
 
     _check_internal_overlaps(body)
@@ -252,7 +322,7 @@ def _compute_mass_inertia(body: Body) -> None:
     # Include structural body as a mass item (centered at origin)
     from botcad.geometry import parallel_axis_inertia
 
-    all_mass_items = mass_items + [((0.0, 0.0, 0.0), structural_mass, dims)]
+    all_mass_items = [*mass_items, ((0.0, 0.0, 0.0), structural_mass, dims)]
     ixx, iyy, izz, ixy, ixz, iyz = parallel_axis_inertia(
         all_mass_items, (com_x, com_y, com_z)
     )
@@ -294,7 +364,6 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
 
     Returns list of (label_a, label_b, overlap_extent) tuples.
     """
-    from botcad.geometry import rotate_vec
 
     # Build list of (label, center, half_extents) for every internal item
     items: list[tuple[str, Vec3, Vec3]] = []
@@ -342,10 +411,7 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
 
 def _aabb_overlap(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> bool:
     """Check if two axis-aligned bounding boxes overlap."""
-    for i in range(3):
-        if abs(pos_a[i] - pos_b[i]) >= half_a[i] + half_b[i]:
-            return False
-    return True
+    return all(abs(pos_a[i] - pos_b[i]) < half_a[i] + half_b[i] for i in range(3))
 
 
 def _overlap_extent(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> Vec3:

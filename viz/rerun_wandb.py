@@ -8,6 +8,7 @@ Uses deterministic eval episodes (mean actions, no sampling) to show
 true policy capability without exploration noise.
 """
 
+import contextlib
 import os
 
 import rerun as rr
@@ -92,10 +93,8 @@ class RerunWandbLogger:
         # Set up sinks: always save to disk, optionally stream live
         sinks = [rr.FileSink(self.rrd_path)]
         if self.live:
-            try:
+            with contextlib.suppress(Exception):  # Viewer may have been closed
                 sinks.append(rr.GrpcSink())
-            except Exception:
-                pass  # Viewer may have been closed; file sink still works
         rr.set_sinks(*sinks)
 
         # Set recording name to just the episode number
@@ -133,7 +132,7 @@ class RerunWandbLogger:
 
     def finish_episode(
         self,
-        episode_data: dict = None,
+        episode_data: dict | None = None,
         upload_artifact: bool = False,
         batch_idx: int | None = None,
     ):

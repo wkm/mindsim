@@ -25,9 +25,7 @@ def _render_program(prog) -> str:
     """Render a ShapeScript program as human-readable text."""
     from botcad.shapescript.cad_steps import format_op
 
-    lines = []
-    for op in prog.ops:
-        lines.append(format_op(op))
+    lines = [format_op(op) for op in prog.ops]
 
     # Add sub-programs if any
     if prog.sub_programs:
@@ -35,8 +33,7 @@ def _render_program(prog) -> str:
         for key in sorted(prog.sub_programs):
             sub = prog.sub_programs[key]
             lines.append(f"--- sub-program: {key} ---")
-            for op in sub.ops:
-                lines.append(f"  {format_op(op)}")
+            lines.extend(f"  {format_op(op)}" for op in sub.ops)
 
     lines.append("")  # trailing newline
     return "\n".join(lines)

@@ -33,7 +33,7 @@ def test_material_is_frozen():
     assert dataclasses.fields(Material)
     try:
         PLA.density = 999  # type: ignore
-        assert False, "Should be frozen"
+        raise AssertionError("Should be frozen")
     except dataclasses.FrozenInstanceError:
         pass
 

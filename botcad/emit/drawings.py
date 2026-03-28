@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from botcad.debug_drawing import DebugDrawing
+from botcad.debug_drawing import DebugDrawingBuilder
 
 # ── Component-level drawings ──
 
@@ -53,7 +53,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     cradle_shaft = cradle.moved(to_shaft)
 
     # Z planes in servo body frame (pocket bracket)
-    body_x, body_y, body_z = servo.effective_body_dims
+    _body_x, _body_y, body_z = servo.effective_body_dims
     shaft_top_z = body_z / 2
     ear_z = servo.mounting_ears[0].pos[2] if servo.mounting_ears else -body_z / 2
 
@@ -65,7 +65,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     outputs: list[Path] = []
 
     # --- Pocket bracket + servo ---
-    d = DebugDrawing("pocket_bracket")
+    d = DebugDrawingBuilder("pocket_bracket")
     d.add_part("servo", servo_body, color=(60, 60, 60))
     d.add_part("bracket", pocket, color=(50, 120, 190))
     d.add_section("top_shaft", Plane.XY.offset(shaft_top_z))
@@ -76,7 +76,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     outputs.append(d.save(out_dir / f"drawing_pocket_{safe}.svg"))
 
     # --- Coupler + servo (shaft-centered frame) ---
-    d = DebugDrawing("coupler")
+    d = DebugDrawingBuilder("coupler")
     d.add_part("servo", servo_shaft, color=(60, 60, 60))
     d.add_part("coupler", coupler, color=(220, 60, 40))
     d.add_section("front_horn", Plane.XY.offset(front_z))
@@ -87,7 +87,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     outputs.append(d.save(out_dir / f"drawing_coupler_{safe}.svg"))
 
     # --- Cradle + servo (shaft-centered frame) ---
-    d = DebugDrawing("cradle")
+    d = DebugDrawingBuilder("cradle")
     d.add_part("servo", servo_shaft, color=(60, 60, 60))
     d.add_part("cradle", cradle_shaft, color=(50, 120, 190))
     d.add_section("front_horn", Plane.XY.offset(front_z))
@@ -98,7 +98,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     outputs.append(d.save(out_dir / f"drawing_cradle_{safe}.svg"))
 
     # --- Full coupler assembly (shaft-centered frame) ---
-    d = DebugDrawing("coupler_assembly")
+    d = DebugDrawingBuilder("coupler_assembly")
     d.add_part("cradle", cradle_shaft, color=(50, 120, 190))
     d.add_part("servo", servo_shaft, color=(60, 60, 60))
     d.add_part("coupler", coupler, color=(220, 60, 40))
@@ -139,12 +139,12 @@ def emit_drawings(bot, output_dir: Path) -> list[Path]:
             servo_body = servo_solid(servo)
             bracket = bracket_solid_solid(servo, spec)
 
-            body_x, body_y, body_z = servo.effective_body_dims
+            _body_x, _body_y, body_z = servo.effective_body_dims
             shaft_top_z = body_z / 2
 
             safe_name = joint.name.replace(" ", "_").lower()
 
-            d = DebugDrawing(f"joint_{joint.name}")
+            d = DebugDrawingBuilder(f"joint_{joint.name}")
             d.add_part("servo", servo_body, color=(60, 60, 60))
             d.add_part("bracket", bracket, color=(50, 120, 190))
             d.add_section("shaft_face", Plane.XY.offset(shaft_top_z))

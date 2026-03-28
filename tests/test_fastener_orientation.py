@@ -22,7 +22,7 @@ def _approx_vec(v, expected, *, atol=1e-6):
 def _approx_quat(q, expected, *, atol=1e-6):
     """Assert two quaternions are approximately equal (up to sign flip)."""
     # q and -q represent the same rotation
-    dot = sum(a * b for a, b in zip(q, expected))
+    dot = sum(a * b for a, b in zip(q, expected, strict=True))
     if dot < 0:
         q = tuple(-x for x in q)
     for i in range(4):
@@ -130,34 +130,29 @@ class TestQuatMultiply:
 
 class TestFastenerOrientation:
     def test_fastener_mounting_ear_orientation(self):
-        """MountingEar axis (0,0,-1) with left_wheel servo quat -> head faces +X.
+        """MountingEar axis (0,0,1) = insertion direction (shank goes +Z in local).
 
-        The servo_quat for left_wheel rotates the servo so its shaft points
-        along -X. A mounting ear with local axis (0,0,-1) should end up with
-        the screw head pointing roughly along +X after composing:
-          final = quat_multiply(servo_quat, axis_align)
-        where axis_align = rotation_between((0,0,1), (0,0,-1))
+        With left_wheel servo quat (shaft along -X), fastener_pose() should
+        produce the same result as the old manual computation.
         """
-        # Servo quat for left_wheel: 90 degrees around -Y
-        # This is (cos(45), 0, -sin(45), 0) = (0.707107, 0, -0.707107, 0)
+        from botcad.component import MountPoint
+        from botcad.geometry import Pose, fastener_pose
+
         servo_quat = (0.707107, 0.0, -0.707107, 0.0)
+        servo_pose = Pose((0.0, 0.0, 0.0), servo_quat)
 
-        # Mounting ear axis in servo-local frame: pointing down
-        ear_axis = (0.0, 0.0, -1.0)
+        # New convention: insertion axis = +Z (shank goes up in servo-local)
+        ear = MountPoint(
+            "ear", pos=(0.0, 0.0, 0.0), diameter=0.003, axis=(0.0, 0.0, 1.0)
+        )
+        fp = fastener_pose(servo_pose, ear)
 
-        # Align fastener +Z to ear axis
-        axis_align = rotation_between((0.0, 0.0, 1.0), ear_axis)
-        final = quat_multiply(servo_quat, axis_align)
+        assert abs(_quat_norm(fp.quat) - 1.0) < 1e-6
 
-        # The fastener head (originally +Z) should now point in some direction
-        # after the composed rotation. Verify the result is a unit quaternion.
-        assert abs(_quat_norm(final) - 1.0) < 1e-6
+        # Head direction = +Z after fastener quat rotation
+        head_dir = rotate_vec(fp.quat, (0.0, 0.0, 1.0))
 
-        # The rotated +Z vector tells us where the screw head faces
-        head_dir = rotate_vec(final, (0.0, 0.0, 1.0))
-
-        # For a left_wheel servo (shaft along -X), mounting ears with axis (0,0,-1)
-        # should have screws pointing roughly along +X (outward from the servo case)
+        # For left_wheel servo, head should point roughly along ±X
         assert abs(head_dir[0] - 1.0) < 0.1 or abs(head_dir[0] - (-1.0)) < 0.1, (
             f"Expected head along +/-X, got {head_dir}"
         )

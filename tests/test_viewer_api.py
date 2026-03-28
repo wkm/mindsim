@@ -6,6 +6,7 @@ for the web viewer, without requiring build123d/OCCT.
 
 import json
 from pathlib import Path
+from typing import ClassVar
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -60,7 +61,7 @@ class TestBuildComponentRegistry:
 
 
 class TestComponentToJson:
-    REQUIRED_KEYS = {
+    REQUIRED_KEYS: ClassVar[set[str]] = {
         "name",
         "category",
         "dimensions_mm",

@@ -41,10 +41,23 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-def _apply_mount_rotation(solid, mount):
-    """Apply rotate_z + face_euler to a component solid, matching pocket orientation."""
+def _apply_mount_rotation(solid, mount, bot=None):
+    """Apply mount orientation to a component solid, matching pocket orientation.
+
+    When bot is provided, uses the Pose from PackingResult (single rotation).
+    Falls back to legacy rotate_z + face_euler when bot is not available.
+    """
     from build123d import Location
 
+    if bot is not None and bot.packing_result is not None:
+        placement = bot.packing_result.placements.get(mount)
+        if placement is not None:
+            euler = quat_to_euler(placement.pose.quat)
+            if euler != (0.0, 0.0, 0.0):
+                solid = solid.moved(Location((0, 0, 0), euler))
+            return solid
+
+    # Legacy fallback
     if mount.rotate_z:
         solid = solid.moved(Location((0, 0, 0), (0, 0, 90)))
     face_euler = mount.face_euler_deg
@@ -53,7 +66,7 @@ def _apply_mount_rotation(solid, mount):
     return solid
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterialSolid:
     """A solid tagged with the material it represents."""
 
@@ -61,7 +74,7 @@ class MaterialSolid:
     solid: object  # build123d Solid
 
 
-@dataclass
+@dataclass(frozen=True)
 class CadModel:
     """Pre-built CAD geometry for all bodies in a bot."""
 
@@ -73,7 +86,7 @@ class CadModel:
     multi_material_solids: dict[str, list[MaterialSolid]] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class AssemblyPart:
     """A positioned CAD solid in the assembly, tagged with metadata."""
 
@@ -83,7 +96,7 @@ class AssemblyPart:
     label: str  # human-readable identifier
 
 
-@dataclass
+@dataclass(frozen=True)
 class CadStep:
     """One intermediate snapshot during body solid construction."""
 
@@ -124,7 +137,7 @@ def _restore_mass_from_cache(body: Body, cached: dict) -> None:
     body.solved_inertia = cached["inertia"]
 
 
-def _update_mass_from_solid(body: Body, solid) -> None:
+def _update_mass_from_solid(body: Body, solid, bot=None) -> None:
     """Compute mass, COM, and inertia from the actual CAD solid + component masses.
 
     Structural mass uses an FDM print model: 2 perimeter walls + 20% infill.
@@ -170,17 +183,20 @@ def _update_mass_from_solid(body: Body, solid) -> None:
     # --- Component masses at their positions ---
     # (pos, mass, dims) for each component + servo
     mass_items: list[tuple[Vec3, float, Vec3]] = []
+    placements = bot.packing_result.placements if bot and bot.packing_result else {}
 
     for mount in body.mounts:
-        mass_items.append(
-            (mount.resolved_pos, mount.component.mass, mount.placed_dimensions)
-        )
+        p = placements[mount].pose.pos if mount in placements else mount.resolved_pos
+        mass_items.append((p, mount.component.mass, mount.placed_dimensions))
 
     # Servo mass at servo body center (not shaft/joint position)
     for joint in body.joints:
-        mass_items.append(
-            (joint.solved_servo_center, joint.servo.mass, joint.servo.dimensions)
+        p = (
+            placements[joint].pose.pos
+            if joint in placements
+            else joint.solved_servo_center
         )
+        mass_items.append((p, joint.servo.mass, joint.servo.dimensions))
 
     # --- Composite mass ---
     total_mass = struct_mass + sum(m for _, m, _ in mass_items)
@@ -253,67 +269,39 @@ def _update_mass_from_solid(body: Body, solid) -> None:
 def make_component_solid(component: Component):
     """Create a build123d solid representing a component's physical geometry.
 
-    Every component must have an explicit CAD solid — no fallback to
-    primitive boxes. Dispatches to shape-specific builders; raises
-    ValueError for unknown components.
+    Routes through the ShapeScript emitter registered in the component
+    registry. Every component kind must have a script_emitter — this is
+    the single code path for both bot viewer and component viewer.
     """
+    from botcad.component import get_component_meta
 
-    dims = component.dimensions
-
-    if component.name == "RaspberryPiZero2W":
-        from botcad.components.compute import raspberry_pi_zero_solid
-
-        return raspberry_pi_zero_solid()
-
-    # Wheels: detailed tire/hub geometry
-    if component.kind == ComponentKind.WHEEL:
-        r = dims[0] / 2
-        w = dims[2]
-        return _make_wheel_solid(r, w)
-
-    # Servos: use detailed solid from bracket module
-    if component.kind == ComponentKind.SERVO:
-        from botcad.bracket import servo_solid
-
-        return servo_solid(component)
-
-    # Cameras: use detailed solid from camera module
-    if component.kind == ComponentKind.CAMERA:
-        from botcad.components.camera import camera_solid
-
-        return camera_solid(component)
-
-    # Batteries: use detailed solid from battery module
-    if component.kind == ComponentKind.BATTERY:
-        from botcad.components.battery import battery_solid
-
-        return battery_solid(component)
-
-    # Bearings: outer ring - inner bore
-    if component.kind == ComponentKind.BEARING:
-        return _make_bearing_solid(component)
-
-    # Test fastener prism: drilled holes at each mount point
-    if component.name == "TestFastenerPrism":
-        from botcad.components.test_fastener import test_fastener_solid
-
-        return test_fastener_solid(component)
+    meta = get_component_meta(component.kind)
+    if meta.script_emitter is not None:
+        return _execute_script_emitter(meta.script_emitter(component))
 
     raise ValueError(
-        f"No CAD solid builder for component {component.name!r}. "
-        f"Every component must have explicit geometry — add a case to "
-        f"make_component_solid() or implement a <component>_solid() factory."
+        f"No ShapeScript emitter for component {component.name!r} "
+        f"(kind={component.kind}). Register a script_emitter in "
+        f"_build_registry()."
     )
 
 
-def _get_body_shapescript(body, parent_joint_map, body_wire_segments):
+def _execute_script_emitter(prog):
+    """Execute a ShapeScript program and return the output solid."""
+    from botcad.shapescript.backend_occt import OcctBackend
+
+    result = OcctBackend().execute(prog)
+    return _as_solid(result.shapes[prog.output_ref.id])
+
+
+def _get_body_shapescript(body, parent_joint_map, body_wire_segments, bot=None):
     """Get or create the ShapeScript program for any body (fabricated or purchased)."""
     if body.kind == BodyKind.FABRICATED:
         from botcad.shapescript.emit_body import emit_body_ir
 
         pj = parent_joint_map.get(body.name)
         wire_segs = tuple(body_wire_segments.get(body.name, []))
-        return emit_body_ir(body, pj, wire_segs or None)
+        return emit_body_ir(body, pj, wire_segs or None, bot=bot)
 
     # Purchased body — route to the appropriate script emitter
     comp = body.component
@@ -343,6 +331,7 @@ def _build_multi_material_solids(
     ir_backend: object,
     multi_material_solids: dict[str, list[MaterialSolid]],
     log,
+    bot=None,
 ) -> None:
     """Execute multi-material programs for a component body, if available.
 
@@ -372,9 +361,8 @@ def _build_multi_material_solids(
             result = ir_backend.execute(mp.program)
             solid = result.shapes.get(mp.program.output_ref.id)
             if solid is not None:
-                # Apply same mount rotation as primary solid
-                if mount is not None:
-                    solid = _apply_mount_rotation(solid, mount)
+                # Component meshes stay in component-local frame;
+                # placement rotation is applied at render time.
                 mat_solids.append(
                     MaterialSolid(
                         material_name=mp.material.name,
@@ -453,7 +441,9 @@ def build_cad(bot: Bot) -> CadModel:
         print(f"[build_cad] [{i + 1}/{n}] {body.name}...", end="", flush=True)
         t0 = time.monotonic()
 
-        prog = _get_body_shapescript(body, parent_joint_map, body_wire_segments)
+        prog = _get_body_shapescript(
+            body, parent_joint_map, body_wire_segments, bot=bot
+        )
         if prog is None:
             dt = time.monotonic() - t0
             print(f" {dt:.1f}s (no script)")
@@ -473,7 +463,7 @@ def build_cad(bot: Bot) -> CadModel:
             solid = result.shapes[prog.output_ref.id]
             if solid is not None:
                 if body.kind == BodyKind.FABRICATED:
-                    _update_mass_from_solid(body, solid)
+                    _update_mass_from_solid(body, solid, bot=bot)
                 cache_data = {"brep": _solid_to_brep_bytes(solid)}
                 if body.kind == BodyKind.FABRICATED:
                     cache_data.update(
@@ -488,28 +478,10 @@ def build_cad(bot: Bot) -> CadModel:
             print(f" {dt:.1f}s")
 
         if solid is not None:
-            # Mounted components: apply rotate_z + face_euler so body_solids
-            # stores the oriented solid.  Clearance checks and on-demand mesh
-            # endpoints both consume body_solids, so the rotation must be
-            # applied here — not deferred to STL export time.
-            mount = comp_mount_map.get(body.name)
-            if mount is not None:
-                solid = _apply_mount_rotation(solid, mount)
-
-            # Purchased comp_ bodies: also apply the parent body's frame_quat
-            # so the component STL is oriented consistently with the parent
-            # body's geometry (e.g. a wheel on a cylinder rim aligned to the
-            # joint axis).  Without this the component STL stays in canonical
-            # Z-up frame while the parent body has been rotated.
-            if (
-                body.kind == BodyKind.PURCHASED
-                and body.parent_body_name
-                and body.name.startswith("comp_")
-            ):
-                parent = bodies_by_name.get(body.parent_body_name)
-                if parent is not None:
-                    solid = _orient_z_to_axis(solid, (0, 0, 1), quat=parent.frame_quat)
-
+            # Component meshes are stored in component-local frame.
+            # Placement (position + orientation) is provided by PackingResult
+            # and applied by the viewer/MuJoCo at render time — NOT baked
+            # into the mesh.
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"
@@ -518,7 +490,7 @@ def build_cad(bot: Bot) -> CadModel:
             # emitter, execute each material program and store the results.
             if body.component is not None and body.name.startswith("comp_"):
                 _build_multi_material_solids(
-                    body, mount, ir_backend, multi_material_solids, log
+                    body, mount, ir_backend, multi_material_solids, log, bot=bot
                 )
 
         log.info("build_cad [%d/%d] %s  %.1fs", i + 1, n, body.name, dt)
@@ -1033,7 +1005,10 @@ def _subprocess_bool_cut(shape, tool, timeout_sec: int):
 
 
 def _make_body_solid(
-    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+    body: Body,
+    parent_joint: Joint | None = None,
+    wire_segments: tuple | None = None,
+    bot=None,
 ):
     """Build a body solid by executing its ShapeScript IR.
 
@@ -1042,15 +1017,18 @@ def _make_body_solid(
     from botcad.shapescript.backend_occt import OcctBackend
     from botcad.shapescript.emit_body import emit_body_ir
 
-    prog = emit_body_ir(body, parent_joint, wire_segments)
+    prog = emit_body_ir(body, parent_joint, wire_segments, bot=bot)
     result = OcctBackend().execute(prog)
     return result.shapes[prog.output_ref.id]
 
 
 def make_body_solid_with_steps(
-    body: Body, parent_joint: Joint | None = None, wire_segments: tuple | None = None
+    body: Body,
+    parent_joint: Joint | None = None,
+    wire_segments: tuple | None = None,
+    bot=None,
 ) -> list[CadStep]:
-    """Build a body solid step-by-step via ShapeScript, capturing each intermediate.
+    """Build a body solid step-by-step via ShapeScriptBuilder, capturing each intermediate.
 
     Executes the ShapeScript IR and converts each op into a CadStep for the
     web viewer's cad-steps debug mode.
@@ -1059,7 +1037,7 @@ def make_body_solid_with_steps(
     from botcad.shapescript.cad_steps import shapescript_to_cad_steps
     from botcad.shapescript.emit_body import emit_body_ir
 
-    prog = emit_body_ir(body, parent_joint, wire_segments)
+    prog = emit_body_ir(body, parent_joint, wire_segments, bot=bot)
     result = OcctBackend().execute(prog)
     return shapescript_to_cad_steps(prog, result)
 
@@ -1317,6 +1295,36 @@ def _make_bearing_solid(bearing: BearingSpec):
     inner = Cylinder(bearing.id / 2, bearing.width + 0.001, align=C)
 
     return _as_solid(outer - inner)
+
+
+def _make_generic_pcb_solid(component):
+    """Create a simple PCB-style box for generic components.
+
+    Rounded corners + mounting hole cuts. Works for any component
+    with dimensions and optional mounting_points.
+    """
+    from build123d import Align, Box, Cylinder, Location
+
+    C = (Align.CENTER, Align.CENTER, Align.CENTER)
+    dx, dy, dz = component.dimensions
+    pcb = Box(dx, dy, dz, align=C)
+
+    # Corner radii (clamped to half the shortest side)
+    radius = min(dx, dy) * 0.15
+    if radius > 0.0005:
+        z_edges = [
+            e for e in pcb.edges() if e.geom_type == "LINE" and abs(e.direction.Z) > 0.9
+        ]
+        if len(z_edges) == 4:
+            pcb = pcb.fillet(radius, z_edges)
+
+    # Cut mounting holes
+    for mp in component.mounting_points:
+        hole = Cylinder(mp.diameter / 2, dz + 0.001, align=C)
+        hole = hole.moved(Location((mp.pos[0], mp.pos[1], 0)))
+        pcb = pcb - hole
+
+    return _as_solid(pcb)
 
 
 def emit_cad_for_assembly(

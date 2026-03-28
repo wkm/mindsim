@@ -355,7 +355,7 @@ _GENERATORS = {
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a plant based on plant_type parameter."""
     gen = _GENERATORS.get(params.plant_type, _potted)
     return gen(params)

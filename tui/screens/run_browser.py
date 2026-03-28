@@ -29,7 +29,7 @@ class RunBrowserScreen(Screen):
     Otherwise discovers runs from the filesystem and W&B API.
     """
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
         Binding("enter", "select_run", "Select", priority=True),

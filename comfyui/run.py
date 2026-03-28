@@ -165,7 +165,7 @@ class ComfyClient:
         outputs = entry.get("outputs", {})
         downloaded = []
 
-        for _node_id, node_out in outputs.items():
+        for node_out in outputs.values():
             # Standard output categories (images, video, etc.)
             for category in ("images", "video", "audio", "gltf", "meshes"):
                 for item in node_out.get(category, []):
