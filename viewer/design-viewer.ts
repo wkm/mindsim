@@ -9,8 +9,8 @@ import * as THREE from 'three';
 import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
 import { DesignScene, NodeKind } from './design-scene.ts';
-import type { ManifestPart, ViewerManifest } from './manifest-types.ts';
-import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
+import type { ViewerManifest } from './manifest-types.ts';
+import { fetchSTL, makeMaterial, manifestQuatToThree, resolvePartNodeId } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -383,26 +383,4 @@ export async function initDesignViewer(
     viewport,
     syncVisibility,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Node ID resolution — maps manifest parts to SceneTree node IDs
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the SceneTree node ID for a manifest part.
- *
- * With the new model, parts[] only contains fasteners and wires.
- * Servos, horns, and wheels are in bodies[]; mounted components are in mounts[].
- */
-function resolvePartNodeId(part: ManifestPart): string {
-  if (part.category === 'fastener') {
-    // Fasteners are grouped — use the joint-scoped or mount-scoped group key
-    return part.joint ? `fastener-group:${part.joint}:${part.name}` : `fastener-group:${part.id}:${part.name}`;
-  }
-  if (part.category === 'wire') {
-    // Wire stubs/segments register under the wire group node for their body
-    return `wire-group:${part.parent_body}`;
-  }
-  return `part:${part.id}`;
 }
