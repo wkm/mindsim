@@ -13,7 +13,7 @@ import warp as wp
 import warp.fem as fem
 
 
-@dataclass
+@dataclass(frozen=True)
 class VoxelDomain:
     grid: fem.Grid3D
     cell_count: int

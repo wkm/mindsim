@@ -49,7 +49,7 @@ SWEEP_FRAMES = 12
 # ── Public API ──
 
 
-@dataclass
+@dataclass(frozen=True)
 class SolidPart:
     """A named solid for subassembly validation.
 
@@ -64,7 +64,7 @@ class SolidPart:
     check_collision: bool = True
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class SweepResult:
     """Result of a ROM validation sweep."""
 

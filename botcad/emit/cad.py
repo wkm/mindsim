@@ -66,7 +66,7 @@ def _apply_mount_rotation(solid, mount, bot=None):
     return solid
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterialSolid:
     """A solid tagged with the material it represents."""
 
@@ -74,7 +74,7 @@ class MaterialSolid:
     solid: object  # build123d Solid
 
 
-@dataclass
+@dataclass(frozen=True)
 class CadModel:
     """Pre-built CAD geometry for all bodies in a bot."""
 
@@ -86,7 +86,7 @@ class CadModel:
     multi_material_solids: dict[str, list[MaterialSolid]] = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class AssemblyPart:
     """A positioned CAD solid in the assembly, tagged with metadata."""
 
@@ -96,7 +96,7 @@ class AssemblyPart:
     label: str  # human-readable identifier
 
 
-@dataclass
+@dataclass(frozen=True)
 class CadStep:
     """One intermediate snapshot during body solid construction."""
 

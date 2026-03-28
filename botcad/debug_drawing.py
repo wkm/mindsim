@@ -293,20 +293,20 @@ def _project_offset(offset_3d: Vec3, right: Vec3, up: Vec3) -> tuple[float, floa
     return (dx * rx + dy * ry + dz * rz, dx * ux + dy * uy + dz * uz)
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class _Part:
     name: str
     solid: Solid | Compound
     color: RGB
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class _Section:
     name: str
     plane: Plane
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class _Projection:
     """A 2D projection view with visible/hidden line separation."""
 
@@ -319,7 +319,7 @@ class _Projection:
 _View = _Section | _Projection
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class DebugDrawing:
     """Accumulates parts and views (sections + projections), exports SVG.
 

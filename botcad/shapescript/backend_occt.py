@@ -49,7 +49,7 @@ from botcad.shapescript.tags import TagRegistry
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class ExecutionResult:
     """Result of executing a ShapeScript."""
 

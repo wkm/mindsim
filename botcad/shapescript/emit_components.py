@@ -1049,11 +1049,11 @@ def compute_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=compute_script(comp),  # full union for bbox
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )
 
 
@@ -1113,11 +1113,11 @@ def camera_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=camera_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_ABS_DARK, program=lens_prog),
             MaterialProgram(material=MAT_NICKEL, program=conn_prog),
-        ],
+        ),
     )
 
 
@@ -1178,11 +1178,11 @@ def _bec5v_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=_bec5v_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )
 
 
@@ -1268,9 +1268,9 @@ def _waveshare_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=_waveshare_serial_bus_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )

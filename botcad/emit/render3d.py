@@ -74,7 +74,7 @@ VIEWS_4: dict[str, dict[str, float]] = {
 # ── Scene builder ──
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class SceneBuilder:
     """Declarative MuJoCo XML scene construction.
 

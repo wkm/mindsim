@@ -43,7 +43,7 @@ from botcad.shapescript.ops import (
 )
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class ShapeScript:
     """Ordered sequence of IR ops with a builder API.
 
@@ -331,7 +331,7 @@ class ShapeScript:
         return prog
 
 
-@dataclass
+@dataclass(frozen=True)
 class MaterialProgram:
     """A ShapeScript program tagged with the material it represents.
 
@@ -344,7 +344,7 @@ class MaterialProgram:
     program: ShapeScript
 
 
-@dataclass
+@dataclass(frozen=True)
 class MultiMaterialResult:
     """Result from a multi-material component emitter.
 
@@ -353,4 +353,6 @@ class MultiMaterialResult:
     """
 
     primary: ShapeScript  # main program (union of all regions, for bbox/collision)
-    material_programs: list[MaterialProgram]  # per-material programs for STL export
+    material_programs: tuple[
+        MaterialProgram, ...
+    ]  # per-material programs for STL export

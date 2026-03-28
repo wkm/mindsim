@@ -39,7 +39,7 @@ def _as_solid(shape):
     return shape
 
 
-@dataclass
+@dataclass(frozen=True)
 class DiffMetrics:
     gen_volume: float
     ref_volume: float

@@ -31,24 +31,15 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-@dataclass
+@dataclass(frozen=True)
 class WireSegment:
-    """A segment of wire between two points in body-local coordinates.
-
-    Identity-based hashing for functools.lru_cache compatibility.
-    """
+    """A segment of wire between two points in body-local coordinates."""
 
     start: Vec3  # body-local coordinates
     end: Vec3  # body-local coordinates
     body_name: str  # which body this segment lives on
     joint_name: str | None = None  # if crossing a joint
     slack: float = 0.0  # extra length needed for joint motion (meters)
-
-    def __hash__(self):
-        return id(self)
-
-    def __eq__(self, other):
-        return self is other
 
     @property
     def straight_length(self) -> float:
@@ -62,7 +53,7 @@ class WireSegment:
         return self.straight_length + self.slack
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class WireRoute:
     """A complete wire route from source to destination."""
 

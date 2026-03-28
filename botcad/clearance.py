@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from botcad.skeleton import Bot
 
 
-@dataclass
+@dataclass(frozen=True)
 class ClearanceResult:
     """Result of checking one clearance constraint against actual geometry."""
 

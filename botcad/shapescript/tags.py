@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from botcad.shapescript.ops import ShapeRef
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class TagRegistry:
     """Tracks tag declarations and propagation through operations."""
 

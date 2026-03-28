@@ -37,7 +37,7 @@ from viz.blueprint import create_training_blueprint
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class RecordingInfo:
     """Metadata about a discovered .rrd recording on W&B."""
 
@@ -47,7 +47,7 @@ class RecordingInfo:
     path: str | None = None  # local path after download
 
 
-@dataclass
+@dataclass(frozen=True)
 class CheckpointInfo:
     """Metadata about a discovered checkpoint."""
 

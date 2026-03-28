@@ -19,7 +19,7 @@ from dataclasses import dataclass
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RunContext:
     """Identity and context for a training run."""
 
