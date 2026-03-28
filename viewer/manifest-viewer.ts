@@ -223,12 +223,14 @@ async function lazyLoadNodeMesh(
       color = new THREE.Color(0.5, 0.5, 0.5);
     }
 
+    const isTransparent = mount.color?.[3] !== undefined && mount.color[3] < 1;
     const mat = new THREE.MeshPhysicalMaterial({
       color,
       roughness: 0.5,
       metalness: 0.0,
-      transparent: mount.color?.[3] !== undefined && mount.color[3] < 1,
+      transparent: isTransparent,
       opacity: mount.color?.[3] ?? 1.0,
+      ...(isTransparent ? { depthWrite: false, side: THREE.DoubleSide } : {}),
     });
 
     const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
