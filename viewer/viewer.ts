@@ -83,11 +83,14 @@ if (cadstepsParam) {
   import('./viewport3d.ts').then(async ({ Viewport3D }) => {
     const container = document.getElementById('canvas-container');
     const TREE_PANEL_WIDTH = 280;
+    const SIDE_PANEL_WIDTH = 320;
 
-    /** Offset the canvas container so it doesn't overlap the tree panel. */
-    function updateCanvasLayout(treePanelVisible: boolean) {
+    /** Offset the canvas container so it doesn't overlap the tree or side panel. */
+    function updateCanvasLayout(treePanelVisible: boolean, sidePanelVisible = false) {
       const left = treePanelVisible ? TREE_PANEL_WIDTH : 0;
+      const right = sidePanelVisible ? SIDE_PANEL_WIDTH : 0;
       container.style.left = `${left}px`;
+      container.style.right = `${right}px`;
     }
 
     // Initial layout: Design tab is active, tree panel visible
@@ -156,7 +159,7 @@ if (cadstepsParam) {
         designViewport.resize();
       } else if (tab === 'dfm') {
         // Show DFM viewer (shares same canvas container)
-        updateCanvasLayout(false);
+        updateCanvasLayout(false, true);
         sidePanel.style.display = '';
 
         if (!dfmHandle) {
@@ -171,6 +174,7 @@ if (cadstepsParam) {
           dfmViewport!.setVisible(true);
           dfmHandle.resume();
         }
+        dfmViewport!.resize();
       } else if (tab === 'sim') {
         // Show Sim UI
         updateCanvasLayout(false);

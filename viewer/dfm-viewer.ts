@@ -260,6 +260,7 @@ export async function initDFMViewer(
   let pollTimer: number | null = null;
   let runId: string | null = null;
   let findings: DFMFindingData[] = [];
+  let assemblyOps: AssemblyOpData[] = [];
 
   // Mount DFM panel in the side panel
   sidePanelEl.innerHTML = '';
@@ -330,6 +331,31 @@ export async function initDFMViewer(
     if (panel) {
       panel.filterByStep(step);
     }
+
+    // Show/hide body groups based on which bodies are installed by this step.
+    // Structural bodies (role !== 'component') are always visible.
+    // Component bodies become visible when their INSERT step is reached.
+    if (assemblyOps.length > 0) {
+      // Collect bodies that have been inserted by step N
+      const visibleBodies = new Set<string>();
+      for (let i = 0; i <= step; i++) {
+        const op = assemblyOps[i];
+        if (op?.body) {
+          visibleBodies.add(op.body);
+        }
+      }
+
+      // Structural bodies from the manifest are always visible
+      for (const body of manifest.bodies) {
+        if (body.role !== 'component') {
+          visibleBodies.add(body.name);
+        }
+      }
+
+      for (const [name, group] of Object.entries(bodyGroups)) {
+        group.visible = visibleBodies.has(name);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -342,6 +368,7 @@ export async function initDFMViewer(
       if (!resp.ok) return;
       const data = await resp.json();
       const ops: AssemblyOpData[] = (data.ops ?? data) as AssemblyOpData[];
+      assemblyOps = ops;
       if (scrubber && ops.length > 0) {
         scrubber.setOps(ops);
       }
@@ -371,27 +398,35 @@ export async function initDFMViewer(
       const state: string = data.state ?? 'running';
       const checksComplete: number = data.checks_complete ?? 0;
       const checksTotal: number = data.checks_total ?? 1;
-      const newFindings: DFMFindingData[] = data.findings ?? [];
 
       if (panel) {
         panel.setProgress(state, checksComplete, checksTotal);
       }
 
-      if (newFindings.length > 0) {
-        findings = newFindings;
-        if (panel) {
-          panel.setFindings(findings);
-          if (scrubber) {
-            panel.filterByStep(scrubber.currentStep());
+      // Findings live at a separate endpoint, not in the status response
+      if (checksComplete > 0) {
+        try {
+          const findingsResp = await fetch(`/api/bots/${botName}/dfm/${runId}/findings`);
+          if (findingsResp.ok) {
+            const findingsData = await findingsResp.json();
+            const newFindings: DFMFindingData[] = findingsData.findings ?? [];
+            if (newFindings.length > 0) {
+              findings = newFindings;
+              if (panel) {
+                panel.setFindings(findings);
+                if (scrubber) {
+                  panel.filterByStep(scrubber.currentStep());
+                }
+              }
+            }
           }
+        } catch (findingsErr) {
+          console.warn('[dfm] findings fetch error:', findingsErr);
         }
       }
 
       if (state === 'complete' || state === 'error') {
         stopPolling();
-        if (panel && newFindings.length > 0) {
-          panel.setFindings(newFindings);
-        }
       }
     } catch (err) {
       console.warn('[dfm] poll error:', err);
