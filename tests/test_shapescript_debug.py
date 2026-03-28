@@ -7,7 +7,7 @@ import pytest
 b3d = pytest.importorskip("build123d")
 rr = pytest.importorskip("rerun")
 
-from botcad.shapescript.program import ShapeScript  # noqa: E402
+from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
 
 
 class TestShapeScriptDebugRerun:
@@ -15,7 +15,7 @@ class TestShapeScriptDebugRerun:
         """Debug a simple program without crashing."""
         from botcad.shapescript.debug_rerun import debug_program
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1, tag="shell")
         hole = prog.cylinder(0.2, 2, tag="hole")
         _result = prog.cut(box, hole)
@@ -27,7 +27,7 @@ class TestShapeScriptDebugRerun:
         """Debug produces per-step mesh files."""
         from botcad.shapescript.debug_rerun import debug_program
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1, 1, 1)
         hole = prog.cylinder(0.1, 2)
         prog.cut(box, hole)
@@ -41,7 +41,7 @@ class TestShapeScriptDebugRerun:
         """FuseOp should log without error."""
         from botcad.shapescript.debug_rerun import debug_program
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         a = prog.box(1, 1, 1)
         b = prog.sphere(0.3)
         prog.fuse(a, b)

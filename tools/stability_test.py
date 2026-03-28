@@ -125,7 +125,7 @@ def reset_to_standing(model: mujoco.MjModel, data: mujoco.MjData):
 # --- Test 1: Passive Standing ---
 
 
-@dataclass
+@dataclass(frozen=True)
 class PassiveStandingResult:
     time_to_fall: float  # seconds until fall (-1 = survived full duration)
     survived: bool
@@ -239,15 +239,15 @@ def test_passive_standing(
 # --- Test 2: Perturbation Resistance ---
 
 
-@dataclass
+@dataclass(frozen=True)
 class PerturbationResult:
     max_lateral_impulse: float  # max recoverable lateral force impulse (N*s)
     max_forward_impulse: float  # max recoverable forward force impulse (N*s)
     max_joint_perturbation: float  # max sinusoidal amplitude before fall (rad)
-    lateral_impulses_tested: list[float]
-    lateral_survived: list[bool]
-    forward_impulses_tested: list[float]
-    forward_survived: list[bool]
+    lateral_impulses_tested: tuple[float, ...]
+    lateral_survived: tuple[bool, ...]
+    forward_impulses_tested: tuple[float, ...]
+    forward_survived: tuple[bool, ...]
 
 
 def _test_impulse(
@@ -394,23 +394,23 @@ def test_perturbation_resistance(
         max_lateral_impulse=max_lateral,
         max_forward_impulse=max_forward,
         max_joint_perturbation=max_joint,
-        lateral_impulses_tested=lateral_magnitudes[: len(lateral_survived)],
-        lateral_survived=lateral_survived,
-        forward_impulses_tested=forward_magnitudes[: len(forward_survived)],
-        forward_survived=forward_survived,
+        lateral_impulses_tested=tuple(lateral_magnitudes[: len(lateral_survived)]),
+        lateral_survived=tuple(lateral_survived),
+        forward_impulses_tested=tuple(forward_magnitudes[: len(forward_survived)]),
+        forward_survived=tuple(forward_survived),
     )
 
 
 # --- Test 3: Mobility-Stability Tradeoff ---
 
 
-@dataclass
+@dataclass(frozen=True)
 class MobilityResult:
     """Results from the mobility-stability tradeoff test."""
 
-    amplitudes: list[float]
-    survival_times: list[float]  # seconds survived at each amplitude
-    forward_distances: list[float]  # forward displacement achieved
+    amplitudes: tuple[float, ...]
+    survival_times: tuple[float, ...]  # seconds survived at each amplitude
+    forward_distances: tuple[float, ...]  # forward displacement achieved
     max_stable_amplitude: float  # largest amplitude that survived full duration
     best_forward_distance: float  # max forward distance while staying upright
 
@@ -505,9 +505,9 @@ def test_mobility_tradeoff(
             )
 
     return MobilityResult(
-        amplitudes=amplitudes,
-        survival_times=survival_times,
-        forward_distances=forward_distances,
+        amplitudes=tuple(amplitudes),
+        survival_times=tuple(survival_times),
+        forward_distances=tuple(forward_distances),
         max_stable_amplitude=max_stable_amp,
         best_forward_distance=best_forward,
     )
@@ -516,7 +516,7 @@ def test_mobility_tradeoff(
 # --- Summary ---
 
 
-@dataclass
+@dataclass(frozen=True)
 class StabilityReport:
     scene_path: str
     passive: PassiveStandingResult

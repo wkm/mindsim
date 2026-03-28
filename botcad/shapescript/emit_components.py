@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from botcad.shapescript.ops import ALIGN_MIN_Z, Align3
-from botcad.shapescript.program import MultiMaterialResult, ShapeScript
+from botcad.shapescript.program import MultiMaterialResult, ShapeScriptBuilder
 
 if TYPE_CHECKING:
     from botcad.component import (
@@ -29,12 +29,12 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Joint
 
 
-def camera_script(spec: CameraSpec) -> ShapeScript:
+def camera_script(spec: CameraSpec) -> ShapeScriptBuilder:
     """Translate camera_solid() to ShapeScript ops.
 
     Models PCB, mounting holes, lens base, lens barrel, and CSI connector.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     pcb_w, pcb_h, _pcb_t = spec.dimensions
     pcb_thick = 0.0016  # standard 1.6mm FR4
@@ -83,13 +83,13 @@ def camera_script(spec: CameraSpec) -> ShapeScript:
     return prog
 
 
-def battery_script(spec: BatterySpec) -> ShapeScript:
+def battery_script(spec: BatterySpec) -> ShapeScriptBuilder:
     """Translate battery_solid() to ShapeScript ops.
 
     All geometry uses native ShapeScript ops — no PrebuiltOps.
     Label and cable exit are simple box primitives.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     w, length, h = spec.dimensions
 
     # 1. Main battery body (filleted cells — native ops)
@@ -127,9 +127,9 @@ def battery_script(spec: BatterySpec) -> ShapeScript:
     return prog
 
 
-def bearing_script(spec: BearingSpec) -> ShapeScript:
-    """Translate _make_bearing_solid() to ShapeScript: outer - inner cylinder."""
-    prog = ShapeScript()
+def bearing_script(spec: BearingSpec) -> ShapeScriptBuilder:
+    """Translate _make_bearing_solid() to ShapeScriptBuilder: outer - inner cylinder."""
+    prog = ShapeScriptBuilder()
 
     outer = prog.cylinder(spec.od / 2, spec.width)
     inner = prog.cylinder(spec.id / 2, spec.width + 0.001)
@@ -139,7 +139,7 @@ def bearing_script(spec: BearingSpec) -> ShapeScript:
     return prog
 
 
-def horn_script(servo: ServoSpec) -> ShapeScript | None:
+def horn_script(servo: ServoSpec) -> ShapeScriptBuilder | None:
     """Build a horn disc with mounting holes and center bore.
 
     The horn is a thin disc with:
@@ -155,7 +155,7 @@ def horn_script(servo: ServoSpec) -> ShapeScript | None:
     if params is None:
         return None
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     # Base disc
     horn = prog.cylinder(params.radius, params.thickness, tag="horn_disc")
@@ -187,7 +187,7 @@ def horn_script(servo: ServoSpec) -> ShapeScript | None:
 # ── Connector / Receptacle / Fastener emitters ──────────────────────
 
 
-def connector_script(spec: ConnectorSpec) -> ShapeScript:
+def connector_script(spec: ConnectorSpec) -> ShapeScriptBuilder:
     """Translate connector_solid() to ShapeScript ops.
 
     All 5 connector types are expressed as native Box/Cylinder + fuse/cut ops:
@@ -196,7 +196,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
     from botcad.connectors import ConnectorType
     from botcad.shapescript.ops import Align3
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     bx, by, bz = spec.body_dimensions
 
     # Main housing body
@@ -349,7 +349,7 @@ def connector_script(spec: ConnectorSpec) -> ShapeScript:
     return prog
 
 
-def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
+def receptacle_script(spec: ConnectorSpec) -> ShapeScriptBuilder:
     """Translate receptacle_solid() to ShapeScript ops.
 
     Slightly larger housing with a cavity on the mating face. Connector-type-
@@ -358,7 +358,7 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
     from botcad.connectors import ConnectorType
     from botcad.shapescript.ops import Align3
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     bx, by, bz = spec.body_dimensions
 
     wall = 0.0008
@@ -430,7 +430,7 @@ def receptacle_script(spec: ConnectorSpec) -> ShapeScript:
     return prog
 
 
-def fastener_script(spec: FastenerSpec, length: float) -> ShapeScript:
+def fastener_script(spec: FastenerSpec, length: float) -> ShapeScriptBuilder:
     """Translate fastener_solid() to ShapeScript ops.
 
     All geometry uses native ShapeScript ops — no PrebuiltOps.
@@ -441,7 +441,7 @@ def fastener_script(spec: FastenerSpec, length: float) -> ShapeScript:
     from botcad.fasteners import HeadType
     from botcad.shapescript.ops import Align3
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     head_r = spec.head_diameter / 2
     head_h = spec.head_height
@@ -483,7 +483,7 @@ def fastener_script(spec: FastenerSpec, length: float) -> ShapeScript:
 # ── Wheel / Wire Channel / Clearance Volume emitters ─────────────
 
 
-def wheel_script(radius: float, width: float) -> ShapeScript:
+def wheel_script(radius: float, width: float) -> ShapeScriptBuilder:
     """Translate _make_wheel_solid() to ShapeScript ops.
 
     Pololu-style wheel: tire ring with 60 tread grooves, rim, hub disc
@@ -493,7 +493,7 @@ def wheel_script(radius: float, width: float) -> ShapeScript:
     """
     import math
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     # Radial dimensions (proportional to wheel radius)
     tire_r = radius
@@ -614,7 +614,9 @@ _CHANNEL_RADIUS = {
 }
 
 
-def emit_wire_channel(prog: ShapeScript, seg, bus_type: BusType) -> ShapeRef | None:
+def emit_wire_channel(
+    prog: ShapeScriptBuilder, seg, bus_type: BusType
+) -> ShapeRef | None:
     """Emit ShapeScript ops for a cylindrical wire channel along a segment.
 
     Translates cad.py:_wire_channel() to native Cylinder + LocateOp.
@@ -666,7 +668,7 @@ def emit_wire_channel(prog: ShapeScript, seg, bus_type: BusType) -> ShapeRef | N
     return channel
 
 
-def _emit_envelope_local(prog: ShapeScript, child: Body) -> ShapeRef | None:
+def _emit_envelope_local(prog: ShapeScriptBuilder, child: Body) -> ShapeRef | None:
     """Emit ShapeScript ops for a child body's outer envelope in Z-up local frame.
 
     Translates cad.py:_child_outer_envelope_local() to native ops.
@@ -713,7 +715,7 @@ def _emit_envelope_local(prog: ShapeScript, child: Body) -> ShapeRef | None:
 
 
 def emit_child_clearance(
-    prog: ShapeScript, child: Body, joint: Joint
+    prog: ShapeScriptBuilder, child: Body, joint: Joint
 ) -> ShapeRef | None:
     """Emit ShapeScript ops for a child body's swept clearance volume.
 
@@ -775,13 +777,13 @@ def emit_child_clearance(
 # ── Compute board (Raspberry Pi) ─────────────────────────────────
 
 
-def compute_script(comp) -> ShapeScript:
+def compute_script(comp) -> ShapeScriptBuilder:
     """Translate raspberry_pi_zero_solid() to ShapeScript ops.
 
     PCB box with Z-axis fillets for corner radii, mounting holes,
     and component blocks (ports, GPIO header, SoC).
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     # PCB plate
     pcb = prog.box(0.065, 0.030, 0.0015, tag="pcb")
@@ -825,7 +827,7 @@ def compute_script(comp) -> ShapeScript:
     return prog
 
 
-def generic_pcb_script(comp) -> ShapeScript:
+def generic_pcb_script(comp) -> ShapeScriptBuilder:
     """ShapeScript emitter for generic components.
 
     Dispatches to component-specific emitters by name, falling back to
@@ -841,9 +843,9 @@ def generic_pcb_script(comp) -> ShapeScript:
     return _generic_pcb_fallback(comp)
 
 
-def _generic_pcb_fallback(comp) -> ShapeScript:
+def _generic_pcb_fallback(comp) -> ShapeScriptBuilder:
     """Simple PCB box with corner fillets and mounting holes."""
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     dx, dy, dz = comp.dimensions
 
     pcb = prog.box(dx, dy, dz, tag="pcb")
@@ -865,7 +867,7 @@ def _generic_pcb_fallback(comp) -> ShapeScript:
     return prog
 
 
-def _bec5v_script(comp) -> ShapeScript:
+def _bec5v_script(comp) -> ShapeScriptBuilder:
     """Pololu D24V10F5 — PCB with inductor, buck IC, and pin header.
 
     Layout from datasheet dimension drawing:
@@ -874,7 +876,7 @@ def _bec5v_script(comp) -> ShapeScript:
       ISL85410 buck IC (QFN 3x3mm, 0.8mm).
       5-pin header along one short edge.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     dx, dy, _dz = comp.dimensions
     pcb_t = 0.001  # 1.0mm FR4
 
@@ -907,7 +909,7 @@ def _bec5v_script(comp) -> ShapeScript:
     return prog
 
 
-def _waveshare_serial_bus_script(comp) -> ShapeScript:
+def _waveshare_serial_bus_script(comp) -> ShapeScriptBuilder:
     """Waveshare Bus Servo Adapter (A) — PCB with connectors and headers.
 
     Layout from product wiki and photos:
@@ -919,7 +921,7 @@ def _waveshare_serial_bus_script(comp) -> ShapeScript:
       USB-UART bridge IC near USB connector.
       4x M2.5 mounting holes in 37x28mm pattern.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     dx, dy, _dz = comp.dimensions
     pcb_t = 0.0016  # 1.6mm FR4
 
@@ -986,7 +988,7 @@ def _waveshare_serial_bus_script(comp) -> ShapeScript:
     return prog
 
 
-def wheel_component_script(comp) -> ShapeScript:
+def wheel_component_script(comp) -> ShapeScriptBuilder:
     """Wrapper for wheel_script that accepts a Component."""
     # Wheel dimensions: radius from X/2, width from Z
     dims = comp.dimensions
@@ -1012,7 +1014,7 @@ def compute_multi_material(comp) -> MultiMaterialResult:
     from botcad.shapescript.program import MaterialProgram, MultiMaterialResult
 
     # -- Program 1: PCB substrate (FR4 green) --
-    pcb_prog = ShapeScript()
+    pcb_prog = ShapeScriptBuilder()
     pcb = pcb_prog.box(0.065, 0.030, 0.0015, tag="pcb")
     pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.003)
 
@@ -1033,13 +1035,13 @@ def compute_multi_material(comp) -> MultiMaterialResult:
     pcb_prog.output_ref = pcb
 
     # -- Program 2: IC packages (dark epoxy) --
-    ic_prog = ShapeScript()
+    ic_prog = ShapeScriptBuilder()
     soc = ic_prog.box(0.012, 0.012, 0.0015, tag="soc")
     soc = ic_prog.locate(soc, pos=(0, 0, 0.0015))
     ic_prog.output_ref = soc
 
     # -- Program 3: Metal connectors (nickel) --
-    metal_prog = ShapeScript()
+    metal_prog = ShapeScriptBuilder()
     ports = metal_prog.box(0.040, 0.007, 0.003, tag="ports")
     ports = metal_prog.locate(ports, pos=(0, -0.0115, 0.002))
     gpio = metal_prog.box(0.051, 0.005, 0.003, tag="gpio")
@@ -1049,11 +1051,11 @@ def compute_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=compute_script(comp),  # full union for bbox
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )
 
 
@@ -1072,7 +1074,7 @@ def camera_multi_material(comp) -> MultiMaterialResult:
     pcb_thick = 0.0016
 
     # -- Program 1: PCB (FR4 green) --
-    pcb_prog = ShapeScript()
+    pcb_prog = ShapeScriptBuilder()
     pcb = pcb_prog.box(pcb_w, pcb_h, pcb_thick)
     if comp.mounting_points:
         hole_proto = pcb_prog.cylinder(
@@ -1085,7 +1087,7 @@ def camera_multi_material(comp) -> MultiMaterialResult:
     pcb_prog.output_ref = pcb
 
     # -- Program 2: Lens housing (ABS dark) --
-    lens_prog = ShapeScript()
+    lens_prog = ShapeScriptBuilder()
     base_size = 0.0085
     base_height = 0.0050
     lens_y_offset = 0.0025
@@ -1101,7 +1103,7 @@ def camera_multi_material(comp) -> MultiMaterialResult:
     lens_prog.output_ref = lens_result
 
     # -- Program 3: Metal connector (nickel) --
-    conn_prog = ShapeScript()
+    conn_prog = ShapeScriptBuilder()
     conn_w = 0.016
     conn_h_dim = 0.005
     conn_t = 0.002
@@ -1113,11 +1115,11 @@ def camera_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=camera_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_ABS_DARK, program=lens_prog),
             MaterialProgram(material=MAT_NICKEL, program=conn_prog),
-        ],
+        ),
     )
 
 
@@ -1148,13 +1150,13 @@ def _bec5v_multi_material(comp) -> MultiMaterialResult:
     pcb_t = 0.001
 
     # -- Program 1: PCB substrate (FR4 green) --
-    pcb_prog = ShapeScript()
+    pcb_prog = ShapeScriptBuilder()
     pcb = pcb_prog.box(dx, dy, pcb_t, tag="pcb")
     pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.001)
     pcb_prog.output_ref = pcb
 
     # -- Program 2: IC packages (dark epoxy) — inductor + buck IC + caps --
-    ic_prog = ShapeScript()
+    ic_prog = ShapeScriptBuilder()
     # Shielded inductor — tallest component, upper center
     inductor = ic_prog.box(0.004, 0.004, 0.0018, align=Align3(z="min"), tag="inductor")
     inductor = ic_prog.locate(inductor, pos=(0.0, 0.003, pcb_t / 2))
@@ -1169,7 +1171,7 @@ def _bec5v_multi_material(comp) -> MultiMaterialResult:
     ic_prog.output_ref = result_ic
 
     # -- Program 3: Metal pin header (nickel) --
-    metal_prog = ShapeScript()
+    metal_prog = ShapeScriptBuilder()
     header = metal_prog.box(
         0.0102, 0.0025, 0.0025, align=Align3(z="min"), tag="pin_header"
     )
@@ -1178,11 +1180,11 @@ def _bec5v_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=_bec5v_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )
 
 
@@ -1201,7 +1203,7 @@ def _waveshare_multi_material(comp) -> MultiMaterialResult:
     pcb_t = 0.0016
 
     # -- Program 1: PCB substrate (FR4 green, with mounting holes) --
-    pcb_prog = ShapeScript()
+    pcb_prog = ShapeScriptBuilder()
     pcb = pcb_prog.box(dx, dy, pcb_t, tag="pcb")
     pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.002)
     if comp.mounting_points:
@@ -1215,13 +1217,13 @@ def _waveshare_multi_material(comp) -> MultiMaterialResult:
     pcb_prog.output_ref = pcb
 
     # -- Program 2: IC packages (dark epoxy) — bridge IC --
-    ic_prog = ShapeScript()
+    ic_prog = ShapeScriptBuilder()
     bridge_ic = ic_prog.box(0.005, 0.005, 0.001, align=Align3(z="min"), tag="bridge_ic")
     bridge_ic = ic_prog.locate(bridge_ic, pos=(0.005, -0.005, pcb_t / 2))
     ic_prog.output_ref = bridge_ic
 
     # -- Program 3: Metal connectors (nickel) --
-    metal_prog = ShapeScript()
+    metal_prog = ShapeScriptBuilder()
 
     # DC barrel jack
     dc_jack = metal_prog.box(
@@ -1268,9 +1270,9 @@ def _waveshare_multi_material(comp) -> MultiMaterialResult:
 
     return MultiMaterialResult(
         primary=_waveshare_serial_bus_script(comp),
-        material_programs=[
+        material_programs=(
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
             MaterialProgram(material=MAT_NICKEL, program=metal_prog),
-        ],
+        ),
     )

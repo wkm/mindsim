@@ -12,13 +12,13 @@ from pathlib import Path
 
 from botcad.shapescript.backend_occt import OcctBackend
 from botcad.shapescript.ops import CutOp, FuseOp
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 log = logging.getLogger(__name__)
 
 
 def debug_program(
-    prog: ShapeScript,
+    prog: ShapeScriptBuilder,
     spawn_viewer: bool = True,
     mesh_dir: Path | None = None,
 ) -> None:

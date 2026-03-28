@@ -391,9 +391,9 @@ class TestWheelScript:
         """Wheel should be registered as a sub-program and called via CallOp."""
         from botcad.shapescript.emit_components import wheel_script
         from botcad.shapescript.ops import CallOp
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         r, w = 0.045, 0.010
         wheel_key = f"wheel_{r:.6f}_{w:.6f}"
         prog.sub_programs[wheel_key] = wheel_script(r, w)
@@ -422,10 +422,10 @@ class TestWireChannel:
     def test_z_aligned_channel(self):
         from botcad.component import BusType
         from botcad.shapescript.emit_components import emit_wire_channel
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
         seg = self._make_seg((0, 0, 0), (0, 0, 0.05))
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ch_ref = emit_wire_channel(prog, seg, BusType.UART_HALF_DUPLEX)
         assert ch_ref is not None
         prog.output_ref = ch_ref
@@ -435,10 +435,10 @@ class TestWireChannel:
     def test_diagonal_channel(self):
         from botcad.component import BusType
         from botcad.shapescript.emit_components import emit_wire_channel
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
         seg = self._make_seg((0.01, 0.02, 0.03), (0.04, 0.05, 0.06))
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ch_ref = emit_wire_channel(prog, seg, BusType.POWER)
         assert ch_ref is not None
         prog.output_ref = ch_ref
@@ -448,10 +448,10 @@ class TestWireChannel:
     def test_x_aligned_channel(self):
         from botcad.component import BusType
         from botcad.shapescript.emit_components import emit_wire_channel
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
         seg = self._make_seg((0, 0, 0), (0.05, 0, 0))
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ch_ref = emit_wire_channel(prog, seg, BusType.CSI)
         assert ch_ref is not None
         prog.output_ref = ch_ref
@@ -461,20 +461,20 @@ class TestWireChannel:
     def test_short_segment_returns_none(self):
         from botcad.component import BusType
         from botcad.shapescript.emit_components import emit_wire_channel
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
         seg = self._make_seg((0, 0, 0), (0, 0, 0.0005))
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         assert emit_wire_channel(prog, seg, BusType.UART_HALF_DUPLEX) is None
 
     def test_negative_z_channel(self):
         """Wire going in -Z direction (az < -0.999)."""
         from botcad.component import BusType
         from botcad.shapescript.emit_components import emit_wire_channel
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
         seg = self._make_seg((0, 0, 0.05), (0, 0, 0))
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ch_ref = emit_wire_channel(prog, seg, BusType.UART_HALF_DUPLEX)
         assert ch_ref is not None
         prog.output_ref = ch_ref
@@ -494,7 +494,7 @@ class TestClearanceVolume:
     def test_cylinder_child_symmetric(self):
         """Axially symmetric cylinder child — no sweep needed."""
         from botcad.shapescript.emit_components import emit_child_clearance
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
         from botcad.skeleton import Body, BodyShape, Joint
 
         child = Body(
@@ -512,7 +512,7 @@ class TestClearanceVolume:
             child=child,
         )
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         clr_ref = emit_child_clearance(prog, child, joint)
         assert clr_ref is not None
         prog.output_ref = clr_ref
@@ -522,7 +522,7 @@ class TestClearanceVolume:
     def test_box_child_swept(self):
         """Asymmetric box child — requires rotation sweep."""
         from botcad.shapescript.emit_components import emit_child_clearance
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
         from botcad.skeleton import Body, BodyShape, Joint
 
         child = Body(
@@ -539,7 +539,7 @@ class TestClearanceVolume:
             range_rad=(-1.57, 1.57),
         )
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         clr_ref = emit_child_clearance(prog, child, joint)
         assert clr_ref is not None
         prog.output_ref = clr_ref
@@ -549,7 +549,7 @@ class TestClearanceVolume:
     def test_sphere_child(self):
         """Sphere child — axially symmetric, no sweep."""
         from botcad.shapescript.emit_components import emit_child_clearance
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
         from botcad.skeleton import Body, BodyShape, Joint
 
         child = Body(
@@ -566,7 +566,7 @@ class TestClearanceVolume:
             child=child,
         )
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         clr_ref = emit_child_clearance(prog, child, joint)
         assert clr_ref is not None
         prog.output_ref = clr_ref

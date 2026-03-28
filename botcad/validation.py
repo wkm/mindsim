@@ -30,7 +30,7 @@ import math
 import shutil
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import mujoco
@@ -49,7 +49,7 @@ SWEEP_FRAMES = 12
 # ── Public API ──
 
 
-@dataclass
+@dataclass(frozen=True)
 class SolidPart:
     """A named solid for subassembly validation.
 
@@ -64,14 +64,14 @@ class SolidPart:
     check_collision: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class SweepResult:
     """Result of a ROM validation sweep."""
 
     name: str
-    frames: list[Image.Image] = field(default_factory=list)
-    angles_deg: list[float] = field(default_factory=list)
-    collisions: list[bool] = field(default_factory=list)
+    frames: tuple[Image.Image, ...] = ()
+    angles_deg: tuple[float, ...] = ()
+    collisions: tuple[bool, ...] = ()
     elapsed: float = 0.0
 
     @property
@@ -86,9 +86,9 @@ class SweepResult:
         """Composite filmstrip with collision indicators."""
         return filmstrip(
             self.name,
-            self.frames,
-            self.angles_deg,
-            self.collisions,
+            list(self.frames),
+            list(self.angles_deg),
+            list(self.collisions),
             cell_w=SWEEP_W,
             cell_h=SWEEP_H,
         )
@@ -150,7 +150,10 @@ def validate_subassembly(
         angles = np.linspace(range_rad[0], range_rad[1], frames)
         qposadr = r.model.jnt_qposadr[0]  # single hinge joint
 
-        result = SweepResult(name=name)
+        # Accumulate in local lists, then freeze into SweepResult
+        frame_imgs: list[Image.Image] = []
+        angle_degs: list[float] = []
+        collision_flags: list[bool] = []
 
         # Load trimesh meshes for collision checking (only check_collision parts)
         collision_fixed = [p for p in fixed if p.check_collision]
@@ -168,8 +171,8 @@ def validate_subassembly(
                 elevation=camera_elevation,
                 distance=dist,
             )
-            result.frames.append(Image.fromarray(img))
-            result.angles_deg.append(math.degrees(angle))
+            frame_imgs.append(Image.fromarray(img))
+            angle_degs.append(math.degrees(angle))
 
             # Collision check using trimesh
             has_col = _check_collision(
@@ -182,14 +185,20 @@ def validate_subassembly(
                 pivot,
                 axis,
             )
-            result.collisions.append(has_col)
+            collision_flags.append(has_col)
 
         r.close()
 
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    result.elapsed = time.perf_counter() - t0
+    result = SweepResult(
+        name=name,
+        frames=tuple(frame_imgs),
+        angles_deg=tuple(angle_degs),
+        collisions=tuple(collision_flags),
+        elapsed=time.perf_counter() - t0,
+    )
 
     # Report
     if result.has_collisions:

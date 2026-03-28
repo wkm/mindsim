@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
@@ -22,7 +22,7 @@ def emit_body_ir(
     parent_joint: Joint | None = None,
     wire_segments: tuple | None = None,
     bot: Bot | None = None,
-) -> ShapeScript:
+) -> ShapeScriptBuilder:
     """Emit a ShapeScript that builds the solid for a single body.
 
     This is a 1:1 translation of cad.py:_make_body_solid(). The result
@@ -46,7 +46,7 @@ def emit_body_ir(
 
     placements = bot.packing_result.placements if bot and bot.packing_result else {}
 
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     dims = body.dimensions
 
     # ── 1. Base shell (cad.py:748-801) ──
@@ -237,7 +237,7 @@ def emit_body_ir(
 
 
 def _emit_orient_z_to_axis(
-    prog: ShapeScript,
+    prog: ShapeScriptBuilder,
     shape_ref,
     axis: tuple[float, float, float],
     quat: tuple[float, float, float, float] | None = None,

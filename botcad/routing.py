@@ -19,7 +19,7 @@ cable flex zone.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from botcad.bracket import BracketSpec
@@ -31,24 +31,15 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-@dataclass
+@dataclass(frozen=True)
 class WireSegment:
-    """A segment of wire between two points in body-local coordinates.
-
-    Identity-based hashing for functools.lru_cache compatibility.
-    """
+    """A segment of wire between two points in body-local coordinates."""
 
     start: Vec3  # body-local coordinates
     end: Vec3  # body-local coordinates
     body_name: str  # which body this segment lives on
     joint_name: str | None = None  # if crossing a joint
     slack: float = 0.0  # extra length needed for joint motion (meters)
-
-    def __hash__(self):
-        return id(self)
-
-    def __eq__(self, other):
-        return self is other
 
     @property
     def straight_length(self) -> float:
@@ -62,13 +53,13 @@ class WireSegment:
         return self.straight_length + self.slack
 
 
-@dataclass
+@dataclass(frozen=True)
 class WireRoute:
     """A complete wire route from source to destination."""
 
     label: str  # e.g. "servo_bus", "camera_csi", "power"
     bus_type: BusType
-    segments: list[WireSegment] = field(default_factory=list)
+    segments: tuple[WireSegment, ...] = ()
 
     @property
     def total_length(self) -> float:
@@ -383,10 +374,8 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
     different bodies, the wire crosses a joint — producing a segment on each
     side of the crossing.
     """
-    route = WireRoute(label="servo_bus", bus_type=BusType.UART_HALF_DUPLEX)
-
     if bot.root is None:
-        return route
+        return WireRoute(label="servo_bus", bus_type=BusType.UART_HALF_DUPLEX)
 
     # Prefer controller board's servo_bus port as bus origin
     servo_bus_origin = _wireport_for_mount(
@@ -399,6 +388,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
         servo_bus_origin = (0.0, 0.0, 0.0)
 
     parent_map = _build_parent_map(bot)
+    segments: list[WireSegment] = []
 
     def _walk(body: Body, current_pos: Vec3, current_body: str) -> None:
         """Walk one subtree and emit servo bus segments."""
@@ -408,7 +398,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
 
             if servo_body == current_body:
                 # Same body — route through interior
-                route.segments.extend(
+                segments.extend(
                     _expand_segment(
                         bot,
                         current_pos,
@@ -422,7 +412,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
                 if crossing is None:
                     # Defensive fallback: if ancestry map is missing (shouldn't
                     # happen for tree-shaped bots), route within current body.
-                    route.segments.extend(
+                    segments.extend(
                         _expand_segment(
                             bot,
                             current_pos,
@@ -439,7 +429,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
                 crossing_joint, _parent = crossing
 
                 # Segment on old body: current_pos → cable exit
-                route.segments.extend(
+                segments.extend(
                     _expand_segment(
                         bot,
                         current_pos,
@@ -449,7 +439,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
                 )
 
                 # Segment on new body: joint entry → connector
-                route.segments.extend(
+                segments.extend(
                     _expand_segment(
                         bot,
                         _joint_entry_local(),
@@ -468,7 +458,11 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
                 _walk(joint.child, _joint_entry_local(), joint.child.name)
 
     _walk(bot.root, current_pos=servo_bus_origin, current_body=bot.root.name)
-    return route
+    return WireRoute(
+        label="servo_bus",
+        bus_type=BusType.UART_HALF_DUPLEX,
+        segments=tuple(segments),
+    )
 
 
 def _route_camera_csi(bot: Bot) -> WireRoute:
@@ -477,10 +471,10 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
     Walks back through the kinematic tree from the camera body to the root,
     generating body-local segments at each joint crossing.
     """
-    route = WireRoute(label="camera_csi", bus_type=BusType.CSI)
+    _empty = WireRoute(label="camera_csi", bus_type=BusType.CSI)
 
     if bot.root is None:
-        return route
+        return _empty
 
     # Find camera body and CSI port (look for camera components,
     # not just any CSI port — the Pi also has one)
@@ -514,22 +508,26 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
     _find_camera(bot.root)
 
     if camera_body is None or camera_pos is None:
-        return route
+        return _empty
 
     # Camera on root body — single direct segment
     pi_csi_pos = _wireport_local(bot.root, BusType.CSI, bot=bot)
     if pi_csi_pos is None:
-        return route
+        return _empty
+
+    segments: list[WireSegment] = []
 
     if camera_body.name == bot.root.name:
-        route.segments.append(
+        segments.append(
             WireSegment(
                 start=camera_pos,
                 end=pi_csi_pos,
                 body_name=bot.root.name,
             )
         )
-        return route
+        return WireRoute(
+            label="camera_csi", bus_type=BusType.CSI, segments=tuple(segments)
+        )
 
     # Build path from camera body back to root
     parent_map = _build_parent_map(bot)
@@ -547,7 +545,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
 
     for _bname, crossing_joint in path:
         # Segment on child body: current_pos → joint origin
-        route.segments.extend(
+        segments.extend(
             _expand_segment(
                 bot,
                 current_pos,
@@ -563,9 +561,9 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
         current_body = parent_map[current_body][1]
 
     # Final segment on root body: cable exit → Pi CSI port
-    route.segments.extend(_expand_segment(bot, current_pos, pi_csi_pos, bot.root.name))
+    segments.extend(_expand_segment(bot, current_pos, pi_csi_pos, bot.root.name))
 
-    return route
+    return WireRoute(label="camera_csi", bus_type=BusType.CSI, segments=tuple(segments))
 
 
 def _route_power(bot: Bot) -> WireRoute:
@@ -574,10 +572,10 @@ def _route_power(bot: Bot) -> WireRoute:
     Both components are on the root body, so this is a single segment
     in body-local coordinates.
     """
-    route = WireRoute(label="power", bus_type=BusType.POWER)
+    _empty = WireRoute(label="power", bus_type=BusType.POWER)
 
     if bot.root is None:
-        return route
+        return _empty
 
     battery_pos: Vec3 | None = None
     pi_pos: Vec3 | None = None
@@ -598,25 +596,29 @@ def _route_power(bot: Bot) -> WireRoute:
                 break
 
     if battery_pos is not None and pi_pos is not None:
-        route.segments.extend(_expand_segment(bot, battery_pos, pi_pos, bot.root.name))
+        segments = _expand_segment(bot, battery_pos, pi_pos, bot.root.name)
+        return WireRoute(
+            label="power", bus_type=BusType.POWER, segments=tuple(segments)
+        )
 
-    return route
+    return _empty
 
 
 def _route_power_servo(bot: Bot) -> WireRoute:
     """Route power from battery to Waveshare controller (servo power distribution)."""
-    route = WireRoute(label="power_servo", bus_type=BusType.POWER)
+    _empty = WireRoute(label="power_servo", bus_type=BusType.POWER)
     if bot.root is None:
-        return route
+        return _empty
 
     battery_pos = _wireport_for_mount(bot.root, "battery", BusType.POWER, bot=bot)
     controller_pos = _wireport_for_mount(bot.root, "controller", BusType.POWER, bot=bot)
 
     if battery_pos is not None and controller_pos is not None:
-        route.segments.extend(
-            _expand_segment(bot, battery_pos, controller_pos, bot.root.name)
+        segments = _expand_segment(bot, battery_pos, controller_pos, bot.root.name)
+        return WireRoute(
+            label="power_servo", bus_type=BusType.POWER, segments=tuple(segments)
         )
-    return route
+    return _empty
 
 
 def _route_power_pi(bot: Bot) -> WireRoute:
@@ -624,36 +626,43 @@ def _route_power_pi(bot: Bot) -> WireRoute:
 
     Battery → BEC power_in, then BEC power_out → Pi usb_power.
     """
-    route = WireRoute(label="power_pi", bus_type=BusType.POWER)
+    _empty = WireRoute(label="power_pi", bus_type=BusType.POWER)
     if bot.root is None:
-        return route
+        return _empty
 
     battery_pos = _wireport_for_mount(bot.root, "battery", BusType.POWER, bot=bot)
     bec_in = _wireport_for_mount(bot.root, "bec", port_label="power_in", bot=bot)
     bec_out = _wireport_for_mount(bot.root, "bec", port_label="power_out", bot=bot)
     pi_power = _wireport_for_mount(bot.root, "pi", port_label="usb_power", bot=bot)
 
+    segments: list[WireSegment] = []
     if battery_pos is not None and bec_in is not None:
-        route.segments.extend(_expand_segment(bot, battery_pos, bec_in, bot.root.name))
+        segments.extend(_expand_segment(bot, battery_pos, bec_in, bot.root.name))
     if bec_out is not None and pi_power is not None:
-        route.segments.extend(_expand_segment(bot, bec_out, pi_power, bot.root.name))
-    return route
+        segments.extend(_expand_segment(bot, bec_out, pi_power, bot.root.name))
+
+    if segments:
+        return WireRoute(
+            label="power_pi", bus_type=BusType.POWER, segments=tuple(segments)
+        )
+    return _empty
 
 
 def _route_pi_usb_data(bot: Bot) -> WireRoute:
     """Route USB data from Pi to Waveshare controller."""
-    route = WireRoute(label="pi_usb_data", bus_type=BusType.USB)
+    _empty = WireRoute(label="pi_usb_data", bus_type=BusType.USB)
     if bot.root is None:
-        return route
+        return _empty
 
     pi_usb = _wireport_for_mount(bot.root, "pi", port_label="usb_data", bot=bot)
     controller_usb = _wireport_for_mount(bot.root, "controller", BusType.USB, bot=bot)
 
     if pi_usb is not None and controller_usb is not None:
-        route.segments.extend(
-            _expand_segment(bot, pi_usb, controller_usb, bot.root.name)
+        segments = _expand_segment(bot, pi_usb, controller_usb, bot.root.name)
+        return WireRoute(
+            label="pi_usb_data", bus_type=BusType.USB, segments=tuple(segments)
         )
-    return route
+    return _empty
 
 
 # ── Utilities ──

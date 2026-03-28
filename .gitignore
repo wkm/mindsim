@@ -49,6 +49,7 @@ viewer/.cdn_cache/
 # Claude Code (track settings.json, ignore everything else)
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 \n# Component reference files\nreferences/components/
 .botcad_cache/
 *.ply
