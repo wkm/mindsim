@@ -23,7 +23,7 @@ import numpy as np
 
 def get_torso_up_z(data: mujoco.MjData, body_id: int) -> float:
     """Get Z component of torso's up vector (1.0 = perfectly upright)."""
-    w, x, y, z = data.xquat[body_id]
+    _w, x, y, _z = data.xquat[body_id]
     return 1 - 2 * (x * x + y * y)
 
 
@@ -59,9 +59,9 @@ def compute_support_polygon_margin(
     for i in range(data.ncon):
         contact = data.contact[i]
         g1, g2 = contact.geom1, contact.geom2
-        if g1 == floor_geom_id and g2 in foot_geom_ids:
-            foot_contacts.append(contact.pos[:2].copy())
-        elif g2 == floor_geom_id and g1 in foot_geom_ids:
+        if (g1 == floor_geom_id and g2 in foot_geom_ids) or (
+            g2 == floor_geom_id and g1 in foot_geom_ids
+        ):
             foot_contacts.append(contact.pos[:2].copy())
 
     if len(foot_contacts) < 2:

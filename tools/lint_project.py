@@ -101,7 +101,7 @@ class NoRotationBetweenInEmitters(LintVisitor):
     """
 
     # Only applies to emitter modules
-    EMITTER_PATHS = {"emit/viewer.py", "emit/mujoco.py", "emit/cad.py"}
+    EMITTER_PATHS = {"emit/viewer.py", "emit/mujoco.py", "emit/cad.py"}  # noqa: RUF012
 
     def visit_Call(self, node: ast.Call) -> None:
         # Check if this file is an emitter
@@ -136,7 +136,7 @@ class NoHardcodedIdentityQuat(LintVisitor):
     all mounted components appear unrotated regardless of face position.
     """
 
-    EMITTER_PATHS = {"emit/viewer.py", "emit/mujoco.py"}
+    EMITTER_PATHS = {"emit/viewer.py", "emit/mujoco.py"}  # noqa: RUF012
 
     def visit_Dict(self, node: ast.Dict) -> None:
         rel = str(self._path.relative_to(BOTCAD_ROOT))
@@ -144,7 +144,7 @@ class NoHardcodedIdentityQuat(LintVisitor):
             self.generic_visit(node)
             return
 
-        for key, value in zip(node.keys, node.values):
+        for key, value in zip(node.keys, node.values, strict=False):
             if not isinstance(key, ast.Constant) or key.value != "quat":
                 continue
             if self._is_identity_quat(value):
@@ -186,7 +186,7 @@ class NoRotatePointForAxes(LintVisitor):
     'axis', 'dir', or 'normal'.
     """
 
-    DIRECTION_HINTS = {"axis", "dir", "direction", "normal"}
+    DIRECTION_HINTS = {"axis", "dir", "direction", "normal"}  # noqa: RUF012
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
@@ -238,10 +238,12 @@ def lint_directory(root: Path) -> list[Violation]:
             suppressed = False
             for offset in range(-1, 8):
                 check_line = v.line + offset
-                if 0 < check_line <= len(lines):
-                    if f"plint: disable={v.rule}" in lines[check_line - 1]:
-                        suppressed = True
-                        break
+                if (
+                    0 < check_line <= len(lines)
+                    and f"plint: disable={v.rule}" in lines[check_line - 1]
+                ):
+                    suppressed = True
+                    break
             if not suppressed:
                 violations.append(v)
     return violations

@@ -93,7 +93,7 @@ def test_solid_bounding_box(designation, head_type):
     assert bb.max.Z > -0.001  # top near or above 0
     # Shank extends in -Z: total depth ≈ head_height + shank_length
     expected_depth = spec.head_height + 0.004
-    assert bb.min.Z < -expected_depth * 0.8  # within 20% tolerance
+    assert -expected_depth * 0.8 > bb.min.Z  # within 20% tolerance
 
     # XY extent should be roughly head_diameter
     assert bb.max.X > 0  # centered, extends in +X

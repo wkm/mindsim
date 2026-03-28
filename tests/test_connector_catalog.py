@@ -44,9 +44,9 @@ def test_solid_bounding_box_matches_dimensions(ct):
     bx, by, bz = spec.body_dimensions
 
     # Allow 50% tolerance for retention features and pin rows
-    assert (bb.max.X - bb.min.X) <= bx * 1.5
-    assert (bb.max.Y - bb.min.Y) <= by * 1.5
-    assert (bb.max.Z - bb.min.Z) <= bz * 1.5
+    assert bx * 1.5 >= (bb.max.X - bb.min.X)
+    assert by * 1.5 >= (bb.max.Y - bb.min.Y)
+    assert bz * 1.5 >= (bb.max.Z - bb.min.Z)
 
 
 # ── Receptacle solids ────────────────────────────────────────────────

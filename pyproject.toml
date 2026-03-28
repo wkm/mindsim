@@ -48,11 +48,46 @@ line-length = 88
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "UP",  # pyupgrade
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific rules
+    "PERF",   # perflint
+    "T10",    # flake8-debugger
+    "TID",    # flake8-tidy-imports
 ]
 ignore = [
-    "E501",  # line too long (formatter handles what it can)
+    "E501",    # line too long — formatter handles it
+    "RUF001",  # ambiguous unicode in strings (degree symbols etc)
+    "RUF002",  # ambiguous unicode in docstrings
+    "RUF003",  # ambiguous unicode in comments
+    "SIM108",  # if-else vs ternary — readability preference
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"build123d".msg = "Do not import build123d directly. Use ShapeScript IR (botcad/shapescript/). Only backend_occt.py should call build123d."
+"OCP".msg = "Do not import OCP directly. Use ShapeScript IR (botcad/shapescript/). Only backend_occt.py should call OCP/OCCT."
+
+[tool.ruff.lint.per-file-ignores]
+# build123d/OCP authorized consumers (TID251)
+"botcad/shapescript/backend_occt.py" = ["TID251"]
+"botcad/shapescript/debug_rerun.py" = ["TID251"]
+"botcad/emit/cad.py" = ["TID251"]
+"botcad/emit/component_renders.py" = ["TID251"]
+"botcad/emit/drawings.py" = ["TID251"]
+"botcad/fasteners.py" = ["TID251"]
+"botcad/connectors.py" = ["TID251"]
+"botcad/components/*.py" = ["TID251"]
+"botcad/cad_utils.py" = ["TID251"]
+"botcad/clearance.py" = ["TID251"]
+"botcad/render_svg.py" = ["TID251"]
+"botcad/debug_drawing.py" = ["TID251"]
+"botcad/validation.py" = ["TID251"]
+"mindsim/server.py" = ["TID251"]
+"tests/**" = ["TID251"]
+"scripts/**" = ["TID251"]

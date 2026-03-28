@@ -63,7 +63,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a stack of books (1 box per book + optional bookend).
 
     Max 8 prims: up to 7 books + 1 bookend.

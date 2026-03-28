@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -232,7 +233,7 @@ def _open_in_rerun(rrd_paths: list[str]) -> None:
     import subprocess
 
     subprocess.Popen(
-        ["rerun"] + rrd_paths,
+        ["rerun", *rrd_paths],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -469,10 +470,8 @@ def record_episode(
     sinks = [rr.FileSink(str(rrd_path))]
     if is_first:
         rr.spawn(connect=False)
-    try:
+    with contextlib.suppress(Exception):  # Viewer may not be running
         sinks.append(rr.GrpcSink())
-    except Exception:
-        pass  # Viewer may not be running
     rr.set_sinks(*sinks)
 
     rr.send_recording_name(f"batch {batch_idx}")

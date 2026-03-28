@@ -67,11 +67,12 @@ def _mount_quat(mount: Mount, body: Body) -> Quat:
 
     # 2. Face rotation (only for FACE_NORMAL components like cameras)
     meta = get_component_meta(mount.component.kind)
-    if meta.mount_orientation == MountOrientation.FACE_NORMAL:
-        if isinstance(mount.position, str):
-            face_q = _FACE_QUAT.get(mount.position)
-            if face_q is not None:
-                quat = quat_multiply(face_q, quat)
+    if meta.mount_orientation == MountOrientation.FACE_NORMAL and isinstance(
+        mount.position, str
+    ):
+        face_q = _FACE_QUAT.get(mount.position)
+        if face_q is not None:
+            quat = quat_multiply(face_q, quat)
 
     # 3. Body frame rotation (for cylinders/rims)
     if body.frame_quat != (1.0, 0.0, 0.0, 0.0):
@@ -105,11 +106,10 @@ def solve_packing(bot: Bot) -> PackingResult:
 def _solve_body(body: Body, placements: dict) -> None:
     """Solve packing for a single body."""
     # Internal components that need to fit inside this body
-    internal_items: list[tuple[str, Vec3, float]] = []
-    for mount in body.mounts:
-        internal_items.append(
-            (mount.label, mount.placed_dimensions, mount.component.mass)
-        )
+    internal_items: list[tuple[str, Vec3, float]] = [
+        (mount.label, mount.placed_dimensions, mount.component.mass)
+        for mount in body.mounts
+    ]
 
     # Servo center positions — the body needs structural material reaching
     # to each servo center (not the shaft/joint position). The bracket
@@ -322,7 +322,7 @@ def _compute_mass_inertia(body: Body) -> None:
     # Include structural body as a mass item (centered at origin)
     from botcad.geometry import parallel_axis_inertia
 
-    all_mass_items = mass_items + [((0.0, 0.0, 0.0), structural_mass, dims)]
+    all_mass_items = [*mass_items, ((0.0, 0.0, 0.0), structural_mass, dims)]
     ixx, iyy, izz, ixy, ixz, iyz = parallel_axis_inertia(
         all_mass_items, (com_x, com_y, com_z)
     )
@@ -411,10 +411,7 @@ def find_internal_overlaps(body: Body) -> list[tuple[str, str, Vec3]]:
 
 def _aabb_overlap(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> bool:
     """Check if two axis-aligned bounding boxes overlap."""
-    for i in range(3):
-        if abs(pos_a[i] - pos_b[i]) >= half_a[i] + half_b[i]:
-            return False
-    return True
+    return all(abs(pos_a[i] - pos_b[i]) < half_a[i] + half_b[i] for i in range(3))
 
 
 def _overlap_extent(pos_a: Vec3, half_a: Vec3, pos_b: Vec3, half_b: Vec3) -> Vec3:

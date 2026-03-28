@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
@@ -133,10 +134,8 @@ class ShapeScript:
         """
         ref = self._next_ref("pre")
         solid_hash = str(hash(id(solid)))  # identity-based; real hash is volume-based
-        try:
+        with contextlib.suppress(Exception):
             solid_hash = f"vol:{abs(solid.volume):.10e}"
-        except Exception:
-            pass
         self.ops.append(PrebuiltOp(ref=ref, solid_hash=solid_hash, tag=tag))
         self.prebuilt_solids[ref.id] = solid
         return ref
@@ -284,8 +283,10 @@ class ShapeScript:
         hashes so cache invalidates when sub-programs change.
         """
         parts = [self.to_json()]
-        for key in sorted(self.sub_programs):
-            parts.append(f"{key}:{self.sub_programs[key].content_hash()}")
+        parts.extend(
+            f"{key}:{self.sub_programs[key].content_hash()}"
+            for key in sorted(self.sub_programs)
+        )
         return hashlib.sha256("|".join(parts).encode()).hexdigest()
 
     def to_json(self) -> str:

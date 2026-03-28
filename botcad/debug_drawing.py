@@ -126,21 +126,21 @@ def _dim_line_h(
     if geo_y is not None:
         ext_start = geo_y + gap if y > geo_y else geo_y - gap
         ext_end = y + tick
-        for x in [x1, x2]:
-            els.append(
-                f'  <line x1="{x:.6f}" y1="{ext_start:.6f}" '
-                f'x2="{x:.6f}" y2="{ext_end:.6f}" '
-                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
-                f'stroke-opacity="0.5"/>'
-            )
+        els.extend(
+            f'  <line x1="{x:.6f}" y1="{ext_start:.6f}" '
+            f'x2="{x:.6f}" y2="{ext_end:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+            f'stroke-opacity="0.5"/>'
+            for x in [x1, x2]
+        )
 
     # Ticks at dimension line
-    for x in [x1, x2]:
-        els.append(
-            f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
-            f'x2="{x:.6f}" y2="{y + tick:.6f}" '
-            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
-        )
+    els.extend(
+        f'  <line x1="{x:.6f}" y1="{y - tick:.6f}" '
+        f'x2="{x:.6f}" y2="{y + tick:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        for x in [x1, x2]
+    )
     # Main dimension line
     els.append(
         f'  <line x1="{x1:.6f}" y1="{y:.6f}" '
@@ -201,21 +201,21 @@ def _dim_line_v(
     if geo_x is not None:
         ext_start = geo_x + gap
         ext_end = x + tick
-        for y in [y1, y2]:
-            els.append(
-                f'  <line x1="{ext_start:.6f}" y1="{y:.6f}" '
-                f'x2="{ext_end:.6f}" y2="{y:.6f}" '
-                f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
-                f'stroke-opacity="0.5"/>'
-            )
+        els.extend(
+            f'  <line x1="{ext_start:.6f}" y1="{y:.6f}" '
+            f'x2="{ext_end:.6f}" y2="{y:.6f}" '
+            f'stroke="{DIM_COLOR}" stroke-width="{ext_lw:.6f}" '
+            f'stroke-opacity="0.5"/>'
+            for y in [y1, y2]
+        )
 
     # Ticks at dimension line
-    for y in [y1, y2]:
-        els.append(
-            f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
-            f'x2="{x + tick:.6f}" y2="{y:.6f}" '
-            f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
-        )
+    els.extend(
+        f'  <line x1="{x - tick:.6f}" y1="{y:.6f}" '
+        f'x2="{x + tick:.6f}" y2="{y:.6f}" '
+        f'stroke="{DIM_COLOR}" stroke-width="{lw:.6f}"/>'
+        for y in [y1, y2]
+    )
     # Main dimension line
     els.append(
         f'  <line x1="{x:.6f}" y1="{y1:.6f}" '
@@ -474,7 +474,7 @@ class DebugDrawing:
 
         # Add shapes per column
         for (_col_name, is_section, parts_data, _view), x_off in zip(
-            columns, x_offsets
+            columns, x_offsets, strict=True
         ):
             offset_loc = Location((x_off, 0, 0))
             if is_section:
@@ -708,11 +708,11 @@ class DebugDrawing:
         # Collect section info for cutting lines on projections
         section_info: list[tuple[str, float]] = []  # (letter, Z value)
 
-        for i, (
+        for _i, (
             (col_name, is_section, _data, view),
             (xmin, ymin, xmax, ymax),
             x_off,
-        ) in enumerate(zip(columns, col_bounds, x_offsets)):
+        ) in enumerate(zip(columns, col_bounds, x_offsets, strict=True)):
             cx = (xmin + xmax) / 2 + x_off
 
             if is_section:
@@ -829,12 +829,12 @@ class DebugDrawing:
             f'x2="{title_x + bar_len:.6f}" y2="{bar_y:.6f}" '
             f'stroke="#333" stroke-width="{_mm(0.35):.6f}"/>'
         )
-        for bx in [title_x, title_x + bar_len]:
-            elements.append(
-                f'  <line x1="{bx:.6f}" y1="{bar_y - tick:.6f}" '
-                f'x2="{bx:.6f}" y2="{bar_y + tick:.6f}" '
-                f'stroke="#333" stroke-width="{_mm(0.25):.6f}"/>'
-            )
+        elements.extend(
+            f'  <line x1="{bx:.6f}" y1="{bar_y - tick:.6f}" '
+            f'x2="{bx:.6f}" y2="{bar_y + tick:.6f}" '
+            f'stroke="#333" stroke-width="{_mm(0.25):.6f}"/>'
+            for bx in [title_x, title_x + bar_len]
+        )
         elements.append(
             f'  <text x="{title_x + bar_len + _mm(1.5):.6f}" y="{bar_y + _mm(0.7):.6f}" '
             f'font-family="{FONT_FAMILY}" '

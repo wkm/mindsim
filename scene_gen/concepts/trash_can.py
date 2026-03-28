@@ -53,7 +53,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a trash can (up to 5 prims: body + base ring + lid + pedal + handle)."""
     half_h = params.height / 2
     prims: list[Prim] = []

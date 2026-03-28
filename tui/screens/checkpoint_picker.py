@@ -14,7 +14,7 @@ from textual.widgets import Footer, OptionList, Static
 class CheckpointPickerScreen(Screen):
     """Pick a checkpoint from a run before playing or resuming."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("escape", "go_back", "Back", priority=True),
         Binding("backspace", "go_back", "Back", show=False, priority=True),
         Binding("enter", "confirm", "Select", priority=True),

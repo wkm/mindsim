@@ -35,7 +35,7 @@ from PIL import Image
 from scipy.ndimage import uniform_filter
 
 # ── Color (re-exported from botcad.colors) ──
-from botcad.colors import (  # noqa: E402, F401
+from botcad.colors import (  # noqa: F401
     COLOR_BRACKET,
     COLOR_COUPLER,
     COLOR_CRADLE,

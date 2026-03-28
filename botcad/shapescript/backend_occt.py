@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     pass
 
-from botcad.shapescript.ops import (  # noqa: F401
+from botcad.shapescript.ops import (
     Align3,
     BoxOp,
     CallOp,

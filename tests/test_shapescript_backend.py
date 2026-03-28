@@ -177,7 +177,7 @@ class TestTransforms:
         b = prog.locate(a, pos=(10, 0, 0))
         prog.query_centroid(b)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, _cy, _cz = r.queries[0]
         assert cx == pytest.approx(10.0, abs=0.01)
 
     def test_locate_rotation(self):
@@ -188,7 +188,7 @@ class TestTransforms:
         b = prog.locate(a, euler_deg=(0, 0, 90))
         prog.query_centroid(b)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, cy, _cz = r.queries[0]
         # After 90 deg Z rotation: x=5 -> y=5, y=0 -> x=0
         assert abs(cx) < 0.1
         assert cy == pytest.approx(5.0, abs=0.1)
@@ -434,7 +434,7 @@ class TestCallOp:
         moved = prog.locate(ref, pos=(10.0, 0, 0))
         prog.query_centroid(moved)
         r = _exec(prog)
-        cx, cy, cz = r.queries[0]
+        cx, _cy, _cz = r.queries[0]
         assert cx == pytest.approx(10.0, abs=0.01)
 
     def test_same_sub_program_called_twice(self):

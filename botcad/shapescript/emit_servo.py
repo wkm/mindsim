@@ -83,7 +83,7 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
     f_h = f_z_top - f_z_bot
 
     if servo.mounting_ears:
-        for _side, ears in _group_ears_by_y_side(servo.mounting_ears).items():
+        for ears in _group_ears_by_y_side(servo.mounting_ears).values():
             f_w = 0.004
             f_cy = (
                 (body_y / 2 - f_w / 2)
@@ -206,7 +206,7 @@ def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
 
         cx, cy, cz = wp.pos
 
-        mx, my, mz = cspec.mating_direction
+        mx, _my, mz = cspec.mating_direction
         if abs(mz) > 0.5:
             flip = 180 if cz < 0 else 0
             euler = (float(flip), 0.0, 90.0)

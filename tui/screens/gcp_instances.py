@@ -17,7 +17,7 @@ from textual.widgets import DataTable, Footer, Static
 class GCPInstancesScreen(Screen):
     """List and manage GCP mindsim-* instances."""
 
-    BINDINGS = [
+    BINDINGS = [  # noqa: RUF012
         Binding("r", "refresh", "Refresh", priority=True),
         Binding("w", "open_wandb", "W&B", priority=True),
         Binding("t", "terminate", "Terminate", priority=True),

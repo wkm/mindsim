@@ -53,7 +53,7 @@ def emit_component_drawings(servo_name: str, out_dir: Path) -> list[Path]:
     cradle_shaft = cradle.moved(to_shaft)
 
     # Z planes in servo body frame (pocket bracket)
-    body_x, body_y, body_z = servo.effective_body_dims
+    _body_x, _body_y, body_z = servo.effective_body_dims
     shaft_top_z = body_z / 2
     ear_z = servo.mounting_ears[0].pos[2] if servo.mounting_ears else -body_z / 2
 
@@ -139,7 +139,7 @@ def emit_drawings(bot, output_dir: Path) -> list[Path]:
             servo_body = servo_solid(servo)
             bracket = bracket_solid_solid(servo, spec)
 
-            body_x, body_y, body_z = servo.effective_body_dims
+            _body_x, _body_y, body_z = servo.effective_body_dims
             shaft_top_z = body_z / 2
 
             safe_name = joint.name.replace(" ", "_").lower()

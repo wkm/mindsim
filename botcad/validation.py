@@ -80,7 +80,7 @@ class SweepResult:
 
     @property
     def collision_angles(self) -> list[float]:
-        return [a for a, c in zip(self.angles_deg, self.collisions) if c]
+        return [a for a, c in zip(self.angles_deg, self.collisions, strict=True) if c]
 
     def image(self) -> Image.Image:
         """Composite filmstrip with collision indicators."""
@@ -305,7 +305,7 @@ def _check_collision(
         manager.add_object(f"fixed_{i}", m)
 
     # Check each moving part against all fixed
-    for i, mesh in enumerate(moving_meshes):
+    for _i, mesh in enumerate(moving_meshes):
         m = mesh.copy()
         m.apply_transform(moving_T)
         if manager.in_collision_single(m):

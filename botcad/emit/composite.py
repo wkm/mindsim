@@ -179,7 +179,9 @@ def filmstrip(
     )
 
     # Frames
-    for i, (frame, angle, has_col) in enumerate(zip(frames, angles_deg, collisions)):
+    for i, (frame, angle, has_col) in enumerate(
+        zip(frames, angles_deg, collisions, strict=True)
+    ):
         x = margin + i * (cell_w + margin)
         y = header_h
 

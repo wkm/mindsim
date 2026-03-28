@@ -200,19 +200,17 @@ def discover_wandb_runs(limit: int = 50) -> list[dict]:
     try:
         api = wandb.Api(timeout=5)
         runs = api.runs("mindsim", per_page=limit)
-        results = []
-        for run in runs:
-            results.append(
-                {
-                    "id": run.id,
-                    "name": run.name,
-                    "state": run.state,
-                    "created_at": run.created_at,
-                    "tags": run.tags,
-                    "url": run.url,
-                }
-            )
-        return results
+        return [
+            {
+                "id": run.id,
+                "name": run.name,
+                "state": run.state,
+                "created_at": run.created_at,
+                "tags": run.tags,
+                "url": run.url,
+            }
+            for run in runs
+        ]
     except Exception:
         return []
 

@@ -575,17 +575,17 @@ def _emit_mounting_hardware(
 
     def _screw_attribs(name: str, mesh: str, pos: str, quat: Quat):
         """Common geom attributes for a fastener, including orientation."""
-        return dict(
-            name=name,
-            type="mesh",
-            mesh=mesh,
-            pos=pos,
-            quat=_fmt_quat(quat),
-            rgba=_SCREW_RGBA,
-            contype="0",
-            conaffinity="0",
-            group="1",
-        )
+        return {
+            "name": name,
+            "type": "mesh",
+            "mesh": mesh,
+            "pos": pos,
+            "quat": _fmt_quat(quat),
+            "rgba": _SCREW_RGBA,
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "1",
+        }
 
     # Servo mounting ears (bracket screw holes on this body's joints)
     for joint in body.joints:

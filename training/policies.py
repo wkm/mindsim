@@ -152,7 +152,7 @@ class LSTMPolicy(nn.Module):
             mean: (B, 2) or (B, T, 2) unbounded mean (tanh applied at sampling)
             std: (2,) standard deviation (shared across batch)
         """
-        features, hidden, is_sequence = self._backbone(x, hidden, sensors=sensors)
+        features, hidden, _is_sequence = self._backbone(x, hidden, sensors=sensors)
         mean = self.fc(features)
         clamped_log_std = self.log_std.clamp(max=self.max_log_std)
         std = torch.exp(clamped_log_std)

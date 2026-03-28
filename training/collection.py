@@ -55,7 +55,7 @@ def collect_episode(
 
     # Accumulate reward component sums for per-episode breakdown
     reward_component_keys = hierarchy.reward_component_keys()
-    reward_component_sums = {k: 0.0 for k in reward_component_keys}
+    reward_component_sums = dict.fromkeys(reward_component_keys, 0.0)
 
     # Accumulate raw reward inputs (physical measures)
     raw_input_keys = [
@@ -65,16 +65,17 @@ def collect_episode(
         "raw_contact_count",
         "raw_action_jerk",
     ]
-    raw_input_sums = {k: 0.0 for k in raw_input_keys}
+    raw_input_sums = dict.fromkeys(raw_input_keys, 0.0)
 
     # Total path length (sum of per-step distance_moved)
     total_path_length = 0.0
 
     # Joint velocity sensor indices (for joint_activity)
-    joint_vel_indices = []
-    for si in env.sensor_info:
-        if si["name"].endswith("_vel") and si["dim"] == 1:
-            joint_vel_indices.append(si["adr"])
+    joint_vel_indices = [
+        si["adr"]
+        for si in env.sensor_info
+        if si["name"].endswith("_vel") and si["dim"] == 1
+    ]
     joint_vel_sum = 0.0  # sum of mean(|joint_vel|) across steps
 
     # Track trajectory for Rerun
@@ -90,7 +91,7 @@ def collect_episode(
     if show_camera:
         # Compute actual control frequency from physics config
         action_dt = env.env.model.opt.timestep * env.mujoco_steps_per_action
-        control_fps = max(1, int(round(1.0 / action_dt)))
+        control_fps = max(1, round(1.0 / action_dt))
         video_encoder = rerun_logger.VideoEncoder(
             f"{ns}/camera",
             width=env.observation_shape[1],

@@ -54,7 +54,7 @@ class Params:
 
 
 @lru_cache(maxsize=128)
-def generate(params: Params = Params()) -> tuple[Prim, ...]:
+def generate(params: Params = Params()) -> tuple[Prim, ...]:  # noqa: B008
     """Generate a bookcase (2 sides + N shelves + optional cabinet/books, max 8)."""
     hw = params.width / 2
     hd = params.depth / 2
