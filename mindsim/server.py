@@ -1126,13 +1126,18 @@ def get_component_manifest(name: str):
         )
 
     # ── Design layer mounts (servo bracket, coupler, etc.) ──
-    skip_layers = {"body", "fasteners", "wires"}
+    # "servo" is the housing mesh — same as body, skip to avoid doubling.
+    skip_layers = {"body", "servo", "fasteners", "wires"}
     mounts: list[dict] = [mount]
     for layer_id in meta.layers:
         if layer_id in skip_layers:
             continue
         layer_meta = _DESIGN_LAYER_META.get(layer_id)
         if not layer_meta:
+            continue
+
+        # Skip layers that can't generate geometry for this component
+        if _generate_solid(comp, layer_id) is None:
             continue
 
         is_clearance = "insertion" in layer_id or "envelope" in layer_id
