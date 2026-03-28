@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
-import { DesignScene, NodeKind } from './design-scene.ts';
+import { DesignScene, NodeKind, type SceneNode } from './design-scene.ts';
 import type { ManifestMount, ManifestPart, ViewerManifest } from './manifest-types.ts';
 import { addMeshWithEdges, BP, createMaterial, hexStr, tintColor } from './presentation.ts';
 import { clearGroup, orientToAxis } from './utils.ts';
@@ -891,7 +891,7 @@ class ComponentBrowser {
     this._componentTree?.updateFromDesignScene(this._designScene.tree);
   }
 
-  _nodeCategoryForFilter(node: any): string | null {
+  _nodeCategoryForFilter(node: SceneNode): string | null {
     // Map node kinds to filter categories.
     if (node.kind === NodeKind.Body) return 'body';
     if (node.kind === NodeKind.SubPart) {

@@ -113,6 +113,14 @@ _DESIGN_LAYER_META: dict[str, dict] = {
     # but were never implemented.
 }
 
+# Bus-type → RGBA color for wire stubs / connectors
+_BUS_COLORS: dict[str, list[float]] = {
+    "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],
+    "csi": [0.40, 0.73, 0.42, 1.0],
+    "power": [0.90, 0.30, 0.25, 1.0],
+    "usb": [0.55, 0.35, 0.75, 1.0],
+}
+
 
 # ---------------------------------------------------------------------------
 # Registry initialisation
@@ -738,37 +746,41 @@ def get_component_stl(name: str, part: str):
     )
 
 
-@app.get("/api/components/{name:path}/materials")
-def get_component_materials(name: str):
-    """Return per-material mesh info for a component's multi-material rendering.
+# ---------------------------------------------------------------------------
+# Shared helpers — used by individual endpoints AND the manifest endpoint
+# ---------------------------------------------------------------------------
 
-    Response: {"materials": [{"name": "fr4_green", "color": [r,g,b], "metallic": 0.0,
-    "roughness": 0.85, "stl_url": "/api/components/BEC5V/stl/mat__fr4_green"}, ...]}
-    Returns empty materials list if no multi-material emitter exists.
+
+def _collect_multi_material(comp, meta) -> tuple[list[dict], dict[str, dict]]:
+    """Return (meshes, materials) for a component's multi-material rendering.
+
+    *meshes* is a list of ``{"file": mat_key, "material": mat_name}`` entries.
+    *materials* maps material name → {color, metallic, roughness, opacity}.
+    Both are empty when no multi-material emitter exists.
     """
-    if name not in _component_registry:
-        raise HTTPException(404, f"Unknown component: {name}")
-
-    _factory, comp, _category = _component_registry[name]
-
-    from botcad.component import get_component_meta
-
-    meta = get_component_meta(comp.kind)
     if meta.multi_material_emitter is None:
-        return {"materials": []}
+        return [], {}
 
     try:
         mm_result = meta.multi_material_emitter(comp)
     except Exception:
-        return {"materials": []}
+        return [], {}
 
     if mm_result is None:
-        return {"materials": []}
+        return [], {}
 
-    materials = []
+    meshes: list[dict] = []
+    materials: dict[str, dict] = {}
     for mp in mm_result.material_programs:
         mat = mp.material
         mat_key = f"mat__{mat.name}"
+        meshes.append({"file": mat_key, "material": mat.name})
+        materials[mat.name] = {
+            "color": list(mat.color[:3]),
+            "metallic": mat.metallic,
+            "roughness": mat.roughness,
+            "opacity": mat.opacity,
+        }
 
         # Pre-generate and cache the per-material STL
         cache_key = (comp.name, mat_key)
@@ -780,28 +792,15 @@ def get_component_materials(name: str):
                 solid = result.shapes[mp.program.output_ref.id]
                 _stl_cache[cache_key] = _solid_to_stl_bytes(solid)
 
-        r, g, b = mat.color[:3]
-        materials.append(
-            {
-                "name": mat.name,
-                "color": [r, g, b],
-                "metallic": mat.metallic,
-                "roughness": mat.roughness,
-                "stl_url": f"/api/components/{name}/stl/{mat_key}",
-            }
-        )
-
-    return {"materials": materials}
+    return meshes, materials
 
 
-@app.get("/api/components/{name:path}/fasteners")
-def get_component_fasteners(name: str):
-    if name not in _component_registry:
-        raise HTTPException(404, f"Unknown component: {name}")
+def _collect_fastener_parts(comp, name: str) -> list[dict]:
+    """Return fastener part entries for a component's mounting points.
 
-    _factory, comp, _category = _component_registry[name]
-
-    # Ensure screw STLs are generated (one per unique diameter)
+    Each entry has id, name, category, parent_body, mesh, pos, quat.
+    Screw STLs are cached as a side effect.
+    """
     for mp in comp.mounting_points:
         cache_key = (f"_screw_{mp.diameter:.4f}", "body")
         with _stl_cache_lock:
@@ -816,30 +815,28 @@ def get_component_fasteners(name: str):
         except Exception:
             pass
 
-    fasteners = []
+    parts: list[dict] = []
     for mp in comp.mounting_points:
         d_key = f"{mp.diameter:.4f}"
-        fasteners.append(
+        parts.append(
             {
-                "label": mp.label,
+                "id": f"fastener_{name}_{mp.label}",
+                "name": f"M{mp.diameter * 1000:.0f} screw",
+                "category": "fastener",
+                "parent_body": name,
+                "mesh": f"_screw_{d_key}",
                 "pos": list(mp.pos),
                 "quat": _axis_to_quat(mp.axis),
-                "diameter_mm": round(mp.diameter * 1000, 2),
-                "stl_url": f"/api/components/_screw_{d_key}/stl/body",
             }
         )
+    return parts
 
-    return {"fasteners": fasteners}
 
+def _collect_wire_parts(comp, name: str) -> tuple[list[dict], list[dict]]:
+    """Return (stubs, connectors) for a component's wire ports.
 
-@app.get("/api/components/{name:path}/wires")
-def get_component_wires(name: str):
-    """Return wire stub positions for a component's wire ports."""
-    if name not in _component_registry:
-        raise HTTPException(404, f"Unknown component: {name}")
-
-    _factory, comp, _category = _component_registry[name]
-
+    Wire stub and connector STLs are cached as a side effect.
+    """
     # Ensure shared wire stub STL is generated
     stub_cache_key = ("_wire_stub", "body")
     with _stl_cache_lock:
@@ -851,21 +848,13 @@ def get_component_wires(name: str):
             stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
             prog.output_ref = stub
             result = OcctBackend().execute(prog)
-            stl_bytes = _solid_to_stl_bytes(result.shapes[stub.id])
-            _stl_cache[stub_cache_key] = stl_bytes
+            _stl_cache[stub_cache_key] = _solid_to_stl_bytes(result.shapes[stub.id])
 
     from botcad.connectors import connector_spec
     from botcad.geometry import rotation_between
 
-    bus_colors = {
-        "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],
-        "csi": [0.40, 0.73, 0.42, 1.0],
-        "power": [0.90, 0.30, 0.25, 1.0],
-        "usb": [0.55, 0.35, 0.75, 1.0],
-    }
-
-    stubs = []
-    connectors = []
+    stubs: list[dict] = []
+    connectors: list[dict] = []
     for wp in comp.wire_ports:
         if not wp.connector_type:
             continue
@@ -883,12 +872,13 @@ def get_component_wires(name: str):
             wp.pos[1] + exit_dir[1] * half_len,
             wp.pos[2] + exit_dir[2] * half_len,
         )
-        color = bus_colors.get(str(wp.bus_type), [0.53, 0.53, 0.53, 1.0])
+        color = _BUS_COLORS.get(str(wp.bus_type), [0.53, 0.53, 0.53, 1.0])
 
         stubs.append(
             {
                 "label": wp.label,
                 "bus_type": str(wp.bus_type),
+                "connector_type": wp.connector_type,
                 "pos": list(center),
                 "quat": [quat[0], quat[1], quat[2], quat[3]],
                 "color": color,
@@ -909,11 +899,14 @@ def get_component_wires(name: str):
                 except Exception:
                     pass
 
-        # Connector orientation: mating direction → +Z
         conn_quat = rotation_between((0.0, 0.0, 1.0), cspec.mating_direction)
         connectors.append(
             {
                 "label": f"{wp.label} ({cspec.label})",
+                "raw_label": wp.label,
+                "bus_type": str(wp.bus_type),
+                "connector_type": wp.connector_type,
+                "connector_mesh": conn_key,
                 "pos": list(wp.pos),
                 "quat": [conn_quat[0], conn_quat[1], conn_quat[2], conn_quat[3]],
                 "color": color,
@@ -921,7 +914,92 @@ def get_component_wires(name: str):
             }
         )
 
-    return {"wires": stubs, "connectors": connectors}
+    return stubs, connectors
+
+
+@app.get("/api/components/{name:path}/materials")
+def get_component_materials(name: str):
+    """Return per-material mesh info for a component's multi-material rendering.
+
+    Response: {"materials": [{"name": "fr4_green", "color": [r,g,b], "metallic": 0.0,
+    "roughness": 0.85, "stl_url": "/api/components/BEC5V/stl/mat__fr4_green"}, ...]}
+    Returns empty materials list if no multi-material emitter exists.
+    """
+    if name not in _component_registry:
+        raise HTTPException(404, f"Unknown component: {name}")
+
+    _factory, comp, _category = _component_registry[name]
+
+    from botcad.component import get_component_meta
+
+    meta = get_component_meta(comp.kind)
+    meshes, materials = _collect_multi_material(comp, meta)
+    if not meshes:
+        return {"materials": []}
+
+    result = []
+    for m in meshes:
+        mat = materials[m["material"]]
+        result.append(
+            {
+                "name": m["material"],
+                "color": mat["color"],
+                "metallic": mat["metallic"],
+                "roughness": mat["roughness"],
+                "stl_url": f"/api/components/{name}/stl/{m['file']}",
+            }
+        )
+
+    return {"materials": result}
+
+
+@app.get("/api/components/{name:path}/fasteners")
+def get_component_fasteners(name: str):
+    if name not in _component_registry:
+        raise HTTPException(404, f"Unknown component: {name}")
+
+    _factory, comp, _category = _component_registry[name]
+    parts = _collect_fastener_parts(comp, name)
+
+    # Re-shape to the endpoint's legacy format (label, diameter_mm, stl_url)
+    fasteners = []
+    for part, mp in zip(parts, comp.mounting_points, strict=True):
+        d_key = f"{mp.diameter:.4f}"
+        fasteners.append(
+            {
+                "label": mp.label,
+                "pos": part["pos"],
+                "quat": part["quat"],
+                "diameter_mm": round(mp.diameter * 1000, 2),
+                "stl_url": f"/api/components/_screw_{d_key}/stl/body",
+            }
+        )
+
+    return {"fasteners": fasteners}
+
+
+@app.get("/api/components/{name:path}/wires")
+def get_component_wires(name: str):
+    """Return wire stub positions for a component's wire ports."""
+    if name not in _component_registry:
+        raise HTTPException(404, f"Unknown component: {name}")
+
+    _factory, comp, _category = _component_registry[name]
+    stubs, connectors = _collect_wire_parts(comp, name)
+
+    # Return only the original wire-endpoint fields
+    wires_out = [
+        {k: v for k, v in s.items() if k not in ("connector_type",)} for s in stubs
+    ]
+    connectors_out = [
+        {
+            k: v
+            for k, v in c.items()
+            if k not in ("raw_label", "bus_type", "connector_type", "connector_mesh")
+        }
+        for c in connectors
+    ]
+    return {"wires": wires_out, "connectors": connectors_out}
 
 
 @app.get("/api/components/{name:path}/manifest")
@@ -938,8 +1016,6 @@ def get_component_manifest(name: str):
     _factory, comp, _category = _component_registry[name]
 
     from botcad.component import get_component_meta
-    from botcad.connectors import connector_spec
-    from botcad.geometry import rotation_between
 
     meta = get_component_meta(comp.kind)
 
@@ -971,36 +1047,9 @@ def get_component_manifest(name: str):
     }
 
     # Multi-material meshes
-    materials: dict[str, dict] = {}
-    if meta.multi_material_emitter is not None:
-        try:
-            mm_result = meta.multi_material_emitter(comp)
-            if mm_result is not None:
-                meshes = []
-                for mp in mm_result.material_programs:
-                    mat = mp.material
-                    mat_key = f"mat__{mat.name}"
-                    meshes.append({"file": mat_key, "material": mat.name})
-                    materials[mat.name] = {
-                        "color": list(mat.color[:3]),
-                        "metallic": mat.metallic,
-                        "roughness": mat.roughness,
-                        "opacity": mat.opacity,
-                    }
-
-                    # Ensure per-material STL is cached
-                    cache_key = (comp.name, mat_key)
-                    with _stl_cache_lock:
-                        if cache_key not in _stl_cache:
-                            from botcad.shapescript.backend_occt import OcctBackend
-
-                            result = OcctBackend().execute(mp.program)
-                            solid = result.shapes[mp.program.output_ref.id]
-                            _stl_cache[cache_key] = _solid_to_stl_bytes(solid)
-
-                mount["meshes"] = meshes
-        except Exception:
-            pass
+    mm_meshes, materials = _collect_multi_material(comp, meta)
+    if mm_meshes:
+        mount["meshes"] = mm_meshes
 
     # Add component default material if not already in materials dict
     if comp.default_material and comp.default_material.name not in materials:
@@ -1013,117 +1062,40 @@ def get_component_manifest(name: str):
         }
 
     # ── Parts: fasteners from mounting points ──
-    parts: list[dict] = []
-    for mp in comp.mounting_points:
-        d_key = f"{mp.diameter:.4f}"
-        screw_mesh = f"_screw_{d_key}"
-
-        # Ensure screw STL is cached
-        cache_key = (screw_mesh, "body")
-        with _stl_cache_lock:
-            if cache_key not in _stl_cache:
-                try:
-                    from botcad.emit.cad import screw_solid
-
-                    stl_bytes = _solid_to_stl_bytes(screw_solid(mp.diameter))
-                    _stl_cache[cache_key] = stl_bytes
-                except Exception:
-                    pass
-
-        parts.append(
-            {
-                "id": f"fastener_{name}_{mp.label}",
-                "name": f"M{mp.diameter * 1000:.0f} screw",
-                "category": "fastener",
-                "parent_body": name,
-                "mesh": screw_mesh,
-                "pos": list(mp.pos),
-                "quat": _axis_to_quat(mp.axis),
-            }
-        )
+    parts: list[dict] = _collect_fastener_parts(comp, name)
 
     # ── Parts: wires from wire ports ──
-    bus_colors = {
-        "uart_half_duplex": [0.20, 0.60, 0.86, 1.0],
-        "csi": [0.40, 0.73, 0.42, 1.0],
-        "power": [0.90, 0.30, 0.25, 1.0],
-        "usb": [0.55, 0.35, 0.75, 1.0],
-    }
-
-    # Ensure shared wire stub STL is generated
-    stub_cache_key = ("_wire_stub", "body")
-    with _stl_cache_lock:
-        if stub_cache_key not in _stl_cache:
-            from botcad.shapescript.backend_occt import OcctBackend
-            from botcad.shapescript.program import ShapeScript
-
-            prog = ShapeScript()
-            stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
-            prog.output_ref = stub
-            result = OcctBackend().execute(prog)
-            _stl_cache[stub_cache_key] = _solid_to_stl_bytes(result.shapes[stub.id])
-
-    for wp in comp.wire_ports:
-        if not wp.connector_type:
-            continue
-        try:
-            cspec = connector_spec(wp.connector_type)
-        except KeyError:
-            continue
-
-        exit_dir = cspec.wire_exit_direction
-        quat = rotation_between((0.0, 0.0, 1.0), exit_dir)
-        half_len = 0.0125
-        center = (
-            wp.pos[0] + exit_dir[0] * half_len,
-            wp.pos[1] + exit_dir[1] * half_len,
-            wp.pos[2] + exit_dir[2] * half_len,
-        )
-        color = bus_colors.get(str(wp.bus_type), [0.53, 0.53, 0.53, 1.0])
-
-        parts.append(
-            {
-                "id": f"wire_{name}_{wp.label}",
-                "name": wp.label,
-                "category": "wire",
-                "parent_body": name,
-                "mesh": "_wire_stub",
-                "pos": list(center),
-                "quat": [quat[0], quat[1], quat[2], quat[3]],
-                "bus_type": str(wp.bus_type),
-                "connector_type": wp.connector_type,
-                "color": color,
-            }
-        )
-
-        # Connector housing
-        conn_key = f"_connector_{wp.connector_type}"
-        cache_key = (conn_key, "body")
-        with _stl_cache_lock:
-            if cache_key not in _stl_cache:
-                try:
-                    from botcad.connectors import connector_solid
-
-                    solid = connector_solid(cspec)
-                    _stl_cache[cache_key] = _solid_to_stl_bytes(solid)
-                except Exception:
-                    pass
-
-        conn_quat = rotation_between((0.0, 0.0, 1.0), cspec.mating_direction)
-        parts.append(
-            {
-                "id": f"connector_{name}_{wp.label}",
-                "name": f"{wp.label} ({cspec.label})",
-                "category": "wire",
-                "parent_body": name,
-                "mesh": conn_key,
-                "pos": list(wp.pos),
-                "quat": [conn_quat[0], conn_quat[1], conn_quat[2], conn_quat[3]],
-                "bus_type": str(wp.bus_type),
-                "connector_type": wp.connector_type,
-                "color": color,
-            }
-        )
+    wire_stubs, wire_connectors = _collect_wire_parts(comp, name)
+    parts.extend(
+        {
+            "id": f"wire_{name}_{stub['label']}",
+            "name": stub["label"],
+            "category": "wire",
+            "parent_body": name,
+            "mesh": "_wire_stub",
+            "pos": stub["pos"],
+            "quat": stub["quat"],
+            "bus_type": stub["bus_type"],
+            "connector_type": stub["connector_type"],
+            "color": stub["color"],
+        }
+        for stub in wire_stubs
+    )
+    parts.extend(
+        {
+            "id": f"connector_{name}_{conn['raw_label']}",
+            "name": conn["label"],
+            "category": "wire",
+            "parent_body": name,
+            "mesh": conn["connector_mesh"],
+            "pos": conn["pos"],
+            "quat": conn["quat"],
+            "bus_type": conn["bus_type"],
+            "connector_type": conn["connector_type"],
+            "color": conn["color"],
+        }
+        for conn in wire_connectors
+    )
 
     # ── Design layer mounts (servo bracket, coupler, etc.) ──
     # "servo" is the housing mesh — same as body, skip to avoid doubling.
