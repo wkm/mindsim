@@ -37,8 +37,9 @@ def test_component_manifest_structure(client):
     assert body["pos"] == [0, 0, 0]
     assert body["quat"] == [1, 0, 0, 0]
 
-    # No joints for a standalone component
+    # No joints or assemblies for a standalone component
     assert m["joints"] == []
+    assert m["assemblies"] == []
 
     # Self-referential mount
     assert len(m["mounts"]) == 1
@@ -99,7 +100,15 @@ def test_component_manifest_wires(client):
         assert "name" in w
         assert w["parent_body"] == "STS3215"
         assert "bus_type" in w
+        assert "connector_type" in w
+        assert "color" in w
         assert "pos" in w
+
+    # Both wire stubs and connector housings should be present
+    stub_ids = [w["id"] for w in wires if w["id"].startswith("wire_")]
+    connector_ids = [w["id"] for w in wires if w["id"].startswith("connector_")]
+    assert len(stub_ids) > 0, "Expected wire stub parts"
+    assert len(connector_ids) > 0, "Expected connector housing parts"
 
 
 def test_component_manifest_404(client):

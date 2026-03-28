@@ -1098,6 +1098,7 @@ def get_component_manifest(name: str):
                 "pos": list(wp.pos),
                 "quat": [conn_quat[0], conn_quat[1], conn_quat[2], conn_quat[3]],
                 "bus_type": str(wp.bus_type),
+                "connector_type": wp.connector_type,
                 "color": color,
             }
         )
