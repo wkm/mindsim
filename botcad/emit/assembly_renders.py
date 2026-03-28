@@ -84,7 +84,7 @@ MINIMAP_SIZE = 400
 _HARDWARE_PREFIXES = ("screw_", "horn_", "rear_", "mount_", "wire_")
 
 
-@dataclass
+@dataclass(frozen=True)
 class StripData:
     jname: str
     # Collision test (full visibility)

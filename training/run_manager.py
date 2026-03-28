@@ -112,7 +112,7 @@ def create_run_dir(run_name: str) -> Path:
     return run_dir
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class RunInfo:
     """Metadata about a training run, persisted as run_info.json."""
 

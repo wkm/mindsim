@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from training.rewards import RewardHierarchy
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnvConfig:
     """Environment configuration."""
 
@@ -112,7 +112,7 @@ class EnvConfig:
     gait_phase_period: float = 0.0  # Period in seconds (e.g. 0.6s for ~1.67Hz stride)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CurriculumConfig:
     """Curriculum learning configuration."""
 
@@ -126,7 +126,7 @@ class CurriculumConfig:
     use_eval_for_curriculum: bool = True  # Use eval success rate for curriculum
 
 
-@dataclass
+@dataclass(frozen=True)
 class PolicyConfig:
     """Neural network policy configuration."""
 
@@ -156,7 +156,7 @@ class PolicyConfig:
         return self.policy_type == "MLPPolicy"
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrainingConfig:
     """Training loop configuration."""
 
@@ -196,7 +196,7 @@ class TrainingConfig:
     max_batches: int | None = None  # None = run until mastery
 
 
-@dataclass
+@dataclass(frozen=True)
 class CommentaryConfig:
     """AI commentary configuration for training dashboard."""
 
@@ -205,7 +205,7 @@ class CommentaryConfig:
     model: str = "haiku"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Pipeline:
     """Complete training pipeline configuration."""
 

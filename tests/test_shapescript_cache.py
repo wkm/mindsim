@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from botcad.shapescript.cache import DiskCache
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 
-def _make_box_program(width: float = 0.06) -> ShapeScript:
+def _make_box_program(width: float = 0.06) -> ShapeScriptBuilder:
     """Helper: build a simple box program."""
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
     box = prog.box(width, 0.04, 0.02)
     prog.query_volume(box)
     prog.output_ref = box

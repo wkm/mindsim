@@ -20,11 +20,12 @@ from pathlib import Path
 # Framework
 # ---------------------------------------------------------------------------
 
-BOTCAD_ROOT = Path(__file__).parent.parent / "botcad"
+PROJECT_ROOT = Path(__file__).parent.parent
+BOTCAD_ROOT = PROJECT_ROOT / "botcad"
 RULES: list[Rule] = []
 
 
-@dataclass
+@dataclass(frozen=True)
 class Violation:
     path: Path
     line: int
@@ -38,7 +39,7 @@ class Violation:
 RuleCheck = type[ast.NodeVisitor]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Rule:
     name: str
     check: RuleCheck
@@ -105,7 +106,11 @@ class NoRotationBetweenInEmitters(LintVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         # Check if this file is an emitter
-        rel = str(self._path.relative_to(BOTCAD_ROOT))
+        try:
+            rel = str(self._path.relative_to(BOTCAD_ROOT))
+        except ValueError:
+            self.generic_visit(node)
+            return
         if rel not in self.EMITTER_PATHS:
             self.generic_visit(node)
             return
@@ -139,7 +144,11 @@ class NoHardcodedIdentityQuat(LintVisitor):
     EMITTER_PATHS = {"emit/viewer.py", "emit/mujoco.py"}  # noqa: RUF012
 
     def visit_Dict(self, node: ast.Dict) -> None:
-        rel = str(self._path.relative_to(BOTCAD_ROOT))
+        try:
+            rel = str(self._path.relative_to(BOTCAD_ROOT))
+        except ValueError:
+            self.generic_visit(node)
+            return
         if rel not in self.EMITTER_PATHS:
             self.generic_visit(node)
             return
@@ -213,6 +222,51 @@ class NoRotatePointForAxes(LintVisitor):
         return False
 
 
+@rule("frozen-dataclass")
+class FrozenDataclass(LintVisitor):
+    """All @dataclass definitions must use frozen=True.
+
+    Lesson: mutable dataclasses are a source of subtle bugs — cached
+    instances get silently mutated, identity semantics are surprising,
+    and they can't be used as dict keys or set members.  Prefer frozen
+    dataclasses and explicit construction of new instances.
+
+    Suppress with ``# plint: disable=frozen-dataclass`` for classes that
+    genuinely need mutation (builders, accumulators, registries).
+    """
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        for deco in node.decorator_list:
+            if self._is_unfrozen_dataclass(deco):
+                self._warn(
+                    node,
+                    f"class {node.name}: @dataclass missing frozen=True. "
+                    "Add frozen=True or suppress with "
+                    "# plint: disable=frozen-dataclass",
+                )
+        self.generic_visit(node)
+
+    @staticmethod
+    def _is_unfrozen_dataclass(node: ast.expr) -> bool:
+        """Return True if decorator is @dataclass without frozen=True."""
+        # Bare @dataclass
+        if isinstance(node, ast.Name) and node.id == "dataclass":
+            return True
+        # @dataclass(...)  — check for frozen=True
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "dataclass":
+                for kw in node.keywords:
+                    if (
+                        kw.arg == "frozen"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value is True
+                    ):
+                        return False
+                return True
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -249,8 +303,21 @@ def lint_directory(root: Path) -> list[Violation]:
     return violations
 
 
+LINT_ROOTS = [
+    PROJECT_ROOT / "botcad",
+    PROJECT_ROOT / "training",
+    PROJECT_ROOT / "scene_gen",
+    PROJECT_ROOT / "viz",
+    PROJECT_ROOT / "tools",
+    PROJECT_ROOT / "scripts",
+]
+
+
 def main() -> int:
-    violations = lint_directory(BOTCAD_ROOT)
+    violations: list[Violation] = []
+    for root in LINT_ROOTS:
+        if root.is_dir():
+            violations.extend(lint_directory(root))
     if not violations:
         return 0
     for v in violations:

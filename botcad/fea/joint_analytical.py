@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
-@dataclass
+@dataclass(frozen=True)
 class StressResult:
     joint_name: str
     body_name: str

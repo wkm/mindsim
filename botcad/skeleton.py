@@ -116,7 +116,7 @@ class BaseType(StrEnum):
     FIXED = "fixed"
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class Assembly:
     """A group of bodies and sub-assemblies — a functional unit.
 
@@ -159,7 +159,7 @@ class Assembly:
 Module = Assembly
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class Mount:
     """A component placed inside a body."""
 
@@ -251,7 +251,7 @@ class Mount:
         return self is other
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class Joint:
     """A revolute joint connecting a parent body to a child body via a servo.
 
@@ -350,7 +350,7 @@ class Joint:
         return self is other
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class Body:
     """A rigid body in the kinematic tree.
 
@@ -539,7 +539,7 @@ class Body:
         return self is other
 
 
-@dataclass
+@dataclass  # plint: disable=frozen-dataclass
 class Bot:
     """Top-level robot definition.
 

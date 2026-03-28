@@ -5,9 +5,9 @@ overlaid in distinct colors. Sections include hatching, section labels,
 and a title block with scale indicator and legend.
 
 Usage:
-    from botcad.debug_drawing import DebugDrawing
+    from botcad.debug_drawing import DebugDrawingBuilder
 
-    drawing = DebugDrawing("coupler_debug")
+    drawing = DebugDrawingBuilder("coupler_debug")
     drawing.add_part("coupler", coupler_solid, color=(200, 80, 50))
     drawing.add_part("servo", servo_solid, color=(60, 60, 60))
     drawing.add_section("front_horn", Plane.XY.offset(front_z))
@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import re
 import string
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from build123d import (
@@ -293,20 +293,20 @@ def _project_offset(offset_3d: Vec3, right: Vec3, up: Vec3) -> tuple[float, floa
     return (dx * rx + dy * ry + dz * rz, dx * ux + dy * uy + dz * uz)
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Part:
     name: str
     solid: Solid | Compound
     color: RGB
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Section:
     name: str
     plane: Plane
 
 
-@dataclass
+@dataclass(frozen=True)
 class _Projection:
     """A 2D projection view with visible/hidden line separation."""
 
@@ -319,8 +319,7 @@ class _Projection:
 _View = _Section | _Projection
 
 
-@dataclass
-class DebugDrawing:
+class DebugDrawingBuilder:
     """Accumulates parts and views (sections + projections), exports SVG.
 
     All views are laid out side-by-side in one SVG file with:
@@ -330,27 +329,33 @@ class DebugDrawing:
     - Title text with scale indicator and part legend
     """
 
-    title: str
-    parts: list[_Part] = field(default_factory=list)
-    sections: list[_Section] = field(default_factory=list)
-    projections: list[tuple[int, _Projection]] = field(default_factory=list)
-    scale: float = DEFAULT_SCALE
-    line_weight: float = LINE_WEIGHT_THICK
-    _view_order: list[_View] = field(default_factory=list)
+    def __init__(
+        self,
+        title: str,
+        scale: float = DEFAULT_SCALE,
+        line_weight: float = LINE_WEIGHT_THICK,
+    ) -> None:
+        self.title = title
+        self.parts: list[_Part] = []
+        self.sections: list[_Section] = []
+        self.projections: list[tuple[int, _Projection]] = []
+        self.scale = scale
+        self.line_weight = line_weight
+        self._view_order: list[_View] = []
 
     def add_part(
         self,
         name: str,
         solid: Solid | Compound,
         color: RGB | None = None,
-    ) -> DebugDrawing:
+    ) -> DebugDrawingBuilder:
         """Add a solid to be sectioned. Color auto-assigned if omitted."""
         if color is None:
             color = PALETTE[len(self.parts) % len(PALETTE)]
         self.parts.append(_Part(name=name, solid=solid, color=color))
         return self
 
-    def add_section(self, name: str, plane: Plane) -> DebugDrawing:
+    def add_section(self, name: str, plane: Plane) -> DebugDrawingBuilder:
         """Add a named section plane."""
         sec = _Section(name=name, plane=plane)
         self.sections.append(sec)
@@ -362,7 +367,7 @@ class DebugDrawing:
         name: str,
         origin: Vec3,
         up: Vec3 = (0, 0, 1),
-    ) -> DebugDrawing:
+    ) -> DebugDrawingBuilder:
         """Add a 2D projection view with visible/hidden line separation.
 
         Args:
