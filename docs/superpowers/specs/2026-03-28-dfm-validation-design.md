@@ -343,6 +343,27 @@ Validation criteria:
 
 Implementation: a test script (not a training env) that loads the scene, runs scripted maneuvers (forward 1s, turn left 1s, turn right 1s, stop), asserts position/orientation within tolerance, and generates a filmstrip for visual confirmation.
 
+## Implementation Phases
+
+### Phase 0: Foundational Cleanups
+
+These are broad codebase improvements that the DFM work depends on. Complete before any DFM-specific code.
+
+**0a. StringId pattern (`botcad/ids.py`):**
+Introduce `BodyId` and `JointId`. Migrate `Body.name`, `Joint.name`, and all code that passes body/joint names as bare strings. This touches the skeleton, packing, emit, viewer manifest, and tests — but each change is mechanical (wrap/unwrap). The goal is that by the time DFM code is written, there are no bare-string entity names to get wrong.
+
+**0b. Dimension types (`botcad/units.py`):**
+Introduce `Meters` and `Radians` as `NewType` wrappers. Migrate existing dimension fields in component specs, fastener specs, connector specs, servo specs, and skeleton geometry. Again mechanical — wrap existing float values, update type annotations. Catches the class of bug where meters and millimeters get mixed (which has happened before in this codebase with the tool library table values).
+
+**0c. Remove assembly mode:**
+Delete `viewer/assembly-mode.ts` and its references. Clean break before building the DFM viewer mode that replaces it.
+
+### Phase 1: Assembly Sequence Model
+### Phase 2: DFM Check Framework + Tier 1 Checks
+### Phase 3: API Surface
+### Phase 4: Viewer DFM Mode
+### Phase 5: Sim Validation (parallel with Phases 1-4)
+
 ## File Organization
 
 ```
