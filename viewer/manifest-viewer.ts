@@ -75,10 +75,14 @@ function createPositionedMesh(
   mesh.position.set(pos[0], pos[1], pos[2]);
   mesh.quaternion.copy(manifestQuatToThree(quat));
 
-  const edges = new THREE.EdgesGeometry(geometry, 28);
-  const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
-  lines.raycast = () => {};
-  mesh.add(lines);
+  // Only add edge lines for opaque meshes — transparent overlays look better without them
+  const matObj = material as THREE.MeshPhysicalMaterial;
+  if (!matObj.transparent) {
+    const edges = new THREE.EdgesGeometry(geometry, 28);
+    const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
+    lines.raycast = () => {};
+    mesh.add(lines);
+  }
 
   return mesh;
 }

@@ -33,8 +33,6 @@ const VIEW_PRESETS = {
   left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '7' },
 };
 
-const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
-
 // ---------------------------------------------------------------------------
 // ComponentBrowser class
 // ---------------------------------------------------------------------------
@@ -57,8 +55,6 @@ class ComponentBrowser {
   _markerGroup: THREE.Group | null;
   _markers: Record<string, any[]>;
   _stepsHasFramed: boolean;
-  _lastSvgText: string;
-  _lastSvgName: string;
   _gizmoSvg: HTMLElement | null;
   _gizmoAxes: any[];
 
@@ -82,8 +78,6 @@ class ComponentBrowser {
     this._markerGroup = null;
     this._markers = {};
     this._stepsHasFramed = false;
-    this._lastSvgText = '';
-    this._lastSvgName = '';
     this._gizmoSvg = null;
     this._gizmoAxes = [];
   }
@@ -152,22 +146,7 @@ class ComponentBrowser {
       }
     }
 
-    const renderBtn = document.getElementById('render-svg');
-    if (renderBtn) {
-      renderBtn.addEventListener('click', () => this._requestSVGRender());
-    }
-
-    // Steps button
-    const stepsBtn = document.getElementById('steps-toggle');
-    if (stepsBtn) {
-      stepsBtn.addEventListener('click', () => {
-        if (this.currentComponent) {
-          window.location.href = `?cadsteps=component:${encodeURIComponent(this.currentComponent.name)}`;
-        }
-      });
-    }
-
-    // Keyboard shortcuts — view presets, escape (SVG modal), arrow keys
+    // Keyboard shortcuts — view presets, arrow keys
     const keyMap: Record<string, string> = {
       '1': 'iso',
       '2': 'front',
@@ -184,11 +163,6 @@ class ComponentBrowser {
       if (!ctrl && keyMap[e.key]) {
         e.preventDefault();
         this._setViewPreset(keyMap[e.key]);
-      } else if (e.key === 'Escape') {
-        const modal = document.getElementById('svg-modal');
-        if (modal && modal.style.display !== 'none') {
-          modal.style.display = 'none';
-        }
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
         this._arrowKeyNav(e.key, e.shiftKey);
@@ -878,114 +852,6 @@ class ComponentBrowser {
 
     this.viewport._fitOrthoFrustum(box);
     this.viewport.controls.update();
-  }
-
-  // -----------------------------------------------------------------------
-  // Server-side SVG render
-  // -----------------------------------------------------------------------
-
-  async _requestSVGRender() {
-    const comp = this.currentComponent;
-    if (!comp) return;
-
-    const groups = this.viewport._groups as Record<string, THREE.Group>;
-    const layers = Object.keys(groups).filter((id) => groups[id].visible);
-    if (layers.length === 0) return;
-
-    const camera = this.viewport.camera;
-    camera.updateMatrixWorld();
-    const dir = new THREE.Vector3();
-    dir.setFromMatrixColumn(camera.matrixWorld, 2);
-    const up = new THREE.Vector3();
-    up.setFromMatrixColumn(camera.matrixWorld, 1);
-
-    const preset = VIEW_PRESETS[this.activePreset as keyof typeof VIEW_PRESETS];
-    const viewLabel = preset ? preset.label : 'Custom';
-
-    const body: any = {
-      view_dir: [dir.x, dir.y, dir.z],
-      view_up: [up.x, up.y, up.z],
-      layers,
-      annotate: {
-        component: comp.name,
-        view: viewLabel,
-        layers: layers,
-        dimensions_mm: comp.dimensions_mm,
-        mass_g: comp.mass_g,
-      },
-    };
-
-    if (this.viewport._secOn) {
-      const box = this._getVisibleBBox();
-      if (box) {
-        const sectionAxis = this.viewport._secAxis as string;
-        const sectionFraction = this.viewport._secFrac as number;
-        const axisIdx = AXIS_INDEX[sectionAxis];
-        const pos =
-          box.min.getComponent(axisIdx) +
-          (box.max.getComponent(axisIdx) - box.min.getComponent(axisIdx)) * sectionFraction;
-        body.section = {
-          axis: sectionAxis,
-          position: pos,
-          flipped: false,
-        };
-        body.annotate.section = `Section ${sectionAxis.toUpperCase()} @ ${(pos * 1000).toFixed(1)} mm`;
-      }
-    }
-
-    const btn = document.querySelector('#render-svg') as HTMLButtonElement;
-    const origText = btn.textContent;
-    btn.textContent = 'Rendering...';
-    btn.disabled = true;
-
-    try {
-      const resp = await fetch(`/api/components/${comp.name}/render-svg`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (resp.ok) {
-        const svgText = await resp.text();
-        this._showSVGModal(svgText, comp.name, viewLabel);
-      } else {
-        console.error('SVG render failed:', await resp.text());
-      }
-    } catch (err) {
-      console.error('SVG render request failed:', err);
-    } finally {
-      btn.textContent = origText;
-      btn.disabled = false;
-    }
-  }
-
-  _showSVGModal(svgText: string, componentName: string, viewLabel: string) {
-    const modal = document.getElementById('svg-modal')!;
-    const title = document.getElementById('svg-modal-title')!;
-    const body = document.getElementById('svg-modal-body')!;
-
-    title.textContent = `${componentName} \u2014 ${viewLabel} view`;
-    body.innerHTML = svgText.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
-
-    this._lastSvgText = svgText;
-    this._lastSvgName = `${componentName}_${viewLabel.toLowerCase()}`;
-
-    modal.style.display = 'flex';
-
-    const close = () => {
-      modal.style.display = 'none';
-    };
-    (document.querySelector('#svg-modal .modal-backdrop') as HTMLElement).onclick = close;
-    document.getElementById('svg-modal-close')!.onclick = close;
-
-    document.getElementById('svg-modal-download')!.onclick = () => {
-      const blob = new Blob([this._lastSvgText], { type: 'image/svg+xml' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${this._lastSvgName}.svg`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    };
   }
 
   // -----------------------------------------------------------------------
