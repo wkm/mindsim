@@ -168,12 +168,12 @@ if (cadstepsParam) {
   document.getElementById('bot-name').textContent = 'Components';
   // Offset canvas for tree panel (same as Design mode)
   document.getElementById('canvas-container').style.left = '280px';
-  // Show component browser navbar elements
-  document.getElementById('cb-nav-divider').style.display = '';
-  document.getElementById('cb-view-group').style.display = '';
-  document.getElementById('cb-tools-group').style.display = '';
+  // Show component browser navbar elements (view dropdown)
+  const cbViewGroup = document.getElementById('cb-view-group');
+  if (cbViewGroup) cbViewGroup.style.display = '';
   import('./component-browser.ts').then((m) => m.initComponentBrowser(componentParam));
 } else {
   // Landing page — already visible by default, hide everything else
-  document.getElementById('component-browser').style.display = 'none';
+  const cbEl = document.getElementById('component-browser');
+  if (cbEl) cbEl.style.display = 'none';
 }
