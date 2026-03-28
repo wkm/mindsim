@@ -350,7 +350,7 @@ function updateSectionPlane(state: SectionState, viewport: Viewport3D, bodyGroup
 // ---------------------------------------------------------------------------
 
 export async function initManifestViewer(options: ManifestViewerOptions): Promise<ManifestViewerContext> {
-  const { container, treePanelEl, manifest, resolveStlUrl, onNodeSelected } = options;
+  const { container, treePanelEl, sidePanelEl: _sidePanelEl, manifest, resolveStlUrl, onNodeSelected } = options;
   const materials = manifest.materials ?? {};
 
   // Layer lazy-loading state
@@ -363,6 +363,13 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
     flipped: false,
     fraction: 0.5,
   };
+
+  // Track DOM listeners for cleanup in dispose()
+  const domListenerCleanups: (() => void)[] = [];
+  function addDomListener(el: EventTarget, event: string, handler: EventListener): void {
+    el.addEventListener(event, handler);
+    domListenerCleanups.push(() => el.removeEventListener(event, handler));
+  }
 
   // -----------------------------------------------------------------------
   // Step 1: Viewport — reuse or create
@@ -513,17 +520,18 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
         designScene.tree.toggleHidden(nodeId);
 
         const node = designScene.tree.getNode(nodeId);
-        if (node && node.kind === NodeKind.Layer && node.meshIds.length === 0 && !node.hidden) {
-          lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, resolveStlUrl, bodyGroups, layerLoadState).then(
-            () => syncVisibility(),
-          );
-        }
-
-        // Lazy-load mount/part meshes on first show
         if (node && !node.hidden && node.meshIds.length === 0) {
-          lazyLoadNodeMesh(nodeId, manifest, designScene, viewport, resolveStlUrl, bodyGroups).then(() =>
-            syncVisibility(),
-          );
+          if (node.kind === NodeKind.Layer) {
+            // Design layer (bot joint layers) — separate lazy-load path
+            lazyLoadLayerMesh(nodeId, manifest, designScene, viewport, resolveStlUrl, bodyGroups, layerLoadState).then(
+              () => syncVisibility(),
+            );
+          } else {
+            // Mount/part meshes — generic lazy-load
+            lazyLoadNodeMesh(nodeId, manifest, designScene, viewport, resolveStlUrl, bodyGroups).then(() =>
+              syncVisibility(),
+            );
+          }
         }
 
         syncVisibility();
@@ -605,7 +613,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   // -----------------------------------------------------------------------
   const sectionToggle = document.getElementById('section-toggle');
   if (sectionToggle) {
-    sectionToggle.addEventListener('click', () => {
+    addDomListener(sectionToggle, 'click', () => {
       section.enabled = !section.enabled;
       sectionToggle.classList.toggle('active', section.enabled);
       const controls = document.getElementById('section-controls');
@@ -617,7 +625,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   for (const axis of ['x', 'y', 'z']) {
     const btn = document.querySelector(`[data-section-axis="${axis}"]`);
     if (btn) {
-      btn.addEventListener('click', () => {
+      addDomListener(btn, 'click', () => {
         section.axis = axis;
         document.querySelectorAll('[data-section-axis]').forEach((b) => {
           b.classList.toggle('active', (b as HTMLElement).dataset.sectionAxis === axis);
@@ -629,7 +637,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
 
   const slider = document.getElementById('section-slider');
   if (slider) {
-    slider.addEventListener('input', () => {
+    addDomListener(slider, 'input', () => {
       section.fraction = Number.parseFloat((slider as HTMLInputElement).value) / 100;
       updateSectionPlane(section, viewport, bodyGroups);
     });
@@ -637,7 +645,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
 
   const flipBtn = document.getElementById('section-flip');
   if (flipBtn) {
-    flipBtn.addEventListener('click', () => {
+    addDomListener(flipBtn, 'click', () => {
       section.flipped = !section.flipped;
       flipBtn.classList.toggle('active', section.flipped);
       updateSectionPlane(section, viewport, bodyGroups);
@@ -649,7 +657,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   // -----------------------------------------------------------------------
   const measureBtn = document.getElementById('measure-toggle');
   if (measureBtn) {
-    measureBtn.addEventListener('click', () => {
+    addDomListener(measureBtn, 'click', () => {
       const active = !viewport._meas.enabled;
       if (active) {
         viewport.enableMeasureTool();
@@ -664,7 +672,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
 
   const clearBtn = document.getElementById('measure-clear');
   if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
+    addDomListener(clearBtn, 'click', () => {
       viewport._meas.clearAll();
     });
   }
@@ -771,21 +779,19 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   // Step 17: Dispose
   // -----------------------------------------------------------------------
   function dispose(): void {
+    // Remove pointer + keyboard listeners
     canvas.removeEventListener('pointerdown', onPointerDown);
     canvas.removeEventListener('pointerup', onPointerUp);
     document.removeEventListener('keydown', onKeyDown);
+    // Remove section/measure DOM listeners
+    for (const cleanup of domListenerCleanups) cleanup();
+    domListenerCleanups.length = 0;
+    // Dispose tree
     tree.dispose();
+    // Clean up mesh groups via viewport (keeps viewport's internal registry clean)
     for (const group of Object.values(bodyGroups)) {
-      group.traverse((obj: any) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            for (const m of obj.material) m.dispose();
-          } else {
-            obj.material.dispose();
-          }
-        }
-      });
+      viewport.clearGroup(group);
+      viewport.scene.remove(group);
     }
   }
 
