@@ -1167,7 +1167,11 @@ async def run_fea(bot: str):
             )
             if not solve_res_tuple:
                 body_results.append(
-                    {"body": target_body.name, "status": "skipped", "reason": "no BCs"}
+                    {
+                        "body": target_body.name,
+                        "status": "skipped",
+                        "reason": "no BCs",
+                    }
                 )
                 continue
 

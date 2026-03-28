@@ -93,10 +93,13 @@ class TestIREmitBasicShapes:
     """Test IR emission for basic body shapes without joints."""
 
     def test_box_body(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
         body = Body(
-            name="test_box", shape=BodyShape.BOX, explicit_dimensions=(0.06, 0.04, 0.02)
+            name=BodyId("test_box"),
+            shape=BodyShape.BOX,
+            explicit_dimensions=(0.06, 0.04, 0.02),
         )
 
         _clear_all_caches()
@@ -106,9 +109,12 @@ class TestIREmitBasicShapes:
         _assert_solids_match(ir, direct, "box")
 
     def test_cylinder_body(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
-        body = Body(name="test_cyl", shape=BodyShape.CYLINDER, radius=0.02, width=0.03)
+        body = Body(
+            name=BodyId("test_cyl"), shape=BodyShape.CYLINDER, radius=0.02, width=0.03
+        )
 
         _clear_all_caches()
         ir = _build_ir(body)
@@ -117,9 +123,10 @@ class TestIREmitBasicShapes:
         _assert_solids_match(ir, direct, "cylinder")
 
     def test_sphere_body(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
-        body = Body(name="test_sph", shape=BodyShape.SPHERE, radius=0.015)
+        body = Body(name=BodyId("test_sph"), shape=BodyShape.SPHERE, radius=0.015)
 
         _clear_all_caches()
         ir = _build_ir(body)
@@ -128,9 +135,12 @@ class TestIREmitBasicShapes:
         _assert_solids_match(ir, direct, "sphere")
 
     def test_tube_body(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
-        body = Body(name="test_tube", shape=BodyShape.TUBE, outer_r=0.01, length=0.08)
+        body = Body(
+            name=BodyId("test_tube"), shape=BodyShape.TUBE, outer_r=0.01, length=0.08
+        )
 
         _clear_all_caches()
         ir = _build_ir(body)
@@ -139,10 +149,11 @@ class TestIREmitBasicShapes:
         _assert_solids_match(ir, direct, "tube")
 
     def test_jaw_body(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
         body = Body(
-            name="test_jaw",
+            name=BodyId("test_jaw"),
             shape=BodyShape.JAW,
             jaw_width=0.03,
             jaw_thickness=0.005,
@@ -212,12 +223,15 @@ class TestIREmitCylinderOrientation:
     def test_cylinder_child_z_axis(self):
         """Child cylinder on Z axis — identity orientation."""
         from botcad.components.servo import STS3215
+        from botcad.ids import BodyId, JointId
         from botcad.skeleton import Body, BodyShape, Joint
 
         servo = STS3215()
-        joint = Joint(name="j1", servo=servo, axis=(0.0, 0.0, 1.0), pos=(0.0, 0.0, 0.0))
+        joint = Joint(
+            name=JointId("j1"), servo=servo, axis=(0.0, 0.0, 1.0), pos=(0.0, 0.0, 0.0)
+        )
         child = Body(
-            name="child_cyl", shape=BodyShape.CYLINDER, radius=0.015, width=0.02
+            name=BodyId("child_cyl"), shape=BodyShape.CYLINDER, radius=0.015, width=0.02
         )
         joint.child = child
 
@@ -231,12 +245,18 @@ class TestIREmitCylinderOrientation:
         """Child cylinder on X axis — 90 rotation."""
         from botcad.components.servo import STS3215
         from botcad.geometry import rotation_between
+        from botcad.ids import BodyId, JointId
         from botcad.skeleton import Body, BodyShape, Joint
 
         servo = STS3215()
-        joint = Joint(name="j2", servo=servo, axis=(1.0, 0.0, 0.0), pos=(0.0, 0.0, 0.0))
+        joint = Joint(
+            name=JointId("j2"), servo=servo, axis=(1.0, 0.0, 0.0), pos=(0.0, 0.0, 0.0)
+        )
         child = Body(
-            name="child_cyl_x", shape=BodyShape.CYLINDER, radius=0.015, width=0.02
+            name=BodyId("child_cyl_x"),
+            shape=BodyShape.CYLINDER,
+            radius=0.015,
+            width=0.02,
         )
         child.frame_quat = rotation_between((0.0, 0.0, 1.0), (1.0, 0.0, 0.0))
         joint.child = child

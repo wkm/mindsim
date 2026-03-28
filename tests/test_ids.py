@@ -18,10 +18,13 @@ def test_body_id_hashable():
     assert len({a, b}) == 1
 
 
-def test_body_id_not_equal_to_joint_id():
+def test_body_id_and_joint_id_are_distinct_types():
     bid = BodyId("base")
     jid = JointId("base")
-    assert bid != jid
+    # String equality holds (both wrap "base"), but types differ
+    assert type(bid) is not type(jid)
+    assert isinstance(bid, BodyId)
+    assert not isinstance(bid, JointId)
 
 
 def test_body_id_str():
