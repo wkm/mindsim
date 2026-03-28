@@ -692,11 +692,10 @@ class ComponentBrowser {
     );
     this._componentTree.build();
 
-    // Set fasteners and wires hidden by default.
-    // SceneTree.nodes is a Map — use .values().
-    // Fasteners are SubPart nodes; wire groups are Component nodes with `wire-group:` prefix.
+    // Set fasteners and wires hidden by default (by ID prefix, not node kind,
+    // because horns are also SubPart but should stay visible).
     for (const node of this._designScene.tree.nodes.values()) {
-      if (node.kind === NodeKind.SubPart || node.id.startsWith('wire-group:')) {
+      if (node.id.startsWith('fastener-group:') || node.id.startsWith('wire-group:')) {
         node.hidden = true;
       }
     }
