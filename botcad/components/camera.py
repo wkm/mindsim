@@ -8,54 +8,53 @@ from botcad.materials import MAT_ABS_DARK
 
 
 def OV5647() -> CameraSpec:
-    """OV5647 camera module (Raspberry Pi Camera v1 compatible).
+    """OV5647 camera module (Raspberry Pi Camera Module v1.3).
 
-    25 x 24 x 9mm, 3g. CSI ribbon cable connection. 72° diagonal FOV.
-    Reference: https://www.raspberrypi.com/documentation/accessories/camera.html
+    PCB: 23.862 x 25mm, ~9mm total thickness, 3g. 72° diagonal FOV.
+    Same PCB form factor and mounting holes as Camera Module V2.
+    Ref: datasheets.raspberrypi.com/camera/camera-module-2-mechanical-drawing.pdf
     """
+    # Same PCB as V2: 23.862 x 25mm, holes at (2,2), (20.8,2), (2,23), (20.8,23).
     return CameraSpec(
         name="OV5647",
-        dimensions=(0.025, 0.024, 0.009),
+        dimensions=(0.023862, 0.025, 0.009),
         mass=0.003,
         fov_deg=72.0,
         resolution=(2592, 1944),
         wire_ports=(
-            # CSI ribbon cable at bottom edge (24mm height -> Y=-12mm)
             WirePort(
                 "csi",
-                pos=(0.0, -0.012, 0.0),
+                pos=(0.0, -0.0125, 0.0),
                 bus_type=BusType.CSI,
                 connector_type="csi_15pin",
             ),
         ),
         mounting_points=(
-            # 4x M2 mounting holes (21mm x 12.5mm pitch)
-            # Bottom holes 2.5mm from bottom edge (Y = -12 + 2.5 = -9.5)
-            # Top holes 12.5mm above bottom holes (Y = -9.5 + 12.5 = 3.0)
+            # 4x M2 holes, 18.8mm H x 21mm V pitch (asymmetric X inset)
             MountPoint(
                 "m1",
-                pos=(-0.0105, -0.0095, 0.0),
+                pos=(-0.009931, -0.0105, 0.0),
                 diameter=0.0022,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
             ),
             MountPoint(
                 "m2",
-                pos=(0.0105, -0.0095, 0.0),
+                pos=(0.008869, -0.0105, 0.0),
                 diameter=0.0022,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
             ),
             MountPoint(
                 "m3",
-                pos=(-0.0105, 0.0030, 0.0),
+                pos=(-0.009931, 0.0105, 0.0),
                 diameter=0.0022,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
             ),
             MountPoint(
                 "m4",
-                pos=(0.0105, 0.0030, 0.0),
+                pos=(0.008869, 0.0105, 0.0),
                 diameter=0.0022,
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
