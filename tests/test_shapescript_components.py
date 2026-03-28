@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+from botcad.units import Kg, Meters, mm3
+
 
 def _execute(prog):
     """Execute a ShapeScript program and return the output solid."""
@@ -93,11 +95,11 @@ class TestBearingScript:
 
         spec = BearingSpec(
             name="608zz",
-            dimensions=(0.022, 0.022, 0.007),
-            mass=0.012,
-            od=0.022,
-            id=0.008,
-            width=0.007,
+            dimensions=mm3(22, 22, 7),
+            mass=Kg(0.012),
+            od=Meters(0.022),
+            id=Meters(0.008),
+            width=Meters(0.007),
         )
         direct = _make_bearing_solid(spec)
         ir_solid = _execute(bearing_script(spec))
@@ -116,11 +118,11 @@ class TestBearingScript:
 
         spec = BearingSpec(
             name="MR128ZZ",
-            dimensions=(0.012, 0.012, 0.0035),
-            mass=0.005,
-            od=0.012,
-            id=0.008,
-            width=0.0035,
+            dimensions=mm3(12, 12, 3.5),
+            mass=Kg(0.005),
+            od=Meters(0.012),
+            id=Meters(0.008),
+            width=Meters(0.0035),
         )
         direct = _make_bearing_solid(spec)
         ir_solid = _execute(bearing_script(spec))
@@ -162,7 +164,7 @@ class TestHornScript:
         from botcad.shapescript.emit_components import horn_script
 
         # Minimal servo with no horn_mounting_points
-        servo = ServoSpec(name="dummy", dimensions=(0.01, 0.01, 0.01), mass=0.01)
+        servo = ServoSpec(name="dummy", dimensions=mm3(10, 10, 10), mass=Kg(0.01))
         assert horn_script(servo) is None
 
 
@@ -489,7 +491,7 @@ class TestClearanceVolume:
     def _dummy_servo():
         from botcad.component import ServoSpec
 
-        return ServoSpec(name="dummy", dimensions=(0.01, 0.01, 0.01), mass=0.01)
+        return ServoSpec(name="dummy", dimensions=mm3(10, 10, 10), mass=Kg(0.01))
 
     def test_cylinder_child_symmetric(self):
         """Axially symmetric cylinder child — no sweep needed."""
@@ -502,7 +504,7 @@ class TestClearanceVolume:
             shape=BodyShape.CYLINDER,
             radius=0.045,
             width=0.01,
-            explicit_dimensions=(0.09, 0.09, 0.01),
+            explicit_dimensions=mm3(90, 90, 10),
         )
         joint = Joint(
             name="axle",
@@ -528,7 +530,7 @@ class TestClearanceVolume:
         child = Body(
             name="arm",
             shape=BodyShape.BOX,
-            explicit_dimensions=(0.04, 0.02, 0.06),
+            explicit_dimensions=mm3(40, 20, 60),
         )
         joint = Joint(
             name="shoulder",
@@ -556,7 +558,7 @@ class TestClearanceVolume:
             name="ball",
             shape=BodyShape.SPHERE,
             radius=0.015,
-            explicit_dimensions=(0.03, 0.03, 0.03),
+            explicit_dimensions=mm3(30, 30, 30),
         )
         joint = Joint(
             name="ball_joint",

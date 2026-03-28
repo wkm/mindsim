@@ -17,6 +17,7 @@ from botcad.geometry import (
     pose_transform_point,
     quat_to_euler,
 )
+from botcad.units import Meters
 
 
 def _approx_vec3(v, expected, *, abs=1e-6):
@@ -175,7 +176,10 @@ class TestFastenerPose:
     def test_insertion_neg_z_head_faces_pos_z(self):
         """axis=(0,0,-1) means screw inserts downward, head faces +Z."""
         mp = MountPoint(
-            label="m1", pos=(0.01, 0.02, 0.0), diameter=0.002, axis=(0.0, 0.0, -1.0)
+            label="m1",
+            pos=(Meters(0.01), Meters(0.02), Meters(0.0)),
+            diameter=Meters(0.002),
+            axis=(0.0, 0.0, -1.0),
         )
         result = fastener_pose(POSE_IDENTITY, mp)
         _approx_vec3(result.pos, (0.01, 0.02, 0.0))
@@ -185,7 +189,10 @@ class TestFastenerPose:
     def test_insertion_pos_z_head_faces_neg_z(self):
         """axis=(0,0,1) means screw inserts upward, head faces -Z (flipped)."""
         mp = MountPoint(
-            label="m2", pos=(0.0, 0.0, 0.0), diameter=0.002, axis=(0.0, 0.0, 1.0)
+            label="m2",
+            pos=(Meters(0.0), Meters(0.0), Meters(0.0)),
+            diameter=Meters(0.002),
+            axis=(0.0, 0.0, 1.0),
         )
         result = fastener_pose(POSE_IDENTITY, mp)
         # head_dir = (0,0,-1), rotation_between(+Z, -Z) = 180 deg
@@ -199,7 +206,10 @@ class TestFastenerPose:
         """Parent offset should be applied to mount point position."""
         parent = Pose((1.0, 2.0, 3.0), (1.0, 0.0, 0.0, 0.0))
         mp = MountPoint(
-            label="m3", pos=(0.1, 0.0, 0.0), diameter=0.002, axis=(0.0, 0.0, -1.0)
+            label="m3",
+            pos=(Meters(0.1), Meters(0.0), Meters(0.0)),
+            diameter=Meters(0.002),
+            axis=(0.0, 0.0, -1.0),
         )
         result = fastener_pose(parent, mp)
         _approx_vec3(result.pos, (1.1, 2.0, 3.0))
@@ -209,7 +219,10 @@ class TestFastenerPose:
         q = euler_to_quat((0.0, 0.0, 90.0))
         parent = Pose((0.0, 0.0, 0.0), q)
         mp = MountPoint(
-            label="m4", pos=(1.0, 0.0, 0.0), diameter=0.002, axis=(0.0, 0.0, -1.0)
+            label="m4",
+            pos=(Meters(1.0), Meters(0.0), Meters(0.0)),
+            diameter=Meters(0.002),
+            axis=(0.0, 0.0, -1.0),
         )
         result = fastener_pose(parent, mp)
         _approx_vec3(result.pos, (0.0, 1.0, 0.0))

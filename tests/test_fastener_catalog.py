@@ -12,6 +12,7 @@ from botcad.fasteners import (
     fastener_spec,
     resolve_fastener,
 )
+from botcad.units import Meters
 
 # ── Catalog consistency ──────────────────────────────────────────────
 
@@ -54,14 +55,21 @@ def test_head_height_positive(designation):
 
 
 def test_resolve_from_fastener_type():
-    mp = MountPoint("test", pos=(0, 0, 0), diameter=0.003, fastener_type="M3")
+    mp = MountPoint(
+        "test",
+        pos=(Meters(0), Meters(0), Meters(0)),
+        diameter=Meters(0.003),
+        fastener_type="M3",
+    )
     spec = resolve_fastener(mp)
     assert spec.designation == "M3"
     assert spec.head_type == HeadType.SOCKET_HEAD_CAP
 
 
 def test_resolve_from_diameter_fallback():
-    mp = MountPoint("test", pos=(0, 0, 0), diameter=0.002)
+    mp = MountPoint(
+        "test", pos=(Meters(0), Meters(0), Meters(0)), diameter=Meters(0.002)
+    )
     spec = resolve_fastener(mp)
     assert spec.designation == "M2"
 
@@ -69,8 +77,8 @@ def test_resolve_from_diameter_fallback():
 def test_resolve_with_head_type():
     mp = MountPoint(
         "test",
-        pos=(0, 0, 0),
-        diameter=0.003,
+        pos=(Meters(0), Meters(0), Meters(0)),
+        diameter=Meters(0.003),
         fastener_type="M3",
         head_type="pan_head_phillips",
     )
