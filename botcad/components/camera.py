@@ -6,6 +6,46 @@ from botcad.colors import COLOR_ELECTRONICS_DARK, COLOR_STRUCTURE_DARK
 from botcad.component import BusType, CameraSpec, MountPoint, WirePort
 from botcad.materials import MAT_ABS_DARK
 
+# V1/V2 share the same PCB: 23.862 x 25mm.
+# Holes at (2, 2), (20.8, 2), (2, 23), (20.8, 23) from bottom-left.
+# 18.8mm H x 21mm V pitch, asymmetric X inset (2mm left, 3.062mm right).
+_PICAMERA_V1V2_MOUNTING_POINTS = (
+    MountPoint(
+        "m1",
+        pos=(-0.009931, -0.0105, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m2",
+        pos=(0.008869, -0.0105, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m3",
+        pos=(-0.009931, 0.0105, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m4",
+        pos=(0.008869, 0.0105, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+)
+
+_PICAMERA_V1V2_WIRE_PORTS = (
+    WirePort(
+        "csi", pos=(0.0, -0.0125, 0.0), bus_type=BusType.CSI, connector_type="csi_15pin"
+    ),
+)
+
 
 def OV5647() -> CameraSpec:
     """OV5647 camera module (Raspberry Pi Camera Module v1.3).
@@ -14,60 +54,23 @@ def OV5647() -> CameraSpec:
     Same PCB form factor and mounting holes as Camera Module V2.
     Ref: datasheets.raspberrypi.com/camera/camera-module-2-mechanical-drawing.pdf
     """
-    # Same PCB as V2: 23.862 x 25mm, holes at (2,2), (20.8,2), (2,23), (20.8,23).
     return CameraSpec(
         name="OV5647",
         dimensions=(0.023862, 0.025, 0.009),
         mass=0.003,
         fov_deg=72.0,
         resolution=(2592, 1944),
-        wire_ports=(
-            WirePort(
-                "csi",
-                pos=(0.0, -0.0125, 0.0),
-                bus_type=BusType.CSI,
-                connector_type="csi_15pin",
-            ),
-        ),
-        mounting_points=(
-            # 4x M2 holes, 18.8mm H x 21mm V pitch (asymmetric X inset)
-            MountPoint(
-                "m1",
-                pos=(-0.009931, -0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m2",
-                pos=(0.008869, -0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m3",
-                pos=(-0.009931, 0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m4",
-                pos=(0.008869, 0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-        ),
+        wire_ports=_PICAMERA_V1V2_WIRE_PORTS,
+        mounting_points=_PICAMERA_V1V2_MOUNTING_POINTS,
         default_material=MAT_ABS_DARK,
     )
 
 
 def camera_solid(spec: CameraSpec):
-    """Build a detailed parametric solid for a camera module.
+    """Build a detailed parametric solid for a V1/V2 camera module.
 
     Models the PCB, lens housing, lens barrel, and CSI connector.
+    Not suitable for V3 (different PCB orientation and lens housing).
     """
     from build123d import Align, Box, Cylinder, Location
 
@@ -127,98 +130,53 @@ def PiCamera2() -> CameraSpec:
     PCB: 23.862 x 25mm, ~9mm total thickness, 3g.
     CSI-2 ribbon cable (15-pin, 1mm pitch).
     Ref: datasheets.raspberrypi.com/camera/camera-module-2-mechanical-drawing.pdf
-
-    Mounting holes are asymmetric in X: 2.0mm from left edge, 3.062mm from right.
     """
-    # PCB center at (11.931, 12.5) from drawing bottom-left origin.
-    # Holes at (2, 2), (20.8, 2), (2, 23), (20.8, 23) from bottom-left.
     return CameraSpec(
         name="PiCamera2",
         dimensions=(0.023862, 0.025, 0.009),
         mass=0.003,
         fov_deg=62.2,
         resolution=(3280, 2464),
-        wire_ports=(
-            WirePort(
-                "csi",
-                pos=(0.0, -0.0125, 0.0),
-                bus_type=BusType.CSI,
-                connector_type="csi_15pin",
-            ),
-        ),
-        mounting_points=(
-            # 4x M2 holes, 18.8mm H x 21mm V pitch (asymmetric X inset)
-            MountPoint(
-                "m1",
-                pos=(-0.009931, -0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m2",
-                pos=(0.008869, -0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m3",
-                pos=(-0.009931, 0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-            MountPoint(
-                "m4",
-                pos=(0.008869, 0.0105, 0.0),
-                diameter=0.0022,
-                axis=(0.0, 0.0, -1.0),
-                fastener_type="M2",
-            ),
-        ),
+        wire_ports=_PICAMERA_V1V2_WIRE_PORTS,
+        mounting_points=_PICAMERA_V1V2_MOUNTING_POINTS,
         default_material=MAT_ABS_DARK,
     )
 
 
-def _picamera3_mounting_points() -> tuple[MountPoint, ...]:
-    """V3 mounting holes shared by standard and wide variants.
-
-    PCB: 25 x 23.862mm. Holes: 4x M2 (ø2.2mm, ø4.75mm pad).
-    21mm H x 12.5mm V pitch. 2mm inset from left/right/bottom edges.
-    Positions from bottom-left: (2, 2), (23, 2), (2, 14.5), (23, 14.5).
-    PCB center at (12.5, 11.931).
-    """
-    return (
-        MountPoint(
-            "m1",
-            pos=(-0.0105, -0.009931, 0.0),
-            diameter=0.0022,
-            axis=(0.0, 0.0, -1.0),
-            fastener_type="M2",
-        ),
-        MountPoint(
-            "m2",
-            pos=(0.0105, -0.009931, 0.0),
-            diameter=0.0022,
-            axis=(0.0, 0.0, -1.0),
-            fastener_type="M2",
-        ),
-        MountPoint(
-            "m3",
-            pos=(-0.0105, 0.002569, 0.0),
-            diameter=0.0022,
-            axis=(0.0, 0.0, -1.0),
-            fastener_type="M2",
-        ),
-        MountPoint(
-            "m4",
-            pos=(0.0105, 0.002569, 0.0),
-            diameter=0.0022,
-            axis=(0.0, 0.0, -1.0),
-            fastener_type="M2",
-        ),
-    )
+# V3 PCB: 25 x 23.862mm. Holes: 4x M2 (ø2.2mm, ø4.75mm pad).
+# 21mm H x 12.5mm V pitch. 2mm inset from left/right/bottom edges.
+# Positions from bottom-left: (2, 2), (23, 2), (2, 14.5), (23, 14.5).
+# PCB center at (12.5, 11.931).
+_PICAMERA3_MOUNTING_POINTS = (
+    MountPoint(
+        "m1",
+        pos=(-0.0105, -0.009931, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m2",
+        pos=(0.0105, -0.009931, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m3",
+        pos=(-0.0105, 0.002569, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+    MountPoint(
+        "m4",
+        pos=(0.0105, 0.002569, 0.0),
+        diameter=0.0022,
+        axis=(0.0, 0.0, -1.0),
+        fastener_type="M2",
+    ),
+)
 
 
 _PICAMERA3_WIRE_PORTS = (
@@ -245,7 +203,7 @@ def PiCamera3() -> CameraSpec:
         fov_deg=75.0,
         resolution=(4608, 2592),
         wire_ports=_PICAMERA3_WIRE_PORTS,
-        mounting_points=_picamera3_mounting_points(),
+        mounting_points=_PICAMERA3_MOUNTING_POINTS,
         default_material=MAT_ABS_DARK,
     )
 
@@ -265,6 +223,6 @@ def PiCamera3Wide() -> CameraSpec:
         fov_deg=120.0,
         resolution=(4608, 2592),
         wire_ports=_PICAMERA3_WIRE_PORTS,
-        mounting_points=_picamera3_mounting_points(),
+        mounting_points=_PICAMERA3_MOUNTING_POINTS,
         default_material=MAT_ABS_DARK,
     )
