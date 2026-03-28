@@ -120,12 +120,20 @@ def _resolve_fastener_to_mount_point(
     Returns (joint_or_none, mount_point, pos_in_body_frame) or None.
 
     The fastener index matches the order in build_assembly_sequence:
-    first all component mounting points (across mounts), then all
-    servo mounting ears (across joints).
+    first all servo mounting ears (across joints), then all component
+    mounting points (across mounts).
     """
     idx = 0
 
-    # Component mounting points first
+    # Servo mounting ears first (matches build order)
+    for joint in body.joints:
+        for mp in joint.servo.mounting_ears:
+            if idx == fastener_index:
+                pos = _ear_pos_in_body_frame(joint, mp)
+                return joint, mp, pos
+            idx += 1
+
+    # Component mounting points
     for mount in body.mounts:
         for mp in mount.component.mounting_points:
             if idx == fastener_index:
@@ -137,14 +145,6 @@ def _resolve_fastener_to_mount_point(
                     mount.resolved_pos[2] + rotated[2],
                 )
                 return None, mp, pos
-            idx += 1
-
-    # Servo mounting ears
-    for joint in body.joints:
-        for mp in joint.servo.mounting_ears:
-            if idx == fastener_index:
-                pos = _ear_pos_in_body_frame(joint, mp)
-                return joint, mp, pos
             idx += 1
 
     return None
