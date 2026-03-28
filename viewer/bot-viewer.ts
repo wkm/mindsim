@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { BotScene } from './bot-scene.ts';
+import { DFMMode } from './dfm-mode.ts';
 import { ExploreMode } from './explore-mode.ts';
 import { FocusController } from './focus-controller.ts';
 import { IKMode } from './ik-mode.ts';
@@ -651,6 +652,7 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     modes.joint = new JointMode(ctx);
     modes.ik = new IKMode(ctx);
     modes.stress = new StressMode(ctx);
+    modes.dfm = new DFMMode(ctx);
 
     // Build sim mode tabs dynamically (the #mode-tabs div is shared with Design/Sim
     // tab buttons, so we create a separate container for Explore/Stress/etc.)
@@ -670,10 +672,11 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
       }
     }
     simModeTabs.innerHTML = '';
-    const simModeNames = ['explore', 'stress', 'joint', 'ik'];
+    const simModeNames = ['explore', 'stress', 'dfm', 'joint', 'ik'];
     const simModeLabels: Record<string, string> = {
       explore: 'Explore',
       stress: 'Stress',
+      dfm: 'DFM',
       joint: 'Joints',
       ik: 'IK',
     };
