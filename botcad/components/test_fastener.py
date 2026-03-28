@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 
-from botcad.colors import COLOR_METAL_BRASS
 from botcad.component import Component, MountPoint
 from botcad.materials import MAT_BRASS
 
@@ -121,38 +120,3 @@ def TestFastenerPrism() -> Component:
         ),
         default_material=MAT_BRASS,
     )
-
-
-def test_fastener_solid(spec: Component):
-    """Build a simple rectangular prism with drilled holes at each mount point."""
-    from build123d import Align, Axis, Box, Cylinder, Location, Vector
-
-    C = (Align.CENTER, Align.CENTER, Align.CENTER)
-    w, d, h = spec.dimensions
-
-    body = Box(w, d, h, align=C)
-
-    # Drill a through-hole at each mounting point along its axis
-    hole_depth = max(w, d, h) + 0.002
-    z_vec = Vector(0, 0, 1)
-
-    for mp in spec.mounting_points:
-        hole = Cylinder(mp.diameter / 2, hole_depth, align=C)
-        target = Vector(*mp.axis)
-
-        # Rotate cylinder from Z-up to target axis
-        dot = z_vec.dot(target)
-        if abs(dot + 1.0) < 1e-6:
-            # Anti-parallel: 180° around X
-            hole = hole.rotate(Axis.X, 180)
-        elif abs(dot - 1.0) > 1e-6:
-            # General case: cross product gives rotation axis
-            cross = z_vec.cross(target)
-            angle = math.degrees(math.acos(max(-1.0, min(1.0, dot))))
-            hole = hole.rotate(Axis((0, 0, 0), cross), angle)
-
-        hole = hole.locate(Location(mp.pos))
-        body = body - hole
-
-    body.color = COLOR_METAL_BRASS.rgb
-    return body
