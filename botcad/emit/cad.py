@@ -393,9 +393,8 @@ def _build_multi_material_solids(
             result = ir_backend.execute(mp.program)
             solid = result.shapes.get(mp.program.output_ref.id)
             if solid is not None:
-                # Apply same mount rotation as primary solid
-                if mount is not None:
-                    solid = _apply_mount_rotation(solid, mount, bot=bot)
+                # Component meshes stay in component-local frame;
+                # placement rotation is applied at render time.
                 mat_solids.append(
                     MaterialSolid(
                         material_name=mp.material.name,
@@ -511,28 +510,10 @@ def build_cad(bot: Bot) -> CadModel:
             print(f" {dt:.1f}s")
 
         if solid is not None:
-            # Mounted components: apply rotate_z + face_euler so body_solids
-            # stores the oriented solid.  Clearance checks and on-demand mesh
-            # endpoints both consume body_solids, so the rotation must be
-            # applied here — not deferred to STL export time.
-            mount = comp_mount_map.get(body.name)
-            if mount is not None:
-                solid = _apply_mount_rotation(solid, mount, bot=bot)
-
-            # Purchased comp_ bodies: also apply the parent body's frame_quat
-            # so the component STL is oriented consistently with the parent
-            # body's geometry (e.g. a wheel on a cylinder rim aligned to the
-            # joint axis).  Without this the component STL stays in canonical
-            # Z-up frame while the parent body has been rotated.
-            if (
-                body.kind == BodyKind.PURCHASED
-                and body.parent_body_name
-                and body.name.startswith("comp_")
-            ):
-                parent = bodies_by_name.get(body.parent_body_name)
-                if parent is not None:
-                    solid = _orient_z_to_axis(solid, (0, 0, 1), quat=parent.frame_quat)
-
+            # Component meshes are stored in component-local frame.
+            # Placement (position + orientation) is provided by PackingResult
+            # and applied by the viewer/MuJoCo at render time — NOT baked
+            # into the mesh.
             body_solids[body.name] = solid
             if not body.mesh_file:
                 body.mesh_file = f"{body.name}.stl"

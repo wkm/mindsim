@@ -420,8 +420,8 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
     body_solids = cad.body_solids
 
     # Body mesh (structural or component): look up pre-built solid from build_cad().
-    # Component solids in body_solids are already rotated (rotate_z + face_euler
-    # applied in build_cad via _apply_mount_rotation).
+    # Component solids are in component-local frame; placement rotation is
+    # applied at render time by the viewer/MuJoCo via PackingResult poses.
     if stem in body_solids:
         return _solid_to_stl_bytes(body_solids[stem])
 

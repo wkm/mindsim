@@ -536,25 +536,31 @@ def _emit_mounted_components(
         comp_key = f"comp_{body.name}_{mount.label}"
         mesh_name = f"{comp_key}_mesh"
 
-        # Read position from purchased Body, fall back to mount.resolved_pos
+        # Position from purchased Body, fall back to mount.resolved_pos
         cb = comp_bodies.get(comp_key)
         if cb is not None:
             pos = _relative_pos(cb.world_pos, body.world_pos)
         else:
             pos = mount.resolved_pos
 
-        SubElement(
-            parent_el,
-            "geom",
-            name=comp_key,
-            type="mesh",
-            mesh=mesh_name,
-            pos=_fmt_vec3(pos),
-            rgba=f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
-            contype="0",
-            conaffinity="0",
-            group="1",
-        )
+        # Component meshes are in component-local frame; apply placement
+        # rotation so the mesh is oriented correctly in the body.
+        placements = bot.packing_result.placements if bot.packing_result else {}
+        geom_attribs: dict[str, str] = {
+            "name": comp_key,
+            "type": "mesh",
+            "mesh": mesh_name,
+            "pos": _fmt_vec3(pos),
+            "rgba": f"{r:.4f} {g:.4f} {b:.4f} {a:.4f}",
+            "contype": "0",
+            "conaffinity": "0",
+            "group": "1",
+        }
+        if mount in placements:
+            q = placements[mount].pose.quat
+            if q != (1.0, 0.0, 0.0, 0.0):
+                geom_attribs["quat"] = _fmt_quat(q)
+        SubElement(parent_el, "geom", **geom_attribs)
 
 
 def _emit_mounting_hardware(
