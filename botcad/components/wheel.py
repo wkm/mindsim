@@ -6,6 +6,7 @@ import math
 
 from botcad.component import Component, ComponentKind, MountPoint
 from botcad.materials import MAT_RUBBER
+from botcad.units import Meters, grams, mm, mm3
 
 
 def PololuWheel90mm() -> Component:
@@ -27,67 +28,67 @@ def PololuWheel90mm() -> Component:
     """
     return Component(
         name="Pololu 90x10mm Wheel",
-        dimensions=(0.090, 0.090, 0.010),  # diameter x diameter x width
-        mass=0.022,
+        dimensions=mm3(90, 90, 10),  # diameter x diameter x width
+        mass=grams(22),
         mounting_points=(
             # 6x M3 holes on 6 spokes (60° intervals)
             # Spoke 0, 3: r = 6.35mm (12.7mm spacing pair)
             # Spoke 1, 2, 4, 5: r = 9.55mm (19.1mm spacing pairs)
             MountPoint(
                 "m1",
-                pos=(0.00635, 0.0, 0.0),
-                diameter=0.003,
+                pos=(mm(6.35), Meters(0.0), Meters(0.0)),
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),
             MountPoint(
                 "m2",
                 pos=(
-                    0.00955 * math.cos(math.pi / 3),
-                    0.00955 * math.sin(math.pi / 3),
-                    0.0,
+                    Meters(0.00955 * math.cos(math.pi / 3)),
+                    Meters(0.00955 * math.sin(math.pi / 3)),
+                    Meters(0.0),
                 ),
-                diameter=0.003,
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),
             MountPoint(
                 "m3",
                 pos=(
-                    0.00955 * math.cos(2 * math.pi / 3),
-                    0.00955 * math.sin(2 * math.pi / 3),
-                    0.0,
+                    Meters(0.00955 * math.cos(2 * math.pi / 3)),
+                    Meters(0.00955 * math.sin(2 * math.pi / 3)),
+                    Meters(0.0),
                 ),
-                diameter=0.003,
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),
             MountPoint(
                 "m4",
-                pos=(-0.00635, 0.0, 0.0),
-                diameter=0.003,
+                pos=(mm(-6.35), Meters(0.0), Meters(0.0)),
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),
             MountPoint(
                 "m5",
                 pos=(
-                    0.00955 * math.cos(4 * math.pi / 3),
-                    0.00955 * math.sin(4 * math.pi / 3),
-                    0.0,
+                    Meters(0.00955 * math.cos(4 * math.pi / 3)),
+                    Meters(0.00955 * math.sin(4 * math.pi / 3)),
+                    Meters(0.0),
                 ),
-                diameter=0.003,
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),
             MountPoint(
                 "m6",
                 pos=(
-                    0.00955 * math.cos(5 * math.pi / 3),
-                    0.00955 * math.sin(5 * math.pi / 3),
-                    0.0,
+                    Meters(0.00955 * math.cos(5 * math.pi / 3)),
+                    Meters(0.00955 * math.sin(5 * math.pi / 3)),
+                    Meters(0.0),
                 ),
-                diameter=0.003,
+                diameter=mm(3),
                 axis=(0.0, 0.0, 1.0),
                 fastener_type="M3",
             ),

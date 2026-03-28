@@ -27,6 +27,17 @@ from botcad.component import (
     WirePort,
 )
 from botcad.materials import MAT_ABS_DARK
+from botcad.units import (
+    Amps,
+    Meters,
+    NewtonM,
+    Radians,
+    RadPerSec,
+    Volts,
+    grams,
+    mm,
+    mm3,
+)
 
 # ── Feetech STS3215 (C018, 12V variant) ─────────────────────────────
 #
@@ -49,50 +60,50 @@ from botcad.materials import MAT_ABS_DARK
 # Overall envelope (with ears and shaft boss, per refined CAD)
 # Z = 35mm (body + mounting ears below + shaft boss above)
 # Full extent with axles = 36.5mm
-_STS3215_DIMS = (0.04523, 0.02473, 0.0350)
+_STS3215_DIMS = mm3(45.23, 24.73, 35.0)
 
 # Main body only (no ears, no horn — the solid rectangular block)
 # Narrowest Z at horn cutout recesses = 29mm
-_STS3215_BODY_DIMS = (0.04523, 0.02473, 0.0320)
+_STS3215_BODY_DIMS = mm3(45.23, 24.73, 32.0)
 
-_STS3215_MASS = 0.055  # kg
-_STS3215_STALL_TORQUE = 2.942  # N-m (30 kg-cm @ 12V)
+_STS3215_MASS = grams(55)
+_STS3215_STALL_TORQUE = NewtonM(2.942)  # 30 kg-cm @ 12V
 _STS3215_NO_LOAD_SPEED_60DEG_S = 0.222  # s/60° @ 12V
-_STS3215_NO_LOAD_SPEED = (math.pi / 3) / _STS3215_NO_LOAD_SPEED_60DEG_S  # rad/s
+_STS3215_NO_LOAD_SPEED = RadPerSec((math.pi / 3) / _STS3215_NO_LOAD_SPEED_60DEG_S)
 _STS3215_GEAR_RATIO = 345.0  # 1:345 total reduction
-_STS3215_TYPICAL_CURRENT = 0.180  # A (no-load current at 12V)
-_STS3215_VOLTAGE = 12.0
+_STS3215_TYPICAL_CURRENT = Amps(0.180)  # no-load current at 12V
+_STS3215_VOLTAGE = Volts(12.0)
 
 # Output shaft offset from body center (meters)
 # Shaft is at X=+12.5mm along the long axis, at the +Z face (16.0mm from center)
-_STS3215_SHAFT_OFFSET = (0.0125, 0.0, 0.0160)
+_STS3215_SHAFT_OFFSET = (mm(12.5), Meters(0.0), mm(16.0))
 
 # Case screw XY coordinates (4x M2.5 self-tapping at corners of each face)
 # These pass through both output (top) and bottom faces at the same XY.
 # ~3mm inset from each edge of the 45.23 x 24.73mm face.
 _CASE_SCREW_XY = (
-    (+0.0195, +0.0094),  # corner: +X, +Y
-    (+0.0195, -0.0094),  # corner: +X, -Y
-    (-0.0195, +0.0094),  # corner: -X, +Y
-    (-0.0195, -0.0094),  # corner: -X, -Y
+    (mm(19.5), mm(9.4)),  # corner: +X, +Y
+    (mm(19.5), mm(-9.4)),  # corner: +X, -Y
+    (mm(-19.5), mm(9.4)),  # corner: -X, +Y
+    (mm(-19.5), mm(-9.4)),  # corner: -X, -Y
 )
-_CASE_SCREW_TOP_Z = +0.0160  # output face (body top, Z = +16mm)
-_CASE_SCREW_BOTTOM_Z = -0.0160  # bottom face (body bottom, Z = -16mm)
-_CASE_SCREW_DIA = 0.0025  # M2.5
+_CASE_SCREW_TOP_Z = mm(16.0)  # output face (body top, Z = +16mm)
+_CASE_SCREW_BOTTOM_Z = mm(-16.0)  # bottom face (body bottom, Z = -16mm)
+_CASE_SCREW_DIA = mm(2.5)  # M2.5
 
 # Horn disc: 19.2mm diameter, 4x M2 holes at 90° on 14mm opposing pattern
 # (7mm bolt circle radius from shaft center at X=+12.5mm, Y=0)
-_HORN_DISC_DIAMETER = 0.0192
-_HORN_BOLT_RADIUS = 0.007  # 14mm / 2
-_HORN_HOLE_DIA = 0.0020  # M2
+_HORN_DISC_DIAMETER = mm(19.2)
+_HORN_BOLT_RADIUS = mm(7.0)  # 14mm / 2
+_HORN_HOLE_DIA = mm(2.0)  # M2
 _HORN_XY = (
-    (+0.0125 + 0.007, 0.0),  # +X from shaft
-    (+0.0125 - 0.007, 0.0),  # -X from shaft
-    (+0.0125, +0.007),  # +Y from shaft
-    (+0.0125, -0.007),  # -Y from shaft
+    (mm(12.5 + 7.0), Meters(0.0)),  # +X from shaft
+    (mm(12.5 - 7.0), Meters(0.0)),  # -X from shaft
+    (mm(12.5), mm(7.0)),  # +Y from shaft
+    (mm(12.5), mm(-7.0)),  # -Y from shaft
 )
-_HORN_TOP_Z = +0.0160  # output face (body top)
-_HORN_BOTTOM_Z = -0.0160  # blind/rear face (body bottom)
+_HORN_TOP_Z = mm(16.0)  # output face (body top)
+_HORN_BOTTOM_Z = mm(-16.0)  # blind/rear face (body bottom)
 
 
 def STS3215(continuous: bool = False) -> ServoSpec:
@@ -106,8 +117,8 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         continuous: If True, servo is in continuous rotation mode (for wheels).
     """
     range_rad = (
-        -math.pi,
-        math.pi,
+        Radians(-math.pi),
+        Radians(math.pi),
     )  # STS3215 runs 360° (position mode reports 0–4096 over one rotation)
 
     return ServoSpec(
@@ -122,13 +133,13 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             # Spaced ~5mm apart center-to-center along Y
             WirePort(
                 "uart_in",
-                pos=(-0.0080, -0.0025, -0.0160),
+                pos=(mm(-8.0), mm(-2.5), mm(-16.0)),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),
             WirePort(
                 "uart_out",
-                pos=(-0.0080, 0.0025, -0.0160),
+                pos=(mm(-8.0), mm(2.5), mm(-16.0)),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),
@@ -154,30 +165,42 @@ def STS3215(continuous: bool = False) -> ServoSpec:
         continuous=continuous,
         # Extended geometry
         body_dimensions=_STS3215_BODY_DIMS,
-        shaft_boss_radius=0.0045,  # 4.5mm radius
-        shaft_boss_height=0.0030,  # 3.0mm protrusion above body top (35mm - 32mm body)
+        shaft_boss_radius=mm(4.5),  # 4.5mm radius
+        shaft_boss_height=mm(3.0),  # 3.0mm protrusion above body top (35mm - 32mm body)
         mounting_ears=(
             # 6x M3 clearance holes (ø3.2mm) in mounting flanges below body
             # Flanges extend below body bottom (Z=-16.0mm)
             # Screw hole centers at Z=-17.5mm (midpoint of flange)
             # Y=±10.25mm (inside body width), symmetric X positions
             MountingEar(
-                "ear_1", pos=(+0.0170, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_1",
+                pos=(mm(17.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_2", pos=(0.0000, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_2",
+                pos=(Meters(0.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_3", pos=(+0.0170, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_3",
+                pos=(mm(17.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_4", pos=(0.0000, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_4",
+                pos=(Meters(0.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_5", pos=(-0.0170, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_5",
+                pos=(mm(-17.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_6", pos=(-0.0170, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_6",
+                pos=(mm(-17.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
         ),
         horn_mounting_points=tuple(
@@ -201,7 +224,7 @@ def STS3215(continuous: bool = False) -> ServoSpec:
             for i, (x, y) in enumerate(_HORN_XY)
         ),
         # 5264-2.54 3-pin connector on bottom face, toward back (-X) end
-        connector_pos=(-0.0080, 0.0, -0.0160),
+        connector_pos=(mm(-8.0), Meters(0.0), mm(-16.0)),
     )
 
 
@@ -221,11 +244,11 @@ def STS3215(continuous: bool = False) -> ServoSpec:
 # Encoder: 12-bit / 4096 counts
 # Protocol: UART half-duplex TTL, same as STS3215
 
-_STS3250_MASS = 0.0745  # kg
-_STS3250_STALL_TORQUE = 4.905  # N-m (50 kg-cm @ 12V)
+_STS3250_MASS = grams(74.5)
+_STS3250_STALL_TORQUE = NewtonM(4.905)  # 50 kg-cm @ 12V
 _STS3250_NO_LOAD_SPEED_60DEG_S = 0.133  # s/60° @ 12V
-_STS3250_NO_LOAD_SPEED = (math.pi / 3) / _STS3250_NO_LOAD_SPEED_60DEG_S  # rad/s
-_STS3250_TYPICAL_CURRENT = 0.330  # A (no-load current at 12V)
+_STS3250_NO_LOAD_SPEED = RadPerSec((math.pi / 3) / _STS3250_NO_LOAD_SPEED_60DEG_S)
+_STS3250_TYPICAL_CURRENT = Amps(0.330)  # no-load current at 12V
 
 
 def STS3250(continuous: bool = False) -> ServoSpec:
@@ -239,7 +262,10 @@ def STS3250(continuous: bool = False) -> ServoSpec:
     Args:
         continuous: If True, servo is in continuous rotation mode (for wheels).
     """
-    range_rad = (-math.pi, math.pi)  # 360° (12-bit encoder, 4096 counts)
+    range_rad = (
+        Radians(-math.pi),
+        Radians(math.pi),
+    )  # 360° (12-bit encoder, 4096 counts)
 
     # Geometry is identical to STS3215 — reuse all dimensional constants.
     return ServoSpec(
@@ -249,13 +275,13 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         wire_ports=(
             WirePort(
                 "uart_in",
-                pos=(-0.0080, -0.0025, -0.0160),
+                pos=(mm(-8.0), mm(-2.5), mm(-16.0)),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),
             WirePort(
                 "uart_out",
-                pos=(-0.0080, 0.0025, -0.0160),
+                pos=(mm(-8.0), mm(2.5), mm(-16.0)),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
             ),
@@ -281,26 +307,38 @@ def STS3250(continuous: bool = False) -> ServoSpec:
         continuous=continuous,
         # Extended geometry — identical to STS3215
         body_dimensions=_STS3215_BODY_DIMS,
-        shaft_boss_radius=0.0045,
-        shaft_boss_height=0.0030,  # 3.0mm (matches STS3215)
+        shaft_boss_radius=mm(4.5),
+        shaft_boss_height=mm(3.0),  # 3.0mm (matches STS3215)
         mounting_ears=(
             MountingEar(
-                "ear_1", pos=(+0.0170, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_1",
+                pos=(mm(17.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_2", pos=(0.0000, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_2",
+                pos=(Meters(0.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_3", pos=(+0.0170, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_3",
+                pos=(mm(17.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_4", pos=(0.0000, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_4",
+                pos=(Meters(0.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_5", pos=(-0.0170, -0.01025, -0.01750), hole_diameter=0.0032
+                "ear_5",
+                pos=(mm(-17.0), mm(-10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
             MountingEar(
-                "ear_6", pos=(-0.0170, +0.01025, -0.01750), hole_diameter=0.0032
+                "ear_6",
+                pos=(mm(-17.0), mm(10.25), mm(-17.50)),
+                hole_diameter=mm(3.2),
             ),
         ),
         horn_mounting_points=tuple(
@@ -323,7 +361,7 @@ def STS3250(continuous: bool = False) -> ServoSpec:
             )
             for i, (x, y) in enumerate(_HORN_XY)
         ),
-        connector_pos=(-0.0080, 0.0, -0.0160),
+        connector_pos=(mm(-8.0), Meters(0.0), mm(-16.0)),
     )
 
 
@@ -349,33 +387,33 @@ def STS3250(continuous: bool = False) -> ServoSpec:
 #     at +Z face.
 
 # Overall envelope (with ears and shaft boss)
-_SCS0009_DIMS = (0.0325, 0.0121, 0.02525)  # 32.5mm with ear tabs
+_SCS0009_DIMS = mm3(32.5, 12.1, 25.25)  # 32.5mm with ear tabs
 
 # Main body only (no ears/horn)
-_SCS0009_BODY_DIMS = (0.0232, 0.0121, 0.0225)
+_SCS0009_BODY_DIMS = mm3(23.2, 12.1, 22.5)
 
-_SCS0009_MASS = 0.0132  # kg
-_SCS0009_STALL_TORQUE = 0.226  # N-m (2.3 kg-cm @ 6V)
+_SCS0009_MASS = grams(13.2)
+_SCS0009_STALL_TORQUE = NewtonM(0.226)  # 2.3 kg-cm @ 6V
 _SCS0009_NO_LOAD_SPEED_60DEG_S = 0.10  # s/60° @ 6V
-_SCS0009_NO_LOAD_SPEED = (math.pi / 3) / _SCS0009_NO_LOAD_SPEED_60DEG_S  # rad/s
+_SCS0009_NO_LOAD_SPEED = RadPerSec((math.pi / 3) / _SCS0009_NO_LOAD_SPEED_60DEG_S)
 _SCS0009_GEAR_RATIO = 1.0  # not published by Feetech
-_SCS0009_TYPICAL_CURRENT = 0.150  # A (no-load current at 6V)
-_SCS0009_VOLTAGE = 6.0
+_SCS0009_TYPICAL_CURRENT = Amps(0.150)  # no-load current at 6V
+_SCS0009_VOLTAGE = Volts(6.0)
 
 # Output shaft center offset from body center (meters)
 # Shaft is offset toward +X end: ~5.8mm from body center, at top face
-_SCS0009_SHAFT_OFFSET = (0.0058, 0.0, 0.01125)
+_SCS0009_SHAFT_OFFSET = (mm(5.8), Meters(0.0), mm(11.25))
 
 # Horn mount XY coordinates (4x M2 pattern around shaft center)
 # Micro servo horn: ~8mm bolt circle, 4 holes at 90° spacing
 _SCS0009_HORN_XY = (
-    (+0.0058 + 0.004, +0.004),
-    (+0.0058 + 0.004, -0.004),
-    (+0.0058 - 0.004, +0.004),
-    (+0.0058 - 0.004, -0.004),
+    (mm(5.8 + 4.0), mm(4.0)),
+    (mm(5.8 + 4.0), mm(-4.0)),
+    (mm(5.8 - 4.0), mm(4.0)),
+    (mm(5.8 - 4.0), mm(-4.0)),
 )
-_SCS0009_HORN_FRONT_Z = +0.01325  # above body top
-_SCS0009_HORN_HOLE_DIA = 0.0020  # M2
+_SCS0009_HORN_FRONT_Z = mm(13.25)  # above body top
+_SCS0009_HORN_HOLE_DIA = mm(2.0)  # M2
 
 
 def SCS0009(continuous: bool = False) -> ServoSpec:
@@ -391,8 +429,8 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
         continuous: If True, servo is in continuous rotation mode.
     """
     range_rad = (
-        -5 * math.pi / 6,
-        5 * math.pi / 6,
+        Radians(-5 * math.pi / 6),
+        Radians(5 * math.pi / 6),
     )  # 300° total (±150° from center)
 
     return ServoSpec(
@@ -402,7 +440,7 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
         wire_ports=(
             WirePort(
                 "uart_bus",
-                pos=(-0.0058, 0.0, -0.01125),
+                pos=(mm(-5.8), Meters(0.0), mm(-11.25)),
                 bus_type=BusType.UART_HALF_DUPLEX,
                 connector_type="5264_3pin",
                 permanent=True,  # wire is molded into servo, not a removable plug
@@ -429,8 +467,8 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
         continuous=continuous,
         # Extended geometry
         body_dimensions=_SCS0009_BODY_DIMS,
-        shaft_boss_radius=0.00198,  # 1.98mm (half of 3.95mm spline OD)
-        shaft_boss_height=0.00200,  # ~2mm protrusion above body
+        shaft_boss_radius=mm(1.98),  # 1.98mm (half of 3.95mm spline OD)
+        shaft_boss_height=mm(2.0),  # ~2mm protrusion above body
         mounting_ears=(
             # 4x M2.0 holes in side-mounted ear tabs (SG90-style).
             # Ears protrude in ±X beyond body at Z ≈ +3.5mm (7.75mm
@@ -438,15 +476,15 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
             # through the tab thickness in Z.
             MountingEar(
                 "ear_1",
-                pos=(+0.0140, 0.0, 0.0035),
-                hole_diameter=0.0020,
+                pos=(mm(14.0), Meters(0.0), mm(3.5)),
+                hole_diameter=mm(2.0),
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
             ),
             MountingEar(
                 "ear_2",
-                pos=(-0.0140, 0.0, 0.0035),
-                hole_diameter=0.0020,
+                pos=(mm(-14.0), Meters(0.0), mm(3.5)),
+                hole_diameter=mm(2.0),
                 axis=(0.0, 0.0, -1.0),
                 fastener_type="M2",
             ),
@@ -463,5 +501,5 @@ def SCS0009(continuous: bool = False) -> ServoSpec:
         ),
         # Single-axis design — no rear horn/blind shaft
         rear_horn_mounting_points=(),
-        connector_pos=(-0.0058, 0.0, -0.01125),
+        connector_pos=(mm(-5.8), Meters(0.0), mm(-11.25)),
     )

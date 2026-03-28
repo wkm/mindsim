@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from botcad.component import BearingSpec
 from botcad.materials import MAT_BEARING_STEEL
+from botcad.units import grams, mm, mm3
 
 
 def Bearing6x3x3() -> BearingSpec:
@@ -13,10 +14,10 @@ def Bearing6x3x3() -> BearingSpec:
     """
     return BearingSpec(
         name="Bearing 6x3x3",
-        dimensions=(0.006, 0.006, 0.003),
-        mass=0.001,  # ~1g
-        od=0.006,
-        id=0.003,
-        width=0.003,
+        dimensions=mm3(6, 6, 3),
+        mass=grams(1),
+        od=mm(6),
+        id=mm(3),
+        width=mm(3),
         default_material=MAT_BEARING_STEEL,
     )
