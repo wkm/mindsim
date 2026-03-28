@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from botcad.units import Meters
+
 if TYPE_CHECKING:
     from botcad.skeleton import Bot
 
@@ -25,8 +27,8 @@ class ClearanceResult:
     body_b: str
     intersects: bool  # do the bodies overlap?
     intersection_volume: float  # m³ -- volume of overlap (0 = no overlap)
-    distance: float  # meters -- surface-to-surface gap (0 if intersecting)
-    min_distance: float  # meters -- required minimum gap
+    distance: Meters  # meters -- surface-to-surface gap (0 if intersecting)
+    min_distance: Meters  # meters -- required minimum gap
     label: str
 
     @property

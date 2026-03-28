@@ -9,6 +9,7 @@ from botcad.skeleton import (
     Bot,
     ClearanceConstraint,
 )
+from botcad.units import mm3
 
 
 class TestClearanceConstraint:
@@ -43,9 +44,9 @@ class TestBotClearanceAPI:
         from botcad.components import STS3215
 
         bot = Bot("test")
-        base = bot.body("base", dimensions=(0.05, 0.05, 0.05))
+        base = bot.body("base", dimensions=mm3(50, 50, 50))
         j = base.joint("j1", servo=STS3215(), axis="z", pos=(0.0, 0.0, 0.03))
-        j.body("arm", dimensions=(0.03, 0.03, 0.06))
+        j.body("arm", dimensions=mm3(30, 30, 60))
         bot.solve()
 
         # Should have at least a child-parent constraint
@@ -57,7 +58,7 @@ class TestBotClearanceAPI:
         from botcad.components import STS3215, PololuWheel90mm
 
         bot = Bot("test")
-        base = bot.body("base", dimensions=(0.10, 0.05, 0.05))
+        base = bot.body("base", dimensions=mm3(100, 50, 50))
         j = base.joint(
             "wheel", servo=STS3215(continuous=True), axis="x", pos=(0.05, 0.0, 0.0)
         )
@@ -74,7 +75,7 @@ class TestBotClearanceAPI:
         from botcad.components import STS3215, PololuWheel90mm
 
         bot = Bot("test")
-        base = bot.body("base", dimensions=(0.10, 0.05, 0.05))
+        base = bot.body("base", dimensions=mm3(100, 50, 50))
         j = base.joint(
             "wheel", servo=STS3215(continuous=True), axis="x", pos=(0.05, 0.0, 0.0)
         )

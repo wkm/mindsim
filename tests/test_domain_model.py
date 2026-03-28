@@ -13,21 +13,24 @@ import math
 import pytest
 
 from botcad.component import CameraSpec, Component, MountingEar, MountPoint, Vec3
+from botcad.units import Degrees, Kg, Meters
 
 # ── TestMountPoint ──
 
 
 class TestMountPoint:
     def test_defaults(self):
-        mp = MountPoint("m1", pos=(0.0, 0.0, 0.0), diameter=0.003)
+        mp = MountPoint(
+            "m1", pos=(Meters(0.0), Meters(0.0), Meters(0.0)), diameter=Meters(0.003)
+        )
         assert mp.axis == (0.0, 0.0, 1.0)
         assert mp.fastener_type == ""
 
     def test_explicit_axis(self):
         mp = MountPoint(
             "m1",
-            pos=(0.0, 0.0, 0.0),
-            diameter=0.003,
+            pos=(Meters(0.0), Meters(0.0), Meters(0.0)),
+            diameter=Meters(0.003),
             axis=(0.0, 0.0, -1.0),
             fastener_type="M3",
         )
@@ -35,27 +38,37 @@ class TestMountPoint:
         assert mp.fastener_type == "M3"
 
     def test_frozen_immutability(self):
-        mp = MountPoint("m1", pos=(0.0, 0.0, 0.0), diameter=0.003)
+        mp = MountPoint(
+            "m1", pos=(Meters(0.0), Meters(0.0), Meters(0.0)), diameter=Meters(0.003)
+        )
         with pytest.raises(AttributeError):
             mp.diameter = 0.005
 
     def test_mounting_ear_factory_returns_mount_point(self):
-        ear = MountingEar("ear_1", pos=(0.01, 0.02, -0.015), hole_diameter=0.0042)
+        ear = MountingEar(
+            "ear_1",
+            pos=(Meters(0.01), Meters(0.02), Meters(-0.015)),
+            hole_diameter=Meters(0.0042),
+        )
         assert isinstance(ear, MountPoint)
 
     def test_mounting_ear_field_mapping(self):
-        ear = MountingEar("ear_1", pos=(0.01, 0.02, -0.015), hole_diameter=0.0042)
+        ear = MountingEar(
+            "ear_1",
+            pos=(Meters(0.01), Meters(0.02), Meters(-0.015)),
+            hole_diameter=Meters(0.0042),
+        )
         assert ear.label == "ear_1"
-        assert ear.pos == (0.01, 0.02, -0.015)
-        assert ear.diameter == 0.0042  # hole_diameter → diameter
+        assert ear.pos == (Meters(0.01), Meters(0.02), Meters(-0.015))
+        assert ear.diameter == Meters(0.0042)  # hole_diameter -> diameter
         assert ear.axis == (0.0, 0.0, 1.0)  # default: insertion direction +Z
         assert ear.fastener_type == "M3"  # default for ears
 
     def test_mounting_ear_custom_axis(self):
         ear = MountingEar(
             "ear_1",
-            pos=(0.0, 0.0, 0.0),
-            hole_diameter=0.004,
+            pos=(Meters(0.0), Meters(0.0), Meters(0.0)),
+            hole_diameter=Meters(0.004),
             axis=(1.0, 0.0, 0.0),
             fastener_type="M2.5",
         )
@@ -70,14 +83,22 @@ class TestMount:
     def test_default_insertion_axis_is_none(self):
         from botcad.skeleton import Mount
 
-        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.01), Meters(0.01), Meters(0.01)),
+            mass=Kg(0.001),
+        )
         m = Mount(component=comp, label="test", position="center")
         assert m.insertion_axis is None
 
     def test_explicit_insertion_axis_preserved(self):
         from botcad.skeleton import Mount
 
-        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.01), Meters(0.01), Meters(0.01)),
+            mass=Kg(0.001),
+        )
         m = Mount(
             component=comp,
             label="test",
@@ -89,7 +110,11 @@ class TestMount:
     def test_resolved_insertion_axis_default(self):
         from botcad.skeleton import Mount
 
-        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.01), Meters(0.01), Meters(0.01)),
+            mass=Kg(0.001),
+        )
         m = Mount(component=comp, label="test", position="center")
         assert m.resolved_insertion_axis == (0.0, 0.0, 1.0)
 
@@ -98,9 +123,9 @@ class TestMount:
 
         cam = CameraSpec(
             name="test_cam",
-            dimensions=(0.025, 0.024, 0.009),
-            mass=0.003,
-            fov_deg=72.0,
+            dimensions=(Meters(0.025), Meters(0.024), Meters(0.009)),
+            mass=Kg(0.003),
+            fov=Degrees(72.0),
             resolution=(640, 480),
         )
         m = Mount(component=cam, label="cam", position="front")
@@ -109,7 +134,11 @@ class TestMount:
     def test_face_outward_false_for_generic(self):
         from botcad.skeleton import Mount
 
-        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.01), Meters(0.01), Meters(0.01)),
+            mass=Kg(0.001),
+        )
         m = Mount(component=comp, label="test", position="front")
         assert m.face_outward is False
 
@@ -120,25 +149,25 @@ class TestMount:
 
         cam = CameraSpec(
             name="test_cam",
-            dimensions=(0.025, 0.024, 0.009),
-            mass=0.003,
-            fov_deg=72.0,
+            dimensions=(Meters(0.025), Meters(0.024), Meters(0.009)),
+            mass=Kg(0.003),
+            fov=Degrees(72.0),
             resolution=(640, 480),
         )
         m = Mount(component=cam, label="cam", position="front")
         # Original dims: (0.025, 0.024, 0.009)
-        # After Rx(-90°) Y↔Z swap: (0.025, 0.009, 0.024)
+        # After Rx(-90deg) Y<->Z swap: (0.025, 0.009, 0.024)
         assert m.placed_dimensions == (0.025, 0.009, 0.024)
 
     def test_camera_front_rotate_point(self):
-        """Rx(-90°) maps (x, y, z) → (x, z, -y)."""
+        """Rx(-90deg) maps (x, y, z) -> (x, z, -y)."""
         from botcad.skeleton import Mount
 
         cam = CameraSpec(
             name="test_cam",
-            dimensions=(0.025, 0.024, 0.009),
-            mass=0.003,
-            fov_deg=72.0,
+            dimensions=(Meters(0.025), Meters(0.024), Meters(0.009)),
+            mass=Kg(0.003),
+            fov=Degrees(72.0),
             resolution=(640, 480),
         )
         m = Mount(component=cam, label="cam", position="front")
@@ -153,9 +182,9 @@ class TestMount:
 
         cam = CameraSpec(
             name="test_cam",
-            dimensions=(0.025, 0.024, 0.009),
-            mass=0.003,
-            fov_deg=72.0,
+            dimensions=(Meters(0.025), Meters(0.024), Meters(0.009)),
+            mass=Kg(0.003),
+            fov=Degrees(72.0),
             resolution=(640, 480),
         )
         m = Mount(component=cam, label="cam", position="top")
@@ -166,13 +195,17 @@ class TestMount:
         """Non-camera component: no face rotation regardless of position."""
         from botcad.skeleton import Mount
 
-        comp = Component("test", dimensions=(0.025, 0.024, 0.009), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.025), Meters(0.024), Meters(0.009)),
+            mass=Kg(0.001),
+        )
         m = Mount(component=comp, label="test", position="front")
         assert m.placed_dimensions == (0.025, 0.024, 0.009)
         assert m.rotate_point((1.0, 2.0, 3.0)) == (1.0, 2.0, 3.0)
 
 
-# ── TestInsertionAxisResolution ──
+# ── TestMount ──
 
 
 class TestInsertionAxisResolution:
@@ -220,7 +253,11 @@ class TestPackingSolver:
     def _make_bot_with_mount(self, position="center", insertion_axis=None):
         from botcad.skeleton import Bot
 
-        comp = Component("widget", dimensions=(0.02, 0.02, 0.01), mass=0.01)
+        comp = Component(
+            "widget",
+            dimensions=(Meters(0.02), Meters(0.02), Meters(0.01)),
+            mass=Kg(0.01),
+        )
         bot = Bot("test_bot")
         body = bot.body("base", padding=0.005)
         body.mount(comp, position=position, insertion_axis=insertion_axis)
@@ -472,14 +509,14 @@ class TestCameraSpec:
 
         cam = OV5647()
         assert isinstance(cam, CameraSpec)
-        assert cam.fov_deg == 72.0
+        assert cam.fov == 72.0
 
     def test_picamera2_is_camera_spec(self):
         from botcad.components.camera import PiCamera2
 
         cam = PiCamera2()
         assert isinstance(cam, CameraSpec)
-        assert cam.fov_deg == 62.2
+        assert cam.fov == 62.2
         assert cam.resolution == (3280, 2464)
 
     def test_camera_spec_inherits_component(self):
@@ -654,7 +691,11 @@ class TestComponentKind:
     def test_generic_component_has_generic_kind(self):
         from botcad.component import Component, ComponentKind
 
-        comp = Component("test", dimensions=(0.01, 0.01, 0.01), mass=0.001)
+        comp = Component(
+            "test",
+            dimensions=(Meters(0.01), Meters(0.01), Meters(0.01)),
+            mass=Kg(0.001),
+        )
         assert comp.kind == ComponentKind.GENERIC
 
     def test_wheel_has_wheel_kind(self):

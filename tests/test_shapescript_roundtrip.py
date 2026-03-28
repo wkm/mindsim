@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from botcad.units import Kg, Meters, mm3
+
 BOTS_DIR = Path(__file__).parent.parent / "bots"
 BOT_DESIGNS = sorted(BOTS_DIR.glob("*/design.py"))
 
@@ -96,7 +98,7 @@ class TestIREmitBasicShapes:
         from botcad.skeleton import Body, BodyShape
 
         body = Body(
-            name="test_box", shape=BodyShape.BOX, explicit_dimensions=(0.06, 0.04, 0.02)
+            name="test_box", shape=BodyShape.BOX, explicit_dimensions=mm3(60, 40, 20)
         )
 
         _clear_all_caches()
@@ -166,9 +168,9 @@ class TestIREmitComponentPockets:
         body = Body(
             name="test_pocket",
             shape=BodyShape.BOX,
-            explicit_dimensions=(0.06, 0.04, 0.03),
+            explicit_dimensions=mm3(60, 40, 30),
         )
-        comp = Component(name="sensor", dimensions=(0.02, 0.01, 0.005), mass=0.01)
+        comp = Component(name="sensor", dimensions=mm3(20, 10, 5), mass=Kg(0.01))
         body.mount(comp, position="center")
         # Manually resolve mount position (normally done by packing solver)
         body.mounts[0].resolved_pos = (0.0, 0.0, 0.0)
@@ -186,15 +188,15 @@ class TestIREmitComponentPockets:
         body = Body(
             name="test_bearing",
             shape=BodyShape.BOX,
-            explicit_dimensions=(0.06, 0.04, 0.03),
+            explicit_dimensions=mm3(60, 40, 30),
         )
         bearing = BearingSpec(
             name="608zz",
-            dimensions=(0.022, 0.022, 0.007),
-            mass=0.012,
-            od=0.022,
-            id=0.008,
-            width=0.007,
+            dimensions=mm3(22, 22, 7),
+            mass=Kg(0.012),
+            od=Meters(0.022),
+            id=Meters(0.008),
+            width=Meters(0.007),
         )
         body.mount(bearing, position="center")
         body.mounts[0].resolved_pos = (0.0, 0.0, 0.0)

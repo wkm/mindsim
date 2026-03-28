@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from botcad.component import BusType, CameraSpec, MountPoint, WirePort
 from botcad.materials import MAT_ABS_DARK
+from botcad.units import Degrees, Meters, grams, mm
 
 # V1/V2 share the same PCB: 23.862 x 25mm.
 # Holes at (2, 2), (20.8, 2), (2, 23), (20.8, 23) from bottom-left.
@@ -11,29 +12,29 @@ from botcad.materials import MAT_ABS_DARK
 _PICAMERA_V1V2_MOUNTING_POINTS = (
     MountPoint(
         "m1",
-        pos=(-0.009931, -0.0105, 0.0),
-        diameter=0.0022,
+        pos=(Meters(-0.009931), mm(-10.5), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m2",
-        pos=(0.008869, -0.0105, 0.0),
-        diameter=0.0022,
+        pos=(Meters(0.008869), mm(-10.5), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m3",
-        pos=(-0.009931, 0.0105, 0.0),
-        diameter=0.0022,
+        pos=(Meters(-0.009931), mm(10.5), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m4",
-        pos=(0.008869, 0.0105, 0.0),
-        diameter=0.0022,
+        pos=(Meters(0.008869), mm(10.5), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
@@ -41,7 +42,10 @@ _PICAMERA_V1V2_MOUNTING_POINTS = (
 
 _PICAMERA_V1V2_WIRE_PORTS = (
     WirePort(
-        "csi", pos=(0.0, -0.0125, 0.0), bus_type=BusType.CSI, connector_type="csi_15pin"
+        "csi",
+        pos=(Meters(0.0), mm(-12.5), Meters(0.0)),
+        bus_type=BusType.CSI,
+        connector_type="csi_15pin",
     ),
 )
 
@@ -55,9 +59,9 @@ def OV5647() -> CameraSpec:
     """
     return CameraSpec(
         name="OV5647",
-        dimensions=(0.023862, 0.025, 0.009),
-        mass=0.003,
-        fov_deg=72.0,
+        dimensions=(Meters(0.023862), mm(25), mm(9)),
+        mass=grams(3),
+        fov=Degrees(72.0),
         resolution=(2592, 1944),
         wire_ports=_PICAMERA_V1V2_WIRE_PORTS,
         mounting_points=_PICAMERA_V1V2_MOUNTING_POINTS,
@@ -74,9 +78,9 @@ def PiCamera2() -> CameraSpec:
     """
     return CameraSpec(
         name="PiCamera2",
-        dimensions=(0.023862, 0.025, 0.009),
-        mass=0.003,
-        fov_deg=62.2,
+        dimensions=(Meters(0.023862), mm(25), mm(9)),
+        mass=grams(3),
+        fov=Degrees(62.2),
         resolution=(3280, 2464),
         wire_ports=_PICAMERA_V1V2_WIRE_PORTS,
         mounting_points=_PICAMERA_V1V2_MOUNTING_POINTS,
@@ -91,29 +95,29 @@ def PiCamera2() -> CameraSpec:
 _PICAMERA3_MOUNTING_POINTS = (
     MountPoint(
         "m1",
-        pos=(-0.0105, -0.009931, 0.0),
-        diameter=0.0022,
+        pos=(mm(-10.5), Meters(-0.009931), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m2",
-        pos=(0.0105, -0.009931, 0.0),
-        diameter=0.0022,
+        pos=(mm(10.5), Meters(-0.009931), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m3",
-        pos=(-0.0105, 0.002569, 0.0),
-        diameter=0.0022,
+        pos=(mm(-10.5), Meters(0.002569), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
     MountPoint(
         "m4",
-        pos=(0.0105, 0.002569, 0.0),
-        diameter=0.0022,
+        pos=(mm(10.5), Meters(0.002569), Meters(0.0)),
+        diameter=mm(2.2),
         axis=(0.0, 0.0, -1.0),
         fastener_type="M2",
     ),
@@ -123,7 +127,7 @@ _PICAMERA3_MOUNTING_POINTS = (
 _PICAMERA3_WIRE_PORTS = (
     WirePort(
         "csi",
-        pos=(0.0, -0.011931, 0.0),
+        pos=(Meters(0.0), Meters(-0.011931), Meters(0.0)),
         bus_type=BusType.CSI,
         connector_type="csi_15pin",
     ),
@@ -139,9 +143,9 @@ def PiCamera3() -> CameraSpec:
     """
     return CameraSpec(
         name="PiCamera3",
-        dimensions=(0.025, 0.023862, 0.0113),
-        mass=0.004,
-        fov_deg=75.0,
+        dimensions=(mm(25), Meters(0.023862), mm(11.3)),
+        mass=grams(4),
+        fov=Degrees(75.0),
         resolution=(4608, 2592),
         wire_ports=_PICAMERA3_WIRE_PORTS,
         mounting_points=_PICAMERA3_MOUNTING_POINTS,
@@ -159,9 +163,9 @@ def PiCamera3Wide() -> CameraSpec:
     """
     return CameraSpec(
         name="PiCamera3Wide",
-        dimensions=(0.025, 0.023862, 0.012),
-        mass=0.004,
-        fov_deg=120.0,
+        dimensions=(mm(25), Meters(0.023862), mm(12)),
+        mass=grams(4),
+        fov=Degrees(120.0),
         resolution=(4608, 2592),
         wire_ports=_PICAMERA3_WIRE_PORTS,
         mounting_points=_PICAMERA3_MOUNTING_POINTS,

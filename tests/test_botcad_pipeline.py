@@ -6,6 +6,7 @@ from botcad.component import Component, WirePort
 from botcad.emit.render3d import SceneBuilder
 from botcad.routing import solve_routing
 from botcad.skeleton import Bot, ServoSpec
+from botcad.units import Kg, mm3
 
 
 def test_scene_builder_scopes_hinges_per_body() -> None:
@@ -39,11 +40,11 @@ def test_scene_builder_scopes_hinges_per_body() -> None:
 
 def test_route_servo_bus_enters_child_body_at_joint_origin() -> None:
     """Child-body servo connections should start at child-local origin."""
-    servo = ServoSpec(name="servo", dimensions=(0.01, 0.02, 0.03), mass=0.1)
+    servo = ServoSpec(name="servo", dimensions=mm3(10, 20, 30), mass=Kg(0.1))
     controller = Component(
         name="controller",
-        dimensions=(0.03, 0.03, 0.01),
-        mass=0.1,
+        dimensions=mm3(30, 30, 10),
+        mass=Kg(0.1),
         wire_ports=(WirePort("uart", (0.0, 0.0, 0.0), "uart_half_duplex"),),
     )
 

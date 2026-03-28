@@ -11,6 +11,18 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from botcad.materials import Material
+from botcad.units import (
+    Amps,
+    Degrees,
+    Kg,
+    Meters,
+    NewtonM,
+    Position,
+    Radians,
+    RadPerSec,
+    Size3D,
+    Volts,
+)
 
 Vec3 = tuple[float, float, float]
 Quat = tuple[float, float, float, float]  # (w, x, y, z)
@@ -20,7 +32,7 @@ Quat = tuple[float, float, float, float]  # (w, x, y, z)
 class Pose:
     """Position + orientation in 3D space."""
 
-    pos: Vec3 = (0.0, 0.0, 0.0)
+    pos: Position = (Meters(0.0), Meters(0.0), Meters(0.0))
     quat: Quat = (1.0, 0.0, 0.0, 0.0)  # identity quaternion (w, x, y, z)
 
 
@@ -159,7 +171,7 @@ class WirePort:
     """Where a wire attaches to a component."""
 
     label: str  # e.g. "uart_in", "uart_out", "power", "csi"
-    pos: Vec3  # position relative to component origin (meters)
+    pos: Position  # position relative to component origin (meters)
     bus_type: BusType
     connector_type: str = ""  # e.g. "5264_3pin", "xt30", "csi_15pin"
     permanent: bool = False  # True if wire is soldered/molded (not a removable plug)
@@ -170,17 +182,17 @@ class MountPoint:
     """A screw hole or snap-fit point on a component."""
 
     label: str
-    pos: Vec3  # position relative to component origin (meters)
-    diameter: float  # hole diameter (meters)
-    axis: Vec3 = (0.0, 0.0, 1.0)  # fastener insertion direction
+    pos: Position  # position relative to component origin (meters)
+    diameter: Meters  # hole diameter (meters)
+    axis: Vec3 = (0.0, 0.0, 1.0)  # fastener insertion direction (dimensionless)
     fastener_type: str = ""  # "M2", "M2.5", "M3", "press_fit", etc.
     head_type: str = ""  # HeadType value, empty = socket_head_cap
 
 
 def MountingEar(
     label: str,
-    pos: Vec3,
-    hole_diameter: float,
+    pos: Position,
+    hole_diameter: Meters,
     axis: Vec3 = (0.0, 0.0, 1.0),
     fastener_type: str = "M3",
 ) -> MountPoint:
@@ -203,14 +215,14 @@ class Component:
     """Base class for all physical components."""
 
     name: str
-    dimensions: Vec3  # bounding box (x, y, z) in meters
-    mass: float  # kg
+    dimensions: Size3D  # bounding box (x, y, z) in meters
+    mass: Kg  # kg
     kind: ComponentKind = ComponentKind.GENERIC
     wire_ports: tuple[WirePort, ...] = ()
     mounting_points: tuple[MountPoint, ...] = ()
     default_material: Material | None = None
-    voltage: float = 0.0  # operating voltage (V), 0 = unpowered
-    typical_current: float = 0.0  # typical draw (A), 0 = unpowered
+    voltage: Volts = Volts(0.0)  # operating voltage (V), 0 = unpowered
+    typical_current: Amps = Amps(0.0)  # typical draw (A), 0 = unpowered
 
 
 @dataclass(frozen=True)
@@ -228,9 +240,9 @@ class BearingSpec(Component):
     """A ball bearing with dimensions and mounting type."""
 
     kind: ComponentKind = ComponentKind.BEARING
-    od: float = 0.0  # outer diameter (meters)
-    id: float = 0.0  # inner diameter (meters)
-    width: float = 0.0  # thickness (meters)
+    od: Meters = Meters(0.0)  # outer diameter (meters)
+    id: Meters = Meters(0.0)  # inner diameter (meters)
+    width: Meters = Meters(0.0)  # thickness (meters)
 
 
 @dataclass(frozen=True)
@@ -238,7 +250,7 @@ class CameraSpec(Component):
     """A camera module with optical parameters."""
 
     kind: ComponentKind = ComponentKind.CAMERA
-    fov_deg: float = 72.0  # diagonal field of view
+    fov: Degrees = Degrees(72.0)  # diagonal field of view
     resolution: tuple[int, int] = (640, 480)  # width x height pixels
 
 
@@ -257,24 +269,39 @@ class ServoSpec(Component):
     """
 
     kind: ComponentKind = ComponentKind.SERVO
-    stall_torque: float = 0.0  # N-m
-    no_load_speed: float = 0.0  # rad/s
-    voltage: float = 0.0  # V
+    stall_torque: NewtonM = NewtonM(0.0)  # N-m
+    no_load_speed: RadPerSec = RadPerSec(0.0)  # rad/s
+    voltage: Volts = Volts(0.0)  # V
     bus_type: BusType = BusType.PWM
-    shaft_offset: Vec3 = (0.0, 0.0, 0.0)  # output shaft center relative to body origin
-    shaft_axis: Vec3 = (0.0, 0.0, 1.0)  # rotation axis (in servo local frame)
-    range_rad: tuple[float, float] = (-3.14159, 3.14159)  # angular range
+    shaft_offset: Position = (
+        Meters(0.0),
+        Meters(0.0),
+        Meters(0.0),
+    )  # output shaft center relative to body origin
+    shaft_axis: Vec3 = (
+        0.0,
+        0.0,
+        1.0,
+    )  # rotation axis (dimensionless, in servo local frame)
+    range_rad: tuple[Radians, Radians] = (
+        Radians(-3.14159),
+        Radians(3.14159),
+    )  # angular range
     gear_ratio: float = 1.0
     continuous: bool = False  # continuous rotation mode (wheels)
 
     # Extended geometry (optional, for detailed CAD / visualization)
-    body_dimensions: Vec3 = (0.0, 0.0, 0.0)  # main body only (no ears/horn)
-    shaft_boss_radius: float = 0.0  # bearing housing radius (meters)
-    shaft_boss_height: float = 0.0  # protrusion above body top face (meters)
+    body_dimensions: Size3D = (
+        Meters(0.0),
+        Meters(0.0),
+        Meters(0.0),
+    )  # main body only (no ears/horn)
+    shaft_boss_radius: Meters = Meters(0.0)  # bearing housing radius (meters)
+    shaft_boss_height: Meters = Meters(0.0)  # protrusion above body top face (meters)
     mounting_ears: tuple[MountPoint, ...] = ()  # bracket attachment tabs
     horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on output horn
     rear_horn_mounting_points: tuple[MountPoint, ...] = ()  # screw holes on blind side
-    connector_pos: Vec3 | None = None  # wire connector center position
+    connector_pos: Position | None = None  # wire connector center position
 
     @property
     def effective_body_dims(self) -> Vec3:
@@ -290,7 +317,7 @@ class ServoSpec(Component):
 
         kp = stall_torque / max_acceptable_error. A real servo with a
         position encoder holds position within a few degrees. We use
-        ~3° (0.05 rad) as the max steady-state error under full load.
+        ~3 deg (0.05 rad) as the max steady-state error under full load.
         """
         max_error_rad = 0.05
         return self.stall_torque / max_error_rad
@@ -299,7 +326,7 @@ class ServoSpec(Component):
     def damping(self) -> float:
         """Joint damping derived from servo specs.
 
-        damping ≈ stall_torque / no_load_speed (viscous friction model).
+        damping = stall_torque / no_load_speed (viscous friction model).
         """
         if self.no_load_speed <= 0:
             return 0.1
