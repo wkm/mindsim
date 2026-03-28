@@ -38,6 +38,8 @@ const ICONS = {
   fastener: { symbol: '\u25a0', color: '#D4A843' }, // filled square — gold
   wire: { symbol: '\u25a0', color: '#9179F2' }, // filled square — purple
   joint: { symbol: '\u25cf', color: '#0A6640' }, // filled circle — green
+  design_layer: { symbol: '\u25a0', color: '#CED9E0' }, // filled square — light gray
+  clearance: { symbol: '\u25a0', color: '#F55656' }, // filled square — red
 };
 
 /** Map category filter keys to display labels and icon colors. */
@@ -47,6 +49,8 @@ const CATEGORY_CHIPS = [
   { key: 'mount', label: 'Components', color: '#0F9960' },
   { key: 'fastener', label: 'Fasteners', color: '#D4A843' },
   { key: 'wire', label: 'Wires', color: '#9179F2' },
+  { key: 'design_layer', label: 'Layers', color: '#CED9E0' },
+  { key: 'clearance', label: 'Clearances', color: '#F55656' },
 ];
 
 /** Map icon types to filter categories for data-category. */
@@ -58,6 +62,8 @@ function iconTypeToCategory(iconType) {
   if (iconType === 'wire') return 'wire';
   if (iconType === 'joint') return 'joint';
   if (iconType === 'assembly') return 'assembly';
+  if (iconType === 'design_layer') return 'design_layer';
+  if (iconType === 'clearance') return 'clearance';
   // mount, battery, camera, compute, component, wheel → mount
   return 'mount';
 }
@@ -122,6 +128,8 @@ export class ComponentTree {
       horn: true,
       fastener: true,
       wire: true,
+      design_layer: true,
+      clearance: true,
     };
 
     this._searchQuery = '';
