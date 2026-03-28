@@ -18,8 +18,10 @@ import json
 import threading
 import time
 import traceback
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -1036,6 +1038,161 @@ def get_assembly_sequence(bot: str):
         }
 
     return {"ops": ops, "tool_library": tool_library}
+
+
+# ---------------------------------------------------------------------------
+# Async DFM run/status/findings
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DFMRun:
+    run_id: str
+    bot_name: str
+    state: str = "running"  # "running" | "complete" | "failed"
+    checks: list[dict] = field(default_factory=list)  # per-check status
+    findings: list[dict] = field(default_factory=list)  # serialized findings
+    error: str | None = None
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+_dfm_runs: dict[str, DFMRun] = {}
+
+
+def _serialize_finding(f) -> dict:
+    """Serialize a DFMFinding to a JSON-safe dict."""
+    from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
+
+    if isinstance(f.target, ComponentRef):
+        target = {
+            "type": "component",
+            "body": str(f.target.body),
+            "mount_label": f.target.mount_label,
+        }
+    elif isinstance(f.target, FastenerRef):
+        target = {
+            "type": "fastener",
+            "body": str(f.target.body),
+            "index": f.target.index,
+        }
+    elif isinstance(f.target, WireRef):
+        target = {"type": "wire", "label": f.target.label}
+    else:
+        target = {"type": "joint", "id": str(f.target)}
+
+    return {
+        "id": f.id,
+        "check_name": f.check_name,
+        "severity": f.severity.value,
+        "body": str(f.body),
+        "target": target,
+        "assembly_step": f.assembly_step,
+        "title": f.title,
+        "description": f.description,
+        "pos": list(f.pos),
+        "direction": list(f.direction) if f.direction else None,
+        "measured": f.measured,
+        "threshold": f.threshold,
+        "has_overlay": f.has_overlay,
+    }
+
+
+def _run_dfm_background(run: DFMRun) -> None:
+    """Execute DFM checks in a background thread, updating the run incrementally."""
+    try:
+        bot_obj, _cad = _load_bot(run.bot_name)
+
+        from botcad.assembly.build import build_assembly_sequence
+        from botcad.dfm.runner import discover_checks
+
+        seq = build_assembly_sequence(bot_obj)
+        checks = discover_checks()
+
+        with run.lock:
+            run.checks = [{"name": c.name, "state": "pending"} for c in checks]
+
+        for i, check in enumerate(checks):
+            with run.lock:
+                run.checks[i]["state"] = "running"
+
+            try:
+                findings = check.run(bot_obj, seq, {})
+                serialized = [_serialize_finding(f) for f in findings]
+                with run.lock:
+                    run.findings.extend(serialized)
+                    run.checks[i]["state"] = "complete"
+                    run.checks[i]["findings_count"] = len(findings)
+            except Exception as e:
+                with run.lock:
+                    run.checks[i]["state"] = "failed"
+                    run.checks[i]["error"] = str(e)
+
+        with run.lock:
+            run.state = "complete"
+
+    except Exception as e:
+        traceback.print_exc()
+        with run.lock:
+            run.state = "failed"
+            run.error = str(e)
+
+
+@app.post("/api/bots/{bot}/dfm/run")
+def start_dfm_run(bot: str):
+    """Start an async DFM run. Returns a run_id for polling."""
+    # Validate bot exists
+    try:
+        _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Failed to load bot: {e}") from e
+
+    run_id = uuid.uuid4().hex[:12]
+    run = DFMRun(run_id=run_id, bot_name=bot)
+    _dfm_runs[run_id] = run
+
+    t = threading.Thread(target=_run_dfm_background, args=(run,), daemon=True)
+    t.start()
+
+    return {"run_id": run_id}
+
+
+@app.get("/api/bots/{bot}/dfm/{run_id}/status")
+def get_dfm_status(bot: str, run_id: str):
+    """Poll status of a DFM run."""
+    run = _dfm_runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, f"DFM run {run_id} not found")
+    if run.bot_name != bot:
+        raise HTTPException(404, f"DFM run {run_id} not found for bot {bot}")
+
+    with run.lock:
+        checks_total = len(run.checks)
+        checks_complete = sum(
+            1 for c in run.checks if c["state"] in ("complete", "failed")
+        )
+        return {
+            "state": run.state,
+            "checks_total": checks_total,
+            "checks_complete": checks_complete,
+            "checks": list(run.checks),
+            "error": run.error,
+        }
+
+
+@app.get("/api/bots/{bot}/dfm/{run_id}/findings")
+def get_dfm_findings(bot: str, run_id: str):
+    """Get findings from a DFM run (may be partial if still running)."""
+    run = _dfm_runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, f"DFM run {run_id} not found")
+    if run.bot_name != bot:
+        raise HTTPException(404, f"DFM run {run_id} not found for bot {bot}")
+
+    with run.lock:
+        return {"findings": list(run.findings)}
 
 
 @app.get("/api/bots/{bot}/bot.xml")
