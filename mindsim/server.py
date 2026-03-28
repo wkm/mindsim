@@ -979,7 +979,7 @@ def get_viewer_manifest(bot: str):
 
     from botcad.emit.viewer import build_viewer_manifest
 
-    return build_viewer_manifest(bot_obj)
+    return build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
 
 
 @app.get("/api/bots/{bot}/assembly-sequence")
@@ -1003,7 +1003,7 @@ def get_assembly_sequence(bot: str):
     from botcad.emit.viewer import build_viewer_manifest
 
     seq = build_assembly_sequence(bot_obj)
-    manifest = build_viewer_manifest(bot_obj)
+    manifest = build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
 
     # Build lookup indices from the manifest for fast mesh resolution
     _body_by_name = {b["name"]: b for b in manifest["bodies"]}
