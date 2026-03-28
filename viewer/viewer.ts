@@ -59,6 +59,12 @@ if (cadstepsParam) {
   designTab.textContent = 'Design';
   modeTabs.appendChild(designTab);
 
+  const dfmTab = document.createElement('button');
+  dfmTab.className = 'btn-ghost';
+  dfmTab.dataset.tab = 'dfm';
+  dfmTab.textContent = 'DFM';
+  modeTabs.appendChild(dfmTab);
+
   const simTab = document.createElement('button');
   simTab.className = 'btn-ghost';
   simTab.dataset.tab = 'sim';
@@ -100,36 +106,79 @@ if (cadstepsParam) {
     // Start the design viewport animation loop
     designViewport.animate(() => {});
 
-    // Track active tab and lazy-loaded Sim viewer
+    // Track active tab and lazy-loaded viewers
     type SimHandle = { pause(): void; resume(): void };
-    let activeTab: 'design' | 'sim' = 'design';
+    type DFMHandle = { pause(): void; resume(): void; dispose(): void };
+    let activeTab: 'design' | 'dfm' | 'sim' = 'design';
     let simHandle: SimHandle | null = null;
+    let dfmHandle: DFMHandle | null = null;
+    let dfmViewport: InstanceType<typeof Viewport3D> | null = null;
+
+    const sidePanel = document.getElementById('side-panel');
 
     function updateTabUI() {
       designTab.classList.toggle('active', activeTab === 'design');
+      dfmTab.classList.toggle('active', activeTab === 'dfm');
       simTab.classList.toggle('active', activeTab === 'sim');
     }
 
-    async function switchTab(tab: 'design' | 'sim') {
+    async function switchTab(tab: 'design' | 'dfm' | 'sim') {
       if (tab === activeTab) return;
+      const prevTab = activeTab;
       activeTab = tab;
       updateTabUI();
 
       const simModeTabs = document.getElementById('sim-mode-tabs');
 
-      if (tab === 'sim') {
-        // Hide Design scene
+      // Deactivate previous tab
+      if (prevTab === 'sim') {
+        simHandle?.pause();
+        document.getElementById('bot-tools-group').style.display = 'none';
+        if (simModeTabs) simModeTabs.style.display = 'none';
+      } else if (prevTab === 'dfm') {
+        dfmHandle?.pause();
+        if (dfmViewport) dfmViewport.scene.visible = false;
+      } else {
+        // was design
         designViewport.scene.visible = false;
-        treePanel.style.display = 'none';
-        updateCanvasLayout(false);
+      }
 
+      // Hide common panels between switches
+      sidePanel.style.display = 'none';
+      treePanel.style.display = 'none';
+
+      if (tab === 'design') {
+        // Show Design scene
+        updateCanvasLayout(true);
+        designViewport.scene.visible = true;
+        treePanel.style.display = 'block';
+        designCtx.syncVisibility();
+        designViewport.resize();
+      } else if (tab === 'dfm') {
+        // Show DFM viewer (shares same canvas container)
+        updateCanvasLayout(false);
+        sidePanel.style.display = '';
+
+        if (!dfmHandle) {
+          // First time — lazy-load DFM viewer with its own viewport
+          dfmViewport = new Viewport3D(container, {
+            cameraType: 'perspective',
+            grid: true,
+          });
+          const { initDFMViewer } = await import('./dfm-viewer.ts');
+          dfmHandle = await initDFMViewer(botName, dfmViewport, sidePanel);
+        } else {
+          dfmViewport!.scene.visible = true;
+          dfmHandle.resume();
+        }
+      } else if (tab === 'sim') {
         // Show Sim UI
-        document.getElementById('side-panel').style.display = '';
+        updateCanvasLayout(false);
+        sidePanel.style.display = '';
         document.getElementById('loading').style.display = '';
         if (simModeTabs) simModeTabs.style.display = '';
 
         if (!simHandle) {
-          // First time — lazy-load MuJoCo viewer
           const { initBotViewer } = await import('./bot-viewer.ts');
           simHandle = await initBotViewer(botName);
         } else {
@@ -137,25 +186,11 @@ if (cadstepsParam) {
         }
 
         document.getElementById('loading').style.display = 'none';
-      } else {
-        // Pause Sim
-        simHandle?.pause();
-
-        // Hide Sim scene (the MuJoCo root group)
-        document.getElementById('side-panel').style.display = 'none';
-        document.getElementById('bot-tools-group').style.display = 'none';
-        if (simModeTabs) simModeTabs.style.display = 'none';
-
-        // Show Design scene
-        designViewport.scene.visible = true;
-        treePanel.style.display = 'block';
-        updateCanvasLayout(true);
-        designCtx.syncVisibility();
-        designViewport.resize();
       }
     }
 
     designTab.addEventListener('click', () => switchTab('design'));
+    dfmTab.addEventListener('click', () => switchTab('dfm'));
     simTab.addEventListener('click', () => switchTab('sim'));
   });
 } else if (componentParam) {

@@ -20,7 +20,7 @@ export const GHOST_OPACITY = 0.06;
 // Types
 // ---------------------------------------------------------------------------
 
-export type ViewerMode = 'explore' | 'joint' | 'ik' | 'dfm';
+export type ViewerMode = 'explore' | 'joint' | 'ik';
 
 export interface BodyState {
   id: number;
