@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,12 +43,11 @@ from botcad.shapescript.ops import (
 )
 
 
-@dataclass  # plint: disable=frozen-dataclass
-class ShapeScript:
+class ShapeScriptBuilder:
     """Ordered sequence of IR ops with a builder API.
 
     Usage:
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(0.06, 0.04, 0.02)
         hole = prog.cylinder(0.01, 0.1, tag="pocket")
         hole = prog.locate(hole, pos=(0.01, 0, 0))
@@ -57,11 +56,12 @@ class ShapeScript:
         prog.output_ref = result
     """
 
-    ops: list[ShapeOp] = field(default_factory=list)
-    output_ref: ShapeRef | None = None  # explicit final shape
-    prebuilt_solids: dict[str, object] = field(default_factory=dict)  # ref.id -> solid
-    sub_programs: dict[str, ShapeScript] = field(default_factory=dict)
-    _counter: int = field(default=0, repr=False)
+    def __init__(self) -> None:
+        self.ops: list[ShapeOp] = []
+        self.output_ref: ShapeRef | None = None  # explicit final shape
+        self.prebuilt_solids: dict[str, object] = {}  # ref.id -> solid
+        self.sub_programs: dict[str, ShapeScriptBuilder] = {}
+        self._counter: int = 0
 
     def _next_ref(self, prefix: str) -> ShapeRef:
         ref = ShapeRef(f"{prefix}_{self._counter}")
@@ -299,7 +299,7 @@ class ShapeScript:
         return json.dumps(ops_data, sort_keys=True, separators=(",", ":"))
 
     @classmethod
-    def from_json(cls, json_str: str) -> ShapeScript:
+    def from_json(cls, json_str: str) -> ShapeScriptBuilder:
         """Deserialize from canonical JSON."""
         import botcad.shapescript.ops as ops_mod
 
@@ -333,7 +333,7 @@ class ShapeScript:
 
 @dataclass(frozen=True)
 class MaterialProgram:
-    """A ShapeScript program tagged with the material it represents.
+    """A ShapeScriptBuilder program tagged with the material it represents.
 
     Used by multi-material component emitters. Each material region
     (e.g., PCB substrate, IC packages, metal connectors) gets its own
@@ -341,7 +341,7 @@ class MaterialProgram:
     """
 
     material: Material
-    program: ShapeScript
+    program: ShapeScriptBuilder
 
 
 @dataclass(frozen=True)
@@ -352,7 +352,9 @@ class MultiMaterialResult:
     plus per-material programs for visual rendering.
     """
 
-    primary: ShapeScript  # main program (union of all regions, for bbox/collision)
+    primary: (
+        ShapeScriptBuilder  # main program (union of all regions, for bbox/collision)
+    )
     material_programs: tuple[
         MaterialProgram, ...
     ]  # per-material programs for STL export

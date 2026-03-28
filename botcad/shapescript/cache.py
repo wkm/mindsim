@@ -11,7 +11,7 @@ import pickle
 from pathlib import Path
 from typing import Any
 
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 DEFAULT_CACHE_DIR = Path(".botcad_cache")
 
@@ -26,10 +26,10 @@ class DiskCache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _path_for(self, prog: ShapeScript) -> Path:
+    def _path_for(self, prog: ShapeScriptBuilder) -> Path:
         return self.cache_dir / f"{prog.content_hash()}.pkl"
 
-    def get(self, prog: ShapeScript) -> Any | None:
+    def get(self, prog: ShapeScriptBuilder) -> Any | None:
         """Return cached data for *prog*, or ``None`` on miss."""
         path = self._path_for(prog)
         if not path.exists():
@@ -37,13 +37,13 @@ class DiskCache:
         with path.open("rb") as f:
             return pickle.load(f)
 
-    def put(self, prog: ShapeScript, data: Any) -> None:
+    def put(self, prog: ShapeScriptBuilder, data: Any) -> None:
         """Store *data* (must be picklable) for *prog*."""
         path = self._path_for(prog)
         with path.open("wb") as f:
             pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def invalidate(self, prog: ShapeScript) -> None:
+    def invalidate(self, prog: ShapeScriptBuilder) -> None:
         """Remove the cached entry for *prog*, if any."""
         path = self._path_for(prog)
         path.unlink(missing_ok=True)

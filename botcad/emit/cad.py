@@ -1028,7 +1028,7 @@ def make_body_solid_with_steps(
     wire_segments: tuple | None = None,
     bot=None,
 ) -> list[CadStep]:
-    """Build a body solid step-by-step via ShapeScript, capturing each intermediate.
+    """Build a body solid step-by-step via ShapeScriptBuilder, capturing each intermediate.
 
     Executes the ShapeScript IR and converts each op into a CadStep for the
     web viewer's cad-steps debug mode.

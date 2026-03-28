@@ -510,9 +510,9 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
     # Wire stub mesh: shared cylinder for all wire stubs
     if stem == "wire_stub":
         from botcad.shapescript.backend_occt import OcctBackend
-        from botcad.shapescript.program import ShapeScript
+        from botcad.shapescript.program import ShapeScriptBuilder
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
         prog.output_ref = stub
         result = OcctBackend().execute(prog)
@@ -823,9 +823,9 @@ def get_component_wires(name: str):
     with _stl_cache_lock:
         if stub_cache_key not in _stl_cache:
             from botcad.shapescript.backend_occt import OcctBackend
-            from botcad.shapescript.program import ShapeScript
+            from botcad.shapescript.program import ShapeScriptBuilder
 
-            prog = ShapeScript()
+            prog = ShapeScriptBuilder()
             stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
             prog.output_ref = stub
             result = OcctBackend().execute(prog)

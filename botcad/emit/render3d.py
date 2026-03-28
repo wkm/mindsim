@@ -26,7 +26,6 @@ Usage:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import mujoco
@@ -74,7 +73,6 @@ VIEWS_4: dict[str, dict[str, float]] = {
 # ── Scene builder ──
 
 
-@dataclass  # plint: disable=frozen-dataclass
 class SceneBuilder:
     """Declarative MuJoCo XML scene construction.
 
@@ -82,15 +80,21 @@ class SceneBuilder:
     a complete MuJoCo XML string. Replaces hand-rolled XML f-strings.
     """
 
-    model_name: str = "scene"
-    width: int = 800
-    height: int = 800
-    _meshes: list[tuple[str, str]] = field(default_factory=list)  # (name, filename)
-    _geoms: list[str] = field(default_factory=list)
-    _legends: list[tuple[str, tuple[int, int, int]]] = field(default_factory=list)
-    _mesh_dir: str = ""
-    # (name, pos_str, geom_strs, joint_strs)
-    _bodies: list[tuple[str, str, list[str], list[str]]] = field(default_factory=list)
+    def __init__(
+        self,
+        model_name: str = "scene",
+        width: int = 800,
+        height: int = 800,
+    ) -> None:
+        self.model_name = model_name
+        self.width = width
+        self.height = height
+        self._meshes: list[tuple[str, str]] = []  # (name, filename)
+        self._geoms: list[str] = []
+        self._legends: list[tuple[str, tuple[int, int, int]]] = []
+        self._mesh_dir: str = ""
+        # (name, pos_str, geom_strs, joint_strs)
+        self._bodies: list[tuple[str, str, list[str], list[str]]] = []
 
     def set_mesh_dir(self, path: str | Path) -> None:
         self._mesh_dir = str(path)

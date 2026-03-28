@@ -8,19 +8,17 @@ fillet/chamfer operations.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from botcad.shapescript.ops import ShapeRef
 
 
-@dataclass  # plint: disable=frozen-dataclass
 class TagRegistry:
     """Tracks tag declarations and propagation through operations."""
 
-    # tag_name -> source ShapeRef (the primitive that declared it)
-    _declarations: dict[str, ShapeRef] = field(default_factory=dict)
-    # ShapeRef -> set of tag names present on that shape
-    _shape_tags: dict[ShapeRef, set[str]] = field(default_factory=dict)
+    def __init__(self) -> None:
+        # tag_name -> source ShapeRef (the primitive that declared it)
+        self._declarations: dict[str, ShapeRef] = {}
+        # ShapeRef -> set of tag names present on that shape
+        self._shape_tags: dict[ShapeRef, set[str]] = {}
 
     def declare(self, tag: str, ref: ShapeRef) -> None:
         """Declare a new tag on a primitive shape."""
