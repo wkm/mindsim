@@ -50,6 +50,9 @@ viewer/.cdn_cache/
 .claude/*
 !.claude/settings.json
 !.claude/skills/
+
+# Superpowers plugin artifacts
+.superpowers/
 \n# Component reference files\nreferences/components/
 .botcad_cache/
 *.ply

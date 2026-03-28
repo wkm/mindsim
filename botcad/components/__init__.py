@@ -2,7 +2,7 @@
 
 from botcad.components.battery import LiPo2S
 from botcad.components.bec import BEC5V
-from botcad.components.camera import OV5647, PiCamera2
+from botcad.components.camera import OV5647, PiCamera2, PiCamera3, PiCamera3Wide
 from botcad.components.compute import RaspberryPiZero2W
 from botcad.components.controller import WaveshareSerialBus
 from botcad.components.servo import SCS0009, STS3215, STS3250
@@ -17,6 +17,8 @@ __all__ = [
     "STS3250",
     "LiPo2S",
     "PiCamera2",
+    "PiCamera3",
+    "PiCamera3Wide",
     "PololuWheel90mm",
     "RaspberryPiZero2W",
     "TestFastenerPrism",

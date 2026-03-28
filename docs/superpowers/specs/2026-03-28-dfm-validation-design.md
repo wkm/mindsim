@@ -24,37 +24,53 @@ The assembly sequence is the foundation. DFM checks run per-step against the geo
 
 **Replaces the prose assembly guide.** The structured sequence is the source of truth; rendering to human language is trivial later.
 
-#### Units
+#### Units and Dimension Types
 
-All dimensions in this spec are SI (meters, radians). Display tables show millimeters for readability; code stores meters.
+All dimensions are SI. To prevent unit confusion, dimension fields use `NewType` wrappers rather than bare floats:
 
-#### Typed References
+```python
+Meters = NewType("Meters", float)
+Radians = NewType("Radians", float)
+```
 
-Refs are frozen, hashable wrappers around names. They reference entities in the skeleton/manifest by name, not by object identity (since `Body`, `Joint`, `Mount` are mutable dataclasses).
+These are zero-cost at runtime but caught by type checkers. Display tables in this spec show millimeters for readability; code always stores `Meters`.
+
+For spatial positions and directions, use `Vec3` (already exists in the codebase) which is implicitly in meters.
+
+#### Typed References — the StringId Pattern
+
+Entity names throughout the skeleton (`Body.name`, `Joint.name`, `Mount.label`, `WireRoute.label`) are currently bare strings. This spec introduces a `StringId` pattern: frozen, hashable wrappers that are the canonical way to reference named entities.
 
 ```python
 @dataclass(frozen=True)
-class BodyRef:
-    name: str  # matches Body.name
+class BodyId:
+    name: str
 
 @dataclass(frozen=True)
-class JointRef:
-    name: str  # matches Joint.name
+class JointId:
+    name: str
 
 @dataclass(frozen=True)
 class ComponentRef:
-    body: BodyRef
+    body: BodyId
     mount_label: str  # matches Mount.label within body
 
 @dataclass(frozen=True)
 class FastenerRef:
-    body: BodyRef
+    body: BodyId
     index: int  # positional index within body's fastener list
 
 @dataclass(frozen=True)
 class WireRef:
     label: str  # matches WireRoute.label
 ```
+
+**Migration plan:** `BodyId` and `JointId` should replace bare `str` in `Body.name` and `Joint.name` over time. This gives us:
+1. Type-level distinction (a `BodyId` can't accidentally be used where a `JointId` is expected)
+2. A single place to add validation (format rules, uniqueness checks) later
+3. Consistent hashable keys for dicts and sets
+
+This is the first use of the pattern; existing skeleton fields migrate incrementally.
 
 #### Types
 
@@ -78,36 +94,36 @@ class ToolKind(Enum):
     PLIERS = "pliers"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolSpec:
     kind: ToolKind
-    shaft_diameter: float          # meters
-    shaft_length: float            # meters
-    head_diameter: float           # meters — clearance envelope
-    grip_clearance: float          # meters — lateral space needed for hand/fingers
+    shaft_diameter: Meters
+    shaft_length: Meters
+    head_diameter: Meters          # clearance envelope
+    grip_clearance: Meters         # lateral space needed for hand/fingers
     solid: Callable[[], Shape]     # geometry for visualization
 
 
-@dataclass
+@dataclass(frozen=True)
 class AssemblyOp:
     step: int
     action: AssemblyAction
-    target: ComponentRef | FastenerRef | WireRef | JointRef  # typed union
-    body: BodyRef
+    target: ComponentRef | FastenerRef | WireRef | JointId  # typed union
+    body: BodyId
     tool: ToolKind | None
     approach_axis: Vec3 | None     # derived from MountPoint.axis (negated) for FASTEN ops
-    angle: float | None            # target angle in radians, only for ARTICULATE ops
-    prerequisites: list[int]
+    angle: Radians | None          # target angle, only for ARTICULATE ops
+    prerequisites: tuple[int, ...]  # frozen — use tuple not list
     description: str               # human language — the only string
 
 
 @dataclass
 class AssemblyState:
     """Snapshot of what's physically present at a point in the assembly."""
-    installed_components: set[ComponentRef]
-    installed_fasteners: set[FastenerRef]
-    routed_wires: set[WireRef]
-    joint_angles: dict[JointRef, float]  # default: 0.0 for all joints; ARTICULATE ops set absolute angles
+    installed_components: frozenset[ComponentRef]
+    installed_fasteners: frozenset[FastenerRef]
+    routed_wires: frozenset[WireRef]
+    joint_angles: dict[JointId, Radians]  # default: 0.0 for all joints; ARTICULATE ops set absolute angles
 
 
 @dataclass
@@ -122,7 +138,7 @@ class AssemblySequence:
         """
         ...
 
-    def geometry_at(self, step: int, body_solids: dict[BodyRef, Shape]) -> Shape:
+    def geometry_at(self, step: int, body_solids: dict[BodyId, Shape]) -> Shape:
         """Union of geometry present at step N.
 
         Includes: printed body shells (always present from step 0),
@@ -137,8 +153,8 @@ class AssemblySequence:
 Key properties:
 - `state_at(step)` gives the DFM system the exact geometry context for each check.
 - `approach_axis` on FASTEN ops is derived from `MountPoint.axis` (negated — tool approaches opposite to insertion direction), placed into body frame via the same transform used in Place.
-- `angle` on ARTICULATE ops sets an absolute joint position in radians. All joints start at 0.0.
-- `geometry_at()` takes `dict[BodyRef, Shape]` — the printed body shells. These are always present (they're what you print). Components, fasteners, and wires appear incrementally as their install steps complete. Body shells include all cut-outs from step 0 since cuts are baked into the print.
+- `angle` on ARTICULATE ops sets an absolute joint position as `Radians`. All joints start at 0.0.
+- `geometry_at()` takes `dict[BodyId, Shape]` — the printed body shells. These are always present (they're what you print). Components, fasteners, and wires appear incrementally as their install steps complete. Body shells include all cut-outs from step 0 since cuts are baked into the print.
 - The sequence is a partial order (DAG via prerequisites), not strictly linear.
 - All ref types are frozen and hashable. No bare strings except `description`.
 
@@ -175,32 +191,49 @@ class DFMSeverity(Enum):
     WARNING = "warning"   # buildable but problematic
     INFO = "info"         # advisory
 
-class DFMCheckKind(Enum):
-    FASTENER_TOOL_CLEARANCE = "fastener_tool_clearance"
-    WIRE_CHANNEL_SIZING = "wire_channel_sizing"
-    WIRE_BEND_RADIUS = "wire_bend_radius"
-    COMPONENT_RETENTION = "component_retention"
-    CONNECTOR_MATING_ACCESS = "connector_mating_access"
 
-@dataclass
+class DFMCheck(ABC):
+    """Base class for all DFM checks. The check registry is built from subclasses."""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Machine-readable name, used in finding IDs and API responses."""
+        ...
+
+    @abstractmethod
+    def run(self, bot: Bot, sequence: AssemblySequence, body_solids: dict[BodyId, Shape]) -> list[DFMFinding]:
+        ...
+
+
+# Checks register by subclassing. The runner discovers all DFMCheck subclasses
+# at import time — no central enum to maintain.
+#
+# Example:
+#   class FastenerToolClearance(DFMCheck):
+#       name = "fastener_tool_clearance"
+#       def run(self, ...) -> list[DFMFinding]: ...
+
+
+@dataclass(frozen=True)
 class DFMFinding:
-    check: DFMCheckKind
+    check_name: str                            # matches DFMCheck.name of the check that produced it
     severity: DFMSeverity
-    body: BodyRef
-    target: ComponentRef | FastenerRef | WireRef | JointRef  # what triggered it
+    body: BodyId
+    target: ComponentRef | FastenerRef | WireRef | JointId  # what triggered it
     assembly_step: int                         # which step this finding applies to
     title: str                                 # human language
     description: str                           # human language
-    pos: tuple[float, float, float]            # world-space location, meters
-    direction: tuple[float, float, float] | None  # clearance cone axis, bend direction
-    measured: float | None                     # actual value in SI (meters, radians)
-    threshold: float | None                    # required value in SI
+    pos: Vec3                                  # world-space location
+    direction: Vec3 | None                     # clearance cone axis, bend direction
+    measured: Meters | Radians | None          # actual value
+    threshold: Meters | Radians | None         # required value
     has_overlay: bool                          # whether an overlay mesh is available
 
     @property
     def id(self) -> str:
-        """Deterministic, stable across runs: '{check}:{body}:{target}'."""
-        return f"{self.check.value}:{self.body.name}:{self.target}"
+        """Deterministic, stable across runs: '{check_name}:{body}:{target}'."""
+        return f"{self.check_name}:{self.body.name}:{self.target}"
 ```
 
 Overlay meshes are served at `GET .../overlays/{finding.id}.stl` — the finding itself only carries `has_overlay: bool`, not a filename.
@@ -263,7 +296,7 @@ GET  /api/bots/{bot}/dfm/{run_id}/status
       state: "running" | "complete" | "failed",
       checks_total: int,
       checks_complete: int,
-      checks: [{ name: DFMCheckKind, state: "pending" | "running" | "complete" | "failed", findings_count: int, error: str | null }]
+      checks: [{ name: str, state: "pending" | "running" | "complete" | "failed", findings_count: int, error: str | null }]
      }
 
 GET  /api/bots/{bot}/dfm/{run_id}/findings
@@ -282,13 +315,15 @@ Checks run independently and report findings as they complete. The viewer can sh
 
 ### 5. Viewer Integration
 
-New mode: **DFM Mode** (alongside Explore/Joints/Assembly). Follows the FEA stress overlay pattern.
+New mode: **DFM Mode** (alongside Explore/Joints). Replaces Assembly mode, which is removed — the assembly step scrubber in DFM mode subsumes its functionality with better data.
 
-**Panel:** Left sidebar lists findings grouped by severity (errors first), filterable by check kind. Each finding shows title, measured vs threshold values, affected body.
+**Prerequisite cleanup:** Remove `assembly-mode.ts` and its references before building DFM mode. This is an explicit first step in implementation.
+
+**Panel:** Left sidebar shows a sortable, filterable **table** of findings. Columns: severity icon, check name, body, title, measured vs threshold. Sortable by any column. Filterable by severity and check name. Not a tree — findings are flat records, a table is more scannable.
 
 **Click finding:** Camera flies to `finding.pos`, isolates the affected body, loads the overlay mesh (clearance cone in red, tight bend in orange, etc.).
 
-**Assembly step scrubber:** Slider at the bottom (like Assembly mode). As you scrub, the bot builds up incrementally — only geometry from `state_at(step)` is visible. Findings filter to show only those relevant to steps 1 through current. You "watch" the assembly happen and see where it breaks down.
+**Assembly step scrubber:** Slider at the bottom. As you scrub, the bot builds up incrementally — only geometry from `state_at(step)` is visible. Findings filter to show only those relevant to steps 1 through current. You "watch" the assembly happen and see where it breaks down.
 
 **Tool visualization:** When a finding involves tool access, the tool geometry renders at the approach position. You see exactly where the hex key would need to go and what's in the way.
 
@@ -308,18 +343,41 @@ Validation criteria:
 
 Implementation: a test script (not a training env) that loads the scene, runs scripted maneuvers (forward 1s, turn left 1s, turn right 1s, stop), asserts position/orientation within tolerance, and generates a filmstrip for visual confirmation.
 
+## Implementation Phases
+
+### Phase 0: Foundational Cleanups
+
+These are broad codebase improvements that the DFM work depends on. Complete before any DFM-specific code.
+
+**0a. StringId pattern (`botcad/ids.py`):**
+Introduce `BodyId` and `JointId`. Migrate `Body.name`, `Joint.name`, and all code that passes body/joint names as bare strings. This touches the skeleton, packing, emit, viewer manifest, and tests — but each change is mechanical (wrap/unwrap). The goal is that by the time DFM code is written, there are no bare-string entity names to get wrong.
+
+**0b. Dimension types (`botcad/units.py`):**
+Introduce `Meters` and `Radians` as `NewType` wrappers. Migrate existing dimension fields in component specs, fastener specs, connector specs, servo specs, and skeleton geometry. Again mechanical — wrap existing float values, update type annotations. Catches the class of bug where meters and millimeters get mixed (which has happened before in this codebase with the tool library table values).
+
+**0c. Remove assembly mode:**
+Delete `viewer/assembly-mode.ts` and its references. Clean break before building the DFM viewer mode that replaces it.
+
+### Phase 1: Assembly Sequence Model
+### Phase 2: DFM Check Framework + Tier 1 Checks
+### Phase 3: API Surface
+### Phase 4: Viewer DFM Mode
+### Phase 5: Sim Validation (parallel with Phases 1-4)
+
 ## File Organization
 
 ```
 botcad/
+  ids.py                 # BodyId, JointId — the StringId pattern, shared across codebase
+  units.py               # Meters, Radians NewType definitions
   assembly/
     sequence.py          # AssemblyAction, AssemblyOp, AssemblySequence, AssemblyState
     tools.py             # ToolKind, ToolSpec, tool library + geometry
-    refs.py              # ComponentRef, FastenerRef, WireRef, JointRef, BodyRef
+    refs.py              # ComponentRef, FastenerRef, WireRef (compound refs using BodyId/JointId)
   dfm/
-    finding.py           # DFMSeverity, DFMCheckKind, DFMFinding
-    runner.py            # async check orchestration, run management
-    checks/
+    check.py             # DFMCheck ABC, DFMSeverity, DFMFinding
+    runner.py            # async check orchestration, run management, subclass discovery
+    checks/              # each file defines a DFMCheck subclass — auto-discovered by runner
       fastener_clearance.py
       wire_channel_sizing.py
       wire_bend_radius.py
@@ -339,7 +397,7 @@ tests/
 ## What This Replaces
 
 - `botcad/emit/readme.py` (prose assembly guide generation) — replaced by `AssemblySequence` rendered to language on demand
-- No other existing code is replaced; this is additive
+- `viewer/assembly-mode.ts` — removed, superseded by DFM mode's assembly step scrubber
 
 ## Out of Scope
 

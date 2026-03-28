@@ -1,9 +1,4 @@
-"""ShapeScript emitters for component factories.
-
-Translates camera_solid(), battery_solid(), _make_bearing_solid(),
-_horn_solid(), connector_solid(), receptacle_solid(), fastener_solid(),
-_make_wheel_solid(), _wire_channel(), and _child_clearance_volume()
-into ShapeScript IR programs or inline ops.
+"""ShapeScript emitters for component geometry.
 
 All geometry uses native ShapeScript ops — no PrebuiltOps.
 """
@@ -30,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def camera_script(spec: CameraSpec) -> ShapeScriptBuilder:
-    """Translate camera_solid() to ShapeScript ops.
+    """Emit camera module geometry as ShapeScript.
 
     Models PCB, mounting holes, lens base, lens barrel, and CSI connector.
     """
@@ -84,9 +79,8 @@ def camera_script(spec: CameraSpec) -> ShapeScriptBuilder:
 
 
 def battery_script(spec: BatterySpec) -> ShapeScriptBuilder:
-    """Translate battery_solid() to ShapeScript ops.
+    """Emit battery pack geometry as ShapeScript.
 
-    All geometry uses native ShapeScript ops — no PrebuiltOps.
     Label and cable exit are simple box primitives.
     """
     prog = ShapeScriptBuilder()
