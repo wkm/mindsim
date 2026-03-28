@@ -74,6 +74,8 @@ class ComponentBrowser {
   _lastSvgName: string;
   _gizmoSvg: HTMLElement | null;
   _gizmoAxes: any[];
+  _selectedMesh: THREE.Mesh | null;
+  _clickCleanup: (() => void) | null;
 
   constructor() {
     this.components = [];
@@ -106,6 +108,8 @@ class ComponentBrowser {
     this._lastSvgName = '';
     this._gizmoSvg = null;
     this._gizmoAxes = [];
+    this._selectedMesh = null;
+    this._clickCleanup = null;
   }
 
   async init() {
@@ -736,7 +740,89 @@ class ComponentBrowser {
       return tintColor(0xced9e0, 0.6);
     });
 
+    // Click-to-select — raycast against visible meshes, highlight + focus tree node
+    this._setupClickToSelect();
+
     this._fitCameraToVisibleMeshes();
+  }
+
+  // -----------------------------------------------------------------------
+  // Click-to-select
+  // -----------------------------------------------------------------------
+
+  _setupClickToSelect() {
+    // Clean up previous listeners
+    if (this._clickCleanup) {
+      this._clickCleanup();
+      this._clickCleanup = null;
+    }
+    this._selectedMesh = null;
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const pointerDown = new THREE.Vector2();
+    const CLICK_THRESHOLD = 5;
+
+    const canvas = this.renderer.domElement;
+
+    const onDown = (e: PointerEvent) => {
+      pointerDown.set(e.clientX, e.clientY);
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const dx = e.clientX - pointerDown.x;
+      const dy = e.clientY - pointerDown.y;
+      if (dx * dx + dy * dy > CLICK_THRESHOLD * CLICK_THRESHOLD) return;
+
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, this.camera);
+
+      // Collect all visible meshes from mesh groups
+      const targets: THREE.Mesh[] = [];
+      for (const group of Object.values(this._meshGroups)) {
+        group.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh && child.visible) {
+            targets.push(child as THREE.Mesh);
+          }
+        });
+      }
+
+      const hits = raycaster.intersectObjects(targets, false);
+
+      // Clear previous highlight
+      if (this._selectedMesh) {
+        const mat = this._selectedMesh.material as THREE.MeshPhysicalMaterial;
+        if (mat.emissive) mat.emissive.setHex(0x000000);
+        this._selectedMesh = null;
+      }
+
+      if (hits.length > 0 && this._designScene && this._componentTree) {
+        const hitMesh = hits[0].object as THREE.Mesh;
+        const nodeId = this._designScene.meshToNode.get(hitMesh.uuid);
+
+        // Highlight mesh with emissive tint
+        this._selectedMesh = hitMesh;
+        const mat = hitMesh.material as THREE.MeshPhysicalMaterial;
+        if (mat.emissive) mat.emissive.setHex(0x333333);
+
+        // Highlight corresponding tree node
+        if (nodeId) {
+          this._componentTree.setFocused(nodeId);
+        }
+      } else if (this._componentTree) {
+        this._componentTree.clearFocus();
+      }
+    };
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointerup', onUp);
+
+    this._clickCleanup = () => {
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointerup', onUp);
+    };
   }
 
   // -----------------------------------------------------------------------
