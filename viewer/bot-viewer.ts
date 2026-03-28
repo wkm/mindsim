@@ -2,14 +2,13 @@
  * MindSim Bot Viewer — MuJoCo-based bot visualization.
  *
  * Loads MuJoCo WASM, builds Three.js scene from the bot model,
- * and routes between Explore/Joint/Assembly/IK modes.
+ * and routes between Explore/Joint/IK modes.
  *
  * Based on the monolithic viewer.js, extracted as an importable module
  * so viewer.js can act as a URL router.
  */
 
 import * as THREE from 'three';
-import { AssemblyMode } from './assembly-mode.ts';
 import { BotScene } from './bot-scene.ts';
 import { ExploreMode } from './explore-mode.ts';
 import { FocusController } from './focus-controller.ts';
@@ -650,7 +649,6 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
       modes.explore = new ExploreMode(ctx, manifest);
     }
     modes.joint = new JointMode(ctx);
-    modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
     modes.stress = new StressMode(ctx);
 
@@ -672,12 +670,11 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
       }
     }
     simModeTabs.innerHTML = '';
-    const simModeNames = ['explore', 'stress', 'joint', 'assembly', 'ik'];
+    const simModeNames = ['explore', 'stress', 'joint', 'ik'];
     const simModeLabels: Record<string, string> = {
       explore: 'Explore',
       stress: 'Stress',
       joint: 'Joints',
-      assembly: 'Assembly',
       ik: 'IK',
     };
     for (const name of simModeNames) {
