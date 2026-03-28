@@ -10,10 +10,10 @@ b3d = pytest.importorskip("build123d")
 
 from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend  # noqa: E402
 from botcad.shapescript.ops import ShapeRef  # noqa: E402
-from botcad.shapescript.program import ShapeScript  # noqa: E402
+from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
 
 
-def _exec(prog: ShapeScript) -> ExecutionResult:
+def _exec(prog: ShapeScriptBuilder) -> ExecutionResult:
     return OcctBackend().execute(prog)
 
 
@@ -28,7 +28,7 @@ class TestRegularPolygonExtrudeOp:
         """
         r = 1.0
         h = 5.0
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = prog.regular_polygon_extrude(r, 6, h)
         prog.query_volume(ref)
         result = _exec(prog)
@@ -42,7 +42,7 @@ class TestRegularPolygonExtrudeOp:
         """
         r = 1.0
         h = 3.0
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = prog.regular_polygon_extrude(r, 4, h)
         prog.query_volume(ref)
         result = _exec(prog)
@@ -53,7 +53,7 @@ class TestRegularPolygonExtrudeOp:
         """MIN_Z aligned polygon extrude has bottom at z=0."""
         from botcad.shapescript.ops import Align3
 
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = prog.regular_polygon_extrude(1.0, 6, 2.0, align=Align3(z="min"))
         prog.query_bbox(ref)
         result = _exec(prog)
@@ -63,7 +63,7 @@ class TestRegularPolygonExtrudeOp:
 
     def test_tag_is_declared(self):
         """Tag should be registered in the tag registry."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         ref = prog.regular_polygon_extrude(1.0, 6, 1.0, tag="hex_recess")
         result = _exec(prog)
         assert "hex_recess" in result.tags.tags_on(ref)
@@ -80,7 +80,7 @@ class TestRegularPolygonExtrudeOp:
 
     def test_can_be_used_in_cut(self):
         """Hex prism can be used as a boolean cut tool."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(10.0, 10.0, 10.0)
         hex_tool = prog.regular_polygon_extrude(1.0, 6, 20.0)
         result = prog.cut(box, hex_tool)
@@ -96,7 +96,7 @@ class TestRegularPolygonExtrudeOp:
 class TestChamferByFaceOp:
     def test_chamfer_top_face_reduces_volume(self):
         """Chamfering top face edges of a cylinder should reduce volume."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         cyl = prog.cylinder(1.0, 2.0)
         chamfered = prog.chamfer_by_face(cyl, axis="z", end="max", size=0.1)
         prog.query_volume(cyl)
@@ -106,7 +106,7 @@ class TestChamferByFaceOp:
 
     def test_chamfer_bottom_face_reduces_volume(self):
         """Chamfering bottom face edges should also reduce volume."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         cyl = prog.cylinder(1.0, 2.0)
         chamfered = prog.chamfer_by_face(cyl, axis="z", end="min", size=0.1)
         prog.query_volume(cyl)
@@ -116,7 +116,7 @@ class TestChamferByFaceOp:
 
     def test_chamfer_box_top(self):
         """Chamfering top face of a box should reduce volume."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(2.0, 2.0, 2.0)
         chamfered = prog.chamfer_by_face(box, axis="z", end="max", size=0.1)
         prog.query_volume(box)
@@ -140,7 +140,7 @@ class TestChamferByFaceOp:
 
     def test_passthrough_on_failure(self):
         """If chamfer fails (e.g. size too large), pass through without error."""
-        prog = ShapeScript()
+        prog = ShapeScriptBuilder()
         box = prog.box(1.0, 1.0, 1.0)
         # Size larger than half the box edge — should fail gracefully
         chamfered = prog.chamfer_by_face(box, axis="z", end="max", size=0.6)

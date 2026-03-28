@@ -156,7 +156,7 @@ def prepare_room(spec) -> None:
             geom.conaffinity = 1
 
 
-@dataclass
+@dataclass(frozen=True)
 class _WallSlot:
     body_id: int
     geom_id: int

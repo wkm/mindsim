@@ -35,7 +35,7 @@ Usage:
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import mujoco
 import numpy as np
@@ -314,7 +314,7 @@ DEFAULT_GEOMS_PER_OBJECT = 8
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlacedObject:
     """An object to place in the scene.
 
@@ -331,7 +331,7 @@ class PlacedObject:
     rotation: float = 0.0
 
 
-@dataclass
+@dataclass(frozen=True)
 class _GeomSlot:
     """A single body+geom pair. One body per geom eliminates the need for
     manual geom_xpos patching — mj_kinematics reliably propagates
@@ -345,11 +345,11 @@ class _GeomSlot:
     mesh_id: int = -1  # companion cone mesh (-1 if not found)
 
 
-@dataclass
+@dataclass(frozen=True)
 class _ObjectSlot:
     """A logical object: a group of geom slots that form one piece of furniture."""
 
-    geom_slots: list[_GeomSlot] = field(default_factory=list)
+    geom_slots: tuple[_GeomSlot, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -446,7 +446,7 @@ class SceneComposer:
                 geom_slots.append(_GeomSlot(body_id, geom_id, mesh_id))
                 j += 1
 
-            self._slots.append(_ObjectSlot(geom_slots))
+            self._slots.append(_ObjectSlot(tuple(geom_slots)))
             i += 1
 
     # -------------------------------------------------------------------

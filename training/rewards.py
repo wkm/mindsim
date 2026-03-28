@@ -37,7 +37,7 @@ STYLE = Priority.STYLE
 GUARD = Priority.GUARD
 
 
-@dataclass
+@dataclass(frozen=True)
 class RewardComponent:
     """A single per-step reward component with metadata."""
 
@@ -67,7 +67,7 @@ class RewardComponent:
             return (self.scale * hi, self.scale * lo)  # hi is closer to 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class BonusEvent:
     """One-time reward event (success, failure, instability)."""
 

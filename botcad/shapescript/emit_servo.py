@@ -10,26 +10,26 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from botcad.shapescript.ops import Align3
-from botcad.shapescript.program import ShapeScript
+from botcad.shapescript.program import ShapeScriptBuilder
 
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
 
 
-def servo_script(servo: ServoSpec) -> ShapeScript:
+def servo_script(servo: ServoSpec) -> ShapeScriptBuilder:
     """Dispatch to form-factor-specific emitter based on servo name."""
     if servo.name == "SCS0009":
         return scs0009_script(servo)
     return sts_series_script(servo)
 
 
-def sts_series_script(servo: ServoSpec) -> ShapeScript:
+def sts_series_script(servo: ServoSpec) -> ShapeScriptBuilder:
     """STS-series servo body (STS3215, STS3250, etc.) as ShapeScript.
 
     All geometry uses native ShapeScript ops — no PrebuiltOps.
     Shaft boss, flanges, rear boss, mounting holes, and connector are native ops.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     # ── Exact geometry constants (from reference CAD) ──
     body_x = 0.0454
@@ -118,13 +118,13 @@ def sts_series_script(servo: ServoSpec) -> ShapeScript:
     return prog
 
 
-def scs0009_script(servo: ServoSpec) -> ShapeScript:
+def scs0009_script(servo: ServoSpec) -> ShapeScriptBuilder:
     """SCS0009 micro servo body (SG90-style) as ShapeScript.
 
     All geometry uses native ShapeScript ops — no PrebuiltOps.
     Shaft boss, ears, mounting holes, and connector are native ops.
     """
-    prog = ShapeScript()
+    prog = ShapeScriptBuilder()
 
     body_x, body_y, body_z = servo.effective_body_dims
     r = 0.0010
@@ -182,7 +182,7 @@ def _group_ears_by_y_side(ears) -> dict[str, list]:
     return sides
 
 
-def _emit_servo_connector(prog: ShapeScript, body_ref, servo: ServoSpec):
+def _emit_servo_connector(prog: ShapeScriptBuilder, body_ref, servo: ServoSpec):
     """Fuse connector receptacles onto the servo body via CallOp sub-programs.
 
     Mirrors _fuse_servo_connector logic: each non-permanent wire port gets
