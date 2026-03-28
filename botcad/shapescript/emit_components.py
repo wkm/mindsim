@@ -825,6 +825,167 @@ def compute_script(comp) -> ShapeScript:
     return prog
 
 
+def generic_pcb_script(comp) -> ShapeScript:
+    """ShapeScript emitter for generic components.
+
+    Dispatches to component-specific emitters by name, falling back to
+    a simple PCB box with corner fillets and mounting holes.
+    """
+    _EMITTERS = {
+        "BEC5V": _bec5v_script,
+        "WaveshareSerialBus": _waveshare_serial_bus_script,
+    }
+    emitter = _EMITTERS.get(comp.name)
+    if emitter is not None:
+        return emitter(comp)
+    return _generic_pcb_fallback(comp)
+
+
+def _generic_pcb_fallback(comp) -> ShapeScript:
+    """Simple PCB box with corner fillets and mounting holes."""
+    prog = ShapeScript()
+    dx, dy, dz = comp.dimensions
+
+    pcb = prog.box(dx, dy, dz, tag="pcb")
+
+    radius = min(dx, dy) * 0.15
+    if radius > 0.0005:
+        pcb = prog.fillet_by_axis(pcb, "z", radius)
+
+    if comp.mounting_points:
+        hole_proto = prog.cylinder(
+            comp.mounting_points[0].diameter / 2, dz + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(comp.mounting_points):
+            hole = prog.instance(hole_proto, i)
+            hole = prog.locate(hole, pos=mp.pos)
+            pcb = prog.cut(pcb, hole)
+
+    prog.output_ref = pcb
+    return prog
+
+
+def _bec5v_script(comp) -> ShapeScript:
+    """Pololu D24V10F5 — PCB with inductor, buck IC, and pin header.
+
+    Layout from datasheet dimension drawing:
+      PCB 12.7 x 17.8mm, 1.0mm thick.
+      Shielded inductor (4x4mm, 1.8mm tall) — tallest component.
+      ISL85410 buck IC (QFN 3x3mm, 0.8mm).
+      5-pin header along one short edge.
+    """
+    prog = ShapeScript()
+    dx, dy, _dz = comp.dimensions
+    pcb_t = 0.001  # 1.0mm FR4
+
+    # PCB
+    pcb = prog.box(dx, dy, pcb_t, tag="pcb")
+    pcb = prog.fillet_by_axis(pcb, "z", 0.001)
+
+    # Shielded power inductor — upper center of board
+    inductor = prog.box(0.004, 0.004, 0.0018, align=Align3(z="min"), tag="inductor")
+    inductor = prog.locate(inductor, pos=(0.0, 0.003, pcb_t / 2))
+
+    # Buck converter IC (QFN) — center-left
+    ic = prog.box(0.003, 0.003, 0.0008, align=Align3(z="min"), tag="ic")
+    ic = prog.locate(ic, pos=(-0.002, -0.002, pcb_t / 2))
+
+    # Output capacitor row — small ceramics along right side
+    cap = prog.box(0.002, 0.001, 0.0006, align=Align3(z="min"), tag="cap")
+    cap = prog.locate(cap, pos=(0.004, -0.003, pcb_t / 2))
+
+    # 5-pin header strip along -Y edge (2.54mm pitch, 5 pins = 10.16mm span)
+    header = prog.box(0.0102, 0.0025, 0.0025, align=Align3(z="min"), tag="pin_header")
+    header = prog.locate(header, pos=(0.0, -dy / 2 + 0.002, pcb_t / 2))
+
+    result = prog.fuse(pcb, inductor)
+    result = prog.fuse(result, ic)
+    result = prog.fuse(result, cap)
+    result = prog.fuse(result, header)
+
+    prog.output_ref = result
+    return prog
+
+
+def _waveshare_serial_bus_script(comp) -> ShapeScript:
+    """Waveshare Bus Servo Adapter (A) — PCB with connectors and headers.
+
+    Layout from product wiki and photos:
+      PCB 42 x 33mm, 1.6mm thick.
+      DC5521 barrel jack (~9mm tall) on left edge — tallest component.
+      USB-C on bottom edge, right of center.
+      2-pin screw terminal on bottom edge, left of center.
+      2x 3-pin servo headers on top edge.
+      USB-UART bridge IC near USB connector.
+      4x M2.5 mounting holes in 37x28mm pattern.
+    """
+    prog = ShapeScript()
+    dx, dy, _dz = comp.dimensions
+    pcb_t = 0.0016  # 1.6mm FR4
+
+    # PCB
+    pcb = prog.box(dx, dy, pcb_t, tag="pcb")
+    pcb = prog.fillet_by_axis(pcb, "z", 0.002)
+
+    # Mounting holes (4x M2.5)
+    if comp.mounting_points:
+        hole_proto = prog.cylinder(
+            comp.mounting_points[0].diameter / 2, pcb_t + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(comp.mounting_points):
+            hole = prog.instance(hole_proto, i)
+            hole = prog.locate(hole, pos=mp.pos)
+            pcb = prog.cut(pcb, hole)
+
+    # DC5521 barrel jack — left edge, lower area (~14mm deep x 9mm wide x 9mm tall)
+    dc_jack = prog.box(
+        0.014, 0.009, 0.009, align=Align3(x="min", z="min"), tag="dc_jack"
+    )
+    dc_jack = prog.locate(dc_jack, pos=(-dx / 2 + 0.001, -0.004, pcb_t / 2))
+
+    # 2-pin screw terminal — bottom edge, left of center
+    screw_term = prog.box(
+        0.010, 0.008, 0.008, align=Align3(y="min", z="min"), tag="screw_terminal"
+    )
+    screw_term = prog.locate(screw_term, pos=(-0.006, -dy / 2 + 0.001, pcb_t / 2))
+
+    # USB-C receptacle — bottom edge, right of center (~8.9 x 3.2mm)
+    usb_c = prog.box(0.009, 0.007, 0.0032, align=Align3(y="min", z="min"), tag="usb_c")
+    usb_c = prog.locate(usb_c, pos=(0.005, -dy / 2 + 0.001, pcb_t / 2))
+
+    # 2x 3-pin servo headers — top edge (8.5mm tall pins)
+    servo_hdr_1 = prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="servo_hdr"
+    )
+    servo_hdr_1 = prog.locate(servo_hdr_1, pos=(-0.006, dy / 2 - 0.001, pcb_t / 2))
+    servo_hdr_2 = prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="servo_hdr_2"
+    )
+    servo_hdr_2 = prog.locate(servo_hdr_2, pos=(0.006, dy / 2 - 0.001, pcb_t / 2))
+
+    # UART header — top-right area
+    uart_hdr = prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="uart_hdr"
+    )
+    uart_hdr = prog.locate(uart_hdr, pos=(0.016, dy / 2 - 0.001, pcb_t / 2))
+
+    # USB-UART bridge IC — near USB connector
+    bridge_ic = prog.box(0.005, 0.005, 0.001, align=Align3(z="min"), tag="bridge_ic")
+    bridge_ic = prog.locate(bridge_ic, pos=(0.005, -0.005, pcb_t / 2))
+
+    # Fuse all
+    result = prog.fuse(pcb, dc_jack)
+    result = prog.fuse(result, screw_term)
+    result = prog.fuse(result, usb_c)
+    result = prog.fuse(result, servo_hdr_1)
+    result = prog.fuse(result, servo_hdr_2)
+    result = prog.fuse(result, uart_hdr)
+    result = prog.fuse(result, bridge_ic)
+
+    prog.output_ref = result
+    return prog
+
+
 def wheel_component_script(comp) -> ShapeScript:
     """Wrapper for wheel_script that accepts a Component."""
     # Wheel dimensions: radius from X/2, width from Z
@@ -956,5 +1117,160 @@ def camera_multi_material(comp) -> MultiMaterialResult:
             MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
             MaterialProgram(material=MAT_ABS_DARK, program=lens_prog),
             MaterialProgram(material=MAT_NICKEL, program=conn_prog),
+        ],
+    )
+
+
+def generic_multi_material(comp) -> MultiMaterialResult:
+    """Multi-material dispatcher for generic components."""
+    _EMITTERS = {
+        "BEC5V": _bec5v_multi_material,
+        "WaveshareSerialBus": _waveshare_multi_material,
+    }
+    emitter = _EMITTERS.get(comp.name)
+    if emitter is not None:
+        return emitter(comp)
+    return None
+
+
+def _bec5v_multi_material(comp) -> MultiMaterialResult:
+    """Multi-material BEC: FR4 PCB + IC/inductor packages + metal pin header.
+
+    Three material regions:
+    1. FR4 green PCB substrate
+    2. IC packages: buck converter IC, inductor (shielded ferrite), capacitors
+    3. Nickel-plated pin header
+    """
+    from botcad.materials import MAT_FR4_GREEN, MAT_IC_PACKAGE, MAT_NICKEL
+    from botcad.shapescript.program import MaterialProgram, MultiMaterialResult
+
+    dx, dy, _dz = comp.dimensions
+    pcb_t = 0.001
+
+    # -- Program 1: PCB substrate (FR4 green) --
+    pcb_prog = ShapeScript()
+    pcb = pcb_prog.box(dx, dy, pcb_t, tag="pcb")
+    pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.001)
+    pcb_prog.output_ref = pcb
+
+    # -- Program 2: IC packages (dark epoxy) — inductor + buck IC + caps --
+    ic_prog = ShapeScript()
+    # Shielded inductor — tallest component, upper center
+    inductor = ic_prog.box(0.004, 0.004, 0.0018, align=Align3(z="min"), tag="inductor")
+    inductor = ic_prog.locate(inductor, pos=(0.0, 0.003, pcb_t / 2))
+    # Buck converter IC (QFN)
+    ic = ic_prog.box(0.003, 0.003, 0.0008, align=Align3(z="min"), tag="ic")
+    ic = ic_prog.locate(ic, pos=(-0.002, -0.002, pcb_t / 2))
+    # Output capacitor row
+    cap = ic_prog.box(0.002, 0.001, 0.0006, align=Align3(z="min"), tag="cap")
+    cap = ic_prog.locate(cap, pos=(0.004, -0.003, pcb_t / 2))
+    result_ic = ic_prog.fuse(inductor, ic)
+    result_ic = ic_prog.fuse(result_ic, cap)
+    ic_prog.output_ref = result_ic
+
+    # -- Program 3: Metal pin header (nickel) --
+    metal_prog = ShapeScript()
+    header = metal_prog.box(
+        0.0102, 0.0025, 0.0025, align=Align3(z="min"), tag="pin_header"
+    )
+    header = metal_prog.locate(header, pos=(0.0, -dy / 2 + 0.002, pcb_t / 2))
+    metal_prog.output_ref = header
+
+    return MultiMaterialResult(
+        primary=_bec5v_script(comp),
+        material_programs=[
+            MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
+            MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
+            MaterialProgram(material=MAT_NICKEL, program=metal_prog),
+        ],
+    )
+
+
+def _waveshare_multi_material(comp) -> MultiMaterialResult:
+    """Multi-material Waveshare: FR4 PCB + IC packages + metal connectors.
+
+    Three material regions:
+    1. FR4 green PCB substrate (with mounting holes)
+    2. IC packages: USB-UART bridge chip
+    3. Metal connectors: DC barrel jack, screw terminal, USB-C, pin headers
+    """
+    from botcad.materials import MAT_FR4_GREEN, MAT_IC_PACKAGE, MAT_NICKEL
+    from botcad.shapescript.program import MaterialProgram, MultiMaterialResult
+
+    dx, dy, _dz = comp.dimensions
+    pcb_t = 0.0016
+
+    # -- Program 1: PCB substrate (FR4 green, with mounting holes) --
+    pcb_prog = ShapeScript()
+    pcb = pcb_prog.box(dx, dy, pcb_t, tag="pcb")
+    pcb = pcb_prog.fillet_by_axis(pcb, "z", 0.002)
+    if comp.mounting_points:
+        hole_proto = pcb_prog.cylinder(
+            comp.mounting_points[0].diameter / 2, pcb_t + 0.001, tag="mounting_hole"
+        )
+        for i, mp in enumerate(comp.mounting_points):
+            hole = pcb_prog.instance(hole_proto, i)
+            hole = pcb_prog.locate(hole, pos=mp.pos)
+            pcb = pcb_prog.cut(pcb, hole)
+    pcb_prog.output_ref = pcb
+
+    # -- Program 2: IC packages (dark epoxy) — bridge IC --
+    ic_prog = ShapeScript()
+    bridge_ic = ic_prog.box(0.005, 0.005, 0.001, align=Align3(z="min"), tag="bridge_ic")
+    bridge_ic = ic_prog.locate(bridge_ic, pos=(0.005, -0.005, pcb_t / 2))
+    ic_prog.output_ref = bridge_ic
+
+    # -- Program 3: Metal connectors (nickel) --
+    metal_prog = ShapeScript()
+
+    # DC barrel jack
+    dc_jack = metal_prog.box(
+        0.014, 0.009, 0.009, align=Align3(x="min", z="min"), tag="dc_jack"
+    )
+    dc_jack = metal_prog.locate(dc_jack, pos=(-dx / 2 + 0.001, -0.004, pcb_t / 2))
+
+    # Screw terminal
+    screw_term = metal_prog.box(
+        0.010, 0.008, 0.008, align=Align3(y="min", z="min"), tag="screw_terminal"
+    )
+    screw_term = metal_prog.locate(screw_term, pos=(-0.006, -dy / 2 + 0.001, pcb_t / 2))
+
+    # USB-C receptacle
+    usb_c = metal_prog.box(
+        0.009, 0.007, 0.0032, align=Align3(y="min", z="min"), tag="usb_c"
+    )
+    usb_c = metal_prog.locate(usb_c, pos=(0.005, -dy / 2 + 0.001, pcb_t / 2))
+
+    # Servo headers (2x)
+    servo_hdr_1 = metal_prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="servo_hdr"
+    )
+    servo_hdr_1 = metal_prog.locate(
+        servo_hdr_1, pos=(-0.006, dy / 2 - 0.001, pcb_t / 2)
+    )
+    servo_hdr_2 = metal_prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="servo_hdr_2"
+    )
+    servo_hdr_2 = metal_prog.locate(servo_hdr_2, pos=(0.006, dy / 2 - 0.001, pcb_t / 2))
+
+    # UART header
+    uart_hdr = metal_prog.box(
+        0.0076, 0.0025, 0.0085, align=Align3(y="max", z="min"), tag="uart_hdr"
+    )
+    uart_hdr = metal_prog.locate(uart_hdr, pos=(0.016, dy / 2 - 0.001, pcb_t / 2))
+
+    metal_result = metal_prog.fuse(dc_jack, screw_term)
+    metal_result = metal_prog.fuse(metal_result, usb_c)
+    metal_result = metal_prog.fuse(metal_result, servo_hdr_1)
+    metal_result = metal_prog.fuse(metal_result, servo_hdr_2)
+    metal_result = metal_prog.fuse(metal_result, uart_hdr)
+    metal_prog.output_ref = metal_result
+
+    return MultiMaterialResult(
+        primary=_waveshare_serial_bus_script(comp),
+        material_programs=[
+            MaterialProgram(material=MAT_FR4_GREEN, program=pcb_prog),
+            MaterialProgram(material=MAT_IC_PACKAGE, program=ic_prog),
+            MaterialProgram(material=MAT_NICKEL, program=metal_prog),
         ],
     )

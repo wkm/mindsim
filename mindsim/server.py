@@ -716,6 +716,62 @@ def get_component_stl(name: str, part: str):
     )
 
 
+@app.get("/api/components/{name:path}/materials")
+def get_component_materials(name: str):
+    """Return per-material mesh info for a component's multi-material rendering.
+
+    Response: {"materials": [{"name": "fr4_green", "color": [r,g,b], "metallic": 0.0,
+    "roughness": 0.85, "stl_url": "/api/components/BEC5V/stl/mat__fr4_green"}, ...]}
+    Returns empty materials list if no multi-material emitter exists.
+    """
+    if name not in _component_registry:
+        raise HTTPException(404, f"Unknown component: {name}")
+
+    _factory, comp, _category = _component_registry[name]
+
+    from botcad.component import get_component_meta
+
+    meta = get_component_meta(comp.kind)
+    if meta.multi_material_emitter is None:
+        return {"materials": []}
+
+    try:
+        mm_result = meta.multi_material_emitter(comp)
+    except Exception:
+        return {"materials": []}
+
+    if mm_result is None:
+        return {"materials": []}
+
+    materials = []
+    for mp in mm_result.material_programs:
+        mat = mp.material
+        mat_key = f"mat__{mat.name}"
+
+        # Pre-generate and cache the per-material STL
+        cache_key = (comp.name, mat_key)
+        with _stl_cache_lock:
+            if cache_key not in _stl_cache:
+                from botcad.shapescript.backend_occt import OcctBackend
+
+                result = OcctBackend().execute(mp.program)
+                solid = result.shapes[mp.program.output_ref.id]
+                _stl_cache[cache_key] = _solid_to_stl_bytes(solid)
+
+        r, g, b = mat.color[:3]
+        materials.append(
+            {
+                "name": mat.name,
+                "color": [r, g, b],
+                "metallic": mat.metallic,
+                "roughness": mat.roughness,
+                "stl_url": f"/api/components/{name}/stl/{mat_key}",
+            }
+        )
+
+    return {"materials": materials}
+
+
 @app.get("/api/components/{name:path}/fasteners")
 def get_component_fasteners(name: str):
     if name not in _component_registry:

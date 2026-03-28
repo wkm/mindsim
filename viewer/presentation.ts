@@ -85,8 +85,8 @@ export function tintColor(entityColor: any, tintFraction = 0.5, baseHex = BP.LIG
 export function createMaterial(color: any, opts: any = {}) {
   const params: any = {
     color,
-    roughness: DEFAULT_ROUGHNESS,
-    metalness: DEFAULT_METALNESS,
+    roughness: opts.roughness ?? DEFAULT_ROUGHNESS,
+    metalness: opts.metalness ?? DEFAULT_METALNESS,
   };
   if (opts.transparent) {
     params.transparent = true;

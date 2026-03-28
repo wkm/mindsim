@@ -699,8 +699,8 @@ class TestComponentRegistry:
         meta = get_component_meta(ComponentKind.SERVO)
         assert meta.script_emitter is not None
 
-    def test_generic_meta_has_no_script_emitter(self):
+    def test_generic_meta_has_script_emitter(self):
         from botcad.component import ComponentKind, get_component_meta
 
         meta = get_component_meta(ComponentKind.GENERIC)
-        assert meta.script_emitter is None
+        assert meta.script_emitter is not None

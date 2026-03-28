@@ -51,7 +51,7 @@ def build() -> Bot:
     base.mount(
         WaveshareSerialBus(), position="back", label="controller", rotation=MOUNT_YAW_90
     )
-    # BEC is tiny (13x10x3mm) — tuck beside controller on back face
+    # BEC is small (12.7x17.8x2.8mm) — tuck beside controller on back face
     base.mount(BEC5V(), position=(0.0, -0.025, 0.015), label="bec")
 
     # --- Wheels (STS3215 in continuous rotation mode) ---
