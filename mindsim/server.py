@@ -980,6 +980,64 @@ def get_viewer_manifest(bot: str):
     return build_viewer_manifest(bot_obj)
 
 
+@app.get("/api/bots/{bot}/assembly-sequence")
+def get_assembly_sequence(bot: str):
+    """Return the assembly sequence for a bot."""
+    try:
+        bot_obj, _cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Assembly sequence generation failed: {e}") from e
+
+    from botcad.assembly.build import build_assembly_sequence
+    from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
+    from botcad.assembly.tools import TOOL_LIBRARY
+
+    seq = build_assembly_sequence(bot_obj)
+
+    def _serialize_target(target):
+        if isinstance(target, ComponentRef):
+            return {
+                "type": "component",
+                "body": str(target.body),
+                "mount_label": target.mount_label,
+            }
+        if isinstance(target, FastenerRef):
+            return {"type": "fastener", "body": str(target.body), "index": target.index}
+        if isinstance(target, WireRef):
+            return {"type": "wire", "label": target.label}
+        # JointId (str subclass)
+        return {"type": "joint", "id": str(target)}
+
+    ops = [
+        {
+            "step": op.step,
+            "action": op.action.value,
+            "target": _serialize_target(op.target),
+            "body": str(op.body),
+            "tool": op.tool.value if op.tool else None,
+            "approach_axis": op.approach_axis,
+            "angle": op.angle,
+            "prerequisites": list(op.prerequisites),
+            "description": op.description,
+        }
+        for op in seq.ops
+    ]
+
+    tool_library = {}
+    for kind, spec in TOOL_LIBRARY.items():
+        tool_library[kind.value] = {
+            "shaft_diameter": spec.shaft_diameter,
+            "shaft_length": spec.shaft_length,
+            "head_diameter": spec.head_diameter,
+            "grip_clearance": spec.grip_clearance,
+        }
+
+    return {"ops": ops, "tool_library": tool_library}
+
+
 @app.get("/api/bots/{bot}/bot.xml")
 def get_bot_xml(bot: str):
     """Serve on-demand MuJoCo bot.xml generated from the bot skeleton."""
