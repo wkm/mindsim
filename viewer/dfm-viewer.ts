@@ -60,6 +60,12 @@ function createPositionedMesh(
 // Camera fly-to animation (standalone, no MuJoCo dependency)
 // ---------------------------------------------------------------------------
 
+interface CameraAnimControls {
+  target: THREE.Vector3;
+  enableDamping?: boolean;
+  update(): void;
+}
+
 interface CameraAnim {
   active: boolean;
   startTime: number;
@@ -68,33 +74,35 @@ interface CameraAnim {
   endPos: THREE.Vector3;
   startTarget: THREE.Vector3;
   endTarget: THREE.Vector3;
+  controls: CameraAnimControls | null;
 }
 
 function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
 }
 
-function updateCameraAnim(
-  anim: CameraAnim,
-  camera: THREE.Camera,
-  controls: { target: THREE.Vector3; update(): void },
-): void {
-  if (!anim.active) return;
+function updateCameraAnim(anim: CameraAnim, camera: THREE.Camera): void {
+  if (!anim.active || !anim.controls) return;
   const elapsed = (performance.now() - anim.startTime) / 1000;
   const t = Math.min(elapsed / anim.duration, 1);
   const e = easeInOut(t);
 
   camera.position.lerpVectors(anim.startPos, anim.endPos, e);
-  controls.target.lerpVectors(anim.startTarget, anim.endTarget, e);
-  controls.update();
+  anim.controls.target.lerpVectors(anim.startTarget, anim.endTarget, e);
+  anim.controls.update();
 
-  if (t >= 1) anim.active = false;
+  if (t >= 1) {
+    anim.active = false;
+    // Re-enable damping now that the animation is done
+    anim.controls.enableDamping = true;
+    anim.controls = null;
+  }
 }
 
 function flyToBox(
   box: THREE.Box3,
   camera: THREE.Camera,
-  controls: { target: THREE.Vector3; update(): void },
+  controls: CameraAnimControls,
   anim: CameraAnim,
   duration = 0.6,
 ): void {
@@ -115,6 +123,13 @@ function flyToBox(
   anim.startTime = performance.now();
   anim.duration = duration;
   anim.active = true;
+
+  // Disable damping for the duration of the animation so OrbitControls
+  // doesn't fight our per-frame position interpolation. The viewport's
+  // _tick() calls controls.update() with damping before our callback,
+  // which would partially undo each animation step.
+  anim.controls = controls;
+  controls.enableDamping = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +158,7 @@ export async function initDFMViewer(
     endPos: new THREE.Vector3(),
     startTarget: new THREE.Vector3(),
     endTarget: new THREE.Vector3(),
+    controls: null,
   };
 
   // Build body name -> meshes lookup for fly-to on finding click
@@ -514,7 +530,7 @@ export async function initDFMViewer(
 
   viewport.animate(() => {
     if (paused) return;
-    updateCameraAnim(cameraAnim, viewport.camera, viewport.controls as any);
+    updateCameraAnim(cameraAnim, viewport.camera);
   });
 
   // ---------------------------------------------------------------------------
