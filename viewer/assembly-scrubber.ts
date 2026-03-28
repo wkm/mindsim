@@ -5,10 +5,20 @@
  * slider, prev/next buttons, a "Show All" shortcut, and step description text.
  */
 
+export interface AssemblyOpTarget {
+  type: 'component' | 'fastener' | 'wire' | 'joint';
+  body?: string;
+  mount_label?: string;
+  index?: number;
+  label?: string;
+  id?: string;
+}
+
 export interface AssemblyOpData {
   step: number;
   action: string;
   body: string;
+  target: AssemblyOpTarget;
   description: string;
   tool: string | null;
 }

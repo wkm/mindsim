@@ -148,6 +148,12 @@ export async function initDFMViewer(
   // Build body name -> meshes lookup for fly-to on finding click
   const bodyMeshes: Record<string, THREE.Mesh[]> = {};
 
+  // Mount meshes keyed by "body:label" (matches ComponentRef in assembly ops)
+  const mountMeshes: Record<string, THREE.Mesh[]> = {};
+
+  // Part meshes keyed by "fastener:body:index" or "wire:label"
+  const partMeshes: Record<string, THREE.Mesh[]> = {};
+
   // Create viewport groups per body
   const bodyGroups: Record<string, THREE.Group> = {};
   for (const body of manifest.bodies) {
@@ -185,6 +191,14 @@ export async function initDFMViewer(
   const mountMeshPromises = mountsList.map(async (mount) => {
     if (!mount.pos || !mount.quat) return;
     const group = getBodyGroup(mount.body);
+    const mountKey = `${mount.body}:${mount.label}`;
+
+    function trackMountMesh(m: THREE.Mesh): void {
+      if (!mountMeshes[mountKey]) mountMeshes[mountKey] = [];
+      mountMeshes[mountKey].push(m);
+      if (!bodyMeshes[mount.body]) bodyMeshes[mount.body] = [];
+      bodyMeshes[mount.body].push(m);
+    }
 
     if (mount.meshes && mount.meshes.length > 0) {
       const subPromises = mount.meshes.map(async (sub) => {
@@ -193,8 +207,7 @@ export async function initDFMViewer(
         const mat = makeMaterial(materials[sub.material]);
         const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
         group.add(mesh);
-        if (!bodyMeshes[mount.body]) bodyMeshes[mount.body] = [];
-        bodyMeshes[mount.body].push(mesh);
+        trackMountMesh(mesh);
       });
       await Promise.all(subPromises);
     } else {
@@ -210,12 +223,13 @@ export async function initDFMViewer(
       });
       const mesh = createPositionedMesh(geometry, mat, mount.pos, mount.quat);
       group.add(mesh);
-      if (!bodyMeshes[mount.body]) bodyMeshes[mount.body] = [];
-      bodyMeshes[mount.body].push(mesh);
+      trackMountMesh(mesh);
     }
   });
 
   // Load part meshes (fasteners, wires)
+  // Track fastener index per body to match FastenerRef(body, index) from assembly ops
+  const fastenerCountByBody: Record<string, number> = {};
   const partsList = manifest.parts ?? [];
   const partMeshPromises = partsList.map(async (part) => {
     if (!part.pos || !part.quat) return;
@@ -238,6 +252,20 @@ export async function initDFMViewer(
     group.add(mesh);
     if (part.parent_body && !bodyMeshes[part.parent_body]) bodyMeshes[part.parent_body] = [];
     if (part.parent_body) bodyMeshes[part.parent_body].push(mesh);
+
+    // Track part meshes for assembly scrubber visibility
+    let partKey: string | null = null;
+    if (part.category === 'fastener') {
+      const idx = fastenerCountByBody[part.parent_body] ?? 0;
+      fastenerCountByBody[part.parent_body] = idx + 1;
+      partKey = `fastener:${part.parent_body}:${idx}`;
+    } else if (part.category === 'wire') {
+      partKey = `wire:${part.name}`;
+    }
+    if (partKey) {
+      if (!partMeshes[partKey]) partMeshes[partKey] = [];
+      partMeshes[partKey].push(mesh);
+    }
   });
 
   await Promise.all([...bodyMeshPromises, ...mountMeshPromises, ...partMeshPromises]);
@@ -332,29 +360,54 @@ export async function initDFMViewer(
       panel.filterByStep(step);
     }
 
-    // Show/hide body groups based on which bodies are installed by this step.
-    // Structural bodies (role !== 'component') are always visible.
-    // Component bodies become visible when their INSERT step is reached.
-    if (assemblyOps.length > 0) {
-      // Collect bodies that have been inserted by step N
-      const visibleBodies = new Set<string>();
-      for (let i = 0; i <= step; i++) {
-        const op = assemblyOps[i];
-        if (op?.body) {
-          visibleBodies.add(op.body);
-        }
-      }
+    if (assemblyOps.length === 0) return;
 
-      // Structural bodies from the manifest are always visible
-      for (const body of manifest.bodies) {
-        if (body.role !== 'component') {
-          visibleBodies.add(body.name);
-        }
-      }
+    // Collect what is visible at this step by scanning ops 0..step
+    const visibleBodies = new Set<string>();
+    const visibleMounts = new Set<string>();
+    const visibleParts = new Set<string>();
 
-      for (const [name, group] of Object.entries(bodyGroups)) {
-        group.visible = visibleBodies.has(name);
+    for (let i = 0; i <= step; i++) {
+      const op = assemblyOps[i];
+      if (!op) continue;
+      const t = op.target;
+
+      if (op.action === 'insert') {
+        if (t.type === 'component' && t.mount_label) {
+          // Mount-level component (battery, Pi, camera, etc.)
+          visibleMounts.add(`${t.body}:${t.mount_label}`);
+        }
+        // Body-level component (servo, horn) — always add the body
+        visibleBodies.add(op.body);
+      } else if (op.action === 'fasten' && t.type === 'fastener') {
+        visibleParts.add(`fastener:${t.body}:${t.index}`);
+      } else if (op.action === 'route_wire' && t.type === 'wire') {
+        visibleParts.add(`wire:${t.label}`);
       }
+    }
+
+    // Structural bodies are always visible
+    for (const body of manifest.bodies) {
+      if (body.role !== 'component') {
+        visibleBodies.add(body.name);
+      }
+    }
+
+    // Apply body group visibility
+    for (const [name, group] of Object.entries(bodyGroups)) {
+      group.visible = visibleBodies.has(name);
+    }
+
+    // Apply mount mesh visibility
+    for (const [key, meshes] of Object.entries(mountMeshes)) {
+      const vis = visibleMounts.has(key);
+      for (const m of meshes) m.visible = vis;
+    }
+
+    // Apply part mesh visibility
+    for (const [key, meshes] of Object.entries(partMeshes)) {
+      const vis = visibleParts.has(key);
+      for (const m of meshes) m.visible = vis;
     }
   }
 
