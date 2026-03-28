@@ -56,8 +56,6 @@ const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
   linewidth: 2,
 });
 
-const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -85,28 +83,6 @@ function createPositionedMesh(
   }
 
   return mesh;
-}
-
-/** Compute a bounding box over all visible mesh groups. */
-function getVisibleBBox(bodyGroups: Record<string, THREE.Group>): THREE.Box3 | null {
-  const box = new THREE.Box3();
-  let hasGeometry = false;
-
-  for (const group of Object.values(bodyGroups)) {
-    if (!group.visible) continue;
-    group.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      if (mesh.isMesh) {
-        mesh.geometry.computeBoundingBox();
-        const childBox = mesh.geometry.boundingBox!.clone();
-        childBox.applyMatrix4(mesh.matrixWorld);
-        box.union(childBox);
-        hasGeometry = true;
-      }
-    });
-  }
-
-  return hasGeometry ? box : null;
 }
 
 /** Map a SceneNode to a filter category string. */
@@ -306,49 +282,6 @@ interface SectionState {
   axis: string;
   flipped: boolean;
   fraction: number;
-}
-
-function updateSectionPlane(state: SectionState, viewport: Viewport3D, bodyGroups: Record<string, THREE.Group>): void {
-  if (state.enabled) {
-    const box = getVisibleBBox(bodyGroups);
-    if (box) {
-      const axisIdx = AXIS_INDEX[state.axis];
-      const axisMin = box.min.getComponent(axisIdx);
-      const axisMax = box.max.getComponent(axisIdx);
-      const pos = axisMin + (axisMax - axisMin) * state.fraction;
-      const sign = state.flipped ? 1 : -1;
-      const normal = new THREE.Vector3();
-      normal.setComponent(axisIdx, sign);
-
-      viewport._secOn = true;
-      viewport._secAxis = state.axis;
-      viewport._secFrac = state.fraction;
-      viewport._secPlane.normal.copy(normal);
-      viewport._secPlane.constant = pos * -sign;
-
-      viewport._applySection();
-
-      if (viewport._secViz) {
-        const center = box.getCenter(new THREE.Vector3());
-        const sz = box.getSize(new THREE.Vector3());
-        const planeSize = Math.max(sz.x, sz.y, sz.z) * 1.5;
-        viewport._secViz.scale.set(planeSize, planeSize, 1);
-        viewport._secViz.visible = true;
-        center.setComponent(axisIdx, pos);
-        viewport._secViz.position.copy(center);
-        viewport._secViz.rotation.set(0, 0, 0);
-        if (axisIdx === 0) viewport._secViz.rotation.y = Math.PI / 2;
-        else if (axisIdx === 1) viewport._secViz.rotation.x = Math.PI / 2;
-      }
-    }
-  } else {
-    viewport._secOn = false;
-    if (viewport._secViz) viewport._secViz.visible = false;
-    viewport._clearSectionCaps();
-    viewport.scene.traverse((ch: any) => {
-      if (ch.material) ch.material.clippingPlanes = [];
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +557,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
       sectionToggle.classList.toggle('active', section.enabled);
       const controls = document.getElementById('section-controls');
       if (controls) controls.style.display = section.enabled ? 'flex' : 'none';
-      updateSectionPlane(section, viewport, bodyGroups);
+      viewport.setSection(section);
     });
   }
 
@@ -636,7 +569,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
         document.querySelectorAll('[data-section-axis]').forEach((b) => {
           b.classList.toggle('active', (b as HTMLElement).dataset.sectionAxis === axis);
         });
-        updateSectionPlane(section, viewport, bodyGroups);
+        viewport.setSection(section);
       });
     }
   }
@@ -645,7 +578,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   if (slider) {
     addDomListener(slider, 'input', () => {
       section.fraction = Number.parseFloat((slider as HTMLInputElement).value) / 100;
-      updateSectionPlane(section, viewport, bodyGroups);
+      viewport.setSection(section);
     });
   }
 
@@ -654,7 +587,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
     addDomListener(flipBtn, 'click', () => {
       section.flipped = !section.flipped;
       flipBtn.classList.toggle('active', section.flipped);
-      updateSectionPlane(section, viewport, bodyGroups);
+      viewport.setSection(section);
     });
   }
 
@@ -664,7 +597,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   const measureBtn = document.getElementById('measure-toggle');
   if (measureBtn) {
     addDomListener(measureBtn, 'click', () => {
-      const active = !viewport._meas.enabled;
+      const active = !viewport.measureEnabled;
       if (active) {
         viewport.enableMeasureTool();
       } else {
@@ -679,7 +612,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   const clearBtn = document.getElementById('measure-clear');
   if (clearBtn) {
     addDomListener(clearBtn, 'click', () => {
-      viewport._meas.clearAll();
+      viewport.clearMeasurements();
     });
   }
 

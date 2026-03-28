@@ -159,7 +159,7 @@ class ComponentBrowser {
 
     // Fit ortho frustum to visible geometry
     const box = this._getVisibleBBox();
-    if (box) this.viewport._fitOrthoFrustum(box);
+    if (box) this.viewport.fitOrthoFrustum(box);
     this.viewport.controls.update();
     this._updatePresetButtons();
   }
@@ -224,7 +224,7 @@ class ComponentBrowser {
     const box = new THREE.Box3();
     let hasGeometry = false;
 
-    const groups = this.viewport._groups as Record<string, THREE.Group>;
+    const groups = this.viewport.groups;
     for (const group of Object.values(groups)) {
       if (!group.visible) continue;
       group.traverse((child) => {
@@ -532,7 +532,7 @@ class ComponentBrowser {
     if (btn) btn.classList.add('active');
 
     // Hide ManifestViewer mesh groups
-    const groups = this.viewport._groups as Record<string, THREE.Group>;
+    const groups = this.viewport.groups;
     for (const group of Object.values(groups)) {
       group.visible = false;
     }
@@ -561,7 +561,7 @@ class ComponentBrowser {
     if (this._markerGroup) this._markerGroup.visible = true;
 
     // Restore ManifestViewer mesh group visibility
-    const groups = this.viewport._groups as Record<string, THREE.Group>;
+    const groups = this.viewport.groups;
     for (const group of Object.values(groups)) {
       group.visible = true;
     }
@@ -591,7 +591,7 @@ class ComponentBrowser {
     this.viewport.controls.target.copy(center);
     this.viewport.camera.lookAt(center);
 
-    this.viewport._fitOrthoFrustum(box);
+    this.viewport.fitOrthoFrustum(box);
     this.viewport.controls.update();
   }
 
@@ -822,7 +822,7 @@ class ComponentBrowser {
     this.viewport.camera.lookAt(center);
     this.viewport.controls.enableRotate = true;
 
-    this.viewport._fitOrthoFrustum(box);
+    this.viewport.fitOrthoFrustum(box);
     this.viewport.controls.update();
   }
 
@@ -839,7 +839,7 @@ class ComponentBrowser {
     ];
 
     // Drive gizmo updates from the viewport animation loop
-    const origAnimCb = this.viewport._animCb;
+    const origAnimCb = this.viewport.animationCallback;
     this.viewport.animate(() => {
       if (origAnimCb) origAnimCb();
       this._updateAxisGizmo();
