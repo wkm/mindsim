@@ -3,11 +3,15 @@
  *
  * Uses Viewport3D for all 3D rendering (orthographic camera, section plane
  * with stencil caps, measure tool, view presets). This module manages the
- * component catalog, layer system, STL loading, and side panel UI.
+ * component catalog, ComponentTree-based visibility, STL loading, and side panel UI.
  */
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { buildSceneTree } from './build-scene-tree.ts';
+import { ComponentTree } from './component-tree.ts';
+import { DesignScene, NodeKind } from './design-scene.ts';
+import type { ManifestMount, ManifestPart, ViewerManifest } from './manifest-types.ts';
 import { addMeshWithEdges, BP, createMaterial, hexStr, tintColor } from './presentation.ts';
 import { clearGroup, orientToAxis } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
@@ -31,30 +35,6 @@ const VIEW_PRESETS = {
   left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '7' },
 };
 
-// ---------------------------------------------------------------------------
-// Layer definitions
-// ---------------------------------------------------------------------------
-const LAYER_META = {
-  body: { label: 'Body', colorHex: null, opts: {} },
-  servo: { label: 'Servo', colorHex: 0x182026, opts: {} },
-  horn: { label: 'Horn', colorHex: 0xe8e8e8, opts: {} },
-  bracket: { label: 'Bracket', colorHex: 0xced9e0, opts: {} },
-  cradle: { label: 'Cradle', colorHex: 0xced9e0, opts: {} },
-  coupler: { label: 'Coupler', colorHex: 0xf55656, opts: {} },
-  bracket_insertion_channel: {
-    label: 'Bracket Insertion Channel',
-    colorHex: 0xf55656,
-    opts: { transparent: true, opacity: 0.25 },
-  },
-  cradle_insertion_channel: {
-    label: 'Cradle Insertion Channel',
-    colorHex: 0xf55656,
-    opts: { transparent: true, opacity: 0.25 },
-  },
-  fasteners: { label: 'Fasteners', colorHex: 0xd4a843, opts: {} },
-  wires: { label: 'Wires', colorHex: 0x9179f2, opts: {} },
-};
-const ALL_LAYER_IDS = Object.keys(LAYER_META);
 const AXIS_INDEX: Record<string, number> = { x: 0, y: 1, z: 2 };
 
 // ---------------------------------------------------------------------------
@@ -65,7 +45,10 @@ class ComponentBrowser {
   currentComponent: any;
   stlLoader: STLLoader;
   stlCache: Record<string, any>;
-  layerGroups: Record<string, any>;
+  _manifest: ViewerManifest | null;
+  _designScene: DesignScene | null;
+  _componentTree: ComponentTree | null;
+  _meshGroups: Record<string, THREE.Group>;
   activePreset: string;
   sectionEnabled: boolean;
   sectionAxis: string;
@@ -97,7 +80,10 @@ class ComponentBrowser {
     this.currentComponent = null;
     this.stlLoader = new STLLoader();
     this.stlCache = {};
-    this.layerGroups = {};
+    this._manifest = null;
+    this._designScene = null;
+    this._componentTree = null;
+    this._meshGroups = {};
     this.activePreset = 'iso';
     this.sectionEnabled = false;
     this.sectionAxis = 'z';
@@ -153,30 +139,6 @@ class ComponentBrowser {
     // ShapeScript step groups (added directly to scene)
     this.scene.add(this.stepsGroup);
     this.scene.add(this.stepsToolGroup);
-
-    // Create a viewport group per layer so Viewport3D tracks them for
-    // bounding box and section cap computation
-    for (const id of ALL_LAYER_IDS) {
-      const g = this.viewport.addGroup(id);
-      this.layerGroups[id] = g;
-    }
-
-    // Register section cap color callback so caps match layer colors
-    this.viewport.setSectionCapColorFn((groupName) => {
-      const meta = LAYER_META[groupName];
-      if (!meta) return null;
-      const entityColor =
-        meta.colorHex !== null
-          ? meta.colorHex
-          : this.currentComponent
-            ? new THREE.Color(
-                this.currentComponent.color[0],
-                this.currentComponent.color[1],
-                this.currentComponent.color[2],
-              )
-            : 0xced9e0;
-      return tintColor(entityColor, 0.6);
-    });
 
     // Start animation loop
     this.viewport.animate();
@@ -413,14 +375,14 @@ class ComponentBrowser {
     const box = new THREE.Box3();
     let hasGeometry = false;
 
-    for (const id of ALL_LAYER_IDS) {
-      const group = this.layerGroups[id];
+    for (const group of Object.values(this._meshGroups)) {
       if (!group.visible) continue;
       group.traverse((child) => {
-        if (child.isMesh) {
-          child.geometry.computeBoundingBox();
-          const childBox = child.geometry.boundingBox.clone();
-          childBox.applyMatrix4(child.matrixWorld);
+        const mesh = child as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.geometry.computeBoundingBox();
+          const childBox = mesh.geometry.boundingBox.clone();
+          childBox.applyMatrix4(mesh.matrixWorld);
           box.union(childBox);
           hasGeometry = true;
         }
@@ -485,36 +447,9 @@ class ComponentBrowser {
     panel.innerHTML = '<p style="color:var(--bp-gray3); font-size:13px">Select a component</p>';
   }
 
-  _buildLayerControls(comp) {
-    let html = '<h3>Layers</h3>';
-    html += '<div class="layer-controls">';
-
-    for (const id of comp.layers || []) {
-      const meta = LAYER_META[id];
-      if (!meta) continue;
-
-      const checked = this.layerGroups[id].visible ? 'checked' : '';
-      const colorSwatch =
-        meta.colorHex !== null
-          ? `<span class="layer-swatch" style="background:#${meta.colorHex.toString(16).padStart(6, '0')}"></span>`
-          : `<span class="layer-swatch" style="background:rgb(${Math.round(comp.color[0] * 255)},${Math.round(comp.color[1] * 255)},${Math.round(comp.color[2] * 255)})"></span>`;
-
-      html += `<label class="layer-toggle">
-        <input type="checkbox" data-layer="${id}" ${checked}>
-        ${colorSwatch}
-        <span class="layer-label">${meta.label}</span>
-      </label>`;
-    }
-
-    html += '</div>';
-    return html;
-  }
-
   _updateSidePanel(comp: any) {
     const panel = document.getElementById('side-panel');
     let html = `<h2>${comp.name}</h2>`;
-
-    html += this._buildLayerControls(comp);
 
     html += `<h3>General</h3>`;
     html += `<div style="font-size:12px; color:#999; line-height:1.8">`;
@@ -556,11 +491,6 @@ class ComponentBrowser {
     }
 
     panel.innerHTML = html;
-
-    panel.querySelectorAll('input[data-layer]').forEach((cb) => {
-      const el = cb as HTMLInputElement;
-      el.addEventListener('change', () => this._onLayerToggle(el.dataset.layer!, el.checked));
-    });
 
     this._createMarkers(comp);
 
@@ -662,42 +592,18 @@ class ComponentBrowser {
   }
 
   // -----------------------------------------------------------------------
-  // Layer loading
+  // Component loading — manifest-driven with ComponentTree
   // -----------------------------------------------------------------------
-
-  async _onLayerToggle(layerId: string, enabled: boolean) {
-    const group = this.layerGroups[layerId];
-
-    if (enabled) {
-      if (group.children.length === 0) {
-        await this._loadLayer(layerId);
-      }
-      group.visible = true;
-    } else {
-      group.visible = false;
-    }
-
-    // Re-fit frustum without changing camera angle
-    const box = this._getVisibleBBox();
-    this.viewport._fitOrthoFrustum(box);
-    this.controls.update();
-
-    // Re-apply section plane (clips new geometry, rebuilds caps)
-    if (this.sectionEnabled) {
-      this._updateSectionPlane();
-    }
-  }
 
   async loadComponent(name: string) {
     const comp = this.components.find((c) => c.name === name);
     if (!comp) return;
-
     this.currentComponent = comp;
 
     document.getElementById('bot-name').textContent = name;
     document.getElementById('mode-tabs').style.display = 'none';
 
-    // Clear measurements, section, steps mode, and layers
+    // Clear measurements, section, steps mode
     this.viewport._meas.clearAll();
     this._resetSection();
     if (this.stepsMode) {
@@ -711,156 +617,314 @@ class ComponentBrowser {
       const btn = document.getElementById('steps-toggle');
       if (btn) btn.classList.remove('active');
     }
-    for (const id of ALL_LAYER_IDS) {
-      this.viewport.clearGroup(this.layerGroups[id]);
-      this.layerGroups[id].visible = false;
+
+    // Clear previous mesh groups (Viewport3D has no removeGroup — clear + remove from scene)
+    for (const [_id, group] of Object.entries(this._meshGroups)) {
+      this.viewport.clearGroup(group);
+      this.scene.remove(group);
+    }
+    this._meshGroups = {};
+
+    // Dispose previous tree
+    if (this._componentTree) {
+      this._componentTree.dispose();
+      this._componentTree = null;
     }
 
-    const defaultLayer = comp.layers?.[0] || 'body';
+    // Fetch manifest
+    const resp = await fetch(`/api/components/${name}/manifest`);
+    if (!resp.ok) return;
+    this._manifest = (await resp.json()) as ViewerManifest;
 
+    // Build scene tree + design scene
+    const sceneTree = buildSceneTree(this._manifest);
+    this._designScene = new DesignScene(sceneTree);
+
+    // Create viewport groups for body + mount + parts
+    const bodyGroup = this.viewport.addGroup(`body:${name}`);
+    this._meshGroups[`body:${name}`] = bodyGroup;
+
+    // Load body mesh (always visible)
+    const mount = this._manifest.mounts?.[0];
+    if (mount?.meshes && mount.meshes.length > 0) {
+      // Multi-material
+      await this._loadMultiMaterialMount(name, mount, bodyGroup);
+    } else {
+      // Single material body
+      const entityColor = comp.color
+        ? new THREE.Color(comp.color[0], comp.color[1], comp.color[2])
+        : new THREE.Color(0.541, 0.608, 0.659);
+      await this._addSTLMesh(name, 'body', tintColor(entityColor), {}, bodyGroup);
+    }
+
+    // Register body meshes with design scene.
+    // buildSceneTree creates: body node as `body:{name}`, mount as `mount:{name}:{name}`.
+    // Register under the mount node since that's the component container.
+    const mountNodeId = `mount:${name}:${name}`;
+    const bodyNodeId = `body:${name}`;
+    // Use mount node if it exists (multi-material), body node otherwise
+    const regNodeId = this._designScene.tree.getNode(mountNodeId) ? mountNodeId : bodyNodeId;
+    for (const child of bodyGroup.children) {
+      this._designScene.registerMesh(regNodeId, child as THREE.Mesh);
+    }
+
+    // Update side panel (specs section — no layer checkboxes)
     this._updateSidePanel(comp);
 
-    await this._loadLayer(defaultLayer);
-    this.layerGroups[defaultLayer].visible = true;
+    // Build ComponentTree in a container
+    const treeContainer = this._getOrCreateTreeContainer();
+    this._componentTree = new ComponentTree(
+      treeContainer,
+      this._manifest,
+      (_nodeId) => {
+        /* select callback — no-op for now */
+      },
+      {
+        onToggleNodeHidden: (nodeId) => this._onTreeToggle(nodeId),
+        onSolo: (nodeId) => this._onTreeSolo(nodeId),
+        onUnsolo: () => this._onTreeUnsolo(),
+        onCategoryToggle: (category, visible) => this._onCategoryToggle(category, visible),
+        onShapeScript: (url) => {
+          // Route ShapeScript links to component endpoint instead of bot endpoint
+          window.location.href = url.replace(/\?cadsteps=/, `?component=${name}&cadsteps=`);
+        },
+      },
+    );
+    this._componentTree.build();
+
+    // Set fasteners and wires hidden by default.
+    // SceneTree.nodes is a Map — use .values().
+    // Fasteners are SubPart nodes; wire groups are Component nodes with `wire-group:` prefix.
+    for (const node of this._designScene.tree.nodes.values()) {
+      if (node.kind === NodeKind.SubPart || node.id.startsWith('wire-group:')) {
+        node.hidden = true;
+      }
+    }
+    this._designScene.syncVisibility();
+    this._componentTree.updateFromDesignScene(this._designScene.tree);
+
+    // Section cap color from manifest materials
+    this.viewport.setSectionCapColorFn((groupName: string) => {
+      if (!this._manifest) return null;
+
+      // Body groups → use component color
+      if (groupName.startsWith('body:')) {
+        const c = this.currentComponent;
+        if (!c) return 0xced9e0;
+        return tintColor(new THREE.Color(c.color[0], c.color[1], c.color[2]), 0.6);
+      }
+
+      // Fastener groups → gold
+      if (groupName.startsWith('fastener')) return tintColor(0xd4a843, 0.6);
+
+      // Wire groups → purple
+      if (groupName.startsWith('wire') || groupName.startsWith('connector')) return tintColor(0x9179f2, 0.6);
+
+      // Default
+      return tintColor(0xced9e0, 0.6);
+    });
+
     this._fitCameraToVisibleMeshes();
   }
 
-  async _loadLayer(layerId: string) {
-    const group = this.layerGroups[layerId];
-    const comp = this.currentComponent;
-    const compName = comp.name;
+  // -----------------------------------------------------------------------
+  // Tree callbacks
+  // -----------------------------------------------------------------------
 
-    if (layerId === 'fasteners') {
-      await this._loadFasteners(compName, group);
-      return;
+  _getOrCreateTreeContainer(): HTMLElement {
+    let container = document.getElementById('component-tree-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'component-tree-container';
+      // Insert at the top of the side panel
+      const panel = document.getElementById('side-panel');
+      panel.insertBefore(container, panel.firstChild);
     }
-
-    if (layerId === 'wires') {
-      await this._loadWires(compName, group);
-      return;
-    }
-
-    // For body layer, try multi-material rendering first
-    if (layerId === 'body') {
-      const loaded = await this._tryLoadMultiMaterial(compName, group);
-      if (loaded) return;
-    }
-
-    const meta = LAYER_META[layerId] || { colorHex: null, opts: {} };
-    const entityColor =
-      meta.colorHex !== null ? meta.colorHex : new THREE.Color(comp.color[0], comp.color[1], comp.color[2]);
-
-    const renderColor = tintColor(entityColor);
-
-    await this._addSTLMesh(compName, layerId, renderColor, meta.opts, group);
+    container.innerHTML = '';
+    return container;
   }
 
-  /** Try loading per-material meshes. Returns true if multi-material was available. */
-  async _tryLoadMultiMaterial(compName: string, group: THREE.Group): Promise<boolean> {
-    try {
-      const resp = await fetch(`/api/components/${compName}/materials`);
-      if (!resp.ok) return false;
-      const data = await resp.json();
-      if (!data.materials || data.materials.length === 0) return false;
+  async _onTreeToggle(nodeId: string) {
+    if (!this._designScene) return;
+    const node = this._designScene.tree.getNode(nodeId);
+    if (!node) return;
 
-      await Promise.all(
-        data.materials.map(async (mat: any) => {
-          const stlResp = await fetch(mat.stl_url);
+    node.hidden = !node.hidden;
+
+    // Lazy-load mesh if this is the first time making it visible
+    if (!node.hidden && node.meshIds.length === 0) {
+      await this._lazyLoadNodeMesh(nodeId);
+    }
+
+    this._designScene.syncVisibility();
+    this._componentTree?.updateFromDesignScene(this._designScene.tree);
+
+    // Re-fit camera and section
+    const box = this._getVisibleBBox();
+    if (box) this.viewport._fitOrthoFrustum(box);
+    this.controls.update();
+    if (this.sectionEnabled) this._updateSectionPlane();
+  }
+
+  _onTreeSolo(nodeId: string) {
+    if (!this._designScene) return;
+    this._designScene.tree.solo(nodeId);
+    this._designScene.syncVisibility();
+    this._componentTree?.updateFromDesignScene(this._designScene.tree);
+  }
+
+  _onTreeUnsolo() {
+    if (!this._designScene) return;
+    this._designScene.tree.unsolo();
+    this._designScene.syncVisibility();
+    this._componentTree?.updateFromDesignScene(this._designScene.tree);
+  }
+
+  _onCategoryToggle(category: string, visible: boolean) {
+    if (!this._designScene) return;
+    // Toggle hidden on all nodes of this category (nodes is a Map)
+    for (const node of this._designScene.tree.nodes.values()) {
+      const nodeCategory = this._nodeCategoryForFilter(node);
+      if (nodeCategory === category) {
+        node.hidden = !visible;
+      }
+    }
+    this._designScene.syncVisibility();
+    this._componentTree?.updateFromDesignScene(this._designScene.tree);
+  }
+
+  _nodeCategoryForFilter(node: any): string | null {
+    // Map node kinds to filter categories.
+    if (node.kind === NodeKind.Body) return 'body';
+    if (node.kind === NodeKind.SubPart) {
+      if (node.id.startsWith('fastener')) return 'fastener';
+    }
+    // Wire groups are NodeKind.Component with `wire-group:` prefix
+    if (node.id.startsWith('wire-group:')) return 'wire';
+    if (node.kind === NodeKind.Component) return 'mount';
+    return null;
+  }
+
+  // -----------------------------------------------------------------------
+  // Lazy-load mesh for tree nodes
+  // -----------------------------------------------------------------------
+
+  async _lazyLoadNodeMesh(nodeId: string) {
+    if (!this._manifest || !this._designScene) return;
+    const compName = this._manifest.bot_name;
+    const allParts = this._manifest.parts ?? [];
+
+    // Match node ID to manifest parts.
+    // buildSceneTree generates these ID patterns:
+    //   fastener-group:mount:{body}:{label}:{groupKey}  (fasteners on a mount)
+    //   wire-group:{body}                                (all wires on a body)
+    let matchingParts: ManifestPart[];
+
+    if (nodeId.startsWith('wire-group:')) {
+      // Wire group: load ALL wire parts for this body
+      matchingParts = allParts.filter((p) => p.category === 'wire');
+    } else if (nodeId.startsWith('fastener-group:')) {
+      // Fastener group: match by group key (last segment of node ID).
+      // groupKey comes from groupFasteners() in utils.ts — it's the part name.
+      const segments = nodeId.split(':');
+      const groupKey = segments[segments.length - 1];
+      matchingParts = allParts.filter((p) => p.category === 'fastener' && p.name === groupKey);
+    } else {
+      return; // Unknown node type
+    }
+
+    if (matchingParts.length === 0) return;
+
+    // Create or find the viewport group for this node
+    let group = this._meshGroups[nodeId];
+    if (!group) {
+      group = this.viewport.addGroup(nodeId);
+      this._meshGroups[nodeId] = group;
+    }
+
+    // Deduplicate STL URLs, batch-load geometries
+    const stlUrlForPart = (part: ManifestPart) => {
+      // Meshes starting with '_' are shared synthetic components (_screw_*, _connector_*, _wire_stub)
+      const meshName = part.mesh;
+      return meshName.startsWith('_')
+        ? `/api/components/${meshName}/stl/body`
+        : `/api/components/${compName}/stl/${meshName}`;
+    };
+
+    const uniqueUrls = [...new Set(matchingParts.map(stlUrlForPart))];
+    const geomCache: Record<string, THREE.BufferGeometry> = {};
+    await Promise.all(
+      uniqueUrls.map(async (url) => {
+        try {
+          const stlResp = await fetch(url);
+          if (!stlResp.ok) return;
+          const buf = await stlResp.arrayBuffer();
+          const geom = this.stlLoader.parse(buf);
+          geom.computeVertexNormals();
+          geomCache[url] = geom;
+        } catch {
+          /* skip */
+        }
+      }),
+    );
+
+    // Place each part with its position/quaternion
+    for (const part of matchingParts) {
+      const url = stlUrlForPart(part);
+      const srcGeom = geomCache[url];
+      if (!srcGeom) continue;
+
+      let color: THREE.Color | number;
+      if (part.category === 'fastener') {
+        color = tintColor(0xd4a843);
+      } else if (part.color) {
+        color = tintColor(new THREE.Color(part.color[0], part.color[1], part.color[2]));
+      } else {
+        color = tintColor(0x808080);
+      }
+
+      const mat = createMaterial(color);
+      const mesh = new THREE.Mesh(srcGeom.clone(), mat);
+      mesh.castShadow = true;
+      if (part.pos) mesh.position.set(part.pos[0], part.pos[1], part.pos[2]);
+      if (part.quat) mesh.quaternion.set(part.quat[1], part.quat[2], part.quat[3], part.quat[0]);
+      group.add(mesh);
+
+      this._designScene.registerMesh(nodeId, mesh);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Multi-material mount helper
+  // -----------------------------------------------------------------------
+
+  async _loadMultiMaterialMount(compName: string, mount: ManifestMount, group: THREE.Group) {
+    if (!mount.meshes) return;
+    const materials = this._manifest?.materials ?? {};
+
+    await Promise.all(
+      mount.meshes.map(async (meshEntry) => {
+        const stlUrl = `/api/components/${compName}/stl/${meshEntry.file}`;
+        try {
+          const stlResp = await fetch(stlUrl);
           if (!stlResp.ok) return;
           const buf = await stlResp.arrayBuffer();
           const geometry = this.stlLoader.parse(buf);
           geometry.computeVertexNormals();
-          const color = new THREE.Color(mat.color[0], mat.color[1], mat.color[2]);
+
+          const mat = materials[meshEntry.material];
+          const color = mat
+            ? new THREE.Color(mat.color[0], mat.color[1], mat.color[2])
+            : new THREE.Color(0.5, 0.5, 0.5);
           addMeshWithEdges(geometry, tintColor(color), group, {
-            metalness: mat.metallic,
-            roughness: mat.roughness,
+            metalness: mat?.metallic ?? 0,
+            roughness: mat?.roughness ?? 0.8,
           });
-        }),
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async _loadFasteners(compName: string, group: THREE.Group) {
-    try {
-      const resp = await fetch(`/api/components/${compName}/fasteners`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-
-      const uniqueUrls: string[] = [...new Set(data.fasteners.map((f: any) => f.stl_url))] as string[];
-      const geomCache: Record<string, any> = {};
-      await Promise.all(
-        uniqueUrls.map(async (url) => {
-          const stlResp = await fetch(url);
-          if (!stlResp.ok) return;
-          const buf = await stlResp.arrayBuffer();
-          const geom = this.stlLoader.parse(buf);
-          geom.computeVertexNormals();
-          geomCache[url] = geom;
-        }),
-      );
-
-      const fastenerMat = createMaterial(tintColor(0xd4a843));
-
-      for (const f of data.fasteners) {
-        const srcGeom = geomCache[f.stl_url];
-        if (!srcGeom) continue;
-
-        const mesh = new THREE.Mesh(srcGeom.clone(), fastenerMat);
-        mesh.castShadow = true;
-        mesh.position.set(f.pos[0], f.pos[1], f.pos[2]);
-        if (f.quat) {
-          mesh.quaternion.set(f.quat[1], f.quat[2], f.quat[3], f.quat[0]);
+        } catch {
+          // skip failed material meshes
         }
-        group.add(mesh);
-      }
-    } catch (err) {
-      console.warn('Failed to load fasteners:', err);
-    }
-  }
-
-  async _loadWires(compName: string, group: THREE.Group) {
-    try {
-      const resp = await fetch(`/api/components/${compName}/wires`);
-      if (!resp.ok) return;
-      const data = await resp.json();
-
-      // Collect all unique STL URLs (stubs + connectors)
-      const allItems = [...(data.wires || []), ...(data.connectors || [])];
-      const uniqueUrls: string[] = [...new Set(allItems.map((item: any) => item.stl_url))] as string[];
-      const geomCache: Record<string, THREE.BufferGeometry> = {};
-
-      await Promise.all(
-        uniqueUrls.map(async (url) => {
-          const stlResp = await fetch(url);
-          if (!stlResp.ok) return;
-          const buf = await stlResp.arrayBuffer();
-          const geom = this.stlLoader.parse(buf);
-          geom.computeVertexNormals();
-          geomCache[url] = geom;
-        }),
-      );
-
-      // Place all items (stubs and connector housings)
-      for (const item of allItems) {
-        const srcGeom = geomCache[item.stl_url];
-        if (!srcGeom) continue;
-
-        const color = new THREE.Color(item.color[0], item.color[1], item.color[2]);
-        const mat = createMaterial(tintColor(color));
-        const mesh = new THREE.Mesh(srcGeom.clone(), mat);
-        mesh.castShadow = true;
-        mesh.position.set(item.pos[0], item.pos[1], item.pos[2]);
-        if (item.quat) {
-          mesh.quaternion.set(item.quat[1], item.quat[2], item.quat[3], item.quat[0]);
-        }
-        group.add(mesh);
-      }
-    } catch (err) {
-      console.warn('Failed to load wires:', err);
-    }
+      }),
+    );
   }
 
   async _addSTLMesh(componentName: string, partName: string, color: any, opts: any, group: THREE.Group) {
@@ -948,8 +1012,8 @@ class ComponentBrowser {
     const btn = document.getElementById('steps-toggle');
     if (btn) btn.classList.add('active');
 
-    for (const id of ALL_LAYER_IDS) {
-      this.layerGroups[id].visible = false;
+    for (const group of Object.values(this._meshGroups)) {
+      group.visible = false;
     }
     if (this._markerGroup) this._markerGroup.visible = false;
     this.stepsGroup.visible = true;
@@ -974,12 +1038,16 @@ class ComponentBrowser {
     this.stepsToolGroup.visible = false;
 
     if (this._markerGroup) this._markerGroup.visible = true;
-    const comp = this.currentComponent;
-    if (comp) {
-      const defaultLayer = comp.layers?.[0] || 'body';
-      this.layerGroups[defaultLayer].visible = true;
+    // Restore mesh group visibility
+    for (const group of Object.values(this._meshGroups)) {
+      group.visible = true;
+    }
+    // Re-apply design scene visibility (respects hidden nodes)
+    if (this._designScene) {
+      this._designScene.syncVisibility();
     }
 
+    const comp = this.currentComponent;
     if (comp) this._updateSidePanel(comp);
     this._fitCameraToVisibleMeshes();
   }
@@ -1287,7 +1355,7 @@ class ComponentBrowser {
     const comp = this.currentComponent;
     if (!comp) return;
 
-    const layers = ALL_LAYER_IDS.filter((id) => this.layerGroups[id].visible);
+    const layers = Object.keys(this._meshGroups).filter((id) => this._meshGroups[id].visible);
     if (layers.length === 0) return;
 
     this.camera.updateMatrixWorld();
@@ -1306,7 +1374,7 @@ class ComponentBrowser {
       annotate: {
         component: comp.name,
         view: viewLabel,
-        layers: layers.map((id) => LAYER_META[id]?.label || id),
+        layers: layers,
         dimensions_mm: comp.dimensions_mm,
         mass_g: comp.mass_g,
       },
