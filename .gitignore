@@ -36,6 +36,7 @@ comfyui/output/
 
 # Snapshot test reports
 snapshot_report.html
+*.shapescript.actual
 
 # Node (viewer tests)
 node_modules/
