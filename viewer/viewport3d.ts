@@ -23,27 +23,37 @@ import { BP, RENDER_ORDER } from './presentation.ts';
 type CameraType = 'orthographic' | 'perspective';
 
 const VIEW_PRESETS = {
-  iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
-  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front', key: '2' },
-  top: { dir: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0), label: 'Top', key: '3' },
-  right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Right', key: '4' },
-  back: { dir: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Back', key: '5' },
-  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom', key: '6' },
-  left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left', key: '7' },
+  iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso' },
+  rearIso: { dir: new THREE.Vector3(-1, 1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Rear' },
+  front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front' },
+  top: { dir: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0), label: 'Top' },
+  right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Right' },
+  back: { dir: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Back' },
+  bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom' },
+  left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left' },
 };
-const KEY_TO_PRESET = {};
-for (const [name, p] of Object.entries(VIEW_PRESETS)) KEY_TO_PRESET[p.key] = name;
+// Digit / numpad code → preset (unshifted / shifted). Shift gives the opposite view.
+const KEY_TO_PRESET: Record<string, { normal: string; shift: string }> = {
+  Digit1: { normal: 'iso', shift: 'rearIso' },
+  Digit2: { normal: 'front', shift: 'back' },
+  Digit3: { normal: 'top', shift: 'bottom' },
+  Digit4: { normal: 'right', shift: 'left' },
+  Numpad1: { normal: 'iso', shift: 'rearIso' },
+  Numpad2: { normal: 'front', shift: 'back' },
+  Numpad3: { normal: 'top', shift: 'bottom' },
+  Numpad4: { normal: 'right', shift: 'left' },
+};
 const AXIS_IDX = { x: 0, y: 1, z: 2 };
 
 // ── Cube face mapping: face index → preset name ──
 // THREE.BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
 const CUBE_FACE_MAP = [
   { preset: 'right', label: 'Right', key: '4', normal: new THREE.Vector3(1, 0, 0) }, // +X
-  { preset: 'left', label: 'Left', key: '7', normal: new THREE.Vector3(-1, 0, 0) }, // -X
-  { preset: 'back', label: 'Back', key: '5', normal: new THREE.Vector3(0, 1, 0) }, // +Y
+  { preset: 'left', label: 'Left', key: '⇧4', normal: new THREE.Vector3(-1, 0, 0) }, // -X
+  { preset: 'back', label: 'Back', key: '⇧2', normal: new THREE.Vector3(0, 1, 0) }, // +Y
   { preset: 'front', label: 'Front', key: '2', normal: new THREE.Vector3(0, -1, 0) }, // -Y
   { preset: 'top', label: 'Top', key: '3', normal: new THREE.Vector3(0, 0, 1) }, // +Z
-  { preset: 'bottom', label: 'Bottom', key: '6', normal: new THREE.Vector3(0, 0, -1) }, // -Z
+  { preset: 'bottom', label: 'Bottom', key: '⇧3', normal: new THREE.Vector3(0, 0, -1) }, // -Z
 ];
 
 // Blueprint palette grays for cube faces — subtle gradient top-to-bottom
@@ -1433,9 +1443,10 @@ export class Viewport3D {
     this._onKey = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       if (e.ctrlKey || e.metaKey) return;
-      if (KEY_TO_PRESET[e.key]) {
+      const viewMapping = KEY_TO_PRESET[e.code];
+      if (viewMapping) {
         e.preventDefault();
-        this.setViewPreset(KEY_TO_PRESET[e.key]);
+        this.setViewPreset(e.shiftKey ? viewMapping.shift : viewMapping.normal);
       } else if (e.key === 'f') {
         e.preventDefault();
         this.zoomToFit();
