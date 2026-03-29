@@ -134,43 +134,30 @@ class TestFasteners:
 
 
 # ---------------------------------------------------------------------------
-# Wire stubs
+# Wire routes
 # ---------------------------------------------------------------------------
 
 
-class TestWireStubs:
-    def _wire_stubs(self, manifest):
-        return [
-            p
-            for p in manifest.get("parts", [])
-            if p["category"] == "wire" and p.get("wire_kind") == "stub"
-        ]
+class TestWireRoutes:
+    def _wire_routes(self, manifest):
+        return [p for p in manifest.get("parts", []) if p["category"] == "wire"]
 
-    def test_manifest_wire_stubs_have_mesh(self, manifest):
-        """Wire stubs have mesh, pos, quat, color fields."""
-        stubs = self._wire_stubs(manifest)
-        # wheeler_base may or may not have wire stubs -- skip if none
-        if len(stubs) == 0:
-            pytest.skip("no wire stubs in wheeler_base manifest")
-        for stub in stubs:
-            assert "mesh" in stub, f"wire stub {stub['id']} missing 'mesh'"
-            assert "pos" in stub, f"wire stub {stub['id']} missing 'pos'"
-            assert "quat" in stub, f"wire stub {stub['id']} missing 'quat'"
-            assert "color" in stub, f"wire stub {stub['id']} missing 'color'"
-            assert len(stub["pos"]) == 3
-            assert len(stub["quat"]) == 4
-            assert len(stub["color"]) == 4  # RGBA
+    def test_wire_routes_have_required_fields(self, manifest):
+        """Wire route entries have mesh, color, bus_type, route_label."""
+        routes = self._wire_routes(manifest)
+        if len(routes) == 0:
+            pytest.skip("no wire routes in wheeler_base manifest")
+        for r in routes:
+            assert "mesh" in r, f"wire route {r['id']} missing 'mesh'"
+            assert "color" in r, f"wire route {r['id']} missing 'color'"
+            assert "bus_type" in r, f"wire route {r['id']} missing 'bus_type'"
+            assert "route_label" in r, f"wire route {r['id']} missing 'route_label'"
+            assert len(r["color"]) == 4  # RGBA
 
-    def test_wire_stubs_no_legacy_fields(self, manifest):
-        """Wire stubs should NOT have position/direction/length (legacy fields)."""
-        stubs = self._wire_stubs(manifest)
-        for stub in stubs:
-            assert "position" not in stub, (
-                f"wire stub {stub['id']} has legacy 'position' field"
-            )
-            assert "direction" not in stub, (
-                f"wire stub {stub['id']} has legacy 'direction' field"
-            )
-            assert "length" not in stub, (
-                f"wire stub {stub['id']} has legacy 'length' field"
+    def test_wire_routes_no_stub_fields(self, manifest):
+        """Wire routes should NOT have stub-era fields (wire_kind)."""
+        routes = self._wire_routes(manifest)
+        for r in routes:
+            assert "wire_kind" not in r, (
+                f"wire route {r['id']} has legacy 'wire_kind' field"
             )

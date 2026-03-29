@@ -23,7 +23,7 @@ from botcad.bracket import (
     servo_solid,
 )
 from botcad.cad_utils import as_solid as _as_solid
-from botcad.component import BearingSpec, BusType, Component, ComponentKind, Vec3
+from botcad.component import BearingSpec, Component, ComponentKind, Vec3
 from botcad.geometry import quat_to_euler
 from botcad.ids import BodyId
 from botcad.skeleton import Body, BodyKind, Bot, Joint
@@ -592,25 +592,10 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> None:
                 horn = _orient_z_to_axis(horn, joint.axis)
                 export_stl(horn, str(meshes_dir / f"horn_{joint.name}.stl"))
 
-    # --- Per-wire STLs ---
+    # --- Per-route wire STLs (WireNet-filtered) ---
+    from botcad.emit.emit_wires import emit_wire_tubes
 
-    bus_radii = {
-        BusType.UART_HALF_DUPLEX: 0.0009,
-        BusType.CSI: 0.0018,
-        BusType.POWER: 0.0012,
-    }
-    for route in bot.wire_routes:
-        radius = bus_radii.get(route.bus_type, 0.0015)
-        for i, seg in enumerate(route.segments):
-            if seg.straight_length < 0.001:
-                continue
-            wire_solid = _wire_segment_solid(seg.start, seg.end, radius)
-            if wire_solid:
-                # Wires are exported in their body-local frame
-                export_stl(
-                    wire_solid,
-                    str(meshes_dir / f"wire_{route.label}_{seg.body_name}_{i}.stl"),
-                )
+    emit_wire_tubes(bot, meshes_dir)
 
     print(f"CAD: wrote {len(body_solids)} STLs to {meshes_dir}")
 
@@ -1081,30 +1066,6 @@ def screw_solid(designation: str, head_type: str = "", length: float = 0.004):
     ht = HeadType(head_type) if head_type else HeadType.SOCKET_HEAD_CAP
     spec = fastener_spec(designation, ht)
     return fastener_solid(spec, length)
-
-
-def _wire_segment_solid(start: Vec3, end: Vec3, radius: float):
-    """Build a wire segment solid (cylinder with spherical caps)."""
-    from build123d import Align, Cylinder, Location, Sphere
-
-    dx = end[0] - start[0]
-    dy = end[1] - start[1]
-    dz = end[2] - start[2]
-    length = math.sqrt(dx**2 + dy**2 + dz**2)
-    if length < 1e-6:
-        return None
-
-    axis = (dx / length, dy / length, dz / length)
-    mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2)
-
-    # Main cylinder
-    cyl = Cylinder(radius, length, align=(Align.CENTER, Align.CENTER, Align.CENTER))
-    # Spherical caps
-    cap1 = Sphere(radius).moved(Location((0, 0, -length / 2)))
-    cap2 = Sphere(radius).moved(Location((0, 0, length / 2)))
-
-    wire = cyl + cap1 + cap2
-    return _orient_z_to_axis(wire, axis).moved(Location(mid))
 
 
 def _axis_angle_to_quat(

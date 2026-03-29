@@ -456,25 +456,35 @@ def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dic
                         _fastener_entry(mount.label, "mount", i, mp, fp, body.name)
                     )
 
-    # 4. Wire segments
+    # 4. Wire routes (one entry per route, world coords, parented to root)
+    net_labels = {net.label for net in bot.wire_nets}
+    root_body_name = str(bot.root.name) if bot.root else ""
     for route in bot.wire_routes:
-        for i, seg in enumerate(route.segments):
-            if seg.straight_length < 0.001:
-                continue
-            manifest["parts"].append(
-                {
-                    "id": f"wire_{route.label}_{seg.body_name}_{i}",
-                    "name": route.label,
-                    "kind": "fabricated",
-                    "category": "wire",
-                    "parent_body": seg.body_name,
-                    "bus_type": str(route.bus_type),
-                    "mesh": f"wire_{route.label}_{seg.body_name}_{i}.stl",
-                }
-            )
-
-    # 5. Wire stubs at connector sockets
-    _emit_wire_stubs(bot, manifest, packing)
+        if route.label not in net_labels:
+            continue
+        if not route.segments:
+            continue
+        bus_color = _BUS_TYPE_COLORS.get(str(route.bus_type), [0.53, 0.53, 0.53, 1.0])
+        manifest["parts"].append(
+            {
+                "id": f"wire_{route.label}",
+                "name": route.label,
+                "kind": "fabricated",
+                "category": "wire",
+                "bus_type": str(route.bus_type),
+                "route_label": route.label,
+                "parent_body": root_body_name,
+                "mesh": f"wire_{route.label}.stl",
+                "pos": [0.0, 0.0, 0.0],
+                "quat": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ],  # plint: disable=no-hardcoded-identity-quat — world-frame mesh
+                "color": bus_color,
+            }
+        )
 
     # Build IK chains — find longest serial chains of hinge joints
     _build_ik_chains(bot, manifest)
@@ -487,205 +497,6 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
     manifest = build_viewer_manifest(bot)
     out_path = output_dir / "viewer_manifest.json"
     out_path.write_text(json.dumps(manifest, indent=2) + "\n")
-
-
-def _emit_wire_stubs(bot: Bot, manifest: dict, packing) -> None:
-    """Emit wire stubs and connector housings at each WirePort.
-
-    Wire stubs are short cylinders (~25mm) extending from connector sockets
-    along the wire exit direction. Connector housings are the physical plug
-    meshes placed at the port origin oriented along the mating direction.
-
-    Covers both mount-attached components and servo wire ports on joints.
-    """
-    from botcad.geometry import (
-        pose_transform_dir,
-        pose_transform_point,
-        rotation_between,
-    )
-
-    for body in bot.all_bodies:
-        for mount in body.mounts:
-            comp = mount.component
-
-            # Get mount pose from packing if available
-            mount_pose = (
-                packing.placements[mount].pose
-                if (packing and mount in packing.placements)
-                else None
-            )
-
-            for wp in comp.wire_ports:
-                if not wp.connector_type:
-                    continue
-
-                # Look up connector spec for wire exit direction
-                try:
-                    from botcad.connectors import connector_spec
-
-                    cspec = connector_spec(wp.connector_type)
-                except KeyError:
-                    log.debug(
-                        "Unknown connector_type %r on %s/%s, skipping wire stub",
-                        wp.connector_type,
-                        comp.name,
-                        wp.label,
-                    )
-                    continue
-
-                # Transform port position and exit direction from component-local
-                # to body-local frame using the mount's Pose
-                body_pos = pose_transform_point(mount_pose, wp.pos)
-                body_dir = pose_transform_dir(mount_pose, cspec.wire_exit_direction)
-
-                # Quaternion aligning cylinder +Z to the wire exit direction
-
-                stub_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                # Position the stub center halfway along the 25mm length
-                half_len = 0.0125  # 25mm / 2
-                stub_center = (
-                    body_pos[0] + body_dir[0] * half_len,
-                    body_pos[1] + body_dir[1] * half_len,
-                    body_pos[2] + body_dir[2] * half_len,
-                )
-
-                bus_color = _BUS_TYPE_COLORS.get(
-                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                )
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
-                        "name": wp.label,
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "stub",
-                        "parent_body": body.name,
-                        "mesh": "wire_stub.stl",
-                        "pos": _round_vec(stub_center),
-                        "quat": _round_vec(stub_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-                # Connector housing — physical plug at the wire port
-                body_mate_dir = pose_transform_dir(mount_pose, cspec.mating_direction)
-                conn_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_conn_{body.name}_{mount.label}_{wp.label}",
-                        "name": f"{wp.label} connector",
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "connector",
-                        "parent_body": body.name,
-                        "mesh": f"connector_{wp.connector_type}.stl",
-                        "pos": _round_vec(body_pos),
-                        "quat": _round_vec(conn_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-        # --- Servo wire ports (on joints, not mounts) ---
-        for joint in body.joints:
-            servo = joint.servo
-            for wp in servo.wire_ports:
-                if not wp.connector_type:
-                    continue
-
-                try:
-                    from botcad.connectors import connector_spec
-
-                    cspec = connector_spec(wp.connector_type)
-                except KeyError:
-                    log.debug(
-                        "Unknown connector_type %r on servo %s/%s, skipping",
-                        wp.connector_type,
-                        servo.name,
-                        wp.label,
-                    )
-                    continue
-
-                # Build a Pose from the joint's solved servo placement
-                from botcad.geometry import rotate_vec
-
-                rotated_pos = rotate_vec(joint.solved_servo_quat, wp.pos)
-                sc = joint.solved_servo_center
-                body_pos = (
-                    rotated_pos[0] + sc[0],
-                    rotated_pos[1] + sc[1],
-                    rotated_pos[2] + sc[2],
-                )
-
-                body_dir = rotate_vec(
-                    joint.solved_servo_quat, cspec.wire_exit_direction
-                )
-                stub_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                half_len = 0.0125
-                stub_center = (
-                    body_pos[0] + body_dir[0] * half_len,
-                    body_pos[1] + body_dir[1] * half_len,
-                    body_pos[2] + body_dir[2] * half_len,
-                )
-
-                bus_color = _BUS_TYPE_COLORS.get(
-                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                )
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_stub_{body.name}_{joint.name}_{wp.label}",
-                        "name": wp.label,
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "stub",
-                        "parent_body": body.name,
-                        "mesh": "wire_stub.stl",
-                        "pos": _round_vec(stub_center),
-                        "quat": _round_vec(stub_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
-
-                # Connector housing for servo wire port
-                body_mate_dir = rotate_vec(
-                    joint.solved_servo_quat, cspec.mating_direction
-                )
-                conn_quat = rotation_between(
-                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
-                )  # plint: disable=no-rotation-between-in-emitters
-
-                manifest["parts"].append(
-                    {
-                        "id": f"wire_conn_{body.name}_{joint.name}_{wp.label}",
-                        "name": f"{wp.label} connector",
-                        "kind": "fabricated",
-                        "category": "wire",
-                        "wire_kind": "connector",
-                        "parent_body": body.name,
-                        "mesh": f"connector_{wp.connector_type}.stl",
-                        "pos": _round_vec(body_pos),
-                        "quat": _round_vec(conn_quat),
-                        "bus_type": str(wp.bus_type),
-                        "connector_type": wp.connector_type,
-                        "color": bus_color,
-                    }
-                )
 
 
 def _build_ik_chains(bot: Bot, manifest: dict) -> None:

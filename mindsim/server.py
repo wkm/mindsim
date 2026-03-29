@@ -576,38 +576,17 @@ def _generate_bot_mesh(bot, cad, stem: str) -> bytes | None:
         cspec = connector_spec(connector_type)
         return _solid_to_stl_bytes(connector_solid(cspec))
 
-    # Wire stub mesh: shared cylinder for all wire stubs
-    if stem == "wire_stub":
-        from botcad.shapescript.backend_occt import OcctBackend
-        from botcad.shapescript.program import ShapeScriptBuilder
-
-        prog = ShapeScriptBuilder()
-        stub = prog.cylinder(0.0015, 0.025, tag="wire_stub")
-        prog.output_ref = stub
-        result = OcctBackend().execute(prog)
-        return _solid_to_stl_bytes(result.shapes[stub.id])
-
-    # Wire mesh: wire_{label}_{body}_{idx}
+    # Wire route mesh: wire_{route_label}
     if stem.startswith("wire_"):
-        from botcad.component import BusType
-        from botcad.emit.cad import _wire_segment_solid
+        from botcad.emit.emit_wires import wire_route_solid
 
-        bus_radii = {
-            BusType.UART_HALF_DUPLEX: 0.0009,
-            BusType.CSI: 0.0018,
-            BusType.POWER: 0.0012,
-        }
+        route_label = stem.removeprefix("wire_")
         for route in bot.wire_routes:
-            radius = bus_radii.get(route.bus_type, 0.0015)
-            for i, seg in enumerate(route.segments):
-                if seg.straight_length < 0.001:
-                    continue
-                expected = f"wire_{route.label}_{seg.body_name}_{i}"
-                if expected == stem:
-                    wire_solid = _wire_segment_solid(seg.start, seg.end, radius)
-                    if wire_solid is None:
-                        return None
-                    return _solid_to_stl_bytes(wire_solid)
+            if route.label == route_label:
+                solid = wire_route_solid(bot, route)
+                if solid is None:
+                    return None
+                return _solid_to_stl_bytes(solid)
         return None
 
     return None
