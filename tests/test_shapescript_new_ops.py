@@ -11,6 +11,7 @@ b3d = pytest.importorskip("build123d")
 from botcad.shapescript.backend_occt import ExecutionResult, OcctBackend  # noqa: E402
 from botcad.shapescript.ops import ShapeRef  # noqa: E402
 from botcad.shapescript.program import ShapeScriptBuilder  # noqa: E402
+from botcad.units import Meters  # noqa: E402
 
 
 def _exec(prog: ShapeScriptBuilder) -> ExecutionResult:
@@ -161,14 +162,14 @@ class TestFastenerNoPrebuilt:
 
         spec = FastenerSpec(
             designation="M2",
-            thread_diameter=0.002,
-            thread_pitch=0.0004,
+            thread_diameter=Meters(0.002),
+            thread_pitch=Meters(0.0004),
             head_type=HeadType.SOCKET_HEAD_CAP,
-            head_diameter=0.0038,
-            head_height=0.002,
-            socket_size=0.0015,
-            clearance_hole=0.0024,
-            close_fit_hole=0.0022,
+            head_diameter=Meters(0.0038),
+            head_height=Meters(0.002),
+            socket_size=Meters(0.0015),
+            clearance_hole=Meters(0.0024),
+            close_fit_hole=Meters(0.0022),
         )
         prog = fastener_script(spec, length=0.008)
         for op in prog.ops:
@@ -182,14 +183,14 @@ class TestFastenerNoPrebuilt:
 
         spec = FastenerSpec(
             designation="M2",
-            thread_diameter=0.002,
-            thread_pitch=0.0004,
+            thread_diameter=Meters(0.002),
+            thread_pitch=Meters(0.0004),
             head_type=HeadType.PAN_HEAD_PHILLIPS,
-            head_diameter=0.004,
-            head_height=0.0016,
-            socket_size=0.0,
-            clearance_hole=0.0024,
-            close_fit_hole=0.0022,
+            head_diameter=Meters(0.004),
+            head_height=Meters(0.0016),
+            socket_size=Meters(0.0),
+            clearance_hole=Meters(0.0024),
+            close_fit_hole=Meters(0.0022),
         )
         prog = fastener_script(spec, length=0.008)
         for op in prog.ops:
@@ -202,14 +203,14 @@ class TestFastenerNoPrebuilt:
 
         spec = FastenerSpec(
             designation="M2",
-            thread_diameter=0.002,
-            thread_pitch=0.0004,
+            thread_diameter=Meters(0.002),
+            thread_pitch=Meters(0.0004),
             head_type=HeadType.SOCKET_HEAD_CAP,
-            head_diameter=0.0038,
-            head_height=0.002,
-            socket_size=0.0015,
-            clearance_hole=0.0024,
-            close_fit_hole=0.0022,
+            head_diameter=Meters(0.0038),
+            head_height=Meters(0.002),
+            socket_size=Meters(0.0015),
+            clearance_hole=Meters(0.0024),
+            close_fit_hole=Meters(0.0022),
         )
         prog = fastener_script(spec, length=0.008)
         prog.query_volume(prog.output_ref)

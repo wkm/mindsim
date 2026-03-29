@@ -205,6 +205,24 @@ export async function fetchSTL(botName: string, meshFile: string): Promise<THREE
   }
 }
 
+/** Fetch an STL from a full URL and parse it into a BufferGeometry with vertex normals. */
+export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry | null> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.warn(`[viewer] failed to fetch STL: ${url} (${resp.status})`);
+      return null;
+    }
+    const buf = await resp.arrayBuffer();
+    const geometry = stlLoader.parse(buf);
+    geometry.computeVertexNormals();
+    return geometry;
+  } catch (err) {
+    console.warn(`[viewer] STL fetch error: ${url}`, err);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Manifest quaternion conversion
 // ---------------------------------------------------------------------------
@@ -270,4 +288,26 @@ export function makeMaterial(matDef: ManifestMaterial | undefined): THREE.MeshPh
     transparent: matDef.opacity < 1.0,
     opacity: matDef.opacity,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Part node ID resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the SceneTree node ID for a manifest part.
+ *
+ * With the new model, parts[] only contains fasteners and wires.
+ * Servos, horns, and wheels are in bodies[]; mounted components are in mounts[].
+ */
+export function resolvePartNodeId(part: ManifestPart): string {
+  if (part.category === 'fastener') {
+    // Fasteners are grouped — use the joint-scoped or mount-scoped group key
+    return part.joint ? `fastener-group:${part.joint}:${part.name}` : `fastener-group:${part.id}:${part.name}`;
+  }
+  if (part.category === 'wire') {
+    // Wire stubs/segments register under the wire group node for their body
+    return `wire-group:${part.parent_body}`;
+  }
+  return `part:${part.id}`;
 }

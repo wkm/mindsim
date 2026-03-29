@@ -22,19 +22,18 @@ if TYPE_CHECKING:
 from botcad.component import POSE_IDENTITY as POSE_IDENTITY
 from botcad.component import Pose as Pose
 from botcad.component import Quat, Vec3
+from botcad.units import Degrees
 
 
 @dataclass(frozen=True)
 class MountRotation:
     """Design-time rotation of a component on its mounting surface."""
 
-    yaw: float = (
-        0.0  # degrees around component local Z (not Radians — build123d convention)
-    )
+    yaw: Degrees = Degrees(0.0)  # degrees around component local Z
 
 
 MOUNT_NO_ROTATION = MountRotation()
-MOUNT_YAW_90 = MountRotation(yaw=90.0)
+MOUNT_YAW_90 = MountRotation(yaw=Degrees(90.0))
 
 
 @dataclass(frozen=True)

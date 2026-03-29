@@ -13,6 +13,8 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from botcad.units import Meters, mm
+
 if TYPE_CHECKING:
     from botcad.component import MountPoint
 
@@ -45,36 +47,36 @@ class FastenerSpec:
 _SOCKET_HEAD_CAP_CATALOG: dict[str, FastenerSpec] = {
     "M2": FastenerSpec(
         designation="M2",
-        thread_diameter=0.002,
-        thread_pitch=0.0004,
+        thread_diameter=mm(2),
+        thread_pitch=mm(0.4),
         head_type=HeadType.SOCKET_HEAD_CAP,
-        head_diameter=0.0038,
-        head_height=0.002,
-        socket_size=0.0015,  # 1.5mm hex AF
-        clearance_hole=0.0024,
-        close_fit_hole=0.0022,
+        head_diameter=mm(3.8),
+        head_height=mm(2),
+        socket_size=mm(1.5),  # 1.5mm hex AF
+        clearance_hole=mm(2.4),
+        close_fit_hole=mm(2.2),
     ),
     "M2.5": FastenerSpec(
         designation="M2.5",
-        thread_diameter=0.0025,
-        thread_pitch=0.00045,
+        thread_diameter=mm(2.5),
+        thread_pitch=mm(0.45),
         head_type=HeadType.SOCKET_HEAD_CAP,
-        head_diameter=0.0045,
-        head_height=0.0025,
-        socket_size=0.002,  # 2.0mm hex AF
-        clearance_hole=0.0029,
-        close_fit_hole=0.0027,
+        head_diameter=mm(4.5),
+        head_height=mm(2.5),
+        socket_size=mm(2.0),  # 2.0mm hex AF
+        clearance_hole=mm(2.9),
+        close_fit_hole=mm(2.7),
     ),
     "M3": FastenerSpec(
         designation="M3",
-        thread_diameter=0.003,
-        thread_pitch=0.0005,
+        thread_diameter=mm(3),
+        thread_pitch=mm(0.5),
         head_type=HeadType.SOCKET_HEAD_CAP,
-        head_diameter=0.0055,
-        head_height=0.003,
-        socket_size=0.0025,  # 2.5mm hex AF
-        clearance_hole=0.0034,
-        close_fit_hole=0.0032,
+        head_diameter=mm(5.5),
+        head_height=mm(3),
+        socket_size=mm(2.5),  # 2.5mm hex AF
+        clearance_hole=mm(3.4),
+        close_fit_hole=mm(3.2),
     ),
 }
 
@@ -83,36 +85,36 @@ _SOCKET_HEAD_CAP_CATALOG: dict[str, FastenerSpec] = {
 _PAN_HEAD_PHILLIPS_CATALOG: dict[str, FastenerSpec] = {
     "M2": FastenerSpec(
         designation="M2",
-        thread_diameter=0.002,
-        thread_pitch=0.0004,
+        thread_diameter=mm(2),
+        thread_pitch=mm(0.4),
         head_type=HeadType.PAN_HEAD_PHILLIPS,
-        head_diameter=0.004,
-        head_height=0.0016,
-        socket_size=0.0,  # Phillips — no hex
-        clearance_hole=0.0024,
-        close_fit_hole=0.0022,
+        head_diameter=mm(4),
+        head_height=mm(1.6),
+        socket_size=mm(0),  # Phillips — no hex
+        clearance_hole=mm(2.4),
+        close_fit_hole=mm(2.2),
     ),
     "M2.5": FastenerSpec(
         designation="M2.5",
-        thread_diameter=0.0025,
-        thread_pitch=0.00045,
+        thread_diameter=mm(2.5),
+        thread_pitch=mm(0.45),
         head_type=HeadType.PAN_HEAD_PHILLIPS,
-        head_diameter=0.005,
-        head_height=0.002,
-        socket_size=0.0,
-        clearance_hole=0.0029,
-        close_fit_hole=0.0027,
+        head_diameter=mm(5),
+        head_height=mm(2),
+        socket_size=mm(0),
+        clearance_hole=mm(2.9),
+        close_fit_hole=mm(2.7),
     ),
     "M3": FastenerSpec(
         designation="M3",
-        thread_diameter=0.003,
-        thread_pitch=0.0005,
+        thread_diameter=mm(3),
+        thread_pitch=mm(0.5),
         head_type=HeadType.PAN_HEAD_PHILLIPS,
-        head_diameter=0.006,
-        head_height=0.0024,
-        socket_size=0.0,
-        clearance_hole=0.0034,
-        close_fit_hole=0.0032,
+        head_diameter=mm(6),
+        head_height=mm(2.4),
+        socket_size=mm(0),
+        clearance_hole=mm(3.4),
+        close_fit_hole=mm(3.2),
     ),
 }
 

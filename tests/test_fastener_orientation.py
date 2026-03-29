@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 
 from botcad.geometry import quat_multiply, rotate_vec, rotation_between
+from botcad.units import Meters
 
 
 def _approx_vec(v, expected, *, atol=1e-6):
@@ -143,7 +144,10 @@ class TestFastenerOrientation:
 
         # New convention: insertion axis = +Z (shank goes up in servo-local)
         ear = MountPoint(
-            "ear", pos=(0.0, 0.0, 0.0), diameter=0.003, axis=(0.0, 0.0, 1.0)
+            "ear",
+            pos=(Meters(0.0), Meters(0.0), Meters(0.0)),
+            diameter=Meters(0.003),
+            axis=(0.0, 0.0, 1.0),
         )
         fp = fastener_pose(servo_pose, ear)
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from botcad.units import Meters
+from botcad.units import Meters, mm
 
 if TYPE_CHECKING:
     from botcad.component import ServoSpec
@@ -116,12 +116,12 @@ def _horn_clip_radius(servo: ServoSpec, spec: BracketSpec) -> float:
 class BracketSpec:
     """Parameters controlling bracket geometry around a servo."""
 
-    wall: Meters = 0.003  # 3mm wall thickness
-    tolerance: Meters = 0.0003  # 0.3mm clearance per side for FDM
-    shaft_clearance: Meters = 0.001  # 1mm extra radius around horn
-    cable_slot_width: Meters = 0.010  # 10mm wide cable exit
-    cable_slot_height: Meters = 0.006  # 6mm tall cable exit
-    coupler_thickness: Meters = 0.010  # 10mm plate thickness for PLA rigidity
+    wall: Meters = mm(3)  # 3mm wall thickness
+    tolerance: Meters = mm(0.3)  # 0.3mm clearance per side for FDM
+    shaft_clearance: Meters = mm(1)  # 1mm extra radius around horn
+    cable_slot_width: Meters = mm(10)  # 10mm wide cable exit
+    cable_slot_height: Meters = mm(6)  # 6mm tall cable exit
+    coupler_thickness: Meters = mm(10)  # 10mm plate thickness for PLA rigidity
 
 
 def bracket_insertion_channel(
@@ -464,7 +464,7 @@ class HornDiscParams:
     radius: Meters  # outer radius of the disc
     thickness: Meters  # disc thickness along shaft axis
     center_z: Meters  # disc center Z in servo local frame
-    center_xy: tuple[float, float]  # shaft XY in servo frame
+    center_xy: tuple[Meters, Meters]  # shaft XY in servo frame
 
 
 def horn_disc_params(

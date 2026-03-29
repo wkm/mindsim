@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from botcad.component import BusType, Component, WirePort
 from botcad.materials import MAT_PCB_DARK_GREEN
+from botcad.units import Amps, Meters, Volts, grams, mm
 
 
 def BEC5V() -> Component:
@@ -16,29 +17,29 @@ def BEC5V() -> Component:
       Drill tolerance ±0.1mm, board edge ±0.3mm.
     Mass ~1.5g.
     """
-    pcb_x = 0.0127  # 12.7mm (500 mil)
-    pcb_y = 0.0178  # 17.8mm (700 mil)
-    profile_z = 0.0028  # 2.8mm total profile height
+    pcb_x = mm(12.7)  # 12.7mm (500 mil)
+    pcb_y = mm(17.8)  # 17.8mm (700 mil)
+    profile_z = mm(2.8)  # 2.8mm total profile height
 
     # Pin header along -Y short edge: 5 pins at 2.54mm pitch,
     # inset 1.27mm from edges.  VIN/GND/VOUT + PG/SHDN.
-    pin_inset_y = 0.00127  # 1.27mm from bottom edge
-    pin_y = -pcb_y / 2 + pin_inset_y
+    pin_inset_y = mm(1.27)  # 1.27mm from bottom edge
+    pin_y = Meters(-pcb_y / 2 + pin_inset_y)
 
     return Component(
         name="BEC5V",
         dimensions=(pcb_x, pcb_y, profile_z),
-        mass=0.0015,
+        mass=grams(1.5),
         wire_ports=(
             WirePort(
                 "power_in",
-                pos=(-pcb_x / 4, pin_y, 0.0),
+                pos=(Meters(-pcb_x / 4), pin_y, Meters(0.0)),
                 bus_type=BusType.POWER,
                 connector_type="pin_header",
             ),
             WirePort(
                 "power_out",
-                pos=(pcb_x / 4, pin_y, 0.0),
+                pos=(Meters(pcb_x / 4), pin_y, Meters(0.0)),
                 bus_type=BusType.POWER,
                 connector_type="pin_header",
             ),
@@ -47,6 +48,6 @@ def BEC5V() -> Component:
             # Pololu D24V10F5 has no mounting holes — soldered via pin header
         ),
         default_material=MAT_PCB_DARK_GREEN,
-        voltage=5.0,
-        typical_current=0.01,
+        voltage=Volts(5.0),
+        typical_current=Amps(0.01),
     )

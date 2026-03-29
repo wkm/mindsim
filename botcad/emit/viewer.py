@@ -45,7 +45,7 @@ def _component_specs(comp) -> dict:
     specs: dict = {}
     specs["component_type"] = comp.kind.value
     if comp.kind == ComponentKind.CAMERA:
-        specs["fov_deg"] = comp.fov_deg
+        specs["fov_deg"] = comp.fov
         specs["resolution"] = list(comp.resolution)
     elif comp.kind == ComponentKind.BATTERY:
         specs["chemistry"] = comp.chemistry

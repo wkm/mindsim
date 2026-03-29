@@ -54,9 +54,14 @@ from botcad.geometry import (
 )
 from botcad.ids import BodyId, JointId
 from botcad.materials import PLA, Material
-from botcad.units import Meters, Radians
+from botcad.units import Kg, Meters, Position, Radians, Size3D
 
-Position = Literal["center", "bottom", "top", "front", "back", "left", "right"]
+_ZERO_M = Meters(0.0)
+_DEFAULT_PADDING = Meters(0.005)
+_ZERO_KG = Kg(0.0)
+_ZERO_POS: Position = (Meters(0.0), Meters(0.0), Meters(0.0))
+
+FacePosition = Literal["center", "bottom", "top", "front", "back", "left", "right"]
 
 # Face rotation table: position → (euler_deg, dims_reorder, point_transform).
 #   euler_deg:  rotation for build123d Location
@@ -82,7 +87,7 @@ class ClearanceConstraint:
 
     body_a: BodyId  # body name
     body_b: BodyId  # body name
-    min_distance: Meters = 0.0  # meters — minimum acceptable gap
+    min_distance: Meters = _ZERO_M  # meters — minimum acceptable gap
     label: str = ""  # human-readable description
 
 
@@ -166,7 +171,7 @@ class Mount:
 
     component: Component
     label: str
-    position: Position | Vec3  # heuristic position or explicit (x, y, z)
+    position: FacePosition | Vec3  # heuristic position or explicit (x, y, z)
     insertion_axis: Vec3 | None = (
         None  # explicit override, or None = derive from position
     )
@@ -308,16 +313,16 @@ class Joint:
         name: str,
         shape: BodyShape = BodyShape.BOX,
         *,
-        radius: Meters = 0.0,
-        width: Meters = 0.0,
-        height: Meters = 0.0,
-        length: Meters = 0.0,
-        outer_r: Meters = 0.0,
-        jaw_length: Meters = 0.0,
-        jaw_width: Meters = 0.0,
-        jaw_thickness: Meters = 0.0,
-        padding: Meters = 0.005,
-        dimensions: Vec3 | None = None,
+        radius: Meters = _ZERO_M,
+        width: Meters = _ZERO_M,
+        height: Meters = _ZERO_M,
+        length: Meters = _ZERO_M,
+        outer_r: Meters = _ZERO_M,
+        jaw_length: Meters = _ZERO_M,
+        jaw_width: Meters = _ZERO_M,
+        jaw_thickness: Meters = _ZERO_M,
+        padding: Meters = _DEFAULT_PADDING,
+        dimensions: Size3D | None = None,
         custom_solid: object | None = None,
         assembly: Assembly | None = None,
         module: Assembly | None = None,
@@ -365,16 +370,16 @@ class Body:
     name: BodyId
     shape: BodyShape = BodyShape.BOX
     kind: BodyKind = BodyKind.FABRICATED
-    radius: Meters = 0.0
-    width: Meters = 0.0
-    height: Meters = 0.0
-    length: Meters = 0.0
-    outer_r: Meters = 0.0
-    jaw_length: Meters = 0.0
-    jaw_width: Meters = 0.0
-    jaw_thickness: Meters = 0.0
-    padding: Meters = 0.005  # clearance around components (meters)
-    explicit_dimensions: Vec3 | None = None
+    radius: Meters = _ZERO_M
+    width: Meters = _ZERO_M
+    height: Meters = _ZERO_M
+    length: Meters = _ZERO_M
+    outer_r: Meters = _ZERO_M
+    jaw_length: Meters = _ZERO_M
+    jaw_width: Meters = _ZERO_M
+    jaw_thickness: Meters = _ZERO_M
+    padding: Meters = _DEFAULT_PADDING  # clearance around components (meters)
+    explicit_dimensions: Size3D | None = None
     custom_solid: object | None = None
     assembly: Assembly | None = None
 
@@ -382,9 +387,9 @@ class Body:
     joints: list[Joint] = field(default_factory=list)
 
     # Computed by packing solver
-    solved_dimensions: Vec3 | None = None
-    solved_mass: float = 0.0
-    solved_com: Vec3 = (0.0, 0.0, 0.0)
+    solved_dimensions: Size3D | None = None
+    solved_mass: Kg = _ZERO_KG
+    solved_com: Position = _ZERO_POS
     solved_inertia: tuple[float, float, float, float, float, float] = (
         0.0,
         0.0,
@@ -488,7 +493,7 @@ class Body:
     def mount(
         self,
         component: Component,
-        position: Position | Vec3 = "center",
+        position: FacePosition | Vec3 = "center",
         label: str = "",
         insertion_axis: Vec3 | None = None,
         rotation: MountRotation = MOUNT_NO_ROTATION,
@@ -587,7 +592,7 @@ class Bot:
         self,
         body_a: str | BodyId,
         body_b: str | BodyId,
-        min_distance: float = 0.0,
+        min_distance: Meters = _ZERO_M,
         label: str = "",
     ) -> None:
         """Declare an expected clearance between two bodies."""

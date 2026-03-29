@@ -22,6 +22,7 @@ from botcad.colors import (
     BP_GREEN3,
     BP_LIGHT_GRAY1,
 )
+from botcad.units import KgPerM3, Meters, Pascals, gpa, mm, mpa
 
 RGBA = tuple[float, float, float, float]
 
@@ -31,7 +32,7 @@ class PrintProcess:
     """FDM print parameters that determine effective mass."""
 
     wall_layers: int = 2
-    nozzle_width: float = 0.0004  # 0.4mm
+    nozzle_width: Meters = mm(0.4)
     infill: float = 0.20
 
 
@@ -50,10 +51,10 @@ class Material:
     roughness: float = 0.7
     opacity: float = 1.0
     # Physical
-    density: float | None = None  # kg/m^3; None for purchased materials
-    youngs_modulus: float = 2.3e9  # Pa (default PLA)
+    density: KgPerM3 | None = None  # kg/m^3; None for purchased materials
+    youngs_modulus: Pascals = gpa(2.3)  # Pa (default PLA)
     poisson_ratio: float = 0.35
-    yield_strength: float = 40e6  # Pa
+    yield_strength: Pascals = mpa(40)  # Pa
     process: PrintProcess | None = None  # FDM params; None for purchased
 
     @property
@@ -83,20 +84,20 @@ PLA = Material(
     "PLA",
     color=(*BP_LIGHT_GRAY1, 1.0),
     roughness=0.8,
-    density=1200.0,
-    youngs_modulus=2.3e9,
+    density=KgPerM3(1200.0),
+    youngs_modulus=gpa(2.3),
     poisson_ratio=0.35,
-    yield_strength=40e6,
+    yield_strength=mpa(40),
     process=PrintProcess(),
 )
 TPU = Material(
     "TPU",
     color=(*BP_DARK_GRAY3, 1.0),
     roughness=0.9,
-    density=1120.0,
-    youngs_modulus=0.1e9,
+    density=KgPerM3(1120.0),
+    youngs_modulus=gpa(0.1),
     poisson_ratio=0.45,
-    yield_strength=15e6,
+    yield_strength=mpa(15),
     process=PrintProcess(infill=0.15),
 )
 ALUMINUM = Material(
@@ -104,10 +105,10 @@ ALUMINUM = Material(
     color=(*BP_GRAY4, 1.0),
     metallic=0.9,
     roughness=0.3,
-    density=2700.0,
-    youngs_modulus=70e9,
+    density=KgPerM3(2700.0),
+    youngs_modulus=gpa(70),
     poisson_ratio=0.33,
-    yield_strength=270e6,
+    yield_strength=mpa(270),
 )
 
 # ── Material catalog: purchased component materials ──
@@ -165,7 +166,7 @@ MAT_STEEL = Material(
     color=(*BP_GRAY4, 1.0),
     metallic=0.9,
     roughness=0.35,
-    density=7800.0,
+    density=KgPerM3(7800.0),
 )
 
 # Aluminum — servo horns, brackets (same as ALUMINUM)
