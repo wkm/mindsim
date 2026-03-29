@@ -41,21 +41,24 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 | Part | STL File | Shape | Dimensions (mm) |
 |------|----------|-------|-----------------|
-| fuselage | `meshes/fuselage.stl` | box | 60.0 x 500.0 x 50.0 |
-| left_wing | `meshes/left_wing.stl` | box | 380.0 x 150.0 x 15.0 |
-| left_aileron_surface | `meshes/left_aileron_surface.stl` | box | 180.0 x 40.0 x 8.0 |
-| right_wing | `meshes/right_wing.stl` | box | 380.0 x 150.0 x 15.0 |
-| right_aileron_surface | `meshes/right_aileron_surface.stl` | box | 180.0 x 40.0 x 8.0 |
-| tail_boom | `meshes/tail_boom.stl` | tube | 24.0 x 24.0 x 250.0 |
-| horizontal_stab | `meshes/horizontal_stab.stl` | box | 250.0 x 80.0 x 8.0 |
-| elevator_surface | `meshes/elevator_surface.stl` | box | 250.0 x 30.0 x 8.0 |
-| vertical_fin | `meshes/vertical_fin.stl` | box | 8.0 x 80.0 x 100.0 |
-| rudder_surface | `meshes/rudder_surface.stl` | box | 8.0 x 30.0 x 100.0 |
+| fuselage | `meshes/fuselage.stl` | box | 50.0 x 400.0 x 45.0 |
+| firewall | `meshes/firewall.stl` | box | 40.0 x 5.0 x 40.0 |
+| left_wing | `meshes/left_wing.stl` | box | 470.0 x 140.0 x 6.0 |
+| left_aileron_surface | `meshes/left_aileron_surface.stl` | box | 220.0 x 35.0 x 5.0 |
+| right_wing | `meshes/right_wing.stl` | box | 470.0 x 140.0 x 6.0 |
+| right_aileron_surface | `meshes/right_aileron_surface.stl` | box | 220.0 x 35.0 x 5.0 |
+| tail_boom | `meshes/tail_boom.stl` | tube | 20.0 x 20.0 x 250.0 |
+| horizontal_stab | `meshes/horizontal_stab.stl` | box | 220.0 x 70.0 x 6.0 |
+| elevator_surface | `meshes/elevator_surface.stl` | box | 220.0 x 25.0 x 5.0 |
+| vertical_fin | `meshes/vertical_fin.stl` | box | 6.0 x 70.0 x 90.0 |
+| rudder_surface | `meshes/rudder_surface.stl` | box | 6.0 x 25.0 x 90.0 |
+| main_gear | `meshes/main_gear.stl` | box | 200.0 x 5.0 x 60.0 |
+| nose_skid | `meshes/nose_skid.stl` | box | 15.0 x 30.0 x 15.0 |
 | comp_fuselage_fc | `meshes/comp_fuselage_fc.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_fuselage_battery | `meshes/comp_fuselage_battery.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_fuselage_esc | `meshes/comp_fuselage_esc.stl` | box | 50.0 x 50.0 x 50.0 |
-| comp_fuselage_motor | `meshes/comp_fuselage_motor.stl` | box | 50.0 x 50.0 x 50.0 |
-| comp_fuselage_prop | `meshes/comp_fuselage_prop.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_firewall_motor | `meshes/comp_firewall_motor.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_firewall_prop | `meshes/comp_firewall_prop.stl` | box | 50.0 x 50.0 x 50.0 |
 | servo_left_aileron | `meshes/servo_left_aileron.stl` | box | 50.0 x 50.0 x 50.0 |
 | horn_left_aileron | `meshes/horn_left_aileron.stl` | box | 50.0 x 50.0 x 50.0 |
 | servo_right_aileron | `meshes/servo_right_aileron.stl` | box | 50.0 x 50.0 x 50.0 |
@@ -69,48 +72,56 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–4 as listed above.
 
-2. **Print structural parts** — Print all 23 body shells from the STL files listed above.
+2. **Print structural parts** — Print all 26 body shells from the STL files listed above.
 
 3. **Assemble base** (`fuselage`):
    - Mount MatekF405Wing (fc) at top position using 4x screw
    - Mount LiPo3S-1300 (battery) at center position
    - Mount ESC-30A (esc) at bottom position
+
+4. **Attach firewall** to fuselage (rigid attachment `firewall_attach`):
    - Mount MT2213 (motor) at front position
    - Mount Propeller-9x4.5 (prop) at front position
 
-4. **Attach left_wing** to fuselage (rigid attachment `left_wing_attach`):
+5. **Attach left_wing** to fuselage (rigid attachment `left_wing_attach`):
    - Structural body (box)
 
-5. **Attach left_aileron_surface** to left_wing via SCS0009 at joint `left_aileron` (axis: roll):
+6. **Attach left_aileron_surface** to left_wing via SCS0009 at joint `left_aileron` (axis: roll):
    - Screw servo into left_wing bracket using 2x M2 screws through mounting ears
    - Attach left_aileron_surface coupler to servo horn using 4x M2 screws
 
-6. **Attach right_wing** to fuselage (rigid attachment `right_wing_attach`):
+7. **Attach right_wing** to fuselage (rigid attachment `right_wing_attach`):
    - Structural body (box)
 
-7. **Attach right_aileron_surface** to right_wing via SCS0009 at joint `right_aileron` (axis: roll):
+8. **Attach right_aileron_surface** to right_wing via SCS0009 at joint `right_aileron` (axis: roll):
    - Screw servo into right_wing bracket using 2x M2 screws through mounting ears
    - Attach right_aileron_surface coupler to servo horn using 4x M2 screws
 
-8. **Attach tail_boom** to fuselage (rigid attachment `tail_boom_attach`):
+9. **Attach tail_boom** to fuselage (rigid attachment `tail_boom_attach`):
    - Structural body (tube)
 
-9. **Attach horizontal_stab** to tail_boom (rigid attachment `h_stab_attach`):
+10. **Attach horizontal_stab** to tail_boom (rigid attachment `h_stab_attach`):
    - Structural body (box)
 
-10. **Attach elevator_surface** to horizontal_stab via SCS0009 at joint `elevator` (axis: roll):
+11. **Attach elevator_surface** to horizontal_stab via SCS0009 at joint `elevator` (axis: roll):
    - Screw servo into horizontal_stab bracket using 2x M2 screws through mounting ears
    - Attach elevator_surface coupler to servo horn using 4x M2 screws
 
-11. **Attach vertical_fin** to tail_boom (rigid attachment `v_fin_attach`):
+12. **Attach vertical_fin** to tail_boom (rigid attachment `v_fin_attach`):
    - Structural body (box)
 
-12. **Attach rudder_surface** to vertical_fin via SCS0009 at joint `rudder` (axis: vertical):
+13. **Attach rudder_surface** to vertical_fin via SCS0009 at joint `rudder` (axis: vertical):
    - Screw servo into vertical_fin bracket using 2x M2 screws through mounting ears
    - Attach rudder_surface coupler to servo horn using 4x M2 screws
 
-13. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
+14. **Attach main_gear** to fuselage (rigid attachment `main_gear_attach`):
+   - Structural body (box)
 
-14. **Connect power** — Connect power supply to servo bus.
+15. **Attach nose_skid** to fuselage (rigid attachment `nose_skid_attach`):
+   - Structural body (box)
 
-15. **Test** — Power on and verify all servo IDs respond. 
+16. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
+
+17. **Connect power** — Connect power supply to servo bus.
+
+18. **Test** — Power on and verify all servo IDs respond. 

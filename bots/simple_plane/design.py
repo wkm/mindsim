@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Simple Plane — RC trainer-style fixed-wing aircraft (~820mm wingspan).
+"""Simple Plane — RC trainer-style fixed-wing aircraft (~1000mm wingspan).
 
 A 3D-printable fixed-wing RC plane with real components:
-- 1x MT2213 935KV brushless motor (nose-mounted, tractor config)
+- 1x MT2213 935KV brushless motor (nose firewall-mounted, tractor config)
 - 1x 9x4.5 propeller
 - 1x 30A ESC
 - 4x SCS0009 micro servos (2 ailerons, 1 elevator, 1 rudder)
@@ -10,12 +10,16 @@ A 3D-printable fixed-wing RC plane with real components:
 - 1x LiPo 3S 1300mAh battery
 
 Structure (high-wing, conventional tail):
-- Fuselage: 60mm W × 500mm L × 50mm H box
-- Wings: 380mm span each (820mm total effective), 150mm chord, 15mm thick
+- Fuselage: 50mm W × 400mm L × 45mm H box (PLA_LIGHT)
+- Motor firewall: 40mm × 5mm × 40mm plate at nose (PLA for strength)
+- Wings: 470mm span each (1000mm total effective), 140mm chord, 6mm thick
 - Tail boom: 250mm tube connecting fuselage to empennage
-- Horizontal stabilizer: 250mm span × 80mm chord
-- Vertical fin: 80mm chord × 100mm tall
+- Horizontal stabilizer: 220mm span × 70mm chord
+- Vertical fin: 70mm chord × 90mm tall
 - 4 hinged control surfaces: ailerons, elevator, rudder
+- Landing gear: main gear plate + nose skid
+
+Target AUW: ~600-700g (components ~263g, structure ~340g max)
 
 Run this script to generate all outputs:
     python bots/simple_plane/design.py
@@ -31,6 +35,7 @@ from botcad.components import (
     Propeller9x45,
     SimonK30A,
 )
+from botcad.materials import PLA, PLA_LIGHT
 from botcad.skeleton import BodyShape, Bot, BracketStyle
 
 
@@ -44,29 +49,43 @@ def build() -> Bot:
     fuselage = bot.body(
         "fuselage",
         shape=BodyShape.BOX,
-        dimensions=(0.060, 0.500, 0.050),  # 60mm W × 500mm L × 50mm H
+        dimensions=(0.050, 0.400, 0.045),  # 50mm W × 400mm L × 45mm H
         padding=0.005,
     )
+    fuselage.set_material(PLA_LIGHT)
 
     # Electronics inside fuselage — CG near wing quarter-chord
     fuselage.mount(MatekF405Wing(), position="top", label="fc")
     fuselage.mount(LiPo3S(1300), position="center", label="battery")
     fuselage.mount(SimonK30A(), position="bottom", label="esc")
-    fuselage.mount(MT2213(), position="front", label="motor")
-    fuselage.mount(Propeller9x45(), position="front", label="prop")
+
+    # ── Motor mount (firewall) ──────────────────────────────────────
+    # Thin firewall plate at nose of fuselage for motor + prop.
+    firewall_att = fuselage.attach(
+        "firewall_attach",
+        pos=(0.0, 0.200, 0.0),  # front of fuselage (Y+)
+    )
+    firewall = firewall_att.body(
+        "firewall",
+        shape=BodyShape.BOX,
+        dimensions=(0.040, 0.005, 0.040),  # 40mm W × 5mm L × 40mm H
+    )
+    firewall.set_material(PLA)  # standard PLA for strength at motor mount
+    firewall.mount(MT2213(), position="front", label="motor")
+    firewall.mount(Propeller9x45(), position="front", label="prop")
 
     # ── Left wing (rigid attachment) ────────────────────────────────
-    # High-wing config: attaches to top of fuselage, slightly ahead of CG.
-    # Wing root is at fuselage edge (x=±30mm), extends outboard 380mm.
+    # High-wing config: thin flat-plate wing, 470mm span × 140mm chord × 6mm
     left_wing_att = fuselage.attach(
         "left_wing_attach",
-        pos=(-0.220, 0.050, 0.025),  # outboard left, slightly forward, top
+        pos=(-0.270, 0.050, 0.022),  # outboard left, slightly forward, top
     )
     left_wing = left_wing_att.body(
         "left_wing",
         shape=BodyShape.BOX,
-        dimensions=(0.380, 0.150, 0.015),  # 380mm span × 150mm chord × 15mm
+        dimensions=(0.470, 0.140, 0.006),  # 470mm span × 140mm chord × 6mm
     )
+    left_wing.set_material(PLA_LIGHT)
 
     # Left aileron — hinged at trailing edge of left wing
     left_aileron_joint = left_wing.joint(
@@ -77,22 +96,24 @@ def build() -> Bot:
         range=(-0.35, 0.35),  # ~±20 degrees
         bracket_style=BracketStyle.COUPLER,
     )
-    left_aileron_joint.body(
+    left_aileron_body = left_aileron_joint.body(
         "left_aileron_surface",
         shape=BodyShape.BOX,
-        dimensions=(0.180, 0.040, 0.008),
+        dimensions=(0.220, 0.035, 0.005),
     )
+    left_aileron_body.set_material(PLA_LIGHT)
 
     # ── Right wing (rigid attachment) ───────────────────────────────
     right_wing_att = fuselage.attach(
         "right_wing_attach",
-        pos=(0.220, 0.050, 0.025),  # outboard right, slightly forward, top
+        pos=(0.270, 0.050, 0.022),  # outboard right, slightly forward, top
     )
     right_wing = right_wing_att.body(
         "right_wing",
         shape=BodyShape.BOX,
-        dimensions=(0.380, 0.150, 0.015),
+        dimensions=(0.470, 0.140, 0.006),
     )
+    right_wing.set_material(PLA_LIGHT)
 
     # Right aileron
     right_aileron_joint = right_wing.joint(
@@ -103,24 +124,26 @@ def build() -> Bot:
         range=(-0.35, 0.35),
         bracket_style=BracketStyle.COUPLER,
     )
-    right_aileron_joint.body(
+    right_aileron_body = right_aileron_joint.body(
         "right_aileron_surface",
         shape=BodyShape.BOX,
-        dimensions=(0.180, 0.040, 0.008),
+        dimensions=(0.220, 0.035, 0.005),
     )
+    right_aileron_body.set_material(PLA_LIGHT)
 
     # ── Tail boom (rigid attachment) ────────────────────────────────
     # Tube from rear of fuselage to tail section.
     tail_boom_att = fuselage.attach(
         "tail_boom_attach",
-        pos=(0.0, -0.375, 0.0),  # rear of fuselage
+        pos=(0.0, -0.300, 0.0),  # rear of fuselage (Y-)
     )
     tail_boom = tail_boom_att.body(
         "tail_boom",
         shape=BodyShape.TUBE,
         length=0.250,  # 250mm long
-        outer_r=0.012,  # 12mm outer radius
+        outer_r=0.010,  # 10mm outer radius
     )
+    tail_boom.set_material(PLA_LIGHT)
 
     # ── Horizontal stabilizer (rigid, at end of tail boom) ─────────
     # TUBE shape has Z as the length axis, so "end of tube" = +Z
@@ -131,8 +154,9 @@ def build() -> Bot:
     h_stab = h_stab_att.body(
         "horizontal_stab",
         shape=BodyShape.BOX,
-        dimensions=(0.250, 0.080, 0.008),  # 250mm span × 80mm chord × 8mm
+        dimensions=(0.220, 0.070, 0.006),  # 220mm span × 70mm chord × 6mm
     )
+    h_stab.set_material(PLA_LIGHT)
 
     # Elevator — hinged at trailing edge of horizontal stabilizer
     elevator_joint = h_stab.joint(
@@ -143,11 +167,12 @@ def build() -> Bot:
         range=(-0.52, 0.52),  # ~±30 degrees
         bracket_style=BracketStyle.COUPLER,
     )
-    elevator_joint.body(
+    elevator_body = elevator_joint.body(
         "elevator_surface",
         shape=BodyShape.BOX,
-        dimensions=(0.250, 0.030, 0.008),
+        dimensions=(0.220, 0.025, 0.005),
     )
+    elevator_body.set_material(PLA_LIGHT)
 
     # ── Vertical fin (rigid, at end of tail boom) ──────────────────
     v_fin_att = tail_boom.attach(
@@ -157,8 +182,9 @@ def build() -> Bot:
     v_fin = v_fin_att.body(
         "vertical_fin",
         shape=BodyShape.BOX,
-        dimensions=(0.008, 0.080, 0.100),  # 8mm × 80mm chord × 100mm tall
+        dimensions=(0.006, 0.070, 0.090),  # 6mm × 70mm chord × 90mm tall
     )
+    v_fin.set_material(PLA_LIGHT)
 
     # Rudder — hinged at trailing edge of vertical fin
     rudder_joint = v_fin.joint(
@@ -169,11 +195,37 @@ def build() -> Bot:
         range=(-0.52, 0.52),
         bracket_style=BracketStyle.COUPLER,
     )
-    rudder_joint.body(
+    rudder_body = rudder_joint.body(
         "rudder_surface",
         shape=BodyShape.BOX,
-        dimensions=(0.008, 0.030, 0.100),
+        dimensions=(0.006, 0.025, 0.090),
     )
+    rudder_body.set_material(PLA_LIGHT)
+
+    # ── Landing gear ───────────────────────────────────────────────
+    # Main gear: simple plate under fuselage, just behind wing quarter-chord
+    main_gear_att = fuselage.attach(
+        "main_gear_attach",
+        pos=(0.0, 0.030, -0.022),  # under fuselage, behind wing
+    )
+    main_gear = main_gear_att.body(
+        "main_gear",
+        shape=BodyShape.BOX,
+        dimensions=(0.200, 0.005, 0.060),  # 200mm W × 5mm L × 60mm H
+    )
+    main_gear.set_material(PLA)  # standard PLA for strength
+
+    # Nose skid: small block under nose
+    nose_skid_att = fuselage.attach(
+        "nose_skid_attach",
+        pos=(0.0, 0.180, -0.022),  # under nose
+    )
+    nose_skid = nose_skid_att.body(
+        "nose_skid",
+        shape=BodyShape.BOX,
+        dimensions=(0.015, 0.030, 0.015),  # 15mm W × 30mm L × 15mm H
+    )
+    nose_skid.set_material(PLA)  # standard PLA for strength
 
     return bot
 

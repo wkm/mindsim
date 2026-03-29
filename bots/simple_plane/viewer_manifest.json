@@ -9,11 +9,11 @@
       "parent": null,
       "shape": "box",
       "dimensions": [
-        0.06,
-        0.5,
-        0.05
+        0.05,
+        0.4,
+        0.045
       ],
-      "mass": 0.634,
+      "mass": 0.2818,
       "pos": [
         0.0,
         0.0,
@@ -26,9 +26,9 @@
         0.0
       ],
       "color": [
-        0.0588,
-        0.6,
-        0.3765,
+        0.8078,
+        0.851,
+        0.8784,
         1.0
       ],
       "mounts": [
@@ -67,7 +67,39 @@
           ],
           "mass": 0.025,
           "component_type": "generic"
-        },
+        }
+      ]
+    },
+    {
+      "name": "firewall",
+      "mesh": "firewall.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.04,
+        0.005,
+        0.04
+      ],
+      "mass": 0.0689,
+      "pos": [
+        0.0,
+        0.2,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
+      "mounts": [
         {
           "label": "motor",
           "component_name": "MT2213",
@@ -99,15 +131,15 @@
       "parent": "fuselage",
       "shape": "box",
       "dimensions": [
-        0.38,
-        0.15,
-        0.015
+        0.47,
+        0.14,
+        0.006
       ],
-      "mass": 0.3185,
+      "mass": 0.1216,
       "pos": [
-        -0.22,
+        -0.27,
         0.05,
-        0.025
+        0.022
       ],
       "quat": [
         1.0,
@@ -129,15 +161,15 @@
       "parent": "left_wing",
       "shape": "box",
       "dimensions": [
-        0.18,
-        0.04,
-        0.008
+        0.22,
+        0.035,
+        0.005
       ],
-      "mass": 0.0276,
+      "mass": 0.0124,
       "pos": [
-        -0.22,
+        -0.27,
         -0.005,
-        0.025
+        0.022
       ],
       "quat": [
         1.0,
@@ -160,15 +192,15 @@
       "parent": "fuselage",
       "shape": "box",
       "dimensions": [
-        0.38,
-        0.15,
-        0.015
+        0.47,
+        0.14,
+        0.006
       ],
-      "mass": 0.3185,
+      "mass": 0.1216,
       "pos": [
-        0.22,
+        0.27,
         0.05,
-        0.025
+        0.022
       ],
       "quat": [
         1.0,
@@ -190,15 +222,15 @@
       "parent": "right_wing",
       "shape": "box",
       "dimensions": [
-        0.18,
-        0.04,
-        0.008
-      ],
-      "mass": 0.0276,
-      "pos": [
         0.22,
+        0.035,
+        0.005
+      ],
+      "mass": 0.0124,
+      "pos": [
+        0.27,
         -0.005,
-        0.025
+        0.022
       ],
       "quat": [
         1.0,
@@ -221,14 +253,14 @@
       "parent": "fuselage",
       "shape": "tube",
       "dimensions": [
-        0.024,
-        0.024,
+        0.02,
+        0.02,
         0.25
       ],
-      "mass": 0.0423,
+      "mass": 0.0165,
       "pos": [
         0.0,
-        -0.375,
+        -0.3,
         0.0
       ],
       "quat": [
@@ -238,9 +270,9 @@
         0.0
       ],
       "color": [
-        0.749,
-        0.8,
-        0.8392,
+        0.8078,
+        0.851,
+        0.8784,
         1.0
       ]
     },
@@ -251,14 +283,14 @@
       "parent": "tail_boom",
       "shape": "box",
       "dimensions": [
-        0.25,
-        0.08,
-        0.008
+        0.22,
+        0.07,
+        0.006
       ],
-      "mass": 0.0877,
+      "mass": 0.0401,
       "pos": [
         0.0,
-        -0.375,
+        -0.3,
         0.25
       ],
       "quat": [
@@ -281,14 +313,14 @@
       "parent": "horizontal_stab",
       "shape": "box",
       "dimensions": [
-        0.25,
-        0.03,
-        0.008
+        0.22,
+        0.025,
+        0.005
       ],
-      "mass": 0.0294,
+      "mass": 0.0091,
       "pos": [
         0.0,
-        -0.4,
+        -0.325,
         0.25
       ],
       "quat": [
@@ -312,14 +344,14 @@
       "parent": "tail_boom",
       "shape": "box",
       "dimensions": [
-        0.008,
-        0.08,
-        0.1
+        0.006,
+        0.07,
+        0.09
       ],
-      "mass": 0.0339,
+      "mass": 0.0217,
       "pos": [
         0.0,
-        -0.375,
+        -0.3,
         0.25
       ],
       "quat": [
@@ -342,14 +374,14 @@
       "parent": "vertical_fin",
       "shape": "box",
       "dimensions": [
-        0.008,
-        0.03,
-        0.1
+        0.006,
+        0.025,
+        0.09
       ],
-      "mass": 0.012,
+      "mass": 0.0042,
       "pos": [
         0.0,
-        -0.4,
+        -0.325,
         0.25
       ],
       "quat": [
@@ -367,6 +399,66 @@
       "joint": "rudder"
     },
     {
+      "name": "main_gear",
+      "mesh": "main_gear.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.2,
+        0.005,
+        0.06
+      ],
+      "mass": 0.0348,
+      "pos": [
+        0.0,
+        0.03,
+        -0.022
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
+      "name": "nose_skid",
+      "mesh": "nose_skid.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.015,
+        0.03,
+        0.015
+      ],
+      "mass": 0.0033,
+      "pos": [
+        0.0,
+        0.18,
+        -0.022
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
       "name": "servo_left_aileron",
       "mesh": "servo_SCS0009.stl",
       "role": "component",
@@ -375,9 +467,9 @@
       "category": "servo",
       "joint": "left_aileron",
       "pos": [
-        -0.23125,
+        -0.28125,
         -0.005,
-        0.0308
+        0.0278
       ],
       "quat": [
         0.707107,
@@ -403,9 +495,9 @@
       "category": "horn",
       "joint": "left_aileron",
       "pos": [
-        -0.217,
+        -0.267,
         -0.005,
-        0.025
+        0.022
       ],
       "quat": [
         0.707107,
@@ -430,9 +522,9 @@
       "category": "servo",
       "joint": "right_aileron",
       "pos": [
-        0.20875,
+        0.25875,
         -0.005,
-        0.0308
+        0.0278
       ],
       "quat": [
         0.707107,
@@ -458,9 +550,9 @@
       "category": "horn",
       "joint": "right_aileron",
       "pos": [
-        0.223,
+        0.273,
         -0.005,
-        0.025
+        0.022
       ],
       "quat": [
         0.707107,
@@ -486,7 +578,7 @@
       "joint": "elevator",
       "pos": [
         -0.01125,
-        -0.4,
+        -0.325,
         0.2558
       ],
       "quat": [
@@ -514,7 +606,7 @@
       "joint": "elevator",
       "pos": [
         0.003,
-        -0.4,
+        -0.325,
         0.25
       ],
       "quat": [
@@ -541,7 +633,7 @@
       "joint": "rudder",
       "pos": [
         -0.0058,
-        -0.4,
+        -0.325,
         0.23875
       ],
       "quat": [
@@ -569,7 +661,7 @@
       "joint": "rudder",
       "pos": [
         0.0,
-        -0.4,
+        -0.325,
         0.253
       ],
       "quat": [
@@ -815,7 +907,7 @@
       "pos": [
         0.0,
         0.0,
-        0.021
+        0.0185
       ],
       "quat": [
         1.0,
@@ -867,7 +959,7 @@
       "pos": [
         0.0,
         0.0,
-        -0.0195
+        -0.017
       ],
       "quat": [
         1.0,
@@ -885,14 +977,14 @@
       "shapescript_component": "ESC-30A"
     },
     {
-      "body": "fuselage",
+      "body": "firewall",
       "label": "motor",
       "component": "MT2213",
       "category": "motor",
-      "mesh": "comp_fuselage_motor.stl",
+      "mesh": "comp_firewall_motor.stl",
       "pos": [
         0.0,
-        0.231,
+        0.1835,
         0.0
       ],
       "quat": [
@@ -911,14 +1003,14 @@
       "shapescript_component": "MT2213"
     },
     {
-      "body": "fuselage",
+      "body": "firewall",
       "label": "prop",
       "component": "Propeller-9x4.5",
       "category": "propeller",
-      "mesh": "comp_fuselage_prop.stl",
+      "mesh": "comp_firewall_prop.stl",
       "pos": [
         0.0,
-        0.1357,
+        0.0882,
         0.0
       ],
       "quat": [
@@ -946,9 +1038,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.22775,
+        -0.27775,
         -0.005,
-        0.0168
+        0.0138
       ],
       "quat": [
         0.707107,
@@ -968,9 +1060,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.22775,
+        -0.27775,
         -0.005,
-        0.0448
+        0.0418
       ],
       "quat": [
         0.707107,
@@ -990,9 +1082,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.218,
+        -0.268,
         -0.001,
-        0.021
+        0.018
       ],
       "quat": [
         0.707107,
@@ -1012,9 +1104,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.218,
+        -0.268,
         -0.009,
-        0.021
+        0.018
       ],
       "quat": [
         0.707107,
@@ -1034,9 +1126,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.218,
+        -0.268,
         -0.001,
-        0.029
+        0.026
       ],
       "quat": [
         0.707107,
@@ -1056,9 +1148,9 @@
       "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.218,
+        -0.268,
         -0.009,
-        0.029
+        0.026
       ],
       "quat": [
         0.707107,
@@ -1078,9 +1170,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.21225,
+        0.26225,
         -0.005,
-        0.0168
+        0.0138
       ],
       "quat": [
         0.707107,
@@ -1100,9 +1192,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.21225,
+        0.26225,
         -0.005,
-        0.0448
+        0.0418
       ],
       "quat": [
         0.707107,
@@ -1122,9 +1214,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.222,
+        0.272,
         -0.001,
-        0.021
+        0.018
       ],
       "quat": [
         0.707107,
@@ -1144,9 +1236,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.222,
+        0.272,
         -0.009,
-        0.021
+        0.018
       ],
       "quat": [
         0.707107,
@@ -1166,9 +1258,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.222,
+        0.272,
         -0.001,
-        0.029
+        0.026
       ],
       "quat": [
         0.707107,
@@ -1188,9 +1280,9 @@
       "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.222,
+        0.272,
         -0.009,
-        0.029
+        0.026
       ],
       "quat": [
         0.707107,
@@ -1211,7 +1303,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.00775,
-        -0.4,
+        -0.325,
         0.2418
       ],
       "quat": [
@@ -1233,7 +1325,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.00775,
-        -0.4,
+        -0.325,
         0.2698
       ],
       "quat": [
@@ -1255,7 +1347,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.396,
+        -0.321,
         0.246
       ],
       "quat": [
@@ -1277,7 +1369,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.404,
+        -0.329,
         0.246
       ],
       "quat": [
@@ -1299,7 +1391,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.396,
+        -0.321,
         0.254
       ],
       "quat": [
@@ -1321,7 +1413,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.404,
+        -0.329,
         0.254
       ],
       "quat": [
@@ -1343,7 +1435,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0082,
-        -0.4,
+        -0.325,
         0.24225
       ],
       "quat": [
@@ -1365,7 +1457,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0198,
-        -0.4,
+        -0.325,
         0.24225
       ],
       "quat": [
@@ -1387,7 +1479,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.004,
-        -0.396,
+        -0.321,
         0.252
       ],
       "quat": [
@@ -1409,7 +1501,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.004,
-        -0.404,
+        -0.329,
         0.252
       ],
       "quat": [
@@ -1431,7 +1523,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.004,
-        -0.396,
+        -0.321,
         0.252
       ],
       "quat": [
@@ -1453,7 +1545,7 @@
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.004,
-        -0.404,
+        -0.329,
         0.252
       ],
       "quat": [
@@ -1476,7 +1568,7 @@
       "pos": [
         0.01525,
         0.01525,
-        0.021
+        0.0185
       ],
       "quat": [
         0.0,
@@ -1498,7 +1590,7 @@
       "pos": [
         0.01525,
         -0.01525,
-        0.021
+        0.0185
       ],
       "quat": [
         0.0,
@@ -1520,7 +1612,7 @@
       "pos": [
         -0.01525,
         0.01525,
-        0.021
+        0.0185
       ],
       "quat": [
         0.0,
@@ -1542,7 +1634,7 @@
       "pos": [
         -0.01525,
         -0.01525,
-        0.021
+        0.0185
       ],
       "quat": [
         0.0,
@@ -1565,7 +1657,7 @@
       "pos": [
         0.0225,
         0.0,
-        -0.032
+        -0.0295
       ],
       "quat": [
         0.0,
@@ -1600,7 +1692,15 @@
         {
           "label": "esc",
           "component": "ESC-30A"
-        },
+        }
+      ],
+      "description": "Base structure \u2014 mount fc, battery, esc"
+    },
+    {
+      "step": 2,
+      "title": "firewall",
+      "body": "firewall",
+      "components": [
         {
           "label": "motor",
           "component": "MT2213"
@@ -1610,16 +1710,16 @@
           "component": "Propeller-9x4.5"
         }
       ],
-      "description": "Base structure \u2014 mount fc, battery, esc, motor, prop"
+      "description": "Base structure \u2014 mount motor, prop"
     },
     {
-      "step": 2,
+      "step": 3,
       "title": "left_wing",
       "body": "left_wing",
       "description": "Base structure"
     },
     {
-      "step": 3,
+      "step": 4,
       "title": "left_aileron_surface",
       "body": "left_aileron_surface",
       "servo": {
@@ -1629,13 +1729,13 @@
       "description": "Attach via SCS0009 at joint left_aileron"
     },
     {
-      "step": 4,
+      "step": 5,
       "title": "right_wing",
       "body": "right_wing",
       "description": "Base structure"
     },
     {
-      "step": 5,
+      "step": 6,
       "title": "right_aileron_surface",
       "body": "right_aileron_surface",
       "servo": {
@@ -1645,19 +1745,19 @@
       "description": "Attach via SCS0009 at joint right_aileron"
     },
     {
-      "step": 6,
+      "step": 7,
       "title": "tail_boom",
       "body": "tail_boom",
       "description": "Base structure"
     },
     {
-      "step": 7,
+      "step": 8,
       "title": "horizontal_stab",
       "body": "horizontal_stab",
       "description": "Base structure"
     },
     {
-      "step": 8,
+      "step": 9,
       "title": "elevator_surface",
       "body": "elevator_surface",
       "servo": {
@@ -1667,13 +1767,13 @@
       "description": "Attach via SCS0009 at joint elevator"
     },
     {
-      "step": 9,
+      "step": 10,
       "title": "vertical_fin",
       "body": "vertical_fin",
       "description": "Base structure"
     },
     {
-      "step": 10,
+      "step": 11,
       "title": "rudder_surface",
       "body": "rudder_surface",
       "servo": {
@@ -1681,6 +1781,18 @@
         "model": "SCS0009"
       },
       "description": "Attach via SCS0009 at joint rudder"
+    },
+    {
+      "step": 12,
+      "title": "main_gear",
+      "body": "main_gear",
+      "description": "Base structure"
+    },
+    {
+      "step": 13,
+      "title": "nose_skid",
+      "body": "nose_skid",
+      "description": "Base structure"
     }
   ],
   "ik_chains": [],

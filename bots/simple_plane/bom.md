@@ -12,8 +12,8 @@
 | ESC-30A | 1 | 45.0 x 24.0 x 11.0 | 25 | esc |
 | MT2213 | 1 | 27.9 x 27.9 x 38.0 | 56 | motor |
 | Propeller-9x4.5 | 1 | 228.6 x 228.6 x 8.0 | 10 | prop |
-| Structural (printed) | — | — | 1268 | PLA/PETG frame |
-| **Total** | | | **1531** | |
+| Structural (printed) | — | — | 485 | PLA/PETG frame |
+| **Total** | | | **748** | |
 
 ## Power Budget
 
