@@ -11,6 +11,7 @@ import { FocusController } from './focus-controller.ts';
 import { SemanticViz } from './semantic-viz.ts';
 import type { ViewerContext } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
+import { clearViewState, updateViewState } from './view-state.ts';
 
 /**
  * Find all descendant body IDs for a given body name by walking the
@@ -154,7 +155,14 @@ export class ExploreMode {
     this.focusedNodeId = nodeId;
     this.focusedData = nodeData;
 
-    const [type] = nodeId.split(':');
+    const [type, ...rest] = nodeId.split(':');
+
+    // Update URL with the selected body name
+    if (type === 'body') {
+      updateViewState({ select: rest[0] });
+    } else {
+      updateViewState({ select: nodeId });
+    }
 
     // Camera + ghost dimming
     this._applyIsolation(nodeId, nodeData);
@@ -375,6 +383,7 @@ export class ExploreMode {
     this.focusedData = null;
     if (this.tree) this.tree.clearFocus();
     this._syncTreeVisualState();
+    clearViewState('select');
   }
 
   _showWelcomeProperties() {
@@ -749,11 +758,13 @@ export class ExploreMode {
         const nodeId = `body:${bodyName}`;
         if (this.tree) this.tree.setFocused(nodeId);
         this.onNodeClick(nodeId, bodyData);
+        updateViewState({ select: bodyName });
       }
     } else {
       // Click on empty space — deselect
       this.unfocus();
       this._showWelcomeProperties();
+      clearViewState('select');
     }
   }
 

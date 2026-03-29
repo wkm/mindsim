@@ -78,7 +78,7 @@
       <geom name="wire_power_base_0" type="mesh" mesh="wire_power_base_0_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <geom name="wire_power_base_1" type="mesh" mesh="wire_power_base_1_mesh" pos="0 0 0" rgba="0.8588 0.2157 0.2157 0.9000" contype="0" conaffinity="0" group="2"/>
       <body name="turntable" pos="0.000000 0.000000 0.031000">
-        <inertial pos="-0.010152 -0.000000 0.018139" mass="0.089313" fullinertia="5.092733e-05 6.790389e-05 3.192168e-05 1.743940e-22 8.305743e-06 -9.786294e-22"/>
+        <inertial pos="-0.010152 -0.000000 0.018139" mass="0.089313" fullinertia="5.092733e-05 6.790389e-05 3.192168e-05 -2.464183e-22 8.305743e-06 3.000904e-23"/>
         <joint name="shoulder_pan" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-1.9200 1.9200"/>
         <geom name="shoulder_pan_horn_disc" type="mesh" mesh="horn_shoulder_pan_mesh" pos="0.000000 0.000000 0.004000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
         <geom type="mesh" mesh="turntable_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
@@ -172,7 +172,7 @@
               <geom name="wire_servo_bus_wrist_7" type="mesh" mesh="wire_servo_bus_wrist_7_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
               <geom name="wire_camera_csi_wrist_1" type="mesh" mesh="wire_camera_csi_wrist_1_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
               <body name="wrist_roll" pos="0.000000 0.000000 0.032000">
-                <inertial pos="-0.012453 -0.000031 0.022517" mass="0.074011" fullinertia="2.743545e-05 3.696162e-05 1.932017e-05 -1.962794e-07 4.897211e-06 -9.554178e-08"/>
+                <inertial pos="-0.012450 -0.000019 0.022516" mass="0.074020" fullinertia="2.743739e-05 3.695709e-05 1.932394e-05 -2.019111e-07 4.904702e-06 -7.347957e-08"/>
                 <joint name="wrist_roll" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-2.7440 2.8410"/>
                 <geom name="wrist_roll_horn_disc" type="mesh" mesh="horn_wrist_roll_mesh" pos="0.000000 0.000000 0.004000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
                 <geom type="mesh" mesh="wrist_roll_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="1" conaffinity="1"/>
@@ -193,10 +193,10 @@
                 <geom name="rear_gripper_horn_rear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.032000 0.000000 0.025000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
                 <geom name="rear_gripper_horn_rear_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.032000 0.007000 0.018000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
                 <geom name="rear_gripper_horn_rear_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.032000 -0.007000 0.018000" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom name="mount_wrist_roll_camera_m1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.010500 0.012950 0.009500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom name="mount_wrist_roll_camera_m2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.010500 0.012950 0.009500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom name="mount_wrist_roll_camera_m3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.010500 0.012950 -0.003000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-                <geom name="mount_wrist_roll_camera_m4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.010500 0.012950 -0.003000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+                <geom name="mount_wrist_roll_camera_m1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.009931 0.012950 0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+                <geom name="mount_wrist_roll_camera_m2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008869 0.012950 0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+                <geom name="mount_wrist_roll_camera_m3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.009931 0.012950 -0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+                <geom name="mount_wrist_roll_camera_m4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008869 0.012950 -0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
                 <geom name="wire_servo_bus_wrist_roll_8" type="mesh" mesh="wire_servo_bus_wrist_roll_8_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
                 <geom name="wire_servo_bus_wrist_roll_9" type="mesh" mesh="wire_servo_bus_wrist_roll_9_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
                 <body name="jaw" pos="0.000000 0.000000 0.018000">

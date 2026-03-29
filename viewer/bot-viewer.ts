@@ -19,6 +19,8 @@ import { SectionCutter } from './section-cutter.ts';
 import { StressMode } from './stress-mode.ts';
 import type { ViewerContext, ViewerMode as ViewerModeInterface } from './types.ts';
 import { GEOM_GROUP_STRUCTURAL } from './utils.ts';
+import type { ViewStateParams } from './view-state.ts';
+import { clearViewState, updateViewState } from './view-state.ts';
 import { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -207,7 +209,7 @@ export interface BotViewerHandle {
   resume(): void;
 }
 
-export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
+export async function initBotViewer(botName: string, initialState?: ViewStateParams): Promise<BotViewerHandle> {
   // ---------------------------------------------------------------------------
   // Globals shared across modes
   // ---------------------------------------------------------------------------
@@ -593,6 +595,10 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     currentModeName = modeName;
     currentMode.activate();
 
+    // Update URL — clear mode-specific sub-state from previous mode
+    updateViewState({ mode: modeName });
+    clearViewState('select');
+
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
 
@@ -717,9 +723,29 @@ export async function initBotViewer(botName: string): Promise<BotViewerHandle> {
     // Show bot tools when in bot viewer
     document.getElementById('bot-tools-group').style.display = '';
 
-    switchMode(manifest ? 'explore' : 'joint');
+    // Determine initial mode: URL state > manifest-based default
+    const defaultMode = manifest ? 'explore' : 'joint';
+    let startMode = defaultMode;
+    if (initialState?.mode && initialState.mode in modes) {
+      startMode = initialState.mode;
+    } else if (initialState?.mode && !(initialState.mode in modes)) {
+      // Requested mode unavailable (e.g. explore without manifest) — fall back and fix URL
+      updateViewState({ mode: defaultMode });
+    }
+
+    switchMode(startMode);
     document.getElementById('loading').style.display = 'none';
 
+    // Apply initial selection/step from URL after mode is active
+    if (initialState?.select && startMode === 'explore' && modes.explore) {
+      const explore = modes.explore as ExploreMode;
+      const bodyData = explore.bodiesByName[initialState.select];
+      if (bodyData) {
+        const nodeId = `body:${initialState.select}`;
+        explore.onNodeClick(nodeId, bodyData);
+        if (explore.tree) explore.tree.setFocused(nodeId);
+      }
+    }
     let paused = false;
 
     viewport.animate(() => {

@@ -8,13 +8,13 @@
 |------|-----|-----------------|----------|-------|
 | STS3215 | 2 | 45.2 x 24.7 x 35.0 | 55 | Joints: left_wheel, right_wheel |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
+| OV5647 | 1 | 23.9 x 25.0 x 9.0 | 3 | camera |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | WaveshareSerialBus | 1 | 42.0 x 33.0 x 12.0 | 16 | controller |
 | BEC5V | 1 | 12.7 x 17.8 x 2.8 | 2 | bec |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 245 | PLA/PETG frame |
-| **Total** | | | **485** | |
+| Structural (printed) | — | — | 248 | PLA/PETG frame |
+| **Total** | | | **488** | |
 
 ## Power Budget
 
@@ -52,6 +52,6 @@
 |-------|------|------------|------------|
 | servo_bus | uart_half_duplex | 16.4 | 0.0 |
 | camera_csi | csi | 0.0 | 0.0 |
-| power_servo | power | 8.6 | 0.0 |
-| power_pi | power | 17.2 | 0.0 |
-| pi_usb_data | usb | 7.9 | 0.0 |
+| power_servo | power | 8.7 | 0.0 |
+| power_pi | power | 17.3 | 0.0 |
+| pi_usb_data | usb | 8.0 | 0.0 |
