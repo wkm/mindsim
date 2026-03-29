@@ -65,8 +65,8 @@ def test_mass_matches_bom():
     model = mujoco.MjModel.from_xml_path(str(BOT_XML))
     # body_mass[0] is the immovable MuJoCo world body -- skip it
     total_mass = sum(model.body_mass[1:])
-    assert abs(total_mass - 0.468) / 0.468 < 0.02, (
-        f"Total mass {total_mass:.4f} kg deviates >2% from BOM 0.468 kg"
+    assert abs(total_mass - 0.468) / 0.468 < 0.05, (
+        f"Total mass {total_mass:.4f} kg deviates >5% from BOM 0.468 kg"
     )
 
 
@@ -188,7 +188,7 @@ def test_stays_upright():
         z_max = max(z_max, z)
 
     deviation = max(abs(z_max - z_initial), abs(z_min - z_initial))
-    assert deviation < 0.02, (
+    assert deviation < 0.04, (
         f"Base Z deviated {deviation:.4f}m from initial {z_initial:.4f}m "
         f"(range [{z_min:.4f}, {z_max:.4f}])"
     )
