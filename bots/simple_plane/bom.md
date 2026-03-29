@@ -12,8 +12,8 @@
 | ESC-30A | 1 | 45.0 x 24.0 x 11.0 | 25 | esc |
 | MT2213 | 1 | 27.9 x 27.9 x 38.0 | 56 | motor |
 | Propeller-9x4.5 | 1 | 228.6 x 228.6 x 8.0 | 10 | prop |
-| Structural (printed) | — | — | 466 | PLA/PETG frame |
-| **Total** | | | **730** | |
+| Structural (printed) | — | — | 1268 | PLA/PETG frame |
+| **Total** | | | **1531** | |
 
 ## Power Budget
 
@@ -45,9 +45,3 @@
 | solder_pad | 1 |
 | xt30 | 1 |
 | xt60 | 1 |
-
-## Wire Lengths
-
-| Route | Type | Length (cm) | Slack (cm) |
-|-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 37.4 | 0.0 |

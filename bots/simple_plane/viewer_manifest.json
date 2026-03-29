@@ -9,11 +9,11 @@
       "parent": null,
       "shape": "box",
       "dimensions": [
-        0.12,
-        0.2,
-        0.06
+        0.06,
+        0.5,
+        0.05
       ],
-      "mass": 0.6328,
+      "mass": 0.634,
       "pos": [
         0.0,
         0.0,
@@ -93,10 +93,40 @@
       ]
     },
     {
-      "name": "left_aileron",
-      "mesh": "left_aileron.stl",
+      "name": "left_wing",
+      "mesh": "left_wing.stl",
       "role": "structure",
       "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.38,
+        0.15,
+        0.015
+      ],
+      "mass": 0.3185,
+      "pos": [
+        -0.22,
+        0.05,
+        0.025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
+      "name": "left_aileron_surface",
+      "mesh": "left_aileron_surface.stl",
+      "role": "structure",
+      "parent": "left_wing",
       "shape": "box",
       "dimensions": [
         0.18,
@@ -105,9 +135,9 @@
       ],
       "mass": 0.0276,
       "pos": [
-        -0.05,
-        -0.05,
-        0.0
+        -0.22,
+        -0.005,
+        0.025
       ],
       "quat": [
         1.0,
@@ -124,10 +154,40 @@
       "joint": "left_aileron"
     },
     {
-      "name": "right_aileron",
-      "mesh": "right_aileron.stl",
+      "name": "right_wing",
+      "mesh": "right_wing.stl",
       "role": "structure",
       "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.38,
+        0.15,
+        0.015
+      ],
+      "mass": 0.3185,
+      "pos": [
+        0.22,
+        0.05,
+        0.025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
+      "name": "right_aileron_surface",
+      "mesh": "right_aileron_surface.stl",
+      "role": "structure",
+      "parent": "right_wing",
       "shape": "box",
       "dimensions": [
         0.18,
@@ -136,9 +196,9 @@
       ],
       "mass": 0.0276,
       "pos": [
-        0.05,
-        -0.05,
-        0.0
+        0.22,
+        -0.005,
+        0.025
       ],
       "quat": [
         1.0,
@@ -155,21 +215,81 @@
       "joint": "right_aileron"
     },
     {
-      "name": "elevator",
-      "mesh": "elevator.stl",
+      "name": "tail_boom",
+      "mesh": "tail_boom.stl",
       "role": "structure",
       "parent": "fuselage",
-      "shape": "box",
+      "shape": "tube",
       "dimensions": [
-        0.2,
-        0.04,
-        0.008
+        0.024,
+        0.024,
+        0.25
       ],
-      "mass": 0.0306,
+      "mass": 0.0423,
       "pos": [
         0.0,
-        -0.09,
+        -0.375,
         0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.749,
+        0.8,
+        0.8392,
+        1.0
+      ]
+    },
+    {
+      "name": "horizontal_stab",
+      "mesh": "horizontal_stab.stl",
+      "role": "structure",
+      "parent": "tail_boom",
+      "shape": "box",
+      "dimensions": [
+        0.25,
+        0.08,
+        0.008
+      ],
+      "mass": 0.0877,
+      "pos": [
+        0.0,
+        -0.375,
+        0.25
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
+      "name": "elevator_surface",
+      "mesh": "elevator_surface.stl",
+      "role": "structure",
+      "parent": "horizontal_stab",
+      "shape": "box",
+      "dimensions": [
+        0.25,
+        0.03,
+        0.008
+      ],
+      "mass": 0.0294,
+      "pos": [
+        0.0,
+        -0.4,
+        0.25
       ],
       "quat": [
         1.0,
@@ -186,21 +306,51 @@
       "joint": "elevator"
     },
     {
-      "name": "rudder",
-      "mesh": "rudder.stl",
+      "name": "vertical_fin",
+      "mesh": "vertical_fin.stl",
       "role": "structure",
-      "parent": "fuselage",
+      "parent": "tail_boom",
       "shape": "box",
       "dimensions": [
         0.008,
-        0.04,
-        0.07
+        0.08,
+        0.1
       ],
-      "mass": 0.011,
+      "mass": 0.0339,
       "pos": [
         0.0,
-        -0.09,
-        0.025
+        -0.375,
+        0.25
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ]
+    },
+    {
+      "name": "rudder_surface",
+      "mesh": "rudder_surface.stl",
+      "role": "structure",
+      "parent": "vertical_fin",
+      "shape": "box",
+      "dimensions": [
+        0.008,
+        0.03,
+        0.1
+      ],
+      "mass": 0.012,
+      "pos": [
+        0.0,
+        -0.4,
+        0.25
       ],
       "quat": [
         1.0,
@@ -221,13 +371,13 @@
       "mesh": "servo_SCS0009.stl",
       "role": "component",
       "component": "SCS0009",
-      "parent": "fuselage",
+      "parent": "left_wing",
       "category": "servo",
       "joint": "left_aileron",
       "pos": [
-        -0.06125,
-        -0.05,
-        0.0058
+        -0.23125,
+        -0.005,
+        0.0308
       ],
       "quat": [
         0.707107,
@@ -249,13 +399,13 @@
       "mesh": "horn_left_aileron.stl",
       "role": "component",
       "component": "Horn disc",
-      "parent": "fuselage",
+      "parent": "left_wing",
       "category": "horn",
       "joint": "left_aileron",
       "pos": [
-        -0.047,
-        -0.05,
-        0.0
+        -0.217,
+        -0.005,
+        0.025
       ],
       "quat": [
         0.707107,
@@ -276,13 +426,13 @@
       "mesh": "servo_SCS0009.stl",
       "role": "component",
       "component": "SCS0009",
-      "parent": "fuselage",
+      "parent": "right_wing",
       "category": "servo",
       "joint": "right_aileron",
       "pos": [
-        0.03875,
-        -0.05,
-        0.0058
+        0.20875,
+        -0.005,
+        0.0308
       ],
       "quat": [
         0.707107,
@@ -304,13 +454,13 @@
       "mesh": "horn_right_aileron.stl",
       "role": "component",
       "component": "Horn disc",
-      "parent": "fuselage",
+      "parent": "right_wing",
       "category": "horn",
       "joint": "right_aileron",
       "pos": [
-        0.053,
-        -0.05,
-        0.0
+        0.223,
+        -0.005,
+        0.025
       ],
       "quat": [
         0.707107,
@@ -331,13 +481,13 @@
       "mesh": "servo_SCS0009.stl",
       "role": "component",
       "component": "SCS0009",
-      "parent": "fuselage",
+      "parent": "horizontal_stab",
       "category": "servo",
       "joint": "elevator",
       "pos": [
         -0.01125,
-        -0.09,
-        0.0058
+        -0.4,
+        0.2558
       ],
       "quat": [
         0.707107,
@@ -359,13 +509,13 @@
       "mesh": "horn_elevator.stl",
       "role": "component",
       "component": "Horn disc",
-      "parent": "fuselage",
+      "parent": "horizontal_stab",
       "category": "horn",
       "joint": "elevator",
       "pos": [
         0.003,
-        -0.09,
-        0.0
+        -0.4,
+        0.25
       ],
       "quat": [
         0.707107,
@@ -386,13 +536,13 @@
       "mesh": "servo_SCS0009.stl",
       "role": "component",
       "component": "SCS0009",
-      "parent": "fuselage",
+      "parent": "vertical_fin",
       "category": "servo",
       "joint": "rudder",
       "pos": [
         -0.0058,
-        -0.09,
-        0.01375
+        -0.4,
+        0.23875
       ],
       "quat": [
         1.0,
@@ -414,13 +564,13 @@
       "mesh": "horn_rudder.stl",
       "role": "component",
       "component": "Horn disc",
-      "parent": "fuselage",
+      "parent": "vertical_fin",
       "category": "horn",
       "joint": "rudder",
       "pos": [
         0.0,
-        -0.09,
-        0.028
+        -0.4,
+        0.253
       ],
       "quat": [
         1.0,
@@ -440,8 +590,8 @@
   "joints": [
     {
       "name": "left_aileron",
-      "parent_body": "fuselage",
-      "child_body": "left_aileron",
+      "parent_body": "left_wing",
+      "child_body": "left_aileron_surface",
       "axis": [
         1.0,
         0.0,
@@ -456,8 +606,8 @@
         20.1
       ],
       "pos": [
-        -0.05,
-        -0.05,
+        0.0,
+        -0.055,
         0.0
       ],
       "servo": "SCS0009",
@@ -473,29 +623,29 @@
         {
           "kind": "bracket",
           "mesh": "bracket_left_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "left_wing"
         },
         {
           "kind": "coupler",
           "mesh": "coupler_left_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "left_wing"
         },
         {
           "kind": "clearance",
           "mesh": "clearance_left_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "left_wing"
         },
         {
           "kind": "insertion",
           "mesh": "insertion_left_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "left_wing"
         }
       ]
     },
     {
       "name": "right_aileron",
-      "parent_body": "fuselage",
-      "child_body": "right_aileron",
+      "parent_body": "right_wing",
+      "child_body": "right_aileron_surface",
       "axis": [
         1.0,
         0.0,
@@ -510,8 +660,8 @@
         20.1
       ],
       "pos": [
-        0.05,
-        -0.05,
+        0.0,
+        -0.055,
         0.0
       ],
       "servo": "SCS0009",
@@ -527,29 +677,29 @@
         {
           "kind": "bracket",
           "mesh": "bracket_right_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "right_wing"
         },
         {
           "kind": "coupler",
           "mesh": "coupler_right_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "right_wing"
         },
         {
           "kind": "clearance",
           "mesh": "clearance_right_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "right_wing"
         },
         {
           "kind": "insertion",
           "mesh": "insertion_right_aileron.stl",
-          "parent_body": "fuselage"
+          "parent_body": "right_wing"
         }
       ]
     },
     {
       "name": "elevator",
-      "parent_body": "fuselage",
-      "child_body": "elevator",
+      "parent_body": "horizontal_stab",
+      "child_body": "elevator_surface",
       "axis": [
         1.0,
         0.0,
@@ -565,7 +715,7 @@
       ],
       "pos": [
         0.0,
-        -0.09,
+        -0.025,
         0.0
       ],
       "servo": "SCS0009",
@@ -581,29 +731,29 @@
         {
           "kind": "bracket",
           "mesh": "bracket_elevator.stl",
-          "parent_body": "fuselage"
+          "parent_body": "horizontal_stab"
         },
         {
           "kind": "coupler",
           "mesh": "coupler_elevator.stl",
-          "parent_body": "fuselage"
+          "parent_body": "horizontal_stab"
         },
         {
           "kind": "clearance",
           "mesh": "clearance_elevator.stl",
-          "parent_body": "fuselage"
+          "parent_body": "horizontal_stab"
         },
         {
           "kind": "insertion",
           "mesh": "insertion_elevator.stl",
-          "parent_body": "fuselage"
+          "parent_body": "horizontal_stab"
         }
       ]
     },
     {
       "name": "rudder",
-      "parent_body": "fuselage",
-      "child_body": "rudder",
+      "parent_body": "vertical_fin",
+      "child_body": "rudder_surface",
       "axis": [
         0.0,
         0.0,
@@ -619,8 +769,8 @@
       ],
       "pos": [
         0.0,
-        -0.09,
-        0.025
+        -0.025,
+        0.0
       ],
       "servo": "SCS0009",
       "continuous": false,
@@ -635,22 +785,22 @@
         {
           "kind": "bracket",
           "mesh": "bracket_rudder.stl",
-          "parent_body": "fuselage"
+          "parent_body": "vertical_fin"
         },
         {
           "kind": "coupler",
           "mesh": "coupler_rudder.stl",
-          "parent_body": "fuselage"
+          "parent_body": "vertical_fin"
         },
         {
           "kind": "clearance",
           "mesh": "clearance_rudder.stl",
-          "parent_body": "fuselage"
+          "parent_body": "vertical_fin"
         },
         {
           "kind": "insertion",
           "mesh": "insertion_rudder.stl",
-          "parent_body": "fuselage"
+          "parent_body": "vertical_fin"
         }
       ]
     }
@@ -665,7 +815,7 @@
       "pos": [
         0.0,
         0.0,
-        0.026
+        0.021
       ],
       "quat": [
         1.0,
@@ -717,7 +867,7 @@
       "pos": [
         0.0,
         0.0,
-        -0.0245
+        -0.0195
       ],
       "quat": [
         1.0,
@@ -742,7 +892,7 @@
       "mesh": "comp_fuselage_motor.stl",
       "pos": [
         0.0,
-        0.081,
+        0.231,
         0.0
       ],
       "quat": [
@@ -768,7 +918,7 @@
       "mesh": "comp_fuselage_prop.stl",
       "pos": [
         0.0,
-        -0.0143,
+        0.1357,
         0.0
       ],
       "quat": [
@@ -793,12 +943,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.05775,
-        -0.05,
-        -0.0082
+        -0.22775,
+        -0.005,
+        0.0168
       ],
       "quat": [
         0.707107,
@@ -815,12 +965,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.05775,
-        -0.05,
-        0.0198
+        -0.22775,
+        -0.005,
+        0.0448
       ],
       "quat": [
         0.707107,
@@ -837,12 +987,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.048,
-        -0.046,
-        -0.004
+        -0.218,
+        -0.001,
+        0.021
       ],
       "quat": [
         0.707107,
@@ -859,12 +1009,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.048,
-        -0.054,
-        -0.004
+        -0.218,
+        -0.009,
+        0.021
       ],
       "quat": [
         0.707107,
@@ -881,12 +1031,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.048,
-        -0.046,
-        0.004
+        -0.218,
+        -0.001,
+        0.029
       ],
       "quat": [
         0.707107,
@@ -903,12 +1053,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "left_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.048,
-        -0.054,
-        0.004
+        -0.218,
+        -0.009,
+        0.029
       ],
       "quat": [
         0.707107,
@@ -925,12 +1075,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.04225,
-        -0.05,
-        -0.0082
+        0.21225,
+        -0.005,
+        0.0168
       ],
       "quat": [
         0.707107,
@@ -947,12 +1097,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.04225,
-        -0.05,
-        0.0198
+        0.21225,
+        -0.005,
+        0.0448
       ],
       "quat": [
         0.707107,
@@ -969,12 +1119,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.052,
-        -0.046,
-        -0.004
+        0.222,
+        -0.001,
+        0.021
       ],
       "quat": [
         0.707107,
@@ -991,12 +1141,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.052,
-        -0.054,
-        -0.004
+        0.222,
+        -0.009,
+        0.021
       ],
       "quat": [
         0.707107,
@@ -1013,12 +1163,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.052,
-        -0.046,
-        0.004
+        0.222,
+        -0.001,
+        0.029
       ],
       "quat": [
         0.707107,
@@ -1035,12 +1185,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "right_wing",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.052,
-        -0.054,
-        0.004
+        0.222,
+        -0.009,
+        0.029
       ],
       "quat": [
         0.707107,
@@ -1057,12 +1207,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.00775,
-        -0.09,
-        -0.0082
+        -0.4,
+        0.2418
       ],
       "quat": [
         0.707107,
@@ -1079,12 +1229,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.00775,
-        -0.09,
-        0.0198
+        -0.4,
+        0.2698
       ],
       "quat": [
         0.707107,
@@ -1101,12 +1251,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.086,
-        -0.004
+        -0.396,
+        0.246
       ],
       "quat": [
         0.707107,
@@ -1123,12 +1273,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.094,
-        -0.004
+        -0.404,
+        0.246
       ],
       "quat": [
         0.707107,
@@ -1145,12 +1295,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.086,
-        0.004
+        -0.396,
+        0.254
       ],
       "quat": [
         0.707107,
@@ -1167,12 +1317,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "horizontal_stab",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.002,
-        -0.094,
-        0.004
+        -0.404,
+        0.254
       ],
       "quat": [
         0.707107,
@@ -1189,12 +1339,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0082,
-        -0.09,
-        0.01725
+        -0.4,
+        0.24225
       ],
       "quat": [
         1.0,
@@ -1211,12 +1361,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0198,
-        -0.09,
-        0.01725
+        -0.4,
+        0.24225
       ],
       "quat": [
         1.0,
@@ -1233,12 +1383,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.004,
-        -0.086,
-        0.027
+        -0.396,
+        0.252
       ],
       "quat": [
         0.0,
@@ -1255,12 +1405,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.004,
-        -0.094,
-        0.027
+        -0.404,
+        0.252
       ],
       "quat": [
         0.0,
@@ -1277,12 +1427,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.004,
-        -0.086,
-        0.027
+        -0.396,
+        0.252
       ],
       "quat": [
         0.0,
@@ -1299,12 +1449,12 @@
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "fuselage",
+      "parent_body": "vertical_fin",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.004,
-        -0.094,
-        0.027
+        -0.404,
+        0.252
       ],
       "quat": [
         0.0,
@@ -1326,7 +1476,7 @@
       "pos": [
         0.01525,
         0.01525,
-        0.026
+        0.021
       ],
       "quat": [
         0.0,
@@ -1348,7 +1498,7 @@
       "pos": [
         0.01525,
         -0.01525,
-        0.026
+        0.021
       ],
       "quat": [
         0.0,
@@ -1370,7 +1520,7 @@
       "pos": [
         -0.01525,
         0.01525,
-        0.026
+        0.021
       ],
       "quat": [
         0.0,
@@ -1392,7 +1542,7 @@
       "pos": [
         -0.01525,
         -0.01525,
-        0.026
+        0.021
       ],
       "quat": [
         0.0,
@@ -1405,105 +1555,6 @@
       "mount_label": "fc"
     },
     {
-      "id": "wire_servo_bus_fuselage_0",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_0.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_1",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_1.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_2",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_2.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_3",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_3.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_4",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_4.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_5",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_5.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_6",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_6.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_7",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_7.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_8",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_8.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_9",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_9.stl"
-    },
-    {
-      "id": "wire_servo_bus_fuselage_10",
-      "name": "servo_bus",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "fuselage",
-      "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_fuselage_10.stl"
-    },
-    {
       "id": "wire_stub_fuselage_esc_batt_pos",
       "name": "batt_pos",
       "kind": "fabricated",
@@ -1514,7 +1565,7 @@
       "pos": [
         0.0225,
         0.0,
-        -0.037
+        -0.032
       ],
       "quat": [
         0.0,
@@ -1563,8 +1614,14 @@
     },
     {
       "step": 2,
-      "title": "left_aileron",
-      "body": "left_aileron",
+      "title": "left_wing",
+      "body": "left_wing",
+      "description": "Base structure"
+    },
+    {
+      "step": 3,
+      "title": "left_aileron_surface",
+      "body": "left_aileron_surface",
       "servo": {
         "joint": "left_aileron",
         "model": "SCS0009"
@@ -1572,9 +1629,15 @@
       "description": "Attach via SCS0009 at joint left_aileron"
     },
     {
-      "step": 3,
-      "title": "right_aileron",
-      "body": "right_aileron",
+      "step": 4,
+      "title": "right_wing",
+      "body": "right_wing",
+      "description": "Base structure"
+    },
+    {
+      "step": 5,
+      "title": "right_aileron_surface",
+      "body": "right_aileron_surface",
       "servo": {
         "joint": "right_aileron",
         "model": "SCS0009"
@@ -1582,9 +1645,21 @@
       "description": "Attach via SCS0009 at joint right_aileron"
     },
     {
-      "step": 4,
-      "title": "elevator",
-      "body": "elevator",
+      "step": 6,
+      "title": "tail_boom",
+      "body": "tail_boom",
+      "description": "Base structure"
+    },
+    {
+      "step": 7,
+      "title": "horizontal_stab",
+      "body": "horizontal_stab",
+      "description": "Base structure"
+    },
+    {
+      "step": 8,
+      "title": "elevator_surface",
+      "body": "elevator_surface",
       "servo": {
         "joint": "elevator",
         "model": "SCS0009"
@@ -1592,9 +1667,15 @@
       "description": "Attach via SCS0009 at joint elevator"
     },
     {
-      "step": 5,
-      "title": "rudder",
-      "body": "rudder",
+      "step": 9,
+      "title": "vertical_fin",
+      "body": "vertical_fin",
+      "description": "Base structure"
+    },
+    {
+      "step": 10,
+      "title": "rudder_surface",
+      "body": "rudder_surface",
       "servo": {
         "joint": "rudder",
         "model": "SCS0009"

@@ -257,6 +257,58 @@ class Mount:
 
 
 @dataclass  # plint: disable=frozen-dataclass
+class Attachment:
+    """A rigid (non-jointed) connection from parent to child body.
+
+    Used for structural parts that don't move: wings, stabilizers,
+    motor mounts, etc. In MuJoCo this emits a child <body> without
+    a <joint> element (welded to parent).
+    """
+
+    name: str
+    pos: Vec3  # position in parent body frame
+    child: Body | None = None
+
+    def body(
+        self,
+        name: str,
+        shape: BodyShape = BodyShape.BOX,
+        *,
+        radius: Meters = _ZERO_M,
+        width: Meters = _ZERO_M,
+        height: Meters = _ZERO_M,
+        length: Meters = _ZERO_M,
+        outer_r: Meters = _ZERO_M,
+        padding: Meters = _DEFAULT_PADDING,
+        dimensions: Size3D | None = None,
+        assembly: Assembly | None = None,
+        module: Assembly | None = None,
+    ) -> Body:
+        """Create and attach a child body at this attachment point."""
+        effective_assembly = assembly or module
+        b = Body(
+            name=name,
+            shape=shape,
+            radius=radius,
+            width=width,
+            height=height,
+            length=length,
+            outer_r=outer_r,
+            padding=padding,
+            explicit_dimensions=dimensions,
+            assembly=effective_assembly,
+        )
+        self.child = b
+        return b
+
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
+
+
+@dataclass  # plint: disable=frozen-dataclass
 class Joint:
     """A revolute joint connecting a parent body to a child body via a servo.
 
@@ -384,6 +436,7 @@ class Body:
 
     mounts: list[Mount] = field(default_factory=list)
     joints: list[Joint] = field(default_factory=list)
+    attachments: list[Attachment] = field(default_factory=list)
 
     # Computed by packing solver
     solved_dimensions: Size3D | None = None
@@ -537,6 +590,16 @@ class Body:
         self.joints.append(j)
         return j
 
+    def attach(
+        self,
+        name: str,
+        pos: Vec3 = (0.0, 0.0, 0.0),
+    ) -> Attachment:
+        """Attach a rigid (non-jointed) child body at the given position."""
+        a = Attachment(name=name, pos=pos)
+        self.attachments.append(a)
+        return a
+
     def __hash__(self):
         return id(self)
 
@@ -657,6 +720,16 @@ class Bot:
                             f"{joint.name} {role_a}-{role_b} clearance",
                         )
 
+            # Attachment (rigid) children — check parent-child clearance
+            for attachment in body.attachments:
+                if attachment.child is not None:
+                    _add(
+                        body.name,
+                        attachment.child.name,
+                        0.0,
+                        f"{attachment.name} attachment clearance",
+                    )
+
             # Mounted components must not intersect parent body.
             # Skip wheel components — the wheel component IS the wheel body
             # (same geometry), so they always fully overlap.
@@ -722,6 +795,14 @@ class Bot:
                     # point coordinates can be transformed consistently.
                     if child.shape is BodyShape.CYLINDER:
                         child.frame_quat = rotation_between((0.0, 0.0, 1.0), joint.axis)
+                    _walk(child, body.assembly)
+            for attachment in body.attachments:
+                if attachment.child is not None:
+                    child = attachment.child
+                    if child.shape is BodyShape.CYLINDER:
+                        child.frame_quat = rotation_between(
+                            (0.0, 0.0, 1.0), (0.0, 0.0, 1.0)
+                        )
                     _walk(child, body.assembly)
 
         if self.root is not None:
@@ -879,6 +960,14 @@ class Bot:
                             parent_world_pos[2] + joint.pos[2],
                         )
                     _walk(child, child_pos)
+            for attachment in body.attachments:
+                if attachment.child is not None:
+                    child_pos = (
+                        parent_world_pos[0] + attachment.pos[0],
+                        parent_world_pos[1] + attachment.pos[1],
+                        parent_world_pos[2] + attachment.pos[2],
+                    )
+                    _walk(attachment.child, child_pos)
 
         if self.root is not None:
             _walk(self.root, (0.0, 0.0, 0.0))

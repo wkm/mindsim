@@ -279,6 +279,25 @@ def _emit_assembly_steps(
         # Recurse into child body's joints
         _emit_assembly_steps(lines, child, bot, step)
 
+    # Recurse into attachment (rigid) children
+    for attachment in getattr(body, "attachments", []):
+        if attachment.child is not None:
+            child = attachment.child
+            lines.append(
+                f"{step[0]}. **Attach {child.name}** to {body.name} "
+                f"(rigid attachment `{attachment.name}`):"
+            )
+            lines.extend(
+                f"   - Mount {mount.component.name} ({mount.label}) "
+                f"at {mount.position} position"
+                for mount in child.mounts
+            )
+            if not child.mounts:
+                lines.append(f"   - Structural body ({child.shape})")
+            lines.append("")
+            step[0] += 1
+            _emit_assembly_steps(lines, child, bot, step)
+
 
 def _axis_label(axis: tuple[float, float, float]) -> str:
     """Human-readable axis label."""

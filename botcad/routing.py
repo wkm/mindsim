@@ -213,19 +213,23 @@ def _wireport_for_mount(
     return None
 
 
-def _build_parent_map(bot: Bot) -> dict[str, tuple[Joint, str]]:
+def _build_parent_map(bot: Bot) -> dict[str, tuple[Joint | None, str]]:
     """Build body_name → (parent_joint, parent_body_name) mapping.
 
     For each non-root body, records which joint connects it to its parent
     and what that parent body's name is.
     """
-    result: dict[str, tuple[Joint, str]] = {}
+    result: dict[str, tuple[Joint | None, str]] = {}
 
     def _walk(body: Body) -> None:
         for joint in body.joints:
             if joint.child is not None:
                 result[joint.child.name] = (joint, body.name)
                 _walk(joint.child)
+        for attachment in getattr(body, "attachments", []):
+            if attachment.child is not None:
+                result[attachment.child.name] = (None, body.name)
+                _walk(attachment.child)
 
     if bot.root is not None:
         _walk(bot.root)

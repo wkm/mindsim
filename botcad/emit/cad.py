@@ -800,6 +800,14 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
                         parent_world_pos[2] + joint.pos[2],
                     )
                 _walk(joint.child, child_pos)
+        for attachment in getattr(body, "attachments", []):
+            if attachment.child is not None:
+                child_pos = (
+                    parent_world_pos[0] + attachment.pos[0],
+                    parent_world_pos[1] + attachment.pos[1],
+                    parent_world_pos[2] + attachment.pos[2],
+                )
+                _walk(attachment.child, child_pos)
 
     if bot.root:
         _walk(bot.root, (0.0, 0.0, 0.0))

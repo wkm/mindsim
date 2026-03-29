@@ -194,22 +194,25 @@ def _build_bot_xml(bot: Bot) -> str:
     # to cover compact mechanisms like wrist-roll + gripper chains.
     contact = SubElement(root, "contact")
     exclude_pairs: set[tuple[str, str]] = set()
+
+    def _child_bodies(b: Body) -> list[Body]:
+        """Get all direct child bodies (via joints and attachments)."""
+        children = [j.child for j in b.joints if j.child is not None]
+        children.extend(
+            a.child for a in getattr(b, "attachments", []) if a.child is not None
+        )
+        return children
+
     for body in structural_bodies:
-        for j1 in body.joints:
-            if j1.child is None:
-                continue
-            # 1 joint apart
-            exclude_pairs.add((body.name, j1.child.name))
-            for j2 in j1.child.joints:
-                if j2.child is None:
-                    continue
-                # 2 joints apart
-                exclude_pairs.add((body.name, j2.child.name))
-                for j3 in j2.child.joints:
-                    if j3.child is None:
-                        continue
-                    # 3 joints apart
-                    exclude_pairs.add((body.name, j3.child.name))
+        for c1 in _child_bodies(body):
+            # 1 step apart
+            exclude_pairs.add((body.name, c1.name))
+            for c2 in _child_bodies(c1):
+                # 2 steps apart
+                exclude_pairs.add((body.name, c2.name))
+                for c3 in _child_bodies(c2):
+                    # 3 steps apart
+                    exclude_pairs.add((body.name, c3.name))
     for b1, b2 in sorted(exclude_pairs):
         SubElement(contact, "exclude", body1=b1, body2=b2)
 
@@ -286,6 +289,7 @@ def _emit_body_tree(
     bot: Bot,
     parent_joint: Joint | None = None,
     is_root: bool = False,
+    attachment_pos: tuple[float, float, float] | None = None,
 ) -> None:
     """Recursively emit body elements.
 
@@ -310,6 +314,8 @@ def _emit_body_tree(
         else:
             ground_clearance = _estimate_ground_clearance(body, bot)
             attribs["pos"] = f"0 0 {ground_clearance:.4f}"
+    elif attachment_pos is not None:
+        attribs["pos"] = _fmt_vec3(attachment_pos)
     elif parent_joint is not None:
         if body.is_wheel_body:
             # Wheel child body: offset outward from servo along joint axis
@@ -502,6 +508,18 @@ def _emit_body_tree(
         if joint.child is not None:
             _emit_body_tree(
                 body_el, joint.child, bot, parent_joint=joint, is_root=False
+            )
+
+    # Attachment (rigid) children — emitted as child <body> without <joint>
+    for attachment in getattr(body, "attachments", []):
+        if attachment.child is not None:
+            _emit_body_tree(
+                body_el,
+                attachment.child,
+                bot,
+                parent_joint=None,
+                is_root=False,
+                attachment_pos=attachment.pos,
             )
 
 

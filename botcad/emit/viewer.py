@@ -340,6 +340,11 @@ def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dic
             if child_joint.child is not None:
                 _walk_body(child_joint.child, body.name, child_joint)
 
+        # Recurse into attachment (rigid) children
+        for attachment in getattr(body, "attachments", []):
+            if attachment.child is not None:
+                _walk_body(attachment.child, body.name, None)
+
     if bot.root:
         _walk_body(bot.root, None, None)
 
@@ -650,7 +655,11 @@ def _build_ik_chains(bot: Bot, manifest: dict) -> None:
                 entry = {"joint": joint.name, "body": joint.child.name}
                 child_chains = _find_chains(joint.child, [*chain, entry])
                 chains.extend(child_chains)
-        if not body.joints and len(chain) >= 2:
+        for attachment in getattr(body, "attachments", []):
+            if attachment.child is not None:
+                child_chains = _find_chains(attachment.child, chain)
+                chains.extend(child_chains)
+        if not body.joints and not getattr(body, "attachments", []) and len(chain) >= 2:
             chains.append(chain)
         return chains
 

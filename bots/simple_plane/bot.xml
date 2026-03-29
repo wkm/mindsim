@@ -6,119 +6,135 @@
   </default>
   <asset>
     <mesh name="fuselage_mesh" file="fuselage.stl" scale="1 1 1"/>
-    <mesh name="left_aileron_mesh" file="left_aileron.stl" scale="1 1 1"/>
-    <mesh name="right_aileron_mesh" file="right_aileron.stl" scale="1 1 1"/>
-    <mesh name="elevator_mesh" file="elevator.stl" scale="1 1 1"/>
-    <mesh name="rudder_mesh" file="rudder.stl" scale="1 1 1"/>
+    <mesh name="left_wing_mesh" file="left_wing.stl" scale="1 1 1"/>
+    <mesh name="left_aileron_surface_mesh" file="left_aileron_surface.stl" scale="1 1 1"/>
+    <mesh name="right_wing_mesh" file="right_wing.stl" scale="1 1 1"/>
+    <mesh name="right_aileron_surface_mesh" file="right_aileron_surface.stl" scale="1 1 1"/>
+    <mesh name="tail_boom_mesh" file="tail_boom.stl" scale="1 1 1"/>
+    <mesh name="horizontal_stab_mesh" file="horizontal_stab.stl" scale="1 1 1"/>
+    <mesh name="elevator_surface_mesh" file="elevator_surface.stl" scale="1 1 1"/>
+    <mesh name="vertical_fin_mesh" file="vertical_fin.stl" scale="1 1 1"/>
+    <mesh name="rudder_surface_mesh" file="rudder_surface.stl" scale="1 1 1"/>
     <mesh name="comp_fuselage_fc_mesh" file="comp_fuselage_fc.stl" scale="1 1 1"/>
     <mesh name="comp_fuselage_battery_mesh" file="comp_fuselage_battery.stl" scale="1 1 1"/>
     <mesh name="comp_fuselage_esc_mesh" file="comp_fuselage_esc.stl" scale="1 1 1"/>
     <mesh name="comp_fuselage_motor_mesh" file="comp_fuselage_motor.stl" scale="1 1 1"/>
     <mesh name="comp_fuselage_prop_mesh" file="comp_fuselage_prop.stl" scale="1 1 1"/>
     <mesh name="servo_SCS0009_mesh" file="servo_SCS0009.stl" scale="1 1 1"/>
-    <mesh name="hardware_M2_shc_mesh" file="hardware_M2_shc.stl" scale="1 1 1"/>
     <mesh name="hardware_M3_shc_mesh" file="hardware_M3_shc.stl" scale="1 1 1"/>
+    <mesh name="hardware_M2_shc_mesh" file="hardware_M2_shc.stl" scale="1 1 1"/>
     <mesh name="horn_left_aileron_mesh" file="horn_left_aileron.stl" scale="1 1 1"/>
     <mesh name="horn_right_aileron_mesh" file="horn_right_aileron.stl" scale="1 1 1"/>
     <mesh name="horn_elevator_mesh" file="horn_elevator.stl" scale="1 1 1"/>
     <mesh name="horn_rudder_mesh" file="horn_rudder.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_0_mesh" file="wire_servo_bus_fuselage_0.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_1_mesh" file="wire_servo_bus_fuselage_1.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_2_mesh" file="wire_servo_bus_fuselage_2.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_3_mesh" file="wire_servo_bus_fuselage_3.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_4_mesh" file="wire_servo_bus_fuselage_4.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_5_mesh" file="wire_servo_bus_fuselage_5.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_6_mesh" file="wire_servo_bus_fuselage_6.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_7_mesh" file="wire_servo_bus_fuselage_7.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_8_mesh" file="wire_servo_bus_fuselage_8.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_9_mesh" file="wire_servo_bus_fuselage_9.stl" scale="1 1 1"/>
-    <mesh name="wire_servo_bus_fuselage_10_mesh" file="wire_servo_bus_fuselage_10.stl" scale="1 1 1"/>
   </asset>
   <worldbody>
-    <body name="fuselage" pos="0 0 0.0400">
+    <body name="fuselage" pos="0 0 0.0350">
       <freejoint name="root"/>
-      <inertial pos="-0.001171 0.003710 0.000112" mass="0.632773" fullinertia="2.138721e-03 8.708282e-04 2.663597e-03 -2.278781e-05 2.624008e-06 3.231256e-05"/>
+      <inertial pos="-0.000000 0.011734 -0.000431" mass="0.633975" fullinertia="1.230313e-02 4.146874e-04 1.247476e-02 -2.157784e-20 -8.703008e-22 -3.059385e-06"/>
       <geom type="mesh" mesh="fuselage_mesh" rgba="0.0588 0.6000 0.3765 1.0000" contype="1" conaffinity="1"/>
       <site name="imu" pos="0 0 0" size="0.005"/>
-      <geom name="comp_fuselage_fc" type="mesh" mesh="comp_fuselage_fc_mesh" pos="0.000000 0.000000 0.026000" rgba="0.0588 0.6000 0.3765 1.0000" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_fuselage_fc" type="mesh" mesh="comp_fuselage_fc_mesh" pos="0.000000 0.000000 0.021000" rgba="0.0588 0.6000 0.3765 1.0000" contype="0" conaffinity="0" group="1"/>
       <geom name="comp_fuselage_battery" type="mesh" mesh="comp_fuselage_battery_mesh" pos="0.000000 0.000000 0.000000" rgba="0.0745 0.4863 0.7412 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="comp_fuselage_esc" type="mesh" mesh="comp_fuselage_esc_mesh" pos="0.000000 0.000000 -0.024500" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="comp_fuselage_motor" type="mesh" mesh="comp_fuselage_motor_mesh" pos="0.000000 0.081000 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.707107 0.000000 0.000000"/>
-      <geom name="comp_fuselage_prop" type="mesh" mesh="comp_fuselage_prop_mesh" pos="0.000000 -0.014300 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="left_aileron_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.061250 -0.050000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="right_aileron_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="0.038750 -0.050000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="elevator_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.011250 -0.090000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="rudder_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.005800 -0.090000 0.013750" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_left_aileron_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.057750 -0.050000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_left_aileron_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.057750 -0.050000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_left_aileron_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.048000 -0.046000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_left_aileron_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.048000 -0.054000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_left_aileron_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.048000 -0.046000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_left_aileron_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.048000 -0.054000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_right_aileron_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.042250 -0.050000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_right_aileron_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.042250 -0.050000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_right_aileron_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.052000 -0.046000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_right_aileron_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.052000 -0.054000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_right_aileron_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.052000 -0.046000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_right_aileron_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.052000 -0.054000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_elevator_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.090000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_elevator_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.090000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_elevator_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.086000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_elevator_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.094000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_elevator_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.086000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_elevator_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.094000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_rudder_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008200 -0.090000 0.017250" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="screw_rudder_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.019800 -0.090000 0.017250" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_rudder_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.004000 -0.086000 0.027000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_rudder_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.004000 -0.094000 0.027000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_rudder_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.004000 -0.086000 0.027000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="horn_rudder_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.004000 -0.094000 0.027000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_fuselage_fc_fc_1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.015250 0.015250 0.026000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_fuselage_fc_fc_2" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.015250 -0.015250 0.026000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_fuselage_fc_fc_3" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.015250 0.015250 0.026000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="mount_fuselage_fc_fc_4" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.015250 -0.015250 0.026000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-      <geom name="wire_servo_bus_fuselage_0" type="mesh" mesh="wire_servo_bus_fuselage_0_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_1" type="mesh" mesh="wire_servo_bus_fuselage_1_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_2" type="mesh" mesh="wire_servo_bus_fuselage_2_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_3" type="mesh" mesh="wire_servo_bus_fuselage_3_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_4" type="mesh" mesh="wire_servo_bus_fuselage_4_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_5" type="mesh" mesh="wire_servo_bus_fuselage_5_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_6" type="mesh" mesh="wire_servo_bus_fuselage_6_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_7" type="mesh" mesh="wire_servo_bus_fuselage_7_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_8" type="mesh" mesh="wire_servo_bus_fuselage_8_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_9" type="mesh" mesh="wire_servo_bus_fuselage_9_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <geom name="wire_servo_bus_fuselage_10" type="mesh" mesh="wire_servo_bus_fuselage_10_mesh" pos="0 0 0" rgba="0.1686 0.5843 0.8392 0.9000" contype="0" conaffinity="0" group="2"/>
-      <body name="left_aileron" pos="-0.050000 -0.050000 0.000000">
-        <inertial pos="0.000000 0.000000 0.000000" mass="0.027587" fullinertia="3.825336e-06 7.463084e-05 7.816192e-05 -1.426192e-23 -3.993337e-24 -1.267726e-24"/>
-        <joint name="left_aileron" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.3500 0.3500"/>
-        <geom name="left_aileron_horn_disc" type="mesh" mesh="horn_left_aileron_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom type="mesh" mesh="left_aileron_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+      <geom name="comp_fuselage_esc" type="mesh" mesh="comp_fuselage_esc_mesh" pos="0.000000 0.000000 -0.019500" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+      <geom name="comp_fuselage_motor" type="mesh" mesh="comp_fuselage_motor_mesh" pos="0.000000 0.231000 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.707107 0.000000 0.000000"/>
+      <geom name="comp_fuselage_prop" type="mesh" mesh="comp_fuselage_prop_mesh" pos="0.000000 0.135700 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_fuselage_fc_fc_1" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.015250 0.015250 0.021000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_fuselage_fc_fc_2" type="mesh" mesh="hardware_M3_shc_mesh" pos="0.015250 -0.015250 0.021000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_fuselage_fc_fc_3" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.015250 0.015250 0.021000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+      <geom name="mount_fuselage_fc_fc_4" type="mesh" mesh="hardware_M3_shc_mesh" pos="-0.015250 -0.015250 0.021000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+      <body name="left_wing" pos="-0.220000 0.050000 0.025000">
+        <inertial pos="-0.000453 -0.001893 0.000259" mass="0.318528" fullinertia="6.157910e-04 3.711296e-03 4.313145e-03 -8.127675e-06 7.214589e-07 3.731045e-06"/>
+        <geom type="mesh" mesh="left_wing_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+        <geom name="left_aileron_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.011250 -0.055000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+        <geom name="screw_left_aileron_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.055000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="screw_left_aileron_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.055000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_left_aileron_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.051000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_left_aileron_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.059000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_left_aileron_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.051000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_left_aileron_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.059000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <body name="left_aileron_surface" pos="0.000000 -0.055000 0.000000">
+          <inertial pos="0.000000 0.000000 0.000000" mass="0.027587" fullinertia="3.825336e-06 7.463084e-05 7.816192e-05 -1.426192e-23 -3.993337e-24 -1.267726e-24"/>
+          <joint name="left_aileron" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.3500 0.3500"/>
+          <geom name="left_aileron_horn_disc" type="mesh" mesh="horn_left_aileron_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom type="mesh" mesh="left_aileron_surface_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+        </body>
       </body>
-      <body name="right_aileron" pos="0.050000 -0.050000 0.000000">
-        <inertial pos="0.000000 0.000000 0.000000" mass="0.027587" fullinertia="3.825336e-06 7.463084e-05 7.816192e-05 -1.426192e-23 -3.993337e-24 -1.267726e-24"/>
-        <joint name="right_aileron" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.3500 0.3500"/>
-        <geom name="right_aileron_horn_disc" type="mesh" mesh="horn_right_aileron_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom type="mesh" mesh="right_aileron_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+      <body name="right_wing" pos="0.220000 0.050000 0.025000">
+        <inertial pos="-0.000453 -0.001893 0.000259" mass="0.318528" fullinertia="6.157910e-04 3.711296e-03 4.313145e-03 -8.127675e-06 7.214589e-07 3.731045e-06"/>
+        <geom type="mesh" mesh="right_wing_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+        <geom name="right_aileron_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.011250 -0.055000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+        <geom name="screw_right_aileron_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.055000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="screw_right_aileron_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.055000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_right_aileron_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.051000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_right_aileron_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.059000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_right_aileron_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.051000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <geom name="horn_right_aileron_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.059000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+        <body name="right_aileron_surface" pos="0.000000 -0.055000 0.000000">
+          <inertial pos="0.000000 0.000000 0.000000" mass="0.027587" fullinertia="3.825336e-06 7.463084e-05 7.816192e-05 -1.426192e-23 -3.993337e-24 -1.267726e-24"/>
+          <joint name="right_aileron" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.3500 0.3500"/>
+          <geom name="right_aileron_horn_disc" type="mesh" mesh="horn_right_aileron_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom type="mesh" mesh="right_aileron_surface_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+        </body>
       </body>
-      <body name="elevator" pos="0.000000 -0.090000 0.000000">
-        <inertial pos="0.000000 0.000000 0.000000" mass="0.030597" fullinertia="4.242801e-06 1.021536e-04 1.060700e-04 3.480035e-23 6.327336e-25 8.858271e-25"/>
-        <joint name="elevator" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.5200 0.5200"/>
-        <geom name="elevator_horn_disc" type="mesh" mesh="horn_elevator_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom type="mesh" mesh="elevator_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
-      </body>
-      <body name="rudder" pos="0.000000 -0.090000 0.025000">
-        <inertial pos="-0.000000 0.000000 -0.000000" mass="0.011028" fullinertia="5.973760e-06 4.562115e-06 1.529283e-06 1.270640e-24 4.561272e-25 9.401432e-39"/>
-        <joint name="rudder" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.0216" range="-0.5200 0.5200"/>
-        <geom name="rudder_horn_disc" type="mesh" mesh="horn_rudder_mesh" pos="0.000000 0.000000 0.003000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
-        <geom type="mesh" mesh="rudder_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+      <body name="tail_boom" pos="0.000000 -0.375000 0.000000">
+        <inertial pos="-0.000000 0.000000 0.125000" mass="0.042315" fullinertia="2.219123e-04 2.219123e-04 3.046658e-06 -2.482795e-22 -2.475877e-21 -2.848461e-23"/>
+        <geom type="mesh" mesh="tail_boom_mesh" rgba="0.7490 0.8000 0.8392 1.0000" contype="1" conaffinity="1"/>
+        <body name="horizontal_stab" pos="0.000000 0.000000 0.250000">
+          <inertial pos="-0.001811 -0.003626 0.000959" mass="0.087664" fullinertia="4.860025e-05 3.951290e-04 4.404446e-04 -2.876700e-06 5.776825e-07 1.419099e-06"/>
+          <geom type="mesh" mesh="horizontal_stab_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+          <geom name="elevator_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.011250 -0.025000 0.005800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+          <geom name="screw_elevator_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.025000 -0.008200" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="screw_elevator_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.007750 -0.025000 0.019800" quat="0.707107 0.000000 0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_elevator_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.021000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_elevator_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.029000 -0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_elevator_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.021000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_elevator_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.002000 -0.029000 0.004000" quat="0.707107 0.000000 -0.707107 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <body name="elevator_surface" pos="0.000000 -0.025000 0.000000">
+            <inertial pos="-0.000000 0.000000 0.000000" mass="0.029361" fullinertia="2.358638e-06 1.530766e-04 1.551220e-04 7.589548e-24 2.023879e-24 2.428655e-25"/>
+            <joint name="elevator" type="hinge" pos="0 0 0" axis="1.000000 0.000000 0.000000" damping="0.0216" range="-0.5200 0.5200"/>
+            <geom name="elevator_horn_disc" type="mesh" mesh="horn_elevator_mesh" pos="0.003000 0.000000 0.000000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+            <geom type="mesh" mesh="elevator_surface_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+          </body>
+        </body>
+        <body name="vertical_fin" pos="0.000000 0.000000 0.250000">
+          <inertial pos="-0.002502 -0.001343 -0.004839" mass="0.033936" fullinertia="3.608452e-05 2.012333e-05 1.932338e-05 -1.357307e-06 -3.139326e-07 -2.668705e-06"/>
+          <geom type="mesh" mesh="vertical_fin_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+          <geom name="rudder_servo" type="mesh" mesh="servo_SCS0009_mesh" pos="-0.005800 -0.025000 -0.011250" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1"/>
+          <geom name="screw_rudder_ear_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008200 -0.025000 -0.007750" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="screw_rudder_ear_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.019800 -0.025000 -0.007750" quat="1.000000 0.000000 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_rudder_out_1" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.004000 -0.021000 0.002000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_rudder_out_2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.004000 -0.029000 0.002000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_rudder_out_3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.004000 -0.021000 0.002000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <geom name="horn_rudder_out_4" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.004000 -0.029000 0.002000" quat="0.000000 0.000000 -1.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+          <body name="rudder_surface" pos="0.000000 -0.025000 0.000000">
+            <inertial pos="0.000000 0.000000 0.000000" mass="0.011965" fullinertia="1.086861e-05 1.003502e-05 9.612237e-07 -4.948790e-26 6.598387e-25 -6.185987e-25"/>
+            <joint name="rudder" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.0216" range="-0.5200 0.5200"/>
+            <geom name="rudder_horn_disc" type="mesh" mesh="horn_rudder_mesh" pos="0.000000 0.000000 0.003000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
+            <geom type="mesh" mesh="rudder_surface_mesh" rgba="0.8078 0.8510 0.8784 1.0000" contype="1" conaffinity="1"/>
+          </body>
+        </body>
       </body>
     </body>
   </worldbody>
   <contact>
-    <exclude body1="fuselage" body2="elevator"/>
-    <exclude body1="fuselage" body2="left_aileron"/>
-    <exclude body1="fuselage" body2="right_aileron"/>
-    <exclude body1="fuselage" body2="rudder"/>
+    <exclude body1="fuselage" body2="elevator_surface"/>
+    <exclude body1="fuselage" body2="horizontal_stab"/>
+    <exclude body1="fuselage" body2="left_aileron_surface"/>
+    <exclude body1="fuselage" body2="left_wing"/>
+    <exclude body1="fuselage" body2="right_aileron_surface"/>
+    <exclude body1="fuselage" body2="right_wing"/>
+    <exclude body1="fuselage" body2="rudder_surface"/>
+    <exclude body1="fuselage" body2="tail_boom"/>
+    <exclude body1="fuselage" body2="vertical_fin"/>
+    <exclude body1="horizontal_stab" body2="elevator_surface"/>
+    <exclude body1="left_wing" body2="left_aileron_surface"/>
+    <exclude body1="right_wing" body2="right_aileron_surface"/>
+    <exclude body1="tail_boom" body2="elevator_surface"/>
+    <exclude body1="tail_boom" body2="horizontal_stab"/>
+    <exclude body1="tail_boom" body2="rudder_surface"/>
+    <exclude body1="tail_boom" body2="vertical_fin"/>
+    <exclude body1="vertical_fin" body2="rudder_surface"/>
   </contact>
   <actuator>
     <position name="left_aileron_motor" joint="left_aileron" kp="4.5" ctrlrange="-0.3500 0.3500" forcerange="-0.23 0.23"/>
