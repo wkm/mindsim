@@ -1153,6 +1153,7 @@ def get_assembly_sequence(bot: str):
             "prerequisites": list(op.prerequisites),
             "description": op.description,
             "repr": pretty_repr(repr(op)),
+            "repr_oneline": repr(op),
             "meshes": _meshes_for_op(op),
         }
         ops.append(op_dict)

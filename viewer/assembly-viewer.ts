@@ -424,9 +424,7 @@ function injectAssemblyStyles(): void {
 // ---------------------------------------------------------------------------
 
 function opSummary(op: AssemblyOpData): string {
-  const action = op.action.toUpperCase();
-  const target = op.target?.label ?? op.target?.id ?? op.body;
-  return `step ${op.step}: ${action} ${target}`;
+  return op.repr_oneline ?? op.repr ?? `step ${op.step}: ${op.action} ${op.body}`;
 }
 
 // ---------------------------------------------------------------------------

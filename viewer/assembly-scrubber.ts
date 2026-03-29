@@ -31,6 +31,7 @@ export interface AssemblyOpData {
   tool: string | null;
   prerequisites: number[];
   repr?: string;
+  repr_oneline?: string;
   meshes?: AssemblyMeshRef[];
 }
 
