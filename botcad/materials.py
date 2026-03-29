@@ -90,6 +90,16 @@ PLA = Material(
     yield_strength=mpa(40),
     process=PrintProcess(),
 )
+PLA_LIGHT = Material(
+    "PLA_light",
+    color=(*BP_LIGHT_GRAY1, 1.0),
+    roughness=0.8,
+    density=KgPerM3(1200.0),
+    youngs_modulus=gpa(2.3),
+    poisson_ratio=0.35,
+    yield_strength=mpa(40),
+    process=PrintProcess(wall_layers=1, infill=0.10),
+)
 TPU = Material(
     "TPU",
     color=(*BP_DARK_GRAY3, 1.0),
