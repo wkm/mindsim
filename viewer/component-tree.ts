@@ -175,8 +175,10 @@ export class ComponentTree {
     searchInput.className = 'tree-search';
     this._searchInput = searchInput;
 
-    const clearBtn = document.createElement('span');
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
     clearBtn.className = 'tree-search-clear';
+    clearBtn.setAttribute('aria-label', 'Clear search');
     clearBtn.innerHTML = CLEAR_ICON;
     clearBtn.style.display = 'none';
     clearBtn.addEventListener('click', () => {
@@ -187,7 +189,7 @@ export class ComponentTree {
     });
 
     searchInput.addEventListener('input', () => {
-      clearBtn.style.display = searchInput.value ? 'block' : 'none';
+      clearBtn.style.display = searchInput.value ? 'inline-flex' : 'none';
       clearTimeout(this._searchTimeout);
       this._searchTimeout = setTimeout(() => {
         this._searchQuery = searchInput.value.toLowerCase();
@@ -757,6 +759,7 @@ export class ComponentTree {
         width: 18px; height: 18px;
         display: inline-flex; align-items: center; justify-content: center;
         color: var(--gray3); cursor: pointer;
+        border: none; padding: 0; background: none;
         border-radius: 50%; transition: background 0.1s, color 0.1s;
       }
       .tree-search-clear:hover { background: var(--secondary); color: var(--foreground); }
