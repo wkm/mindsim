@@ -18,8 +18,10 @@ import json
 import threading
 import time
 import traceback
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -1221,7 +1223,367 @@ def get_viewer_manifest(bot: str):
 
     from botcad.emit.viewer import build_viewer_manifest
 
-    return build_viewer_manifest(bot_obj)
+    return build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
+
+
+@app.get("/api/bots/{bot}/assembly-sequence")
+def get_assembly_sequence(bot: str):
+    """Return the assembly sequence for a bot, enriched with mesh references.
+
+    Each op carries a ``meshes`` array so the viewer can load STLs directly
+    from the assembly sequence without a separate manifest lookup.
+    """
+    try:
+        bot_obj, _cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Assembly sequence generation failed: {e}") from e
+
+    from botcad.assembly.build import build_assembly_sequence
+    from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
+    from botcad.assembly.tools import TOOL_LIBRARY
+    from botcad.emit.viewer import build_viewer_manifest
+    from botcad.formatting import pretty_repr
+
+    seq = build_assembly_sequence(bot_obj)
+    manifest = build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
+
+    # Build lookup indices from the manifest for fast mesh resolution
+    _body_by_name = {b["name"]: b for b in manifest["bodies"]}
+    _mounts_by_key = {
+        (m["body"], m["label"]): m for m in (manifest.get("mounts") or [])
+    }
+    # Fastener parts indexed by (body, per-body-index)
+    _fastener_parts: dict[tuple[str, int], dict] = {}
+    _fastener_count: dict[str, int] = {}
+    for p in manifest.get("parts") or []:
+        if p.get("category") == "fastener":
+            body = p["parent_body"]
+            idx = _fastener_count.get(body, 0)
+            _fastener_count[body] = idx + 1
+            _fastener_parts[(body, idx)] = p
+    # Wire parts indexed by route label
+    _wire_parts: dict[str, list[dict]] = {}
+    for p in manifest.get("parts") or []:
+        if p.get("category") == "wire" and p.get("wire_kind") != "stub":
+            label = p["name"]
+            _wire_parts.setdefault(label, []).append(p)
+
+    def _round_vec(v):
+        return [round(x, 6) for x in v]
+
+    def _meshes_for_op(op) -> list[dict]:
+        """Resolve mesh file + pos/quat for an assembly op."""
+        meshes: list[dict] = []
+        target = op.target
+
+        if op.action.value == "insert" and isinstance(target, ComponentRef):
+            if target.mount_label == "__body__":
+                # Body shell placement
+                body = _body_by_name.get(str(target.body))
+                if body:
+                    meshes.append(
+                        {
+                            "file": body["mesh"],
+                            "pos": body["pos"],
+                            "quat": body["quat"],
+                        }
+                    )
+                    if body.get("color"):
+                        meshes[-1]["color"] = body["color"]
+            elif target.mount_label.startswith("servo_"):
+                # Servo insertion — look for servo body in manifest
+                joint_name = target.mount_label[len("servo_") :]
+                servo_body = _body_by_name.get(f"servo_{joint_name}")
+                if servo_body:
+                    meshes.append(
+                        {
+                            "file": servo_body["mesh"],
+                            "pos": servo_body["pos"],
+                            "quat": servo_body["quat"],
+                        }
+                    )
+                    if servo_body.get("color"):
+                        meshes[-1]["color"] = servo_body["color"]
+                # Also include the horn if it exists
+                horn_body = _body_by_name.get(f"horn_{joint_name}")
+                if horn_body:
+                    meshes.append(
+                        {
+                            "file": horn_body["mesh"],
+                            "pos": horn_body["pos"],
+                            "quat": horn_body["quat"],
+                        }
+                    )
+                    if horn_body.get("color"):
+                        meshes[-1]["color"] = horn_body["color"]
+            else:
+                # Mounted component (battery, camera, etc.)
+                mount = _mounts_by_key.get((str(target.body), target.mount_label))
+                if mount:
+                    if mount.get("meshes"):
+                        # Multi-material component
+                        meshes.extend(
+                            {
+                                "file": sub["file"],
+                                "pos": mount["pos"],
+                                "quat": mount["quat"],
+                                "material": sub.get("material"),
+                            }
+                            for sub in mount["meshes"]
+                        )
+                    else:
+                        entry: dict = {
+                            "file": mount["mesh"],
+                            "pos": mount["pos"],
+                            "quat": mount["quat"],
+                        }
+                        if mount.get("color"):
+                            entry["color"] = mount["color"]
+                        meshes.append(entry)
+
+        elif op.action.value == "fasten" and isinstance(target, FastenerRef):
+            part = _fastener_parts.get((str(target.body), target.index))
+            if part and part.get("pos") and part.get("quat"):
+                meshes.append(
+                    {
+                        "file": part["mesh"],
+                        "pos": part["pos"],
+                        "quat": part["quat"],
+                    }
+                )
+
+        elif op.action.value == "route_wire" and isinstance(target, WireRef):
+            wire_parts = _wire_parts.get(target.label, [])
+            for wp in wire_parts:
+                entry = {
+                    "file": wp["mesh"],
+                    "pos": wp.get("pos", [0.0, 0.0, 0.0]),
+                    "quat": wp.get("quat", [1.0, 0.0, 0.0, 0.0]),
+                }
+                if wp.get("color"):
+                    entry["color"] = wp["color"]
+                meshes.append(entry)
+
+        # CONNECT and ARTICULATE ops have no mesh
+        return meshes
+
+    def _serialize_target(target):
+        if isinstance(target, ComponentRef):
+            return {
+                "type": "component",
+                "body": str(target.body),
+                "mount_label": target.mount_label,
+            }
+        if isinstance(target, FastenerRef):
+            return {"type": "fastener", "body": str(target.body), "index": target.index}
+        if isinstance(target, WireRef):
+            return {"type": "wire", "label": target.label}
+        # JointId (str subclass)
+        return {"type": "joint", "id": str(target)}
+
+    ops = []
+    for op in seq.ops:
+        op_dict = {
+            "step": op.step,
+            "action": op.action.value,
+            "target": _serialize_target(op.target),
+            "body": str(op.body),
+            "tool": op.tool.value if op.tool else None,
+            "approach_axis": op.approach_axis,
+            "angle": op.angle,
+            "prerequisites": list(op.prerequisites),
+            "description": op.description,
+            "repr": pretty_repr(repr(op)),
+            "repr_oneline": repr(op),
+            "meshes": _meshes_for_op(op),
+        }
+        ops.append(op_dict)
+
+    tool_library = {}
+    for kind, spec in TOOL_LIBRARY.items():
+        tool_library[kind.value] = {
+            "shaft_diameter": spec.shaft_diameter,
+            "shaft_length": spec.shaft_length,
+            "head_diameter": spec.head_diameter,
+            "grip_clearance": spec.grip_clearance,
+        }
+
+    return {"ops": ops, "tool_library": tool_library}
+
+
+# ---------------------------------------------------------------------------
+# Async DFM run/status/findings
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DFMRun:
+    run_id: str
+    bot_name: str
+    created_at: float = field(default_factory=time.monotonic)
+    state: str = "running"  # "running" | "complete" | "failed"
+    checks: list[dict] = field(default_factory=list)  # per-check status
+    findings: list[dict] = field(default_factory=list)  # serialized findings
+    error: str | None = None
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+_dfm_runs: dict[str, DFMRun] = {}
+
+_DFM_RUN_TTL = 600.0  # 10 minutes
+
+
+def _evict_stale_dfm_runs() -> None:
+    """Remove completed/failed DFM runs older than _DFM_RUN_TTL."""
+    now = time.monotonic()
+    stale = [
+        rid
+        for rid, run in _dfm_runs.items()
+        if run.state in ("complete", "failed") and now - run.created_at > _DFM_RUN_TTL
+    ]
+    for rid in stale:
+        del _dfm_runs[rid]
+
+
+def _serialize_finding(f) -> dict:
+    """Serialize a DFMFinding to a JSON-safe dict."""
+    from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
+
+    if isinstance(f.target, ComponentRef):
+        target = {
+            "type": "component",
+            "body": str(f.target.body),
+            "mount_label": f.target.mount_label,
+        }
+    elif isinstance(f.target, FastenerRef):
+        target = {
+            "type": "fastener",
+            "body": str(f.target.body),
+            "index": f.target.index,
+        }
+    elif isinstance(f.target, WireRef):
+        target = {"type": "wire", "label": f.target.label}
+    else:
+        target = {"type": "joint", "id": str(f.target)}
+
+    return {
+        "id": f.id,
+        "check_name": f.check_name,
+        "severity": f.severity.value,
+        "body": str(f.body),
+        "target": target,
+        "assembly_step": f.assembly_step,
+        "title": f.title,
+        "description": f.description,
+        "pos": list(f.pos),
+        "direction": list(f.direction) if f.direction else None,
+        "measured": f.measured,
+        "threshold": f.threshold,
+        "has_overlay": f.has_overlay,
+    }
+
+
+def _run_dfm_background(run: DFMRun) -> None:
+    """Execute DFM checks in a background thread, updating the run incrementally."""
+    try:
+        bot_obj, _cad = _load_bot(run.bot_name)
+
+        from botcad.assembly.build import build_assembly_sequence
+        from botcad.dfm.runner import discover_checks
+
+        seq = build_assembly_sequence(bot_obj)
+        checks = discover_checks()
+
+        with run.lock:
+            run.checks = [{"name": c.name, "state": "pending"} for c in checks]
+
+        for i, check in enumerate(checks):
+            with run.lock:
+                run.checks[i]["state"] = "running"
+
+            try:
+                findings = check.run(bot_obj, seq)
+                serialized = [_serialize_finding(f) for f in findings]
+                with run.lock:
+                    run.findings.extend(serialized)
+                    run.checks[i]["state"] = "complete"
+                    run.checks[i]["findings_count"] = len(findings)
+            except Exception as e:
+                with run.lock:
+                    run.checks[i]["state"] = "failed"
+                    run.checks[i]["error"] = str(e)
+
+        with run.lock:
+            run.state = "complete"
+
+    except Exception as e:
+        traceback.print_exc()
+        with run.lock:
+            run.state = "failed"
+            run.error = str(e)
+
+
+@app.post("/api/bots/{bot}/dfm/run")
+def start_dfm_run(bot: str):
+    """Start an async DFM run. Returns a run_id for polling."""
+    _evict_stale_dfm_runs()
+
+    # Validate bot exists
+    try:
+        _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"Failed to load bot: {e}") from e
+
+    run_id = uuid.uuid4().hex[:12]
+    run = DFMRun(run_id=run_id, bot_name=bot)
+    _dfm_runs[run_id] = run
+
+    t = threading.Thread(target=_run_dfm_background, args=(run,), daemon=True)
+    t.start()
+
+    return {"run_id": run_id}
+
+
+@app.get("/api/bots/{bot}/dfm/{run_id}/status")
+def get_dfm_status(bot: str, run_id: str):
+    """Poll status of a DFM run."""
+    run = _dfm_runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, f"DFM run {run_id} not found")
+    if run.bot_name != bot:
+        raise HTTPException(404, f"DFM run {run_id} not found for bot {bot}")
+
+    with run.lock:
+        checks_total = len(run.checks)
+        checks_complete = sum(
+            1 for c in run.checks if c["state"] in ("complete", "failed")
+        )
+        return {
+            "state": run.state,
+            "checks_total": checks_total,
+            "checks_complete": checks_complete,
+            "checks": list(run.checks),
+            "error": run.error,
+        }
+
+
+@app.get("/api/bots/{bot}/dfm/{run_id}/findings")
+def get_dfm_findings(bot: str, run_id: str):
+    """Get findings from a DFM run (may be partial if still running)."""
+    run = _dfm_runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, f"DFM run {run_id} not found")
+    if run.bot_name != bot:
+        raise HTTPException(404, f"DFM run {run_id} not found for bot {bot}")
+
+    with run.lock:
+        return {"findings": list(run.findings)}
 
 
 @app.get("/api/bots/{bot}/bot.xml")
@@ -1272,6 +1634,13 @@ def get_bot_mesh(bot: str, mesh_name: str):
     )
 
 
+def _pretty_repr_cad(s: str) -> str:
+    """Lazy-import pretty_repr for cad-steps endpoint."""
+    from botcad.formatting import pretty_repr
+
+    return pretty_repr(s)
+
+
 @app.get("/api/bots/{bot}/body/{body}/cad-steps")
 def get_cad_steps_meta(bot: str, body: str):
     """Return JSON metadata for all CAD construction steps of a body."""
@@ -1292,6 +1661,8 @@ def get_cad_steps_meta(bot: str, body: str):
                 "label": s.label,
                 "op": s.op,
                 "has_tool": s.tool is not None,
+                "script": s.script,
+                "repr": _pretty_repr_cad(s.ir_repr),
             }
             for i, s in enumerate(steps)
         ],
@@ -1411,7 +1782,11 @@ async def run_fea(bot: str):
             )
             if not solve_res_tuple:
                 body_results.append(
-                    {"body": target_body.name, "status": "skipped", "reason": "no BCs"}
+                    {
+                        "body": target_body.name,
+                        "status": "skipped",
+                        "reason": "no BCs",
+                    }
                 )
                 continue
 

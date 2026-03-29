@@ -52,8 +52,9 @@ from botcad.geometry import (
     MountRotation,
     PackingResult,
 )
+from botcad.ids import BodyId, JointId
 from botcad.materials import PLA, Material
-from botcad.units import Kg, Meters, Position, Size3D
+from botcad.units import Kg, Meters, Position, Radians, Size3D
 
 _ZERO_M = Meters(0.0)
 _DEFAULT_PADDING = Meters(0.005)
@@ -84,8 +85,8 @@ _FACE_ROTATION: dict[str, _FaceRotEntry] = {
 class ClearanceConstraint:
     """Expected clearance between two bodies in the assembly."""
 
-    body_a: str  # body name
-    body_b: str  # body name
+    body_a: BodyId  # body name
+    body_b: BodyId  # body name
     min_distance: Meters = _ZERO_M  # meters — minimum acceptable gap
     label: str = ""  # human-readable description
 
@@ -144,7 +145,7 @@ class Assembly:
 
     def body(self, name: str, shape: BodyShape = BodyShape.BOX, **kwargs) -> Body:
         """Create a body in this assembly. First body created becomes bot root."""
-        b = Body(name=name, shape=shape, assembly=self, **kwargs)
+        b = Body(name=BodyId(name), shape=shape, assembly=self, **kwargs)
         if self._bot.root is None:
             self._bot.root = b
         return b
@@ -264,11 +265,11 @@ class Joint:
     that take Joint arguments.  Within a bot build, each Joint is a singleton.
     """
 
-    name: str
+    name: JointId
     servo: ServoSpec
     axis: Vec3  # rotation axis in parent frame
     pos: Vec3  # joint position relative to parent body origin
-    range_rad: tuple[float, float] | None = None  # override servo default
+    range_rad: tuple[Radians, Radians] | None = None  # override servo default
     grip: bool = False  # force-limited gripper actuator
     bracket_style: BracketStyle = BracketStyle.POCKET
     child: Body | None = None
@@ -280,7 +281,7 @@ class Joint:
     solved_servo_quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
 
     @property
-    def effective_range(self) -> tuple[float, float]:
+    def effective_range(self) -> tuple[Radians, Radians]:
         if self.range_rad is not None:
             return self.range_rad
         return self.servo.range_rad
@@ -330,7 +331,7 @@ class Joint:
         # Accept both 'assembly' and 'module' (backward compat)
         effective_assembly = assembly or module
         b = Body(
-            name=name,
+            name=BodyId(name),
             shape=shape,
             radius=radius,
             width=width,
@@ -366,7 +367,7 @@ class Body:
     that take Body arguments.  Within a bot build, each Body is a singleton.
     """
 
-    name: str
+    name: BodyId
     shape: BodyShape = BodyShape.BOX
     kind: BodyKind = BodyKind.FABRICATED
     radius: Meters = _ZERO_M
@@ -414,7 +415,7 @@ class Body:
     shapescript: object | None = None
 
     # For purchased parts: which structural body this part is associated with
-    parent_body_name: str | None = None
+    parent_body_name: BodyId | None = None
 
     # Mesh filename for this body (e.g., "base.stl", "servo_STS3215.stl")
     mesh_file: str | None = None
@@ -526,7 +527,7 @@ class Body:
         """Add a joint (with servo) connecting to a new child body."""
         axis_vec = _parse_axis(axis)
         j = Joint(
-            name=name,
+            name=JointId(name),
             servo=servo,
             axis=axis_vec,
             pos=pos,
@@ -589,16 +590,18 @@ class Bot:
 
     def clearance(
         self,
-        body_a: str,
-        body_b: str,
+        body_a: str | BodyId,
+        body_b: str | BodyId,
         min_distance: Meters = _ZERO_M,
         label: str = "",
     ) -> None:
         """Declare an expected clearance between two bodies."""
+        a = body_a if isinstance(body_a, BodyId) else BodyId(body_a)
+        b = body_b if isinstance(body_b, BodyId) else BodyId(body_b)
         self._clearance_constraints.append(
             ClearanceConstraint(
-                body_a=body_a,
-                body_b=body_b,
+                body_a=a,
+                body_b=b,
                 min_distance=min_distance,
                 label=label,
             )
@@ -616,7 +619,7 @@ class Bot:
         existing |= {(c.body_b, c.body_a) for c in self._clearance_constraints}
         body_names = {b.name for b in self.all_bodies}
 
-        def _add(a: str, b: str, min_dist: float, label: str) -> None:
+        def _add(a: BodyId, b: BodyId, min_dist: float, label: str) -> None:
             if a == b:
                 return
             if (a, b) not in existing and (b, a) not in existing:
@@ -630,14 +633,14 @@ class Bot:
                 continue
             for joint in body.joints:
                 # Collect all bodies at this joint
-                joint_bodies = []
+                joint_bodies: list[tuple[BodyId, str]] = []
                 joint_bodies.append((body.name, "parent"))
                 if joint.child:
                     joint_bodies.append((joint.child.name, "child"))
-                servo_name = f"servo_{joint.name}"
+                servo_name = BodyId(f"servo_{joint.name}")
                 if servo_name in body_names:
                     joint_bodies.append((servo_name, "servo"))
-                horn_name = f"horn_{joint.name}"
+                horn_name = BodyId(f"horn_{joint.name}")
                 if horn_name in body_names:
                     joint_bodies.append((horn_name, "horn"))
 
@@ -663,7 +666,7 @@ class Bot:
             for mount in body.mounts:
                 if mount.component.kind == ComponentKind.WHEEL:
                     continue
-                comp_name = f"comp_{body.name}_{mount.label}"
+                comp_name = BodyId(f"comp_{body.name}_{mount.label}")
                 if comp_name in body_names:
                     _add(
                         comp_name,
@@ -683,7 +686,7 @@ class Bot:
     ) -> Body:
         """Create the root body of the robot."""
         b = Body(
-            name=name,
+            name=BodyId(name),
             shape=shape,
             padding=padding,
             explicit_dimensions=dimensions,
@@ -904,7 +907,7 @@ class Bot:
             # --- Servo bodies for each joint ---
             for joint in body.joints:
                 servo_body = Body(
-                    name=f"servo_{joint.name}",
+                    name=BodyId(f"servo_{joint.name}"),
                     kind=BodyKind.PURCHASED,
                     parent_body_name=body.name,
                 )
@@ -924,7 +927,7 @@ class Bot:
                 params = horn_disc_params(joint.servo)
                 if params is not None:
                     horn_body = Body(
-                        name=f"horn_{joint.name}",
+                        name=BodyId(f"horn_{joint.name}"),
                         kind=BodyKind.PURCHASED,
                         parent_body_name=body.name,
                     )
@@ -951,7 +954,7 @@ class Bot:
             # --- Mounted components (battery, camera, Pi, etc.) ---
             for mount in body.mounts:
                 comp_body = Body(
-                    name=f"comp_{body.name}_{mount.label}",
+                    name=BodyId(f"comp_{body.name}_{mount.label}"),
                     kind=BodyKind.PURCHASED,
                     parent_body_name=body.name,
                 )

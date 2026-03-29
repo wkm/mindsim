@@ -89,6 +89,7 @@ ignore = [
 "botcad/render_svg.py" = ["TID251"]
 "botcad/debug_drawing.py" = ["TID251"]
 "botcad/validation.py" = ["TID251"]
+"botcad/assembly/tools.py" = ["TID251"]
 "mindsim/server.py" = ["TID251"]
 "tests/**" = ["TID251"]
 "scripts/**" = ["TID251"]

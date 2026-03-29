@@ -2,14 +2,13 @@
  * MindSim Bot Viewer — MuJoCo-based bot visualization.
  *
  * Loads MuJoCo WASM, builds Three.js scene from the bot model,
- * and routes between Explore/Joint/Assembly/IK modes.
+ * and routes between Explore/Joint/IK modes.
  *
  * Based on the monolithic viewer.js, extracted as an importable module
  * so viewer.js can act as a URL router.
  */
 
 import * as THREE from 'three';
-import { AssemblyMode } from './assembly-mode.ts';
 import { BotScene } from './bot-scene.ts';
 import { ExploreMode } from './explore-mode.ts';
 import { FocusController } from './focus-controller.ts';
@@ -598,7 +597,7 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
 
     // Update URL — clear mode-specific sub-state from previous mode
     updateViewState({ mode: modeName });
-    clearViewState('step', 'select');
+    clearViewState('select');
 
     // Refit canvas to the visible area between panels
     requestAnimationFrame(() => updateCanvasLayout());
@@ -656,10 +655,8 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
       modes.explore = new ExploreMode(ctx, manifest);
     }
     modes.joint = new JointMode(ctx);
-    modes.assembly = new AssemblyMode(ctx);
     modes.ik = new IKMode(ctx);
     modes.stress = new StressMode(ctx);
-
     // Build sim mode tabs dynamically (the #mode-tabs div is shared with Design/Sim
     // tab buttons, so we create a separate container for Explore/Stress/etc.)
     let simModeTabs = document.getElementById('sim-mode-tabs');
@@ -678,12 +675,11 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
       }
     }
     simModeTabs.innerHTML = '';
-    const simModeNames = ['explore', 'stress', 'joint', 'assembly', 'ik'];
+    const simModeNames = ['explore', 'stress', 'joint', 'ik'];
     const simModeLabels: Record<string, string> = {
       explore: 'Explore',
       stress: 'Stress',
       joint: 'Joints',
-      assembly: 'Assembly',
       ik: 'IK',
     };
     for (const name of simModeNames) {
@@ -750,21 +746,6 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
         if (explore.tree) explore.tree.setFocused(nodeId);
       }
     }
-    if (initialState?.step !== undefined && startMode === 'assembly' && modes.assembly) {
-      const assembly = modes.assembly as AssemblyMode;
-      // Clamp step to valid range — goToStep will be called after manifest loads.
-      // Assembly mode loads manifest in activate(), so we defer step application.
-      const waitForSteps = () => {
-        if (assembly.steps.length > 0) {
-          const clampedStep = Math.max(0, Math.min(initialState.step!, assembly.steps.length - 1));
-          assembly.goToStep(clampedStep);
-        } else {
-          requestAnimationFrame(waitForSteps);
-        }
-      };
-      requestAnimationFrame(waitForSteps);
-    }
-
     let paused = false;
 
     viewport.animate(() => {

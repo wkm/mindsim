@@ -1,8 +1,7 @@
 """Emit viewer_manifest.json for the 3D web viewer.
 
-Walks the kinematic tree and produces structured assembly steps,
-joint metadata, IK chain definitions, and enriched body/joint/mount data
-for the CAD-app-style explore mode.
+Walks the kinematic tree and produces joint metadata, IK chain definitions,
+and enriched body/joint/mount data for the CAD-app-style explore mode.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from botcad.geometry import PackingResult, Pose
+    from botcad.ids import BodyId
     from botcad.skeleton import Body, Bot, Joint
 
 import logging
@@ -62,24 +62,6 @@ def _component_specs(comp) -> dict:
 def _round_vec(v):
     """Round a tuple/list of floats to 6 decimal places (µm precision for meters)."""
     return [round(x, 6) for x in v]
-
-
-def _build_assembly_tree(bot: Bot) -> list[dict]:
-    """Build the assembly hierarchy for the viewer manifest."""
-    from botcad.skeleton import Assembly
-
-    def _assembly_dict(asm: Assembly) -> dict:
-        # Collect body names belonging to this assembly
-        body_names = [b.name for b in bot.all_bodies if b.assembly is asm]
-        sub_assemblies = [_assembly_dict(sub) for sub in asm._sub_assemblies.values()]
-        return {
-            "name": asm.name,
-            "path": asm.path,
-            "bodies": body_names,
-            "sub_assemblies": sub_assemblies,
-        }
-
-    return [_assembly_dict(asm) for asm in bot._assemblies.values()]
 
 
 def _get_multi_material_result(comp, cache: dict):
@@ -151,7 +133,7 @@ def _fastener_entry(
     index: int,
     mp,
     fp: Pose,
-    body_name: str,
+    body_name: BodyId,
 ) -> dict:
     """Build a manifest entry for a fastener at a computed Pose.
 
@@ -204,20 +186,16 @@ def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dic
 
     manifest = {
         "bot_name": bot.name,
-        "assemblies": _build_assembly_tree(bot),
         "bodies": [],
         "joints": [],
         "mounts": [],
         "parts": [],
-        "assembly_steps": [],
         "ik_chains": [],
         "materials": _build_materials_dict(bot, mm_cache),
     }
 
-    # Walk tree to build body/joint lists and assembly steps
-    step_num = [0]
-
-    def _walk_body(body: Body, parent_name: str | None, joint: Joint | None) -> None:
+    # Walk tree to build body/joint lists
+    def _walk_body(body: Body, parent_name: BodyId | None, joint: Joint | None) -> None:
         # Body entry — enriched with shape, dimensions, mass
         body_entry = {
             "name": body.name,
@@ -300,40 +278,6 @@ def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dic
                 ],
             }
             manifest["joints"].append(joint_entry)
-
-        # Assembly step
-        step_num[0] += 1
-        step = {
-            "step": step_num[0],
-            "title": body.name,
-            "body": body.name,
-        }
-
-        # Components mounted in this body
-        components = [
-            {
-                "label": mount.label,
-                "component": mount.component.name,
-            }
-            for mount in body.mounts
-        ]
-        if components:
-            step["components"] = components
-
-        # Servo for the joint connecting this body
-        if joint:
-            step["servo"] = {
-                "joint": joint.name,
-                "model": joint.servo.name,
-            }
-            step["description"] = f"Attach via {joint.servo.name} at joint {joint.name}"
-        else:
-            step["description"] = "Base structure"
-            if components:
-                comp_names = ", ".join(c["label"] for c in components)
-                step["description"] += f" — mount {comp_names}"
-
-        manifest["assembly_steps"].append(step)
 
         # Recurse into child joints
         for child_joint in body.joints:

@@ -571,9 +571,10 @@ class TestJawShape:
         assert dims == (0.03, 0.005, 0.04)  # X=width, Y=thickness, Z=length
 
     def test_jaw_defaults(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyShape
 
-        b = Body(name="jaw", shape=BodyShape.JAW)
+        b = Body(name=BodyId("jaw"), shape=BodyShape.JAW)
         dims = b.dimensions
         assert dims[0] == 0.03  # default width
         assert dims[1] == 0.005  # default thickness
@@ -636,15 +637,17 @@ class TestAssemblyHierarchy:
         assert finger.path == "arm/gripper/finger"
 
     def test_body_kind_default(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyKind
 
-        b = Body(name="test")
+        b = Body(name=BodyId("test"))
         assert b.kind == BodyKind.FABRICATED
 
     def test_body_kind_purchased(self):
+        from botcad.ids import BodyId
         from botcad.skeleton import Body, BodyKind
 
-        b = Body(name="servo_body", kind=BodyKind.PURCHASED)
+        b = Body(name=BodyId("servo_body"), kind=BodyKind.PURCHASED)
         assert b.kind == BodyKind.PURCHASED
 
     def test_assembly_bodies_collected(self):

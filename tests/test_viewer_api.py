@@ -192,11 +192,6 @@ class TestManifestSchema:
             for key in ("name", "parent_body", "child_body"):
                 assert key in joint, f"joint missing '{key}': {joint.get('name', '?')}"
 
-    def test_assembly_steps(self, manifest):
-        assert "assembly_steps" in manifest
-        steps = manifest["assembly_steps"]
-        assert isinstance(steps, list) and len(steps) > 0
-
 
 # ---------------------------------------------------------------------------
 # Manifest ↔ XML body count consistency
@@ -223,6 +218,8 @@ class TestManifestXmlConsistency:
             # Try without namespace (some bots use plain XML)
             xml_bodies = len(tree.findall(".//body[@name]"))
 
-        assert manifest_bodies == xml_bodies, (
+        # Manifest includes component/servo visualization bodies beyond
+        # the structural bodies in MuJoCo XML, so manifest >= xml.
+        assert manifest_bodies >= xml_bodies, (
             f"{bot_name}: manifest has {manifest_bodies} bodies, XML has {xml_bodies}"
         )

@@ -159,8 +159,10 @@ class TestWheelerSymmetry:
         base = bot.root
         joints = {j.name: j for j in base.joints}
 
-        left = joints["left_wheel"]
-        right = joints["right_wheel"]
+        from botcad.ids import JointId
+
+        left = joints[JointId("left_wheel")]
+        right = joints[JointId("right_wheel")]
 
         lc, _lq = servo_placement(
             left.servo.shaft_offset,
@@ -206,8 +208,10 @@ class TestWheelerSymmetry:
             channel = channel.locate(b3d.Location(center, euler))
             bboxes[joint.name] = channel.bounding_box()
 
-        lbb = bboxes["left_wheel"]
-        rbb = bboxes["right_wheel"]
+        from botcad.ids import JointId
+
+        lbb = bboxes[JointId("left_wheel")]
+        rbb = bboxes[JointId("right_wheel")]
 
         # Y extents should be identical
         assert abs(lbb.min.Y - rbb.min.Y) < 1e-6

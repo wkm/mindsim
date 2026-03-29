@@ -10,14 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from botcad.ids import BodyId, JointId
+
 if TYPE_CHECKING:
     from botcad.skeleton import Body, Bot, Joint
 
 
 @dataclass(frozen=True)
 class StressResult:
-    joint_name: str
-    body_name: str
+    joint_name: JointId
+    body_name: BodyId
     side: str  # "parent" or "child"
     max_torque_nm: float
     stall_torque_nm: float

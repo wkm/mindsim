@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 export interface ViewStateParams {
-  tab?: 'design' | 'sim';
+  tab?: 'design' | 'dfm' | 'sim';
   mode?: string;
   select?: string;
   solo?: string;
@@ -39,7 +39,7 @@ export function readViewState(): ViewStateParams {
   const result: ViewStateParams = {};
 
   const tab = url.get('tab');
-  if (tab === 'design' || tab === 'sim') result.tab = tab;
+  if (tab === 'design' || tab === 'dfm' || tab === 'sim') result.tab = tab;
 
   const mode = url.get('mode');
   if (mode) result.mode = mode;

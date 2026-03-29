@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from botcad.ids import BodyId
 from botcad.materials import ALUMINUM, MAT_PLA_LIGHT, PLA, TPU, Material
 from botcad.skeleton import Body, BodyShape
 
@@ -61,7 +62,7 @@ def test_material_with_metallic():
 
 def test_body_defaults_to_pla():
     """Every body should default to PLA material."""
-    body = Body(name="test", shape=BodyShape.BOX)
+    body = Body(name=BodyId("test"), shape=BodyShape.BOX)
     assert body.material is PLA
     assert body.material.density == 1200.0
 
@@ -75,7 +76,7 @@ def test_tpu_differs_from_pla():
 
 def test_fabricated_body_gets_material_after_solve():
     """After material assignment, fabricated bodies must have material with color."""
-    body = Body(name="test", shape=BodyShape.BOX)
+    body = Body(name=BodyId("test"), shape=BodyShape.BOX)
     body.material = MAT_PLA_LIGHT
     assert body.material is not None
     assert len(body.material.color) == 4

@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from botcad.ids import BodyId
 from botcad.units import Meters
 
 if TYPE_CHECKING:
@@ -23,8 +24,8 @@ if TYPE_CHECKING:
 class ClearanceResult:
     """Result of checking one clearance constraint against actual geometry."""
 
-    body_a: str
-    body_b: str
+    body_a: BodyId
+    body_b: BodyId
     intersects: bool  # do the bodies overlap?
     intersection_volume: float  # m³ -- volume of overlap (0 = no overlap)
     distance: Meters  # meters -- surface-to-surface gap (0 if intersecting)

@@ -91,13 +91,6 @@ export interface ManifestJoint {
   design_layers?: ManifestDesignLayer[];
 }
 
-export interface ManifestAssembly {
-  name: string;
-  path: string;
-  bodies: string[];
-  sub_assemblies: ManifestAssembly[];
-}
-
 export interface ViewerManifest {
   bot_name: string;
   bodies: ManifestBody[];
@@ -105,7 +98,6 @@ export interface ViewerManifest {
   mounts?: ManifestMount[];
   parts?: ManifestPart[];
   materials?: Record<string, ManifestMaterial>;
-  assemblies?: ManifestAssembly[];
 }
 
 // ---------------------------------------------------------------------------

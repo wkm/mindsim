@@ -227,6 +227,44 @@ export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry
 // Manifest quaternion conversion
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Positioned mesh with edge lines
+// ---------------------------------------------------------------------------
+
+/** Shared edge line material — consistent wireframe look across viewers. */
+export const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.35,
+  linewidth: 2, // only effective on some platforms; WebGL often caps at 1px
+});
+
+/** Create a positioned mesh with edge lines, matching component browser style. */
+export function createPositionedMesh(
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+  pos: number[],
+  quat: number[],
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.position.set(pos[0], pos[1], pos[2]);
+  mesh.quaternion.copy(manifestQuatToThree(quat));
+
+  // Add wireframe edge lines for surface definition (same as component browser)
+  const edges = new THREE.EdgesGeometry(geometry, 28);
+  const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
+  lines.raycast = () => {}; // edges don't participate in picking
+  mesh.add(lines);
+
+  return mesh;
+}
+
+// ---------------------------------------------------------------------------
+// Manifest quaternion conversion
+// ---------------------------------------------------------------------------
+
 /** Convert manifest wxyz quaternion to Three.js xyzw quaternion. */
 export function manifestQuatToThree(q: number[]): THREE.Quaternion {
   // Manifest: [w, x, y, z] -> Three.js: new Quaternion(x, y, z, w)

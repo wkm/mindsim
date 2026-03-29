@@ -64,31 +64,61 @@ def shapescript_to_cad_steps(
             case BoxOp(ref=_ref, tag=tag):
                 label = "Create box" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case CylinderOp(ref=_ref, tag=tag):
                 label = "Create cylinder" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case SphereOp(ref=_ref, tag=tag):
                 label = "Create sphere" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case PrebuiltOp(ref=_ref, tag=tag):
                 label = "Prebuilt" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case RegularPolygonExtrudeOp(ref=_ref, tag=tag):
                 label = "Create polygon extrude" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case CallOp(ref=_ref, sub_program_key=key, tag=tag):
@@ -100,19 +130,32 @@ def shapescript_to_cad_steps(
                         op="create",
                         group=key,
                         script=script_line,
+                        ir_repr=repr(op),
                     )
                 )
 
             case CopyOp(ref=_ref, source=src, tag=tag):
                 label = "Copy" + (f" ({tag})" if tag else f" of {src.id}")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             case RadialArrayOp(ref=_ref, source=src, count=n, axis=_ax, tag=tag):
                 label = f"RadialArray ×{n}" + (f" ({tag})" if tag else "")
                 steps.append(
-                    CadStep(label=label, solid=solid, op="create", script=script_line)
+                    CadStep(
+                        label=label,
+                        solid=solid,
+                        op="create",
+                        script=script_line,
+                        ir_repr=repr(op),
+                    )
                 )
 
             # Booleans — cut/union steps with tool
@@ -127,6 +170,7 @@ def shapescript_to_cad_steps(
                         op="cut",
                         tool=tool_solid,
                         script=script_line,
+                        ir_repr=repr(op),
                     )
                 )
 
@@ -141,6 +185,7 @@ def shapescript_to_cad_steps(
                         op="union",
                         tool=tool_solid,
                         script=script_line,
+                        ir_repr=repr(op),
                     )
                 )
 
@@ -156,6 +201,7 @@ def shapescript_to_cad_steps(
                         op="locate",
                         tool=tool_solid,
                         script=script_line,
+                        ir_repr=repr(op),
                     )
                 )
 
@@ -168,7 +214,11 @@ def shapescript_to_cad_steps(
                         label += f" ({tag})"
                     steps.append(
                         CadStep(
-                            label=label, solid=solid, op="create", script=script_line
+                            label=label,
+                            solid=solid,
+                            op="create",
+                            script=script_line,
+                            ir_repr=repr(op),
                         )
                     )
 

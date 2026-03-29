@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from botcad.bracket import BracketSpec
 from botcad.component import BusType, Vec3
 from botcad.geometry import rotate_vec
+from botcad.ids import BodyId, JointId
 from botcad.skeleton import BodyShape
 from botcad.units import Meters, Position
 
@@ -38,8 +39,8 @@ class WireSegment:
 
     start: Position  # body-local coordinates
     end: Position  # body-local coordinates
-    body_name: str  # which body this segment lives on
-    joint_name: str | None = None  # if crossing a joint
+    body_name: BodyId  # which body this segment lives on
+    joint_name: JointId | None = None  # if crossing a joint
     slack: Meters = Meters(0.0)  # extra length needed for joint motion (meters)
 
     @property
@@ -213,13 +214,13 @@ def _wireport_for_mount(
     return None
 
 
-def _build_parent_map(bot: Bot) -> dict[str, tuple[Joint, str]]:
+def _build_parent_map(bot: Bot) -> dict[BodyId, tuple[Joint, BodyId]]:
     """Build body_name → (parent_joint, parent_body_name) mapping.
 
     For each non-root body, records which joint connects it to its parent
     and what that parent body's name is.
     """
-    result: dict[str, tuple[Joint, str]] = {}
+    result: dict[BodyId, tuple[Joint, BodyId]] = {}
 
     def _walk(body: Body) -> None:
         for joint in body.joints:
@@ -239,8 +240,8 @@ def _expand_segment(
     bot: Bot,
     start: Vec3,
     end: Vec3,
-    body_name: str,
-    joint_name: str | None = None,
+    body_name: BodyId,
+    joint_name: JointId | None = None,
     slack: float = 0.0,
 ) -> list[WireSegment]:
     """Expand a logical segment into sub-segments routed through body interior.
@@ -391,7 +392,7 @@ def _route_servo_bus(bot: Bot) -> WireRoute:
     parent_map = _build_parent_map(bot)
     segments: list[WireSegment] = []
 
-    def _walk(body: Body, current_pos: Vec3, current_body: str) -> None:
+    def _walk(body: Body, current_pos: Vec3, current_body: BodyId) -> None:
         """Walk one subtree and emit servo bus segments."""
         for joint in body.joints:
             servo_body = body.name  # servo is mounted on joint's parent body
@@ -532,7 +533,7 @@ def _route_camera_csi(bot: Bot) -> WireRoute:
 
     # Build path from camera body back to root
     parent_map = _build_parent_map(bot)
-    path: list[tuple[str, Joint]] = []  # (body_name, joint_to_cross)
+    path: list[tuple[BodyId, Joint]] = []  # (body_name, joint_to_cross)
 
     body_name = camera_body.name
     while body_name in parent_map:
