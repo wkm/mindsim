@@ -80,6 +80,7 @@ ignore = [
 "botcad/shapescript/backend_occt.py" = ["TID251"]
 "botcad/shapescript/debug_rerun.py" = ["TID251"]
 "botcad/emit/cad.py" = ["TID251"]
+"botcad/emit/emit_wires.py" = ["TID251"]
 "botcad/emit/component_renders.py" = ["TID251"]
 "botcad/emit/drawings.py" = ["TID251"]
 "botcad/fasteners.py" = ["TID251"]
