@@ -1303,7 +1303,12 @@ export class Viewport3D {
     this._transparentBtn.addEventListener('click', () => {
       this._transparentOn = !this._transparentOn;
       this._updateTransparentBtn();
-      if (this.onTransparentToggle) this.onTransparentToggle(this._transparentOn);
+      if (this.onTransparentToggle) {
+        this.onTransparentToggle(this._transparentOn);
+      } else {
+        // Fallback: apply transparency directly to all scene meshes
+        this._applySceneTransparency(this._transparentOn);
+      }
     });
     strip.appendChild(this._transparentBtn);
     this._addToolTooltip(this._transparentBtn, 'Transparent (T)');
@@ -1463,6 +1468,30 @@ export class Viewport3D {
     const activeCSS = 'background:rgba(19,124,189,0.3);color:#2B95D6;';
     const inactiveCSS = 'background:transparent;color:#CED9E0;';
     this._transparentBtn.style.cssText = base + (this._transparentOn ? activeCSS : inactiveCSS);
+  }
+
+  /**
+   * Fallback transparent mode for viewers without BotScene (design, component).
+   * Traverses all scene meshes and sets opacity directly.
+   */
+  _applySceneTransparency(on: boolean) {
+    this._scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const mat = child.material;
+      if (!mat) return;
+      if (on) {
+        // Save originals on first apply
+        if (mat._origOpacity === undefined) {
+          mat._origOpacity = mat.opacity;
+          mat._origTransparent = mat.transparent;
+        }
+        mat.opacity = mat._origOpacity * 0.35;
+        mat.transparent = true;
+      } else if (mat._origOpacity !== undefined) {
+        mat.opacity = mat._origOpacity;
+        mat.transparent = mat._origTransparent;
+      }
+    });
   }
 
   _initKeys() {
