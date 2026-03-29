@@ -62,4 +62,5 @@ echo "  branch: exp/$NAME"
 echo ""
 
 cd "$WT_DIR"
+make wt-setup
 exec claude

@@ -18,8 +18,6 @@ from botcad.units import Meters, mm
 if TYPE_CHECKING:
     from botcad.component import MountPoint
 
-from botcad.units import Meters
-
 
 class HeadType(StrEnum):
     SOCKET_HEAD_CAP = "socket_head_cap"  # hex socket (Allen) — default

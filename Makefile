@@ -1,4 +1,4 @@
-.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm setup lint test-viewer viewer-cache web
+.PHONY: tui train quick-sim test smoketest view play renders validate wt-new wt-ls wt-rm wt-setup setup lint test-viewer viewer-cache web
 
 tui:
 	uv run mjpython main.py
@@ -84,6 +84,13 @@ setup:
 	@echo "Setup complete (git hooks, node deps, playwright browser)"
 
 # --- Worktree management ---
+
+wt-setup:
+	uv sync
+	pnpm install
+	git config core.hooksPath .githooks
+	@echo "Worktree deps installed (uv, pnpm, git hooks)"
+
 # TYPE=infra -> infra/<name> branch (no date prefix)
 # Default   -> exp/YYMMDD-<name> branch (date auto-prefixed)
 
@@ -109,7 +116,7 @@ ifdef NAME
 	@echo "  dir:    $(WT_DIR)"
 	@echo "  branch: $(BRANCH)"
 	@echo ""
-	cd "$(WT_DIR)" && exec claude
+	cd "$(WT_DIR)" && make wt-setup && exec claude
 else ifdef DESC
 	@scripts/wt-new $(DESC)
 else
