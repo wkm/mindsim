@@ -16,31 +16,14 @@
  */
 
 import type { SceneTree } from './design-scene.ts';
+import { CHEVRON_RIGHT, CHIP_ICONS, CLEAR_ICON, CODE_ICON, EYE_ICON, EYE_OFF_ICON, TREE_ICONS } from './icons.ts';
 import type { ManifestIndex, ViewerManifest } from './manifest-types.ts';
 import { indexManifest } from './manifest-types.ts';
 import { groupFasteners, humanizeJointName } from './utils.ts';
 
 // ── SVG Icons ──
 
-const CHEVRON_RIGHT = `<svg viewBox="0 0 16 16" width="10" height="10"><path d="M6 3l5 5-5 5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-const ICONS = {
-  assembly: { symbol: '\u25b8', color: '#5C7080' }, // right triangle — gray
-  body: { symbol: '\u25a0', color: '#2B95D6' }, // filled square — blue
-  servo: { symbol: '\u25a0', color: '#182026' }, // filled square — dark gray
-  horn: { symbol: '\u25a0', color: '#E8E8E8' }, // filled square — light gray
-  mount: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green
-  battery: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
-  camera: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
-  compute: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
-  component: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
-  wheel: { symbol: '\u25a0', color: '#0F9960' }, // filled square — green (mount)
-  fastener: { symbol: '\u25a0', color: '#D4A843' }, // filled square — gold
-  wire: { symbol: '\u25a0', color: '#9179F2' }, // filled square — purple
-  joint: { symbol: '\u25cf', color: '#0A6640' }, // filled circle — green
-  design_layer: { symbol: '\u25a0', color: '#CED9E0' }, // filled square — light gray
-  clearance: { symbol: '\u25a0', color: '#F55656' }, // filled square — red
-};
+const ICONS = TREE_ICONS;
 
 /** Map category filter keys to display labels and icon colors. */
 const CATEGORY_CHIPS = [
@@ -194,7 +177,7 @@ export class ComponentTree {
 
     const clearBtn = document.createElement('span');
     clearBtn.className = 'tree-search-clear';
-    clearBtn.textContent = '\u00d7';
+    clearBtn.innerHTML = CLEAR_ICON;
     clearBtn.style.display = 'none';
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
@@ -227,10 +210,11 @@ export class ComponentTree {
       btn.className = 'tree-filter-chip';
       btn.dataset.filterKey = chip.key;
 
-      const dot = document.createElement('span');
-      dot.className = 'tree-filter-dot';
-      dot.style.background = chip.color;
-      btn.appendChild(dot);
+      const ico = document.createElement('span');
+      ico.className = 'tree-filter-icon';
+      ico.style.color = chip.color;
+      ico.innerHTML = CHIP_ICONS[chip.key] || '';
+      btn.appendChild(ico);
 
       const lbl = document.createTextNode(chip.label);
       btn.appendChild(lbl);
@@ -279,11 +263,11 @@ export class ComponentTree {
    *
    * Three visual states per node:
    *   - Visible (own hidden=false, all ancestors visible):
-   *       dot = filled blue, row full opacity
+   *       eye icon shown, row full opacity
    *   - Explicitly hidden (own hidden=true):
-   *       dot = empty circle, row dimmed
+   *       eye-off icon shown, row dimmed
    *   - Implicitly hidden (own hidden=false but an ancestor is hidden):
-   *       dot = filled blue (shows it will reappear when ancestor is unhidden),
+   *       eye icon shown (shows it will reappear when ancestor is unhidden),
    *       row dimmed
    */
   updateFromDesignScene(tree: SceneTree): void {
@@ -299,10 +283,9 @@ export class ComponentTree {
 
       const dot = domNode.querySelector('.vis-dot') as HTMLElement;
       if (dot) {
-        // Dot shows OWN state: filled blue if not hidden, empty circle if hidden
-        dot.style.background = ownHidden ? 'transparent' : '#58a6ff';
-        dot.style.border = ownHidden ? '2px solid #484f58' : 'none';
-        dot.style.boxSizing = 'border-box';
+        // Swap eye icon based on own hidden state
+        dot.innerHTML = ownHidden ? EYE_OFF_ICON : EYE_ICON;
+        dot.classList.toggle('hidden', ownHidden);
       }
 
       // Row opacity shows EFFECTIVE visibility (considers ancestors + solo)
@@ -635,12 +618,13 @@ export class ComponentTree {
       header.appendChild(spacer);
     }
 
-    // Category color dot
-    const dot = document.createElement('span');
-    dot.className = 'tree-cat-dot';
+    // Category icon
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'tree-cat-icon';
     const iconDef = ICONS[iconType] || ICONS.component;
-    dot.style.background = iconDef.color;
-    header.appendChild(dot);
+    iconSpan.innerHTML = iconDef.svg;
+    iconSpan.style.color = iconDef.color;
+    header.appendChild(iconSpan);
 
     // Label
     const labelEl = document.createElement('span');
@@ -660,7 +644,7 @@ export class ComponentTree {
     if (shapescriptUrl) {
       const codeBtn = document.createElement('span');
       codeBtn.className = 'tree-code-icon';
-      codeBtn.textContent = '</>';
+      codeBtn.innerHTML = CODE_ICON;
       codeBtn.title = 'View in ShapeScript';
       codeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -670,11 +654,12 @@ export class ComponentTree {
       header.appendChild(codeBtn);
     }
 
-    // Visibility dot indicator (always last, right-aligned via margin-left:auto)
+    // Visibility eye icon (always last, right-aligned via position:absolute)
     {
       const visDot = document.createElement('span');
       visDot.className = 'vis-dot';
       visDot.title = 'Toggle visibility';
+      visDot.innerHTML = EYE_ICON;
       visDot.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this.onToggleNodeHidden) this.onToggleNodeHidden(nodeId);
@@ -769,8 +754,9 @@ export class ComponentTree {
       .tree-search::placeholder { color: var(--gray3); }
       .tree-search-clear {
         position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-        width: 18px; height: 18px; line-height: 18px; text-align: center;
-        font-size: 14px; color: var(--gray3); cursor: pointer;
+        width: 18px; height: 18px;
+        display: inline-flex; align-items: center; justify-content: center;
+        color: var(--gray3); cursor: pointer;
         border-radius: 50%; transition: background 0.1s, color 0.1s;
       }
       .tree-search-clear:hover { background: var(--secondary); color: var(--foreground); }
@@ -793,10 +779,12 @@ export class ComponentTree {
         background: rgba(19,124,189,0.06); border-color: var(--gray5);
         color: var(--foreground);
       }
-      .tree-filter-chip:not(.active) .tree-filter-dot { opacity: 0.3; }
-      .tree-filter-dot {
-        width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+      .tree-filter-chip:not(.active) .tree-filter-icon { opacity: 0.3; }
+      .tree-filter-icon {
+        width: 10px; height: 10px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
       }
+      .tree-filter-icon svg { width: 10px; height: 10px; }
 
       /* ── Tree nodes ── */
       .tree-node { }
@@ -835,9 +823,13 @@ export class ComponentTree {
         display: inline-flex;
       }
 
-      /* Category color dot */
-      .tree-cat-dot {
-        width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+      /* Category icon */
+      .tree-cat-icon {
+        width: 14px; height: 14px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+      }
+      .tree-cat-icon svg {
+        width: 14px; height: 14px;
       }
 
       /* Label */
@@ -854,23 +846,24 @@ export class ComponentTree {
         line-height: 16px; flex-shrink: 0;
       }
 
-      /* ── Visibility dot indicator (absolutely positioned at right edge) ── */
+      /* ── Visibility eye icon (absolutely positioned at right edge) ── */
       .vis-dot {
-        width: 12px; height: 12px; border-radius: 50%;
-        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-        cursor: pointer; background: #58a6ff;
-        box-sizing: border-box;
-        transition: background 0.15s, border 0.15s;
+        width: 16px; height: 16px;
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        cursor: pointer; color: var(--gray3);
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: color 0.15s;
       }
-      .vis-dot:hover { opacity: 0.7; }
+      .vis-dot:hover { color: var(--primary); }
+      .vis-dot.hidden { color: var(--gray5); opacity: 0.4; }
 
       /* Code icon (right-aligned, hover-visible) */
       .tree-code-icon {
         flex-shrink: 0;
-        font-size: 10px; font-family: var(--font-mono);
+        width: 14px; height: 14px;
+        display: inline-flex; align-items: center; justify-content: center;
         color: var(--gray3); cursor: pointer;
         opacity: 0; transition: opacity 0.15s;
-        padding: 0 2px;
       }
       .tree-node-header:hover .tree-code-icon { opacity: 1; }
       .tree-code-icon:hover { color: var(--primary); }
@@ -886,8 +879,6 @@ export class ComponentTree {
         width: 1px; background: rgba(206,217,224,0.5);
       }
 
-      /* Remove icon from old style (replaced by dot) */
-      .tree-node-icon { display: none; }
     `;
     document.head.appendChild(style);
   }

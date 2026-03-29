@@ -16,6 +16,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { Earcut } from 'three/src/extras/Earcut.js';
 import { loadEnvironment } from './environment.ts';
+import { TOOLBAR_ICONS as ICONS } from './icons.ts';
 import { MeasureTool } from './measure-tool.ts';
 import { BP, RENDER_ORDER } from './presentation.ts';
 
@@ -31,24 +32,6 @@ const VIEW_PRESETS = {
 const KEY_TO_PRESET = {};
 for (const [name, p] of Object.entries(VIEW_PRESETS)) KEY_TO_PRESET[p.key] = name;
 const AXIS_IDX = { x: 0, y: 1, z: 2 };
-
-// ── SVG icons for tool strip ──
-const ICONS = {
-  select: `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2">
-    <path d="M5 3l14 9-6 2-4 6z"/>
-  </svg>`,
-  measure: `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2">
-    <path d="M21 6H3M21 18H3M12 6v12M7 6v4M17 6v4M7 18v-4M17 18v-4"/>
-  </svg>`,
-  section: `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2">
-    <rect x="3" y="3" width="18" height="18" rx="2"/>
-    <line x1="3" y1="12" x2="21" y2="12"/>
-  </svg>`,
-  settings: `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2">
-    <circle cx="12" cy="12" r="3"/>
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-  </svg>`,
-};
 
 // ── Cube face mapping: face index → preset name ──
 // THREE.BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
