@@ -32,12 +32,16 @@ const VIEW_PRESETS = {
   bottom: { dir: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, -1, 0), label: 'Bottom' },
   left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1), label: 'Left' },
 };
-// Digit code → preset (unshifted / shifted). Shift gives the opposite view.
+// Digit / numpad code → preset (unshifted / shifted). Shift gives the opposite view.
 const KEY_TO_PRESET: Record<string, { normal: string; shift: string }> = {
   Digit1: { normal: 'iso', shift: 'rearIso' },
   Digit2: { normal: 'front', shift: 'back' },
   Digit3: { normal: 'top', shift: 'bottom' },
   Digit4: { normal: 'right', shift: 'left' },
+  Numpad1: { normal: 'iso', shift: 'rearIso' },
+  Numpad2: { normal: 'front', shift: 'back' },
+  Numpad3: { normal: 'top', shift: 'bottom' },
+  Numpad4: { normal: 'right', shift: 'left' },
 };
 const AXIS_IDX = { x: 0, y: 1, z: 2 };
 
