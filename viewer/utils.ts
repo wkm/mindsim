@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { timedFetch, warn } from './log.ts';
+import { errorMessage, timedFetch, warn } from './log.ts';
 import type { ManifestMaterial, ManifestPart } from './manifest-types.ts';
 
 // MuJoCo geom group constants
@@ -201,7 +201,7 @@ export async function fetchSTL(botName: string, meshFile: string): Promise<THREE
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    warn('viewer', `error loading ${meshFile}`, { error: err instanceof Error ? err.message : String(err) });
+    warn('viewer', `error loading ${meshFile}`, { error: errorMessage(err) });
     return null;
   }
 }
@@ -219,7 +219,7 @@ export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    warn('viewer', `STL fetch error: ${url}`, { error: err instanceof Error ? err.message : String(err) });
+    warn('viewer', `STL fetch error: ${url}`, { error: errorMessage(err) });
     return null;
   }
 }

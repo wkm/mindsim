@@ -18,33 +18,59 @@ interface LogEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Ring buffer
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract a human-readable message from an unknown thrown value. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// ---------------------------------------------------------------------------
+// Ring buffer (circular — no shift/unshift)
 // ---------------------------------------------------------------------------
 
 const LOG_BUFFER_SIZE = 200;
-const _buffer: LogEntry[] = [];
+const _ring: (LogEntry | undefined)[] = new Array(LOG_BUFFER_SIZE);
+let _head = 0; // next write index
+let _count = 0;
 
 function _push(entry: LogEntry): void {
-  _buffer.push(entry);
-  if (_buffer.length > LOG_BUFFER_SIZE) {
-    _buffer.shift();
-  }
+  _ring[_head] = entry;
+  _head = (_head + 1) % LOG_BUFFER_SIZE;
+  if (_count < LOG_BUFFER_SIZE) _count++;
 }
 
-// Expose buffer on window for devtools access
-(window as any).__mindsim_logs = _buffer;
+/** Snapshot the ring buffer contents in chronological order. */
+function _snapshot(): LogEntry[] {
+  if (_count === 0) return [];
+  const start = (_head - _count + LOG_BUFFER_SIZE) % LOG_BUFFER_SIZE;
+  const out: LogEntry[] = [];
+  for (let i = 0; i < _count; i++) {
+    out.push(_ring[(start + i) % LOG_BUFFER_SIZE]!);
+  }
+  return out;
+}
+
+// Expose a live view on window for devtools access.
+// Getter rebuilds from ring on each access — devtools usage is infrequent.
+Object.defineProperty(window, '__mindsim_logs', { get: _snapshot });
 
 // ---------------------------------------------------------------------------
 // Console output
 // ---------------------------------------------------------------------------
 
-function _consoleLog(level: 'log' | 'warn' | 'error', tag: string, msg: string, data?: Record<string, unknown>): void {
+const _consoleMethods = { info: 'log', warn: 'warn', error: 'error' } as const;
+
+function _log(level: 'info' | 'warn' | 'error', tag: string, msg: string, data?: Record<string, unknown>): void {
   const prefix = `[${tag}]`;
+  const method = _consoleMethods[level];
   if (data) {
-    console[level](prefix, msg, data);
+    console[method](prefix, msg, data);
   } else {
-    console[level](prefix, msg);
+    console[method](prefix, msg);
   }
+  _push({ ts: new Date().toISOString(), level, tag, msg, data });
 }
 
 // ---------------------------------------------------------------------------
@@ -52,18 +78,15 @@ function _consoleLog(level: 'log' | 'warn' | 'error', tag: string, msg: string, 
 // ---------------------------------------------------------------------------
 
 export function info(tag: string, msg: string, data?: Record<string, unknown>): void {
-  _consoleLog('log', tag, msg, data);
-  _push({ ts: new Date().toISOString(), level: 'info', tag, msg, data });
+  _log('info', tag, msg, data);
 }
 
 export function warn(tag: string, msg: string, data?: Record<string, unknown>): void {
-  _consoleLog('warn', tag, msg, data);
-  _push({ ts: new Date().toISOString(), level: 'warn', tag, msg, data });
+  _log('warn', tag, msg, data);
 }
 
 export function error(tag: string, msg: string, data?: Record<string, unknown>): void {
-  _consoleLog('error', tag, msg, data);
-  _push({ ts: new Date().toISOString(), level: 'error', tag, msg, data });
+  _log('error', tag, msg, data);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +113,7 @@ export async function timedFetch(url: string, init?: RequestInit): Promise<Respo
       method,
       url,
       duration_ms: durationMs,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
     throw err;
   }
@@ -101,25 +124,32 @@ export async function timedFetch(url: string, init?: RequestInit): Promise<Respo
 // ---------------------------------------------------------------------------
 
 let _flushing = false;
+let _consecutiveFailures = 0;
+const MAX_FLUSH_FAILURES = 5;
 
 /** POST buffered log entries to the server and clear the buffer. Fire-and-forget. */
 export async function flushToServer(): Promise<void> {
-  if (_buffer.length === 0 || _flushing) return;
+  const entries = _snapshot();
+  if (entries.length === 0 || _flushing) return;
+  if (_consecutiveFailures >= MAX_FLUSH_FAILURES) return; // back off permanently until a page reload
+
   _flushing = true;
-  const entries = _buffer.splice(0, _buffer.length);
   try {
     const resp = await fetch('/api/client-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries }),
     });
-    if (!resp.ok) {
-      // Re-queue entries at the front
-      _buffer.unshift(...entries);
+    if (resp.ok) {
+      // Clear only the entries we sent (new ones may have arrived during POST)
+      _count = 0;
+      _head = 0;
+      _consecutiveFailures = 0;
+    } else {
+      _consecutiveFailures++;
     }
   } catch {
-    // Re-queue entries — server may not be available
-    _buffer.unshift(...entries);
+    _consecutiveFailures++;
   } finally {
     _flushing = false;
   }

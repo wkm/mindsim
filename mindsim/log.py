@@ -29,10 +29,8 @@ def setup_logging(level: int = logging.INFO) -> None:
         return
     _setup_done = True
 
-    # Ensure logs directory exists
     Path("logs").mkdir(exist_ok=True)
 
-    # Shared structlog processors for stdlib integration
     shared_processors: list = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
@@ -42,7 +40,6 @@ def setup_logging(level: int = logging.INFO) -> None:
         structlog.processors.UnicodeDecoder(),
     ]
 
-    # Configure structlog to wrap stdlib logging
     structlog.configure(
         processors=[
             *shared_processors,
@@ -53,7 +50,6 @@ def setup_logging(level: int = logging.INFO) -> None:
         cache_logger_on_first_use=True,
     )
 
-    # Console formatter (human-readable, colored)
     console_formatter = structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
@@ -61,7 +57,6 @@ def setup_logging(level: int = logging.INFO) -> None:
         ],
     )
 
-    # JSON formatter (for file output)
     json_formatter = structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
@@ -69,19 +64,14 @@ def setup_logging(level: int = logging.INFO) -> None:
         ],
     )
 
-    # Set up root logger
     root = logging.getLogger()
     root.setLevel(level)
-
-    # Clear any existing handlers to avoid duplicates
     root.handlers.clear()
 
-    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
     root.addHandler(console_handler)
 
-    # File handler (rotating JSON lines)
     file_handler = logging.handlers.RotatingFileHandler(
         "logs/mindsim.log",
         maxBytes=5_000_000,
@@ -90,7 +80,6 @@ def setup_logging(level: int = logging.INFO) -> None:
     file_handler.setFormatter(json_formatter)
     root.addHandler(file_handler)
 
-    # Install excepthook for unhandled exceptions
     _original_excepthook = sys.excepthook
 
     def _logging_excepthook(

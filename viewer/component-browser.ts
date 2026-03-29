@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { info, error as logError, timedFetch } from './log.ts';
+import { errorMessage, info, error as logError, timedFetch } from './log.ts';
 import type { ViewerManifest } from './manifest-types.ts';
 import { initManifestViewer, type ManifestViewerContext, type StlUrlContext } from './manifest-viewer.ts';
 import { BP, hexStr } from './presentation.ts';
@@ -508,7 +508,7 @@ class ComponentBrowser {
       this._enterStepsMode();
     } catch (err) {
       logError('cad-steps', 'failed to fetch ShapeScript steps', {
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       });
     } finally {
       if (btn) {
