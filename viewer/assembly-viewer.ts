@@ -1,24 +1,23 @@
 /**
- * Assembly Viewer — top-level Assembly tab with Steps / DAG / DFM sub-views.
+ * Assembly Viewer — data-first layout with nav/detail/viewport split.
  *
- * All three sub-views share the same 3D viewport and mesh state. Only the
- * side panel / bottom bar content changes between sub-tabs.
+ * Layout:
+ *   Top third:  sub-tab bar (Steps / DAG / DFM) + nav pane (scrollable)
+ *   Bottom 2/3: left = detail panel, right = 3D viewport
  *
- * - Steps: scrubber + incremental mesh build-up + op repr display
- * - DAG: prerequisite graph visualization (SVG)
- * - DFM: findings table + progress indicator
+ * All three sub-tabs share the same detail panel and 3D viewport. Selecting
+ * a step in any mode updates both the detail pane and mesh visibility.
  *
- * Entry point: initAssemblyViewer(botName, viewport, sidePanelEl)
+ * Entry point: initAssemblyViewer(botName)
  */
 
 import * as THREE from 'three';
 import { AssemblyDAG } from './assembly-dag.ts';
 import type { AssemblyMeshRef, AssemblyOpData } from './assembly-scrubber.ts';
-import { AssemblyScrubber } from './assembly-scrubber.ts';
 import { type DFMFindingData, DFMPanel } from './dfm-panel.ts';
 import type { ManifestMaterial, ViewerManifest } from './manifest-types.ts';
 import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
-import type { Viewport3D } from './viewport3d.ts';
+import { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -28,6 +27,8 @@ export interface AssemblyHandle {
   pause(): void;
   resume(): void;
   dispose(): void;
+  /** The root DOM element — caller should mount this in the content area. */
+  rootEl: HTMLElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,23 +168,68 @@ function materialForMeshRef(
 }
 
 // ---------------------------------------------------------------------------
+// Repr syntax highlighting (duplicated from assembly-scrubber to avoid export)
+// ---------------------------------------------------------------------------
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function highlightRepr(repr: string): string {
+  let s = escapeHtml(repr);
+
+  const tokens: { key: string; html: string }[] = [];
+  let tokenId = 0;
+  const placeholder = (cls: string, text: string) => {
+    const key = `\x00T${tokenId++}\x00`;
+    tokens.push({ key, html: `<span style="${cls}">${text}</span>` });
+    return key;
+  };
+
+  s = s.replace(/'[^']*'/g, (m) => placeholder('color:#D4A72C', m));
+  s = s.replace(/"[^"]*"/g, (m) => placeholder('color:#D4A72C', m));
+  s = s.replace(/\b(AssemblyOp|AssemblyAction|ComponentRef|FastenerRef|WireRef|JointId|BodyId|ToolKind)\b/g, (m) =>
+    placeholder('color:#2B95D6;font-weight:600', m),
+  );
+  s = s.replace(/\.([A-Z][A-Z0-9_]+)\b/g, (_m, val) => `.${placeholder('color:#0F9960;font-weight:600', val)}`);
+  s = s.replace(/\b(-?\d+\.?\d*)\b/g, (m) => placeholder('color:#C87619', m));
+  s = s.replace(/\b(None|True|False)\b/g, (m) => placeholder('color:#9179F2', m));
+
+  for (const { key, html } of tokens) {
+    s = s.replace(key, html);
+  }
+
+  return s;
+}
+
+// ---------------------------------------------------------------------------
 // Styles (injected once)
 // ---------------------------------------------------------------------------
 
 let stylesInjected = false;
 
-function injectSubTabStyles(): void {
+function injectAssemblyStyles(): void {
   if (stylesInjected) return;
   stylesInjected = true;
 
   const style = document.createElement('style');
   style.textContent = `
+    /* Assembly root layout */
+    .assembly-root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: var(--background);
+    }
+
+    /* Sub-tab bar */
     .assembly-subtabs {
       display: flex;
       gap: 2px;
       padding: 4px 8px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
     .assembly-subtab {
       font-family: var(--font);
@@ -205,22 +251,244 @@ function injectSubTabStyles(): void {
       background: var(--primary);
       color: var(--primary-fg, #fff);
     }
+
+    /* Nav pane (top third) */
+    .assembly-nav {
+      height: 33%;
+      min-height: 120px;
+      overflow-y: auto;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Bottom 2/3 */
+    .assembly-bottom {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* Detail pane (bottom left) */
+    .assembly-detail {
+      width: 50%;
+      overflow-y: auto;
+      padding: 12px;
+      border-right: 1px solid var(--border);
+    }
+
+    /* Viewport pane (bottom right) */
+    .assembly-viewport {
+      width: 50%;
+      position: relative;
+      min-height: 0;
+    }
+
+    /* Steps list */
+    .asm-step-row {
+      font-family: "Input Mono Narrow", "SF Mono", "Menlo", monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      padding: 2px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--muted-fg);
+      border-left: 3px solid transparent;
+      transition: background 0.08s;
+    }
+    .asm-step-row:hover {
+      background: var(--secondary);
+    }
+    .asm-step-row.selected {
+      background: var(--secondary);
+      color: var(--foreground);
+      border-left-color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* DFM nav list */
+    .asm-dfm-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font);
+      font-size: 11px;
+      line-height: 1.6;
+      padding: 3px 12px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: background 0.08s;
+    }
+    .asm-dfm-row:hover {
+      background: var(--secondary);
+    }
+    .asm-dfm-row.selected {
+      background: var(--secondary);
+      border-left-color: var(--primary);
+    }
+    .asm-dfm-row.dimmed {
+      opacity: 0.5;
+    }
+    .asm-dfm-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 9px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 0 5px;
+      flex-shrink: 0;
+    }
+    .asm-dfm-badge.error {
+      background: var(--destructive, #e53e3e);
+      color: #fff;
+    }
+    .asm-dfm-badge.warning {
+      background: var(--gold3, #d69e2e);
+      color: #fff;
+    }
+    .asm-dfm-badge.pass {
+      background: var(--success, #38a169);
+      color: #fff;
+    }
+
+    /* Detail pane repr block */
+    .asm-detail-repr {
+      margin: 0;
+      padding: 10px 12px;
+      background: #1C2127;
+      border-radius: 6px;
+      font-family: "Input Mono Narrow", "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #ABB3BF;
+      overflow-x: auto;
+      max-height: 50%;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Detail pane findings section */
+    .asm-detail-findings {
+      margin-top: 12px;
+    }
+    .asm-detail-findings h4 {
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted-fg);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0 0 8px 0;
+    }
+    .asm-finding-card {
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border-radius: 4px;
+      border-left: 3px solid var(--border);
+      background: var(--card);
+      font-family: var(--font);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .asm-finding-card:hover {
+      background: var(--secondary);
+    }
+    .asm-finding-card.severity-error {
+      border-left-color: var(--destructive, #e53e3e);
+    }
+    .asm-finding-card.severity-warning {
+      border-left-color: var(--gold3, #d69e2e);
+    }
+    .asm-finding-card.severity-info {
+      border-left-color: var(--primary);
+    }
+    .asm-finding-title {
+      font-weight: 600;
+      color: var(--foreground);
+    }
+    .asm-finding-desc {
+      color: var(--muted-fg);
+      margin-top: 2px;
+    }
   `;
   document.head.appendChild(style);
+}
+
+// ---------------------------------------------------------------------------
+// Single-line op summary for the Steps list
+// ---------------------------------------------------------------------------
+
+function opSummary(op: AssemblyOpData): string {
+  const action = op.action.toUpperCase();
+  const target = op.target?.label ?? op.target?.id ?? op.body;
+  return `step ${op.step}: ${action} ${target}`;
 }
 
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
-export async function initAssemblyViewer(
-  botName: string,
-  viewport: Viewport3D,
-  sidePanelEl: HTMLElement,
-): Promise<AssemblyHandle> {
-  injectSubTabStyles();
+export async function initAssemblyViewer(botName: string): Promise<AssemblyHandle> {
+  injectAssemblyStyles();
 
-  // Fetch manifest for materials dict only
+  // =========================================================================
+  // Build DOM layout
+  // =========================================================================
+
+  const root = document.createElement('div');
+  root.className = 'assembly-root';
+
+  // -- Sub-tab bar --
+  const tabBar = document.createElement('div');
+  tabBar.className = 'assembly-subtabs';
+  root.appendChild(tabBar);
+
+  const subTabButtons: Record<AssemblySubTab, HTMLButtonElement> = {} as Record<AssemblySubTab, HTMLButtonElement>;
+  for (const tab of ['steps', 'dag', 'dfm'] as const) {
+    const btn = document.createElement('button');
+    btn.className = `assembly-subtab${tab === 'steps' ? ' active' : ''}`;
+    btn.textContent = tab === 'dfm' ? 'DFM' : tab === 'dag' ? 'DAG' : 'Steps';
+    btn.addEventListener('click', () => switchSubTab(tab));
+    tabBar.appendChild(btn);
+    subTabButtons[tab] = btn;
+  }
+
+  // -- Nav pane (top third) --
+  const navPane = document.createElement('div');
+  navPane.className = 'assembly-nav';
+  root.appendChild(navPane);
+
+  // -- Bottom 2/3 --
+  const bottomPane = document.createElement('div');
+  bottomPane.className = 'assembly-bottom';
+  root.appendChild(bottomPane);
+
+  const detailPane = document.createElement('div');
+  detailPane.className = 'assembly-detail';
+  bottomPane.appendChild(detailPane);
+
+  const viewportPane = document.createElement('div');
+  viewportPane.className = 'assembly-viewport';
+  bottomPane.appendChild(viewportPane);
+
+  // =========================================================================
+  // Create Viewport3D inside viewportPane
+  // =========================================================================
+
+  const viewport = new Viewport3D(viewportPane, {
+    cameraType: 'perspective',
+    grid: true,
+  });
+
+  // =========================================================================
+  // Fetch manifest
+  // =========================================================================
+
   const manifestResp = await fetch(`/api/bots/${botName}/viewer_manifest`);
   const manifest: ViewerManifest | null = manifestResp.ok ? await manifestResp.json() : null;
   const materials: Record<string, ManifestMaterial> = manifest?.materials ?? {};
@@ -246,80 +514,211 @@ export async function initAssemblyViewer(
   // Single group for all assembly meshes
   const asmGroup = viewport.addGroup('assembly-meshes');
 
-  // ---------------------------------------------------------------------------
+  // =========================================================================
   // Shared state
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   let dfmPanel: DFMPanel | null = null;
-  let scrubber: AssemblyScrubber | null = null;
   let dag: AssemblyDAG | null = null;
   let pollTimer: number | null = null;
   let runId: string | null = null;
   let findings: DFMFindingData[] = [];
   let assemblyOps: AssemblyOpData[] = [];
   let activeSubTab: AssemblySubTab = 'steps';
+  let selectedStep = -1;
 
-  // ---------------------------------------------------------------------------
-  // Sub-tab bar (rendered inside the side panel)
-  // ---------------------------------------------------------------------------
+  // =========================================================================
+  // Nav pane containers (one per sub-tab, swapped in/out)
+  // =========================================================================
 
-  const subTabBar = document.createElement('div');
-  subTabBar.className = 'assembly-subtabs';
+  // Steps list container
+  const stepsListEl = document.createElement('div');
+  stepsListEl.style.cssText = 'padding: 4px 0;';
 
-  const subTabButtons: Record<AssemblySubTab, HTMLButtonElement> = {} as Record<AssemblySubTab, HTMLButtonElement>;
-  for (const tab of ['steps', 'dag', 'dfm'] as const) {
-    const btn = document.createElement('button');
-    btn.className = `assembly-subtab${tab === 'steps' ? ' active' : ''}`;
-    btn.textContent = tab === 'dfm' ? 'DFM' : tab === 'dag' ? 'DAG' : 'Steps';
-    btn.addEventListener('click', () => switchSubTab(tab));
-    subTabBar.appendChild(btn);
-    subTabButtons[tab] = btn;
-  }
-
-  // Sub-tab content container (below the tab bar, inside side panel)
-  const subTabContent = document.createElement('div');
-  subTabContent.style.cssText = 'flex: 1; overflow-y: auto;';
-
-  // ---------------------------------------------------------------------------
-  // Build side panel structure
-  // ---------------------------------------------------------------------------
-
-  sidePanelEl.innerHTML = '';
-  sidePanelEl.style.display = 'flex';
-  sidePanelEl.style.flexDirection = 'column';
-  sidePanelEl.appendChild(subTabBar);
-  sidePanelEl.appendChild(subTabContent);
-
-  // ---------------------------------------------------------------------------
-  // Steps sub-view: scrubber
-  // ---------------------------------------------------------------------------
-
-  const canvasContainer = viewport.renderer.domElement.parentElement;
-  if (canvasContainer) {
-    scrubber = new AssemblyScrubber(canvasContainer, (step) => onStepChange(step));
-  }
-
-  // ---------------------------------------------------------------------------
-  // DFM sub-view: panel
-  // ---------------------------------------------------------------------------
-
-  const dfmContainer = document.createElement('div');
-  dfmPanel = new DFMPanel(dfmContainer, (finding) => onFindingClick(finding));
-
-  // ---------------------------------------------------------------------------
-  // DAG sub-view
-  // ---------------------------------------------------------------------------
-
+  // DAG container
   const dagContainer = document.createElement('div');
   dagContainer.style.cssText = 'width: 100%; height: 100%; overflow: auto;';
-  dag = new AssemblyDAG(dagContainer, (step) => {
-    if (scrubber) scrubber.setStep(step);
-    onStepChange(step);
-  });
+  dag = new AssemblyDAG(dagContainer, (step) => selectStep(step));
 
-  // ---------------------------------------------------------------------------
+  // DFM nav list container
+  const dfmNavEl = document.createElement('div');
+  dfmNavEl.style.cssText = 'padding: 4px 0;';
+
+  // DFM findings panel (used internally for data, not for direct DOM display)
+  const dfmInternalContainer = document.createElement('div');
+  dfmPanel = new DFMPanel(dfmInternalContainer, (finding) => onFindingClick(finding));
+
+  // =========================================================================
+  // Steps list rendering
+  // =========================================================================
+
+  function renderStepsList(): void {
+    stepsListEl.innerHTML = '';
+    for (const op of assemblyOps) {
+      const row = document.createElement('div');
+      row.className = `asm-step-row${op.step === selectedStep ? ' selected' : ''}`;
+      row.textContent = opSummary(op);
+      row.addEventListener('click', () => selectStep(op.step));
+      stepsListEl.appendChild(row);
+    }
+  }
+
+  function updateStepsListSelection(): void {
+    const rows = stepsListEl.querySelectorAll('.asm-step-row');
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle('selected', i < assemblyOps.length && assemblyOps[i].step === selectedStep);
+    }
+    // Auto-scroll to selected
+    const sel = stepsListEl.querySelector('.asm-step-row.selected') as HTMLElement | null;
+    if (sel) {
+      sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  // =========================================================================
+  // DFM nav list rendering
+  // =========================================================================
+
+  function findingsForStep(step: number): DFMFindingData[] {
+    return findings.filter((f) => f.assembly_step === step);
+  }
+
+  function renderDfmNavList(): void {
+    dfmNavEl.innerHTML = '';
+    for (const op of assemblyOps) {
+      const stepFindings = findingsForStep(op.step);
+      const errorCount = stepFindings.filter((f) => f.severity === 'error').length;
+      const warnCount = stepFindings.filter((f) => f.severity === 'warning').length;
+      const hasFindings = stepFindings.length > 0;
+
+      const row = document.createElement('div');
+      row.className = `asm-dfm-row${op.step === selectedStep ? ' selected' : ''}${!hasFindings ? ' dimmed' : ''}`;
+
+      // Badge
+      const badge = document.createElement('span');
+      if (errorCount > 0) {
+        badge.className = 'asm-dfm-badge error';
+        badge.textContent = String(errorCount);
+      } else if (warnCount > 0) {
+        badge.className = 'asm-dfm-badge warning';
+        badge.textContent = String(warnCount);
+      } else {
+        badge.className = 'asm-dfm-badge pass';
+        badge.textContent = '\u2713';
+      }
+      row.appendChild(badge);
+
+      // Label
+      const label = document.createElement('span');
+      label.textContent = opSummary(op);
+      label.style.cssText = 'overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+      row.appendChild(label);
+
+      row.addEventListener('click', () => selectStep(op.step));
+      dfmNavEl.appendChild(row);
+    }
+  }
+
+  function updateDfmNavSelection(): void {
+    const rows = dfmNavEl.querySelectorAll('.asm-dfm-row');
+    for (let i = 0; i < rows.length; i++) {
+      const isSelected = i < assemblyOps.length && assemblyOps[i].step === selectedStep;
+      rows[i].classList.toggle('selected', isSelected);
+    }
+    const sel = dfmNavEl.querySelector('.asm-dfm-row.selected') as HTMLElement | null;
+    if (sel) {
+      sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  // =========================================================================
+  // Detail pane rendering
+  // =========================================================================
+
+  function renderDetail(): void {
+    detailPane.innerHTML = '';
+    const op = assemblyOps.find((o) => o.step === selectedStep);
+    if (!op) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding: 16px; color: var(--muted-fg); font-size: 12px;';
+      empty.textContent = 'Select an assembly step to view details.';
+      detailPane.appendChild(empty);
+      return;
+    }
+
+    // Pretty repr
+    const repr = document.createElement('pre');
+    repr.className = 'asm-detail-repr';
+    if (op.repr) {
+      repr.innerHTML = highlightRepr(op.repr);
+    } else {
+      const toolStr = op.tool ? ` [${op.tool}]` : '';
+      repr.textContent = `${op.action}: ${op.body} \u2014 ${op.description}${toolStr}`;
+    }
+    detailPane.appendChild(repr);
+
+    // In DFM mode (or always when findings exist for this step): show findings
+    const stepFindings = findingsForStep(op.step);
+    if (stepFindings.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'asm-detail-findings';
+
+      const heading = document.createElement('h4');
+      heading.textContent = `Findings (${stepFindings.length})`;
+      section.appendChild(heading);
+
+      for (const f of stepFindings) {
+        const card = document.createElement('div');
+        card.className = `asm-finding-card severity-${f.severity}`;
+        card.addEventListener('click', () => onFindingClick(f));
+
+        const title = document.createElement('div');
+        title.className = 'asm-finding-title';
+        title.textContent = `${f.severity.toUpperCase()}: ${f.title}`;
+        card.appendChild(title);
+
+        const desc = document.createElement('div');
+        desc.className = 'asm-finding-desc';
+        desc.textContent = f.description;
+        card.appendChild(desc);
+
+        section.appendChild(card);
+      }
+
+      detailPane.appendChild(section);
+    }
+  }
+
+  // =========================================================================
+  // Step selection (shared across all sub-tabs)
+  // =========================================================================
+
+  function selectStep(step: number): void {
+    selectedStep = step;
+
+    // Update mesh visibility
+    for (const [opStep, meshes] of stepMeshes.entries()) {
+      const visible = opStep <= step;
+      for (const m of meshes) m.visible = visible;
+    }
+
+    // Update detail pane
+    renderDetail();
+
+    // Update nav list selections
+    updateStepsListSelection();
+    updateDfmNavSelection();
+
+    // Update DAG highlight
+    if (dag) dag.highlightStep(step);
+
+    // Update DFM panel internal filter
+    if (dfmPanel) dfmPanel.filterByStep(step);
+  }
+
+  // =========================================================================
   // Sub-tab switching
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   function switchSubTab(tab: AssemblySubTab): void {
     if (tab === activeSubTab) return;
@@ -329,43 +728,25 @@ export async function initAssemblyViewer(
       btn.classList.toggle('active', key === tab);
     }
 
-    // Clear sub-tab content
-    subTabContent.innerHTML = '';
-
-    // Show/hide scrubber based on sub-tab
-    if (scrubber) {
-      // Steps and DFM show the scrubber; DAG hides it
-      const scrubberEl = canvasContainer?.querySelector('.assembly-scrubber') as HTMLElement | null;
-      if (scrubberEl) {
-        scrubberEl.style.display = tab === 'dag' ? 'none' : '';
-      }
-    }
+    navPane.innerHTML = '';
 
     if (tab === 'steps') {
-      // Steps: side panel shows a placeholder message (repr is in scrubber overlay)
-      const stepsInfo = document.createElement('div');
-      stepsInfo.style.cssText = 'padding: 16px; color: var(--muted-fg); font-size: 12px;';
-      stepsInfo.textContent = 'Use the scrubber below the viewport to step through the assembly sequence.';
-      subTabContent.appendChild(stepsInfo);
+      navPane.appendChild(stepsListEl);
+      updateStepsListSelection();
     } else if (tab === 'dag') {
-      subTabContent.appendChild(dagContainer);
+      navPane.appendChild(dagContainer);
     } else if (tab === 'dfm') {
-      subTabContent.appendChild(dfmContainer);
+      navPane.appendChild(dfmNavEl);
+      updateDfmNavSelection();
     }
   }
 
-  // Initialize with Steps sub-tab content
-  switchSubTab('steps');
-  // Force steps active since switchSubTab early-returns if same tab
-  activeSubTab = 'steps';
-  const stepsInfo = document.createElement('div');
-  stepsInfo.style.cssText = 'padding: 16px; color: var(--muted-fg); font-size: 12px;';
-  stepsInfo.textContent = 'Use the scrubber below the viewport to step through the assembly sequence.';
-  subTabContent.appendChild(stepsInfo);
+  // Initialize Steps as the active sub-tab
+  navPane.appendChild(stepsListEl);
 
-  // ---------------------------------------------------------------------------
+  // =========================================================================
   // Assembly sequence loading
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   async function loadAssemblySequence(): Promise<void> {
     try {
@@ -374,10 +755,6 @@ export async function initAssemblyViewer(
       const data = await resp.json();
       const ops: AssemblyOpData[] = (data.ops ?? data) as AssemblyOpData[];
       assemblyOps = ops;
-
-      if (scrubber && ops.length > 0) {
-        scrubber.setOps(ops);
-      }
 
       // Update DAG with ops
       if (dag && ops.length > 0) {
@@ -418,31 +795,36 @@ export async function initAssemblyViewer(
 
       await Promise.all(loadPromises);
 
-      showAllMeshes();
+      // Show all meshes and frame
+      for (const meshes of stepMeshes.values()) {
+        for (const m of meshes) m.visible = true;
+      }
       const box = new THREE.Box3().expandByObject(asmGroup);
       if (!box.isEmpty()) {
         viewport.frameOnBox(box);
       }
 
-      if (scrubber && ops.length > 0) {
-        onStepChange(ops[ops.length - 1].step);
+      // Render nav lists
+      renderStepsList();
+      renderDfmNavList();
+
+      // Select last step
+      if (ops.length > 0) {
+        selectStep(ops[ops.length - 1].step);
       }
     } catch (err) {
       console.warn('[assembly] assembly-sequence error:', err);
     }
   }
 
-  function showAllMeshes(): void {
-    for (const meshes of stepMeshes.values()) {
-      for (const m of meshes) m.visible = true;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
+  // =========================================================================
   // Finding click: ghost other bodies, fly camera to affected body
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   function onFindingClick(finding: DFMFindingData): void {
+    // First select the step so mesh visibility is correct
+    selectStep(finding.assembly_step);
+
     const meshesForBody = bodyMeshes[finding.body];
 
     asmGroup.traverse((child) => {
@@ -480,25 +862,9 @@ export async function initAssemblyViewer(
     }
   }
 
-  function onStepChange(step: number): void {
-    if (dfmPanel) {
-      dfmPanel.filterByStep(step);
-    }
-    if (dag) {
-      dag.highlightStep(step);
-    }
-
-    if (assemblyOps.length === 0) return;
-
-    for (const [opStep, meshes] of stepMeshes.entries()) {
-      const visible = opStep <= step;
-      for (const m of meshes) m.visible = visible;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
+  // =========================================================================
   // DFM analysis polling
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   function stopPolling(): void {
     if (pollTimer !== null) {
@@ -532,10 +898,12 @@ export async function initAssemblyViewer(
               findings = newFindings;
               if (dfmPanel) {
                 dfmPanel.setFindings(findings);
-                if (scrubber) {
-                  dfmPanel.filterByStep(scrubber.currentStep());
-                }
+                dfmPanel.filterByStep(selectedStep);
               }
+              // Re-render DFM nav list with updated findings
+              renderDfmNavList();
+              // Re-render detail if we have findings for the current step
+              renderDetail();
             }
           }
         } catch (findingsErr) {
@@ -571,9 +939,9 @@ export async function initAssemblyViewer(
   loadAssemblySequence();
   startDFMAnalysis();
 
-  // ---------------------------------------------------------------------------
+  // =========================================================================
   // Animation loop (camera fly-to)
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   let paused = false;
 
@@ -582,11 +950,18 @@ export async function initAssemblyViewer(
     updateCameraAnim(cameraAnim, viewport.camera);
   });
 
-  // ---------------------------------------------------------------------------
+  // Resize viewport when container becomes visible (deferred mount)
+  const resizeObserver = new ResizeObserver(() => {
+    viewport.resize();
+  });
+  resizeObserver.observe(viewportPane);
+
+  // =========================================================================
   // Handle
-  // ---------------------------------------------------------------------------
+  // =========================================================================
 
   return {
+    rootEl: root,
     pause() {
       paused = true;
     },
@@ -596,19 +971,18 @@ export async function initAssemblyViewer(
     },
     dispose() {
       stopPolling();
+      resizeObserver.disconnect();
       if (dfmPanel) {
         dfmPanel.dispose();
         dfmPanel = null;
-      }
-      if (scrubber) {
-        scrubber.dispose();
-        scrubber = null;
       }
       if (dag) {
         dag.dispose();
         dag = null;
       }
       viewport.scene.remove(asmGroup);
+      viewport.dispose();
+      root.remove();
     },
   };
 }

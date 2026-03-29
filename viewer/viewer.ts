@@ -111,11 +111,10 @@ if (cadstepsParam) {
 
     // Track active tab and lazy-loaded viewers
     type SimHandle = { pause(): void; resume(): void };
-    type DFMHandle = { pause(): void; resume(): void; dispose(): void };
+    type DFMHandle = { pause(): void; resume(): void; dispose(): void; rootEl: HTMLElement };
     let activeTab: 'design' | 'dfm' | 'sim' = 'design';
     let simHandle: SimHandle | null = null;
     let dfmHandle: DFMHandle | null = null;
-    let dfmViewport: InstanceType<typeof Viewport3D> | null = null;
 
     const sidePanel = document.getElementById('side-panel');
 
@@ -140,7 +139,7 @@ if (cadstepsParam) {
         if (simModeTabs) simModeTabs.style.display = 'none';
       } else if (prevTab === 'dfm') {
         dfmHandle?.pause();
-        if (dfmViewport) dfmViewport.setVisible(false);
+        if (dfmHandle) dfmHandle.rootEl.style.display = 'none';
       } else {
         // was design
         designViewport.setVisible(false);
@@ -152,31 +151,32 @@ if (cadstepsParam) {
 
       if (tab === 'design') {
         // Show Design scene
+        container.style.display = '';
         updateCanvasLayout(true);
         designViewport.setVisible(true);
         treePanel.style.display = 'block';
         designCtx.syncVisibility();
         designViewport.resize();
       } else if (tab === 'dfm') {
-        // Show DFM viewer (shares same canvas container)
-        updateCanvasLayout(false, true);
-        sidePanel.style.display = '';
+        // Assembly viewer owns its own layout (nav/detail/viewport split).
+        // Hide the shared canvas container; the assembly viewer's rootEl
+        // is mounted as a sibling that fills the same area.
+        container.style.display = 'none';
 
         if (!dfmHandle) {
-          // First time — lazy-load DFM viewer with its own viewport
-          dfmViewport = new Viewport3D(container, {
-            cameraType: 'perspective',
-            grid: true,
-          });
           const { initAssemblyViewer } = await import('./assembly-viewer.ts');
-          dfmHandle = await initAssemblyViewer(botName, dfmViewport, sidePanel);
+          dfmHandle = await initAssemblyViewer(botName);
+          // Mount the assembly root as a sibling of canvas-container
+          const parent = container.parentElement!;
+          dfmHandle.rootEl.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0;';
+          parent.appendChild(dfmHandle.rootEl);
         } else {
-          dfmViewport!.setVisible(true);
+          dfmHandle.rootEl.style.display = '';
           dfmHandle.resume();
         }
-        dfmViewport!.resize();
       } else if (tab === 'sim') {
         // Show Sim UI
+        container.style.display = '';
         updateCanvasLayout(false);
         sidePanel.style.display = '';
         document.getElementById('loading').style.display = '';
