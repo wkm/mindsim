@@ -518,7 +518,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
   tree.updateFromDesignScene(designScene.tree);
 
   // -----------------------------------------------------------------------
-  // Step 9: Default visibility — hide fasteners, wires, design layers, clearances
+  // Step 9: Default visibility — hide design layers and clearances
   // -----------------------------------------------------------------------
   const hiddenMountIds = new Set<string>();
   for (const m of manifest.mounts ?? []) {
@@ -527,7 +527,7 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
     }
   }
   for (const node of designScene.tree.nodes.values()) {
-    if (node.id.startsWith('fastener-group:') || node.id.startsWith('wire-group:') || hiddenMountIds.has(node.id)) {
+    if (hiddenMountIds.has(node.id)) {
       node.hidden = true;
     }
   }
