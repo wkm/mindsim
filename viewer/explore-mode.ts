@@ -110,6 +110,7 @@ export class ExploreMode {
         onShapeScript: (url) => {
           window.location.href = url;
         },
+        onHover: (nodeId) => this._handleTreeHover(nodeId),
       },
     );
     this.tree.build();
@@ -686,6 +687,78 @@ export class ExploreMode {
   }
 
   // ---------------------------------------------------------------------------
+  // Bidirectional hover — tree ↔ viewport
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Resolve a nodeId to the body IDs it represents.
+   * Used for tree→viewport hover highlighting.
+   */
+  _resolveNodeToBodyIds(nodeId: string): number[] {
+    const [type, ...rest] = nodeId.split(':');
+    if (type === 'body') {
+      const id = this.bodyNameToId[rest[0]];
+      return id !== undefined ? [id] : [];
+    }
+    if (type === 'joint') {
+      // Look up joint by name to get parent + child body
+      const jointName = rest[0];
+      const joint = this.manifest.joints.find((j: any) => j.name === jointName);
+      if (!joint) return [];
+      const ids: number[] = [];
+      const parentId = this.bodyNameToId[joint.parent_body];
+      const childId = this.bodyNameToId[joint.child_body];
+      if (parentId !== undefined) ids.push(parentId);
+      if (childId !== undefined) ids.push(childId);
+      return ids;
+    }
+    if (type === 'mount') {
+      // mount:{bodyName}:{label}
+      const id = this.bodyNameToId[rest[0]];
+      return id !== undefined ? [id] : [];
+    }
+    if (type === 'assembly') {
+      // For assembly nodes, get all descendant bodies
+      // Try to find a root body for this assembly from its joint structure
+      if (rest[0] === 'joint' && rest.length >= 2) {
+        // assembly:joint:{jointName} — get joint's child body and descendants
+        const jointName = rest[1];
+        const joint = this.manifest.joints.find((j: any) => j.name === jointName);
+        if (joint) return this._getBodyAndDescendants(joint.child_body);
+      }
+      // Root assembly — all bodies
+      return this.manifest.bodies
+        .map((b: any) => this.bodyNameToId[b.name])
+        .filter((id: number | undefined) => id !== undefined);
+    }
+    if (type === 'part' || type === 'fastener-group' || type === 'wire-group') {
+      // These nodes live under a body — use data-body-name from the DOM
+      // Since we don't have the data here, parse the nodeId
+      // fastener-group:mount:{bodyName}:{label}:{key} or fastener-group:{jointName}:{key}
+      // wire-group:{bodyName} or part:{id}
+      // For wire-group, the body name is right in the nodeId
+      if (type === 'wire-group') {
+        const id = this.bodyNameToId[rest[0]];
+        return id !== undefined ? [id] : [];
+      }
+      // For others, we can't easily resolve without data — return empty
+      return [];
+    }
+    return [];
+  }
+
+  /** Handle tree node hover → highlight bodies in viewport. */
+  _handleTreeHover(nodeId: string | null): void {
+    if (nodeId) {
+      const bodyIds = this._resolveNodeToBodyIds(nodeId);
+      this.ctx.botScene.setHoveredBodies(bodyIds);
+    } else {
+      this.ctx.botScene.setHoveredBodies([]);
+    }
+    this.ctx.syncScene();
+  }
+
+  // ---------------------------------------------------------------------------
   // 3D viewport raycasting — hover highlight + click-to-select
   // ---------------------------------------------------------------------------
 
@@ -735,6 +808,16 @@ export class ExploreMode {
     this.ctx.syncScene();
     this._hoveredBodyId = hitBodyId;
     this.ctx.renderer.domElement.style.cursor = hitBodyId != null ? 'pointer' : '';
+
+    // Viewport → tree: highlight the corresponding tree node
+    if (this.tree) {
+      if (hitBodyId != null) {
+        const bodyName = this.bodyIdToName[hitBodyId];
+        this.tree.setHighlighted(bodyName ? `body:${bodyName}` : null);
+      } else {
+        this.tree.setHighlighted(null);
+      }
+    }
   }
 
   _handlePointerDown(event: PointerEvent) {

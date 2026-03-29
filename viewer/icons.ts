@@ -20,6 +20,7 @@ import cpuSvg from '@tabler/icons/outline/cpu.svg?raw';
 import cubeSvg from '@tabler/icons/outline/cube.svg?raw';
 import eyeSvg from '@tabler/icons/outline/eye.svg?raw';
 import eyeOffSvg from '@tabler/icons/outline/eye-off.svg?raw';
+import ghostSvg from '@tabler/icons/outline/ghost.svg?raw';
 import infoCircleSvg from '@tabler/icons/outline/info-circle.svg?raw';
 import layersLinkedSvg from '@tabler/icons/outline/layers-linked.svg?raw';
 import layersSubtractSvg from '@tabler/icons/outline/layers-subtract.svg?raw';
@@ -45,6 +46,7 @@ export const TOOLBAR_ICONS = {
   select: sizedIcon(pointerSvg, 20),
   measure: sizedIcon(rulerMeasureSvg, 20),
   section: sizedIcon(sectionSvg, 20),
+  transparent: sizedIcon(ghostSvg, 20),
   settings: sizedIcon(settingsSvg, 20),
 };
 

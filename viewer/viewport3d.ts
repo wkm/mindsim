@@ -163,6 +163,9 @@ export class Viewport3D {
   _updateSecPopoverPos: any;
   _updateSettingsPopoverPos: any;
   _hatchTextures: any;
+  _transparentBtn: any;
+  _transparentOn: boolean;
+  onTransparentToggle: ((on: boolean) => void) | null;
 
   /** @param {HTMLElement} container  @param {Object} [options] */
   constructor(container: any, options: any = {}) {
@@ -190,6 +193,9 @@ export class Viewport3D {
     this._contourLineMat = null;
     // Ghosting
     this._ghostedMeshes = new Map(); // mesh → { opacity, transparent }
+    // Transparent mode
+    this._transparentOn = false;
+    this.onTransparentToggle = null;
     // Follow mode
     this._followMode = false;
     this._followTarget = null; // Vector3 — center of followed geometry
@@ -493,6 +499,33 @@ export class Viewport3D {
     this._scene.traverse((ch) => {
       if (ch.material) ch.material.clippingPlanes = [];
     });
+  }
+
+  /** Enable transparent mode. */
+  enableTransparent() {
+    this._transparentOn = true;
+    this._updateToolStyles();
+    if (this.onTransparentToggle) {
+      this.onTransparentToggle(true);
+    } else {
+      this._applySceneTransparency(true);
+    }
+  }
+
+  /** Disable transparent mode. */
+  disableTransparent() {
+    this._transparentOn = false;
+    this._updateToolStyles();
+    if (this.onTransparentToggle) {
+      this.onTransparentToggle(false);
+    } else {
+      this._applySceneTransparency(false);
+    }
+  }
+
+  /** Whether transparent mode is currently active. */
+  get transparentEnabled() {
+    return this._transparentOn;
   }
 
   /** Whether section plane is currently active. */
@@ -1290,6 +1323,17 @@ export class Viewport3D {
     // Keep popover positioned next to the strip
     this._positionSecPopover();
 
+    // Transparent tool (independent toggle — can coexist with section/measure)
+    this._transparentBtn = document.createElement('button');
+    this._transparentBtn.style.cssText = toolBtnCSS;
+    this._transparentBtn.innerHTML = ICONS.transparent;
+    this._transparentBtn.addEventListener('click', () => {
+      if (this._transparentOn) this.disableTransparent();
+      else this.enableTransparent();
+    });
+    strip.appendChild(this._transparentBtn);
+    this._addToolTooltip(this._transparentBtn, 'Transparent (T)');
+
     // ── Settings button (bottom of strip) ──
     const settingsDivider = document.createElement('div');
     settingsDivider.style.cssText = 'height:1px;margin:2px 4px;background:rgba(206,217,224,0.2);';
@@ -1428,15 +1472,47 @@ export class Viewport3D {
 
   _setActiveTool(tool) {
     this._activeTool = tool;
+    this._updateToolStyles();
+  }
+
+  /** Update all tool button styles based on current state. */
+  _updateToolStyles() {
     const activeCSS = 'background:rgba(19,124,189,0.3);color:#2B95D6;';
     const inactiveCSS = 'background:transparent;color:#CED9E0;';
-
-    // Update button styles (preserve base styles)
     const base =
       'width:36px;height:36px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
+    const tool = this._activeTool;
     this._selectBtn.style.cssText = base + (tool === null ? activeCSS : inactiveCSS);
     this._measBtn.style.cssText = base + (tool === 'measure' ? activeCSS : inactiveCSS);
     this._secBtn.style.cssText = base + (tool === 'section' ? activeCSS : inactiveCSS);
+    this._transparentBtn.style.cssText = base + (this._transparentOn ? activeCSS : inactiveCSS);
+  }
+
+  /**
+   * Fallback transparent mode for viewers without BotScene (design, component).
+   * Traverses all scene meshes and sets opacity directly.
+   */
+  _applySceneTransparency(on: boolean) {
+    this._scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const mat = child.material;
+      if (!mat) return;
+      if (on) {
+        // Save originals on first apply
+        if (mat._origOpacity === undefined) {
+          mat._origOpacity = mat.opacity;
+          mat._origTransparent = mat.transparent;
+          mat._origAlphaHash = mat.alphaHash;
+        }
+        mat.opacity = mat._origOpacity * 0.35;
+        mat.transparent = true;
+        mat.depthWrite = false;
+      } else if (mat._origOpacity !== undefined) {
+        mat.opacity = mat._origOpacity;
+        mat.transparent = mat._origTransparent;
+        mat.depthWrite = mat._origDepthWrite ?? true;
+      }
+    });
   }
 
   _initKeys() {
@@ -1456,6 +1532,9 @@ export class Viewport3D {
       } else if (e.key === 's') {
         e.preventDefault();
         this._secBtn.click();
+      } else if (e.key === 't') {
+        e.preventDefault();
+        this._transparentBtn.click();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         if (this._meas.enabled) this.disableMeasureTool();

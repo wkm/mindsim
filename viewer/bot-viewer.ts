@@ -721,6 +721,12 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
       flipBtn: document.getElementById('bot-section-flip'),
       keyTarget: window,
     });
+    // Wire transparent toggle: viewport button → BotScene → sync
+    viewport.onTransparentToggle = (on) => {
+      botScene.setTransparent(on);
+      syncScene();
+    };
+
     // Show bot tools when in bot viewer
     document.getElementById('bot-tools-group').style.display = '';
 

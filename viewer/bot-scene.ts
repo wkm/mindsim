@@ -16,6 +16,19 @@
 /** Opacity for ghosted (dimmed) bodies. */
 export const GHOST_OPACITY = 0.06;
 
+/** Opacity for structural bodies in transparent mode. */
+export const TRANSPARENT_STRUCTURAL_OPACITY = 0.35;
+
+/** Opacity for detail (servo/screw/component) bodies in transparent mode. */
+export const TRANSPARENT_DETAIL_OPACITY = 0.6;
+
+/**
+ * Geom group constant for detail meshes (servos, screws, components).
+ * Mirrors GEOM_GROUP_DETAIL from utils.ts — duplicated here to keep
+ * BotScene free of Three.js transitive imports.
+ */
+const GEOM_GROUP_DETAIL = 1;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -38,6 +51,7 @@ export interface BodyState {
 export class BotScene {
   bodies: BodyState[];
   activeMode: ViewerMode;
+  transparent: boolean;
 
   /** Which body IDs are isolated (empty = no isolation). */
   private _isolatedIds: Set<number>;
@@ -56,6 +70,7 @@ export class BotScene {
     }
 
     this.activeMode = 'explore';
+    this.transparent = false;
     this._isolatedIds = new Set();
   }
 
@@ -126,6 +141,19 @@ export class BotScene {
     }
   }
 
+  /** Set multiple bodies as hovered (empty array to clear). */
+  setHoveredBodies(bodyIds: number[]): void {
+    const idSet = new Set(bodyIds);
+    for (const body of this.bodies) {
+      body.hovered = idSet.has(body.id);
+    }
+  }
+
+  /** Toggle transparent rendering mode. */
+  setTransparent(on: boolean): void {
+    this.transparent = on;
+  }
+
   /** Set which body is selected (null to clear). */
   setSelected(bodyId: number | null): void {
     for (const body of this.bodies) {
@@ -155,12 +183,16 @@ export class BotScene {
    *
    * - Invisible → 0
    * - Ghosted → GHOST_OPACITY
+   * - Transparent mode + structural → TRANSPARENT_STRUCTURAL_OPACITY
+   * - Transparent mode + detail → TRANSPARENT_DETAIL_OPACITY
    * - Normal → 1.0
    *
    * Body 0 during isolation: visible=true but not in isolatedIds
    * → its meshes should be hidden (opacity 0).
+   *
+   * @param geomGroup - Optional geometry group (GEOM_GROUP_STRUCTURAL=0, GEOM_GROUP_DETAIL=1, etc.)
    */
-  bodyOpacity(bodyId: number): number {
+  bodyOpacity(bodyId: number, geomGroup?: number): number {
     const body = this.bodies[bodyId];
     if (!body) return 0;
 
@@ -172,6 +204,11 @@ export class BotScene {
 
     if (!body.visible) return 0;
     if (body.ghosted) return GHOST_OPACITY;
+    if (this.transparent) {
+      // Detail meshes (servos, screws) are more opaque than structural shells
+      if (geomGroup === GEOM_GROUP_DETAIL) return TRANSPARENT_DETAIL_OPACITY;
+      return TRANSPARENT_STRUCTURAL_OPACITY;
+    }
     return 1.0;
   }
 
@@ -182,8 +219,8 @@ export class BotScene {
   bodyEmissive(bodyId: number): number {
     const body = this.bodies[bodyId];
     if (!body) return 0;
-    if (body.hovered) return 0x666666;
     if (body.selected) return 0x333333;
+    if (body.hovered) return 0x666666;
     return 0;
   }
 }
