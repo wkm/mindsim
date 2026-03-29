@@ -254,7 +254,7 @@ class ComponentBrowser {
       this.components = await resp.json();
       info('components', `catalog loaded: ${this.components.length} components`);
     } catch (err: any) {
-      logError('components', `failed to fetch catalog: ${err.message}`);
+      logError('components', 'failed to fetch catalog', { error: err.message });
       document.getElementById('side-panel')!.innerHTML =
         `<p style="color:#ff6666; font-size:13px">Failed to load components: ${err.message}</p>`;
     }
@@ -507,7 +507,9 @@ class ComponentBrowser {
 
       this._enterStepsMode();
     } catch (err) {
-      logError('cad-steps', `failed to fetch ShapeScript steps: ${err}`);
+      logError('cad-steps', 'failed to fetch ShapeScript steps', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       if (btn) {
         btn.textContent = 'Steps';

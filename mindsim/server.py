@@ -37,7 +37,10 @@ log = structlog.get_logger("mindsim.server")
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Ensure the component registry is built when uvicorn starts."""
+    """Ensure logging and component registry are ready when uvicorn starts."""
+    from mindsim.log import setup_logging
+
+    setup_logging()  # idempotent — no-op if main.py already called it
     init_registry()
     yield
 
@@ -57,16 +60,22 @@ async def _log_api_requests(request: Request, call_next):
         return await call_next(request)
 
     t0 = time.perf_counter()
-    response = await call_next(request)
-    duration_ms = round((time.perf_counter() - t0) * 1000, 1)
-    _request_log.info(
-        "request",
-        method=request.method,
-        path=request.url.path,
-        status=response.status_code,
-        duration_ms=duration_ms,
-    )
-    return response
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception:
+        raise
+    finally:
+        duration_ms = round((time.perf_counter() - t0) * 1000, 1)
+        _request_log.info(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            duration_ms=duration_ms,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1959,17 +1968,21 @@ async def post_client_log(request: Request):
     Client timestamps are preserved as-is to maintain ordering.
     """
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "request body must be a JSON object")
     entries = body.get("entries", [])
     if not isinstance(entries, list):
         raise HTTPException(400, "entries must be a list")
 
     lines: list[str] = []
     for entry in entries[:50]:
-        line = json.dumps(entry, separators=(",", ":"))
+        if not isinstance(entry, dict):
+            continue
+        line = json.dumps(entry, separators=(",", ":"), default=str)
         lines.append(line)
 
     if lines:
-        with _client_log_lock, open(_get_client_log_path(), "a") as f:
+        with _client_log_lock, open(_get_client_log_path(), "a", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
     return Response(status_code=204)

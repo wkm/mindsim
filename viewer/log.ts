@@ -74,33 +74,54 @@ export function error(tag: string, msg: string, data?: Record<string, unknown>):
 export async function timedFetch(url: string, init?: RequestInit): Promise<Response> {
   const method = init?.method ?? 'GET';
   const t0 = performance.now();
-  const resp = await fetch(url, init);
-  const durationMs = Math.round(performance.now() - t0);
-  info('fetch', `${method} ${url} -> ${resp.status} (${durationMs}ms)`, {
-    method,
-    url,
-    status: resp.status,
-    duration_ms: durationMs,
-  });
-  return resp;
+  try {
+    const resp = await fetch(url, init);
+    const durationMs = Math.round(performance.now() - t0);
+    info('fetch', `${method} ${url} -> ${resp.status} (${durationMs}ms)`, {
+      method,
+      url,
+      status: resp.status,
+      duration_ms: durationMs,
+    });
+    return resp;
+  } catch (err) {
+    const durationMs = Math.round(performance.now() - t0);
+    error('fetch', `${method} ${url} -> ERROR (${durationMs}ms)`, {
+      method,
+      url,
+      duration_ms: durationMs,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Server flush
 // ---------------------------------------------------------------------------
 
+let _flushing = false;
+
 /** POST buffered log entries to the server and clear the buffer. Fire-and-forget. */
 export async function flushToServer(): Promise<void> {
-  if (_buffer.length === 0) return;
+  if (_buffer.length === 0 || _flushing) return;
+  _flushing = true;
   const entries = _buffer.splice(0, _buffer.length);
   try {
-    await fetch('/api/client-log', {
+    const resp = await fetch('/api/client-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries }),
     });
+    if (!resp.ok) {
+      // Re-queue entries at the front
+      _buffer.unshift(...entries);
+    }
   } catch {
-    // Silent — server may not have the endpoint yet
+    // Re-queue entries — server may not be available
+    _buffer.unshift(...entries);
+  } finally {
+    _flushing = false;
   }
 }
 

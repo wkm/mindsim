@@ -201,7 +201,7 @@ export async function fetchSTL(botName: string, meshFile: string): Promise<THREE
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    warn('viewer', `error loading ${meshFile}: ${err}`);
+    warn('viewer', `error loading ${meshFile}`, { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -219,7 +219,7 @@ export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    warn('viewer', `STL fetch error: ${url}: ${err}`);
+    warn('viewer', `STL fetch error: ${url}`, { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
