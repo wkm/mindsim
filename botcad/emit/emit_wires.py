@@ -14,13 +14,16 @@ from botcad.routing import WireRoute
 from botcad.skeleton import Bot
 from botcad.units import Meters, Position
 
-# Visual radius per bus type (meters)
+# Visual radius per bus type (meters) — outer diameter with insulation.
+# UART/USB: 26 AWG silicone ~1.5mm OD → 0.75mm radius
+# CSI: 15-pin FFC ribbon is flat (~0.3mm × 15mm) but rendered as round for now
+# Power: 22 AWG silicone ~1.8mm OD → 0.9mm radius
 _WIRE_VISUAL_RADIUS: dict[BusType, float] = {
-    BusType.UART_HALF_DUPLEX: 0.0009,  # 0.9mm
-    BusType.CSI: 0.0018,  # 1.8mm
-    BusType.POWER: 0.0012,  # 1.2mm
+    BusType.UART_HALF_DUPLEX: 0.00075,  # 26 AWG, 1.5mm OD
+    BusType.CSI: 0.0010,  # FFC ribbon, rough approximation as round
+    BusType.POWER: 0.0009,  # 22 AWG, 1.8mm OD
 }
-_DEFAULT_WIRE_RADIUS = 0.0015
+_DEFAULT_WIRE_RADIUS = 0.00075  # 26 AWG default
 
 
 def route_to_world_polyline(bot: Bot, route: WireRoute) -> list[Position]:
