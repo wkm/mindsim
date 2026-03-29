@@ -38,6 +38,12 @@ make validate
 - **`.moved()`, never `.locate()`.** build123d's `.locate()` mutates in place and returns `self`. On `@lru_cache`d solids (bracket, envelope, coupler, servo), this silently corrupts the cached object for all future callers. Always use `.moved()` which creates an independent copy. The CAD steps debug viewer (`?cadsteps=bot:body`) makes this kind of bug visible.
 - **Commit logs are a journal.** Explain _why_, not just _what_.
 - Work with the user on improvement. Emit logs from interactions that will help you understand what a user did and what happened when they report a bug. Don't commit these logs.
+- **Type system discipline.** Be pedantic about types representing only valid states. Every new type should be semantically sane — if a field combination shouldn't exist, make it unrepresentable. Solid type design keeps purpose clear and prevents entire categories of bugs.
+- **Guard domain boundaries.** When converting between types, be explicit about what data is dropped or added — you're changing the domain you can represent. If a property disappears in the narrower type, verify the narrower representation is actually appropriate. Don't silently lose information.
+- **Naming is worth the time.** Longer, descriptive identifiers are preferred — a name should tell you what something *is* without needing to read surrounding context. Abbreviations save keystrokes but cost clarity. Be consistent and predictable with naming conventions — boring is good. Naming is hard; spend time thinking about the precise name. It's worth it.
+- **Clear separation of concerns.** Classes, modules, and files should have well-defined boundaries and a single reason to exist. Resist hacking tangential logic into an existing unit just because it's convenient — find or create the right home for it.
+- **Verify with logs.** We've instrumented structured logging throughout the stack. When making changes, check the logs to confirm your work does what you think it does. Don't just trust that it compiled.
+- **Slow is smooth, smooth is fast.** Don't rush. Break large bodies of work into sub-items. Check each piece as you go. Verify intermediate results before building on top of them. Catching a mistake early is cheaper than unwinding a cascade.
 
 ## ShapeScript (Intermediate Representation)
 
