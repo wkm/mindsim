@@ -475,6 +475,13 @@ def build_viewer_manifest(bot: Bot, packing: PackingResult | None = None) -> dic
                 "route_label": route.label,
                 "parent_body": root_body_name,
                 "mesh": f"wire_{route.label}.stl",
+                "pos": [0.0, 0.0, 0.0],
+                "quat": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ],  # plint: disable=no-hardcoded-identity-quat — world-frame mesh
                 "color": bus_color,
             }
         )
