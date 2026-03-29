@@ -12,18 +12,26 @@ from pathlib import Path
 from botcad.component import BusType
 from botcad.routing import WireRoute
 from botcad.skeleton import Bot
-from botcad.units import Meters, Position
+from botcad.units import Meters, Position, WireGauge, mm
 
-# Visual radius per bus type (meters) — outer diameter with insulation.
-# UART/USB: 26 AWG silicone ~1.5mm OD → 0.75mm radius
-# CSI: 15-pin FFC ribbon is flat (~0.3mm × 15mm) but rendered as round for now
-# Power: 22 AWG silicone ~1.8mm OD → 0.9mm radius
-_WIRE_VISUAL_RADIUS: dict[BusType, float] = {
-    BusType.UART_HALF_DUPLEX: 0.00075,  # 26 AWG, 1.5mm OD
-    BusType.CSI: 0.0010,  # FFC ribbon, rough approximation as round
-    BusType.POWER: 0.0009,  # 22 AWG, 1.8mm OD
+# Wire gauge per bus type — derives visual radius from AWG + insulation.
+# CSI ribbon is flat (not round) but approximated as a thin round cable for now.
+_WIRE_GAUGE: dict[BusType, WireGauge] = {
+    BusType.UART_HALF_DUPLEX: WireGauge(awg=26),  # standard servo signal wire
+    BusType.POWER: WireGauge(awg=22),  # battery/power distribution
 }
-_DEFAULT_WIRE_RADIUS = 0.00075  # 26 AWG default
+_DEFAULT_GAUGE = WireGauge(awg=26)
+
+# CSI ribbon: not a round wire. Use a fixed small radius as rough approximation.
+_CSI_VISUAL_RADIUS = mm(1.0)
+
+
+def _visual_radius(bus_type: BusType) -> Meters:
+    """Get the visual radius for a bus type."""
+    if bus_type == BusType.CSI:
+        return _CSI_VISUAL_RADIUS
+    gauge = _WIRE_GAUGE.get(bus_type, _DEFAULT_GAUGE)
+    return gauge.outer_radius
 
 
 def route_to_world_polyline(bot: Bot, route: WireRoute) -> list[Position]:
@@ -72,7 +80,7 @@ def wire_route_solid(bot: Bot, route: WireRoute):
     if len(polyline) < 2:
         return None
 
-    radius = _WIRE_VISUAL_RADIUS.get(route.bus_type, _DEFAULT_WIRE_RADIUS)
+    radius = _visual_radius(route.bus_type)
 
     parts = []
     for j in range(len(polyline) - 1):

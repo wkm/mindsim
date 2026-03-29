@@ -10,6 +10,7 @@ Factory functions convert from common datasheet units.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import NewType
 
 # ── Scalar types ────────────────────────────────────────────────────────
@@ -61,3 +62,43 @@ def gpa(val: float) -> Pascals:
 def deg_to_rad(val: float) -> Radians:
     """Degrees → Radians."""
     return Radians(val * math.pi / 180.0)
+
+
+# ── Wire gauge ─────────────────────────────────────────────────────────
+
+# AWG diameter formula: d_mm = 0.127 × 92^((36 - AWG) / 39)
+
+_AWG_BASE = 0.127
+_AWG_RATIO = 92.0
+_AWG_EXPONENT_OFFSET = 36
+_AWG_EXPONENT_DIVISOR = 39
+
+
+def awg_conductor_diameter_m(awg: int) -> Meters:
+    """AWG gauge number → conductor diameter in meters."""
+    dia_mm = _AWG_BASE * _AWG_RATIO ** (
+        (_AWG_EXPONENT_OFFSET - awg) / _AWG_EXPONENT_DIVISOR
+    )
+    return Meters(dia_mm / 1000.0)
+
+
+@dataclass(frozen=True)
+class WireGauge:
+    """Wire gauge with insulation — derives outer diameter from AWG + jacket.
+
+    >>> WireGauge(awg=26).outer_radius
+    Meters(0.000...)
+    """
+
+    awg: int
+    insulation_thickness: Meters = Meters(0.0005)  # 0.5mm per side, silicone default
+
+    @property
+    def conductor_radius(self) -> Meters:
+        return Meters(awg_conductor_diameter_m(self.awg) / 2)
+
+    @property
+    def outer_radius(self) -> Meters:
+        return Meters(
+            awg_conductor_diameter_m(self.awg) / 2 + self.insulation_thickness
+        )
