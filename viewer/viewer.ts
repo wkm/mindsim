@@ -98,9 +98,8 @@ if (cadstepsParam) {
     // Initial layout: Design tab is active, tree panel visible
     updateCanvasLayout(true);
 
-    // Create a perspective viewport for Design
     const designViewport = new Viewport3D(container, {
-      cameraType: 'perspective',
+      cameraType: 'orthographic',
       grid: true,
     });
 

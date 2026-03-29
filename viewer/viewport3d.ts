@@ -19,6 +19,8 @@ import { loadEnvironment } from './environment.ts';
 import { MeasureTool } from './measure-tool.ts';
 import { BP, RENDER_ORDER } from './presentation.ts';
 
+type CameraType = 'orthographic' | 'perspective';
+
 const VIEW_PRESETS = {
   iso: { dir: new THREE.Vector3(1, -1, 0.8).normalize(), up: new THREE.Vector3(0, 0, 1), label: 'Iso', key: '1' },
   front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1), label: 'Front', key: '2' },
@@ -111,7 +113,7 @@ export class Viewport3D {
   _animating: boolean;
   _disposed: boolean;
   _activeTool: any;
-  _cameraType: string;
+  _cameraType: CameraType;
   _lerpActive: boolean;
   _lerpS: any;
   _lerpE: any;
@@ -177,6 +179,7 @@ export class Viewport3D {
     this._animating = false;
     this._disposed = false;
     this._activeTool = null; // 'select' | 'measure' | 'section' | null
+    // Orthographic is the standard default. Perspective is supported but discouraged.
     this._cameraType = options.cameraType || 'orthographic';
     // Lerp
     this._lerpActive = false;
@@ -629,7 +632,7 @@ export class Viewport3D {
    * Switch between perspective and orthographic cameras at runtime,
    * preserving the current view direction and target.
    */
-  _switchCamera(type) {
+  _switchCamera(type: CameraType) {
     if (type === this._cameraType) return;
     const oldPos = this._cam.position.clone();
     const oldUp = this._cam.up.clone();

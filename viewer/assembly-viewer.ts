@@ -430,7 +430,7 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   // =========================================================================
 
   const viewport = new Viewport3D(viewportPane, {
-    cameraType: 'perspective',
+    cameraType: 'orthographic',
     grid: true,
   });
 
