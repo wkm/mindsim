@@ -666,11 +666,11 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
 
   async function loadWiringNets(): Promise<void> {
     if (wiringLoaded) return;
-    wiringLoaded = true;
     try {
       const resp = await fetch(`/api/bots/${botName}/wirenets`);
       if (!resp.ok) return;
       const nets: WireNet[] = await resp.json();
+      wiringLoaded = true;
       if (!wiringDiagram) {
         wiringDiagram = new WiringDiagram(wiringContainer, {
           onNodeClick: (nodeId) => {
@@ -717,20 +717,36 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
       const table = document.createElement('table');
       table.style.cssText =
         'width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--font-mono, monospace);';
-      table.innerHTML =
-        '<thead><tr><th style="text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;">Port</th>' +
-        '<th style="text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;">Bus</th>' +
-        '<th style="text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;">Net</th>' +
-        '<th style="text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;">Status</th></tr></thead>';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const thStyle = 'text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;';
+      for (const col of ['Port', 'Bus', 'Net', 'Status']) {
+        const th = document.createElement('th');
+        th.style.cssText = thStyle;
+        th.textContent = col;
+        headerRow.appendChild(th);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
 
       const tbody = document.createElement('tbody');
       for (const p of portInfo) {
         const tr = document.createElement('tr');
-        tr.innerHTML =
-          `<td style="padding:2px 6px;">${p.label}</td>` +
-          `<td style="padding:2px 6px;">${p.busType}</td>` +
-          `<td style="padding:2px 6px;">${p.netLabel}</td>` +
-          `<td style="padding:2px 6px;color:${p.connected ? 'var(--success,#38a169)' : 'orange'};">${p.connected ? 'connected' : 'orphaned'}</td>`;
+        for (const [text, style] of [
+          [p.label, 'padding:2px 6px;'],
+          [p.busType, 'padding:2px 6px;'],
+          [p.netLabel, 'padding:2px 6px;'],
+          [
+            p.connected ? 'connected' : 'dangling',
+            `padding:2px 6px;color:${p.connected ? 'var(--success,#38a169)' : 'orange'};`,
+          ],
+        ] as const) {
+          const td = document.createElement('td');
+          td.style.cssText = style;
+          td.textContent = text;
+          tr.appendChild(td);
+        }
         tbody.appendChild(tr);
       }
       table.appendChild(tbody);
@@ -747,10 +763,18 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
 
     const info = document.createElement('div');
     info.style.cssText = 'font-size: 12px; color: var(--muted-fg); line-height: 1.8;';
-    info.innerHTML =
-      `<div><strong>Bus type:</strong> ${net.bus_type}</div>` +
-      `<div><strong>Topology:</strong> ${net.topology}</div>` +
-      `<div><strong>Ports:</strong> ${net.ports.length}</div>`;
+    for (const [label, value] of [
+      ['Bus type', net.bus_type],
+      ['Topology', net.topology],
+      ['Ports', String(net.ports.length)],
+    ] as const) {
+      const row = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = `${label}: `;
+      row.appendChild(strong);
+      row.appendChild(document.createTextNode(value));
+      info.appendChild(row);
+    }
     detailPane.appendChild(info);
 
     const portList = document.createElement('ul');

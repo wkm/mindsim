@@ -61,7 +61,7 @@ A new function `derive_wirenets(bot: Bot) -> tuple[WireNet, ...]` produces the n
 
 Long-term, bots could declare their wiring spec declaratively (e.g., as data on the bot definition), but that's out of scope. For now, `derive_wirenets()` is the single place that encodes "what connects to what."
 
-The net list is stored on `Bot.wire_nets: tuple[WireNet, ...]` alongside the existing `Bot.wire_routes`.
+The net list is stored on `Bot.wire_nets: list[WireNet]` alongside the existing `Bot.wire_routes`.
 
 ### Validation Checks
 
@@ -77,40 +77,34 @@ New DFM checks in `botcad/dfm/checks/`:
 
 ## Phase 2: Wiring Diagram View
 
-### Library Choice: Sprotty + elkjs
+### Library Choice: elkjs + custom SVG
 
-The diagram uses [Sprotty](https://sprotty.org/) (EPL-2.0) for rendering and interaction, with [sprotty-elk](https://www.npmjs.com/package/sprotty-elk) for automatic port-aware layout via elkjs.
+The diagram uses [elkjs](https://github.com/kieler/elkjs) (EPL-2.0) for port-aware automatic layout, with hand-rendered SVG for display and interaction. This matches the pattern used by the existing `assembly-dag.ts`.
 
-**Why Sprotty:**
-- First-class `SPort` model — ports are named, positioned, and edges connect port-to-port
-- SVG rendering with virtual DOM (snabbdom) — no hand-rolled SVG
-- Built-in click/hover/select interaction
-- Framework-agnostic (plain TypeScript + DOM, no React)
-- elkjs integration via `sprotty-elk` handles layout with port constraints
+**Why elkjs directly (not Sprotty):**
+A spike confirmed that Sprotty's port-to-port edge routing works, but the full Sprotty stack pulls in inversify (DI container), snabbdom (virtual DOM), and reflect-metadata — heavy dependencies for what is essentially a static diagram. Using elkjs directly for layout + custom SVG keeps the code simple and consistent with existing viewer patterns.
 
-**Spike required:** Confirm port-to-port edge routing works correctly in Sprotty 1.4 (there was a historical issue in `sprotty-layout`). Do this before building the full view.
-
-### SGraph Mapping
+### Graph Model Mapping
 
 ```
-WireNet[] → SGraph
+WireNet[] → GraphNode[] + GraphEdge[] → elkjs layout → SVG
 
-Each unique component_id  → SNode
+Each unique component_id  → GraphNode (ElkNode)
   - label: component name
-  - children: SPorts for each wire port on that component
+  - ports: input ports on left (WEST), output ports on right (EAST)
 
-Each NetPort              → SPort on its parent SNode
+Each NetPort              → GraphPort (ElkPort) on its parent node
   - label: port_label
-  - CSS class: bus_type (for color)
+  - side: determined by edge direction (target=WEST, source=EAST)
 
-Adjacent port pairs       → SEdge (port-to-port)
-  - DAISY_CHAIN: ports[i] → ports[i+1] for each i
+Adjacent port pairs       → GraphEdge (ElkExtendedEdge, port-to-port)
+  - DAISY_CHAIN: ports[i] → ports[i+1], skipping same-component pairs
   - POINT_TO_POINT: ports[0] → ports[1]
   - STAR: ports[0] → ports[i] for i in 1..n
-  - CSS class: bus_type (for color)
+  - Colored by bus_type
 ```
 
-This transform lives in `viewer/wiring-diagram.ts` — a pure function from `WireNet[]` to SGraph JSON.
+This transform lives in `viewer/wiring-diagram.ts` — a pure function from `WireNet[]` to the internal graph model, then to elkjs input, then to SVG.
 
 ### Viewer Integration
 
@@ -172,7 +166,7 @@ Deferred until Phases 1-2 validate the logical model. **Phases 1-2 must not modi
 ### Phase 2 (TypeScript)
 - **New:** `viewer/wiring-diagram.ts` — Sprotty container, WireNet→SGraph transform
 - **Modified:** `viewer/assembly-viewer.ts` — add "Wiring" sub-tab
-- **Modified:** `package.json` — add `sprotty`, `sprotty-elk`, `elkjs` dependencies
+- **Modified:** `package.json` — add `elkjs` dependency
 
 ### Phase 3 (Python, deferred)
 - **Modified:** `botcad/routing.py` — consume `WireNet[]`

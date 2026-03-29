@@ -77,7 +77,8 @@ interface GraphPort {
   id: string;
   label: string;
   busType: string;
-  orphaned: boolean;
+  /** Port not referenced by any edge — distinct from DFM "orphaned" (not in any net). */
+  dangling: boolean;
   side: 'WEST' | 'EAST'; // WEST = input (left), EAST = output (right)
 }
 
@@ -178,7 +179,7 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
         // Ambiguous — use naming: labels ending in _in/input → left, else right
         side = /_in$|_input$|^power_in$|^usb_power$|^csi_in$/.test(portLabel) ? 'WEST' : 'EAST';
       }
-      const gp: GraphPort = { id: portId, label: portLabel, busType, orphaned: false, side };
+      const gp: GraphPort = { id: portId, label: portLabel, busType, dangling: false, side };
       if (side === 'WEST') {
         westPorts.push(gp);
       } else {
@@ -198,11 +199,13 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
     });
   }
 
-  // Orphaned port detection: ports not referenced by any edge
+  // Dangling port detection: ports not referenced by any edge.
+  // Distinct from DFM "orphaned" (port not in any net) — dangling means
+  // the port appears in a net but has no wire connecting it to another component.
   for (const node of nodes) {
     for (const port of node.ports) {
       if (!sourcePorts.has(port.id) && !targetPorts.has(port.id)) {
-        port.orphaned = true;
+        port.dangling = true;
       }
     }
   }
@@ -439,7 +442,7 @@ function renderSVG(layout: LayoutResult, callbacks: WiringDiagramCallbacks): SVG
 
         const portColor = BUS_TYPE_COLORS[port.busType] ?? '#666';
 
-        if (port.orphaned) {
+        if (port.dangling) {
           portRect.setAttribute('fill', 'none');
           portRect.setAttribute('stroke', 'orange');
           portRect.setAttribute('stroke-width', '2');
