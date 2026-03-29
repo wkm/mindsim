@@ -8,6 +8,8 @@
  *   /viewer/?cadsteps=X:Y     → CAD steps debugger (Three.js, no MuJoCo)
  */
 
+import { clearViewState, readViewState, updateViewState } from './view-state.ts';
+
 // ---------------------------------------------------------------------------
 // URL routing — decide which mode to launch
 // ---------------------------------------------------------------------------
@@ -132,6 +134,16 @@ if (cadstepsParam) {
 
       const simModeTabs = document.getElementById('sim-mode-tabs');
 
+      // Update URL state
+      updateViewState({ tab });
+      if (tab === 'design') {
+        clearViewState('mode', 'step');
+      } else if (tab === 'sim') {
+        clearViewState('solo');
+      } else {
+        clearViewState('mode', 'step', 'solo');
+      }
+
       // Deactivate previous tab
       if (prevTab === 'sim') {
         simHandle?.pause();
@@ -184,7 +196,7 @@ if (cadstepsParam) {
 
         if (!simHandle) {
           const { initBotViewer } = await import('./bot-viewer.ts');
-          simHandle = await initBotViewer(botName);
+          simHandle = await initBotViewer(botName, initialState);
         } else {
           simHandle.resume();
         }
@@ -193,9 +205,27 @@ if (cadstepsParam) {
       }
     }
 
+    // Read initial view state from URL
+    const initialState = readViewState();
+
     designTab.addEventListener('click', () => switchTab('design'));
     dfmTab.addEventListener('click', () => switchTab('dfm'));
     simTab.addEventListener('click', () => switchTab('sim'));
+
+    // Apply initial tab from URL
+    if (initialState.tab === 'sim' || initialState.tab === 'dfm') {
+      switchTab(initialState.tab);
+    } else {
+      // Design tab is default — apply initial solo/select if present
+      if (initialState.solo && designCtx.scene.tree.getNode(initialState.solo)) {
+        designCtx.scene.tree.solo(initialState.solo);
+        designCtx.syncVisibility();
+        designCtx.tree.updateFromDesignScene(designCtx.scene.tree);
+      }
+      if (initialState.select) {
+        designCtx.tree.setFocused(initialState.select);
+      }
+    }
   });
 } else if (componentParam) {
   // Component browser — hide landing, show unified layout (tree + canvas + side panel)
