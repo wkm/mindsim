@@ -571,6 +571,7 @@ class Bot:
     all_bodies: list[Body] = field(default_factory=list)
     all_joints: list[Joint] = field(default_factory=list)
     wire_routes: list = field(default_factory=list)
+    wire_nets: list = field(default_factory=list)
     packing_result: PackingResult | None = None
 
     _assemblies: dict[str, Assembly] = field(default_factory=dict)
@@ -845,8 +846,10 @@ class Bot:
         self._create_purchased_bodies()
 
         from botcad.routing import solve_routing
+        from botcad.wirenet import derive_wirenets
 
         self.wire_routes = solve_routing(self)
+        self.wire_nets = list(derive_wirenets(self))
 
         # Auto-generate clearance constraints from assembly structure
         self._generate_implicit_constraints()
