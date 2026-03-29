@@ -16,6 +16,11 @@ from functools import lru_cache
 from botcad.component import Vec3
 from botcad.units import Meters, Position, Size3D
 
+# Wire stub geometry — the short placeholder cylinder at each connector port.
+# Used by viewer, server, and validation code.
+WIRE_STUB_RADIUS = Meters(0.0015)  # 1.5 mm
+WIRE_STUB_LENGTH = Meters(0.025)  # 25 mm
+
 
 class ConnectorType(StrEnum):
     MOLEX_5264_3PIN = "5264_3pin"
