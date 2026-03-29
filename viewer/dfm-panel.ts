@@ -9,6 +9,8 @@
  * - Click-to-select rows with callback
  */
 
+import { SEVERITY_COLORS, SEVERITY_ICONS } from './icons.ts';
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -38,7 +40,7 @@ type SortColumn = 'severity' | 'check_name' | 'body' | 'title' | 'measured';
 type SortDir = 'asc' | 'desc';
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
-const SEVERITY_ICON: Record<string, string> = { error: '\u{1F534}', warning: '\u{1F7E1}', info: '\u2139\uFE0F' };
+const SEVERITY_ICON = SEVERITY_ICONS;
 
 // ---------------------------------------------------------------------------
 // Styles (injected once)
@@ -114,7 +116,7 @@ function injectStyles() {
     .dfm-table tr { cursor: pointer; transition: background 0.1s; }
     .dfm-table tbody tr:hover { background: rgba(19,124,189,0.06); }
     .dfm-table tbody tr.selected { background: rgba(19,124,189,0.12); }
-    .dfm-table .col-sev { width: 24px; text-align: center; }
+    .dfm-table .col-sev { width: 24px; text-align: center; line-height: 0; }
     .dfm-table .col-meas { font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
   `;
   document.head.appendChild(style);
@@ -209,7 +211,7 @@ export class DFMPanel {
       const btn = document.createElement('button');
       btn.className = 'dfm-filter-btn';
       btn.dataset.severity = sev;
-      btn.textContent = `${SEVERITY_ICON[sev]} ${sev}`;
+      btn.innerHTML = `<span style="display:inline-flex;align-items:center;color:${SEVERITY_COLORS[sev]}">${SEVERITY_ICON[sev]}</span> ${sev}`;
       btn.addEventListener('click', () => this._toggleFilter(sev));
       filters.appendChild(btn);
     }
@@ -320,7 +322,7 @@ export class DFMPanel {
       const measStr = this._formatMeasured(f);
       const selClass = f.id === this.selectedId ? ' selected' : '';
       html += `<tr data-id="${f.id}" class="${selClass}">`;
-      html += `<td class="col-sev">${icon}</td>`;
+      html += `<td class="col-sev" style="color:${SEVERITY_COLORS[f.severity]}">${icon}</td>`;
       html += `<td>${this._esc(f.check_name)}</td>`;
       html += `<td>${this._esc(f.body)}</td>`;
       html += `<td>${this._esc(f.title)}</td>`;

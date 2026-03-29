@@ -15,7 +15,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["three"]
+    "types": ["three", "vite/client"]
   },
   "include": ["viewer/**/*.ts"],
   "exclude": ["node_modules", "viewer/.cdn_cache", "viewer/tests/*.test.ts"]
