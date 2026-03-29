@@ -14,6 +14,7 @@ import { ExploreMode } from './explore-mode.ts';
 import { FocusController } from './focus-controller.ts';
 import { IKMode } from './ik-mode.ts';
 import { JointMode } from './joint-mode.ts';
+import { timedFetch } from './log.ts';
 import { sync } from './scene-sync.ts';
 import { SectionCutter } from './section-cutter.ts';
 import { StressMode } from './stress-mode.ts';
@@ -573,7 +574,7 @@ export async function initBotViewer(botName: string, initialState?: ViewStatePar
   // ---------------------------------------------------------------------------
   async function fetchManifest() {
     try {
-      const resp = await fetch(`../bots/${botName}/viewer_manifest.json`);
+      const resp = await timedFetch(`../bots/${botName}/viewer_manifest.json`);
       if (resp.ok) return await resp.json();
     } catch {
       /* fall through */

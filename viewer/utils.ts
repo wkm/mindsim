@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { timedFetch, warn } from './log.ts';
 import type { ManifestMaterial, ManifestPart } from './manifest-types.ts';
 
 // MuJoCo geom group constants
@@ -190,9 +191,9 @@ const stlLoader = new STLLoader();
 /** Fetch an STL and parse it into a BufferGeometry with vertex normals. */
 export async function fetchSTL(botName: string, meshFile: string): Promise<THREE.BufferGeometry | null> {
   try {
-    const resp = await fetch(`/api/bots/${botName}/meshes/${meshFile}`);
+    const resp = await timedFetch(`/api/bots/${botName}/meshes/${meshFile}`);
     if (!resp.ok) {
-      console.warn(`[viewer] failed to fetch ${meshFile}: ${resp.status}`);
+      warn('viewer', `failed to fetch ${meshFile}: ${resp.status}`);
       return null;
     }
     const buf = await resp.arrayBuffer();
@@ -200,7 +201,7 @@ export async function fetchSTL(botName: string, meshFile: string): Promise<THREE
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    console.warn(`[viewer] error loading ${meshFile}:`, err);
+    warn('viewer', `error loading ${meshFile}: ${err}`);
     return null;
   }
 }
@@ -208,9 +209,9 @@ export async function fetchSTL(botName: string, meshFile: string): Promise<THREE
 /** Fetch an STL from a full URL and parse it into a BufferGeometry with vertex normals. */
 export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry | null> {
   try {
-    const resp = await fetch(url);
+    const resp = await timedFetch(url);
     if (!resp.ok) {
-      console.warn(`[viewer] failed to fetch STL: ${url} (${resp.status})`);
+      warn('viewer', `failed to fetch STL: ${url} (${resp.status})`);
       return null;
     }
     const buf = await resp.arrayBuffer();
@@ -218,7 +219,7 @@ export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry
     geometry.computeVertexNormals();
     return geometry;
   } catch (err) {
-    console.warn(`[viewer] STL fetch error: ${url}`, err);
+    warn('viewer', `STL fetch error: ${url}: ${err}`);
     return null;
   }
 }

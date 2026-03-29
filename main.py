@@ -425,27 +425,15 @@ class MindSimApp(App):
 
 
 def _setup_logging() -> None:
-    """Configure root logger level and install an excepthook.
+    """Configure structured logging for the entire process.
 
     Per-run file logging is set up in train.py when the run directory is
-    created.  This function only sets the root level and installs an
-    excepthook so unhandled exceptions are captured by whatever handlers
-    are active at the time.
+    created.  This function configures structlog with console + rotating
+    JSON file output and installs an excepthook.
     """
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    from mindsim.log import setup_logging
 
-    # Capture unhandled exceptions to the log
-    _original_excepthook = sys.excepthook
-
-    def _logging_excepthook(exc_type, exc_value, exc_tb):
-        if not issubclass(exc_type, KeyboardInterrupt):
-            logging.critical(
-                "Unhandled exception", exc_info=(exc_type, exc_value, exc_tb)
-            )
-        _original_excepthook(exc_type, exc_value, exc_tb)
-
-    sys.excepthook = _logging_excepthook
+    setup_logging()
 
 
 def _is_mjpython() -> bool:

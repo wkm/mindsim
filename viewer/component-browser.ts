@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { info, error as logError, timedFetch } from './log.ts';
 import type { ViewerManifest } from './manifest-types.ts';
 import { initManifestViewer, type ManifestViewerContext, type StlUrlContext } from './manifest-viewer.ts';
 import { BP, hexStr } from './presentation.ts';
@@ -248,12 +249,12 @@ class ComponentBrowser {
 
   async _fetchCatalog() {
     try {
-      const resp = await fetch('/api/components');
+      const resp = await timedFetch('/api/components');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       this.components = await resp.json();
-      console.log(`Component catalog: ${this.components.length} components loaded`);
+      info('components', `catalog loaded: ${this.components.length} components`);
     } catch (err: any) {
-      console.error('Failed to fetch component catalog:', err);
+      logError('components', `failed to fetch catalog: ${err.message}`);
       document.getElementById('side-panel')!.innerHTML =
         `<p style="color:#ff6666; font-size:13px">Failed to load components: ${err.message}</p>`;
     }
@@ -434,7 +435,7 @@ class ComponentBrowser {
     }
 
     // Fetch manifest
-    const resp = await fetch(`/api/components/${name}/manifest`);
+    const resp = await timedFetch(`/api/components/${name}/manifest`);
     if (!resp.ok) return;
     const manifest = (await resp.json()) as ViewerManifest;
 
@@ -488,12 +489,12 @@ class ComponentBrowser {
     }
 
     try {
-      const resp = await fetch(`/api/components/${this.currentComponent.name}/shapescript`);
+      const resp = await timedFetch(`/api/components/${this.currentComponent.name}/shapescript`);
       if (!resp.ok) {
         if (resp.status === 404) {
           this._showStepsUnavailable();
         } else {
-          console.error('ShapeScript steps fetch failed:', resp.status);
+          logError('cad-steps', `ShapeScript steps fetch failed: ${resp.status}`);
         }
         return;
       }
@@ -506,7 +507,7 @@ class ComponentBrowser {
 
       this._enterStepsMode();
     } catch (err) {
-      console.error('Failed to fetch ShapeScript steps:', err);
+      logError('cad-steps', `failed to fetch ShapeScript steps: ${err}`);
     } finally {
       if (btn) {
         btn.textContent = 'Steps';
