@@ -14,6 +14,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+# build123d logs "None context requested by Box/Cylinder/..." at INFO for every
+# shape created outside a BuildPart context. ShapeScript always does this.
+logging.getLogger("build123d").setLevel(logging.WARNING)
+
 from botcad.shapescript.ops import (
     Align3,
     BoxOp,

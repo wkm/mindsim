@@ -188,26 +188,10 @@ export function humanizeJointName(name: string): string {
 
 const stlLoader = new STLLoader();
 
-/** Fetch an STL and parse it into a BufferGeometry with vertex normals. */
-export async function fetchSTL(botName: string, meshFile: string): Promise<THREE.BufferGeometry | null> {
-  try {
-    const resp = await timedFetch(`/api/bots/${botName}/meshes/${meshFile}`);
-    if (!resp.ok) {
-      warn('viewer', `failed to fetch ${meshFile}: ${resp.status}`);
-      return null;
-    }
-    const buf = await resp.arrayBuffer();
-    const geometry = stlLoader.parse(buf);
-    geometry.computeVertexNormals();
-    return geometry;
-  } catch (err) {
-    warn('viewer', `error loading ${meshFile}`, { error: errorMessage(err) });
-    return null;
-  }
-}
+/** In-flight / completed STL fetches — each URL is fetched at most once per session. */
+const stlFetchCache = new Map<string, Promise<THREE.BufferGeometry | null>>();
 
-/** Fetch an STL from a full URL and parse it into a BufferGeometry with vertex normals. */
-export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry | null> {
+async function doFetchSTL(url: string): Promise<THREE.BufferGeometry | null> {
   try {
     const resp = await timedFetch(url);
     if (!resp.ok) {
@@ -222,6 +206,25 @@ export async function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry
     warn('viewer', `STL fetch error: ${url}`, { error: errorMessage(err) });
     return null;
   }
+}
+
+/** Fetch an STL and parse it into a BufferGeometry with vertex normals. */
+export function fetchSTL(botName: string, meshFile: string): Promise<THREE.BufferGeometry | null> {
+  return fetchSTLFromUrl(`/api/bots/${botName}/meshes/${meshFile}`);
+}
+
+/** Fetch an STL from a full URL and parse it into a BufferGeometry with vertex normals.
+ *  Deduplicates: the same URL is only fetched once per session. */
+export function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry | null> {
+  const cached = stlFetchCache.get(url);
+  if (cached) return cached;
+
+  const promise = doFetchSTL(url).then((geometry) => {
+    if (geometry === null) stlFetchCache.delete(url);
+    return geometry;
+  });
+  stlFetchCache.set(url, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
