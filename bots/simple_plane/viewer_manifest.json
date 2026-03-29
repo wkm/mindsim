@@ -1,0 +1,1641 @@
+{
+  "bot_name": "simple_plane",
+  "assemblies": [],
+  "bodies": [
+    {
+      "name": "fuselage",
+      "mesh": "fuselage.stl",
+      "role": "structure",
+      "parent": null,
+      "shape": "box",
+      "dimensions": [
+        0.12,
+        0.2,
+        0.06
+      ],
+      "mass": 0.6328,
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
+      "mounts": [
+        {
+          "label": "fc",
+          "component_name": "MatekF405Wing",
+          "dimensions": [
+            0.036,
+            0.036,
+            0.008
+          ],
+          "mass": 0.01,
+          "component_type": "generic"
+        },
+        {
+          "label": "battery",
+          "component_name": "LiPo3S-1300",
+          "dimensions": [
+            0.105,
+            0.034,
+            0.025
+          ],
+          "mass": 0.11,
+          "component_type": "battery",
+          "chemistry": "LiPo",
+          "voltage": 0.0,
+          "cells_s": 3
+        },
+        {
+          "label": "esc",
+          "component_name": "ESC-30A",
+          "dimensions": [
+            0.045,
+            0.024,
+            0.011
+          ],
+          "mass": 0.025,
+          "component_type": "generic"
+        },
+        {
+          "label": "motor",
+          "component_name": "MT2213",
+          "dimensions": [
+            0.0279,
+            0.0279,
+            0.038
+          ],
+          "mass": 0.056,
+          "component_type": "motor"
+        },
+        {
+          "label": "prop",
+          "component_name": "Propeller-9x4.5",
+          "dimensions": [
+            0.2286,
+            0.2286,
+            0.008
+          ],
+          "mass": 0.01,
+          "component_type": "propeller"
+        }
+      ]
+    },
+    {
+      "name": "left_aileron",
+      "mesh": "left_aileron.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.18,
+        0.04,
+        0.008
+      ],
+      "mass": 0.0276,
+      "pos": [
+        -0.05,
+        -0.05,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
+      "joint": "left_aileron"
+    },
+    {
+      "name": "right_aileron",
+      "mesh": "right_aileron.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.18,
+        0.04,
+        0.008
+      ],
+      "mass": 0.0276,
+      "pos": [
+        0.05,
+        -0.05,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
+      "joint": "right_aileron"
+    },
+    {
+      "name": "elevator",
+      "mesh": "elevator.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.2,
+        0.04,
+        0.008
+      ],
+      "mass": 0.0306,
+      "pos": [
+        0.0,
+        -0.09,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
+      "joint": "elevator"
+    },
+    {
+      "name": "rudder",
+      "mesh": "rudder.stl",
+      "role": "structure",
+      "parent": "fuselage",
+      "shape": "box",
+      "dimensions": [
+        0.008,
+        0.04,
+        0.07
+      ],
+      "mass": 0.011,
+      "pos": [
+        0.0,
+        -0.09,
+        0.025
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.8078,
+        0.851,
+        0.8784,
+        1.0
+      ],
+      "joint": "rudder"
+    },
+    {
+      "name": "servo_left_aileron",
+      "mesh": "servo_SCS0009.stl",
+      "role": "component",
+      "component": "SCS0009",
+      "parent": "fuselage",
+      "category": "servo",
+      "joint": "left_aileron",
+      "pos": [
+        -0.06125,
+        -0.05,
+        0.0058
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.0132,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "SCS0009"
+    },
+    {
+      "name": "horn_left_aileron",
+      "mesh": "horn_left_aileron.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "fuselage",
+      "category": "horn",
+      "joint": "left_aileron",
+      "pos": [
+        -0.047,
+        -0.05,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:SCS0009"
+    },
+    {
+      "name": "servo_right_aileron",
+      "mesh": "servo_SCS0009.stl",
+      "role": "component",
+      "component": "SCS0009",
+      "parent": "fuselage",
+      "category": "servo",
+      "joint": "right_aileron",
+      "pos": [
+        0.03875,
+        -0.05,
+        0.0058
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.0132,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "SCS0009"
+    },
+    {
+      "name": "horn_right_aileron",
+      "mesh": "horn_right_aileron.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "fuselage",
+      "category": "horn",
+      "joint": "right_aileron",
+      "pos": [
+        0.053,
+        -0.05,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:SCS0009"
+    },
+    {
+      "name": "servo_elevator",
+      "mesh": "servo_SCS0009.stl",
+      "role": "component",
+      "component": "SCS0009",
+      "parent": "fuselage",
+      "category": "servo",
+      "joint": "elevator",
+      "pos": [
+        -0.01125,
+        -0.09,
+        0.0058
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "mass": 0.0132,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "SCS0009"
+    },
+    {
+      "name": "horn_elevator",
+      "mesh": "horn_elevator.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "fuselage",
+      "category": "horn",
+      "joint": "elevator",
+      "pos": [
+        0.003,
+        -0.09,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:SCS0009"
+    },
+    {
+      "name": "servo_rudder",
+      "mesh": "servo_SCS0009.stl",
+      "role": "component",
+      "component": "SCS0009",
+      "parent": "fuselage",
+      "category": "servo",
+      "joint": "rudder",
+      "pos": [
+        -0.0058,
+        -0.09,
+        0.01375
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.0132,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "SCS0009"
+    },
+    {
+      "name": "horn_rudder",
+      "mesh": "horn_rudder.stl",
+      "role": "component",
+      "component": "Horn disc",
+      "parent": "fuselage",
+      "category": "horn",
+      "joint": "rudder",
+      "pos": [
+        0.0,
+        -0.09,
+        0.028
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "horn:SCS0009"
+    }
+  ],
+  "joints": [
+    {
+      "name": "left_aileron",
+      "parent_body": "fuselage",
+      "child_body": "left_aileron",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -0.35,
+        0.35
+      ],
+      "range_deg": [
+        -20.1,
+        20.1
+      ],
+      "pos": [
+        -0.05,
+        -0.05,
+        0.0
+      ],
+      "servo": "SCS0009",
+      "continuous": false,
+      "servo_specs": {
+        "stall_torque_nm": 0.226,
+        "no_load_speed_rad_s": 10.472,
+        "voltage": 6.0,
+        "gear_ratio": 1.0,
+        "mass": 0.0132
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_left_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_left_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_left_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_left_aileron.stl",
+          "parent_body": "fuselage"
+        }
+      ]
+    },
+    {
+      "name": "right_aileron",
+      "parent_body": "fuselage",
+      "child_body": "right_aileron",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -0.35,
+        0.35
+      ],
+      "range_deg": [
+        -20.1,
+        20.1
+      ],
+      "pos": [
+        0.05,
+        -0.05,
+        0.0
+      ],
+      "servo": "SCS0009",
+      "continuous": false,
+      "servo_specs": {
+        "stall_torque_nm": 0.226,
+        "no_load_speed_rad_s": 10.472,
+        "voltage": 6.0,
+        "gear_ratio": 1.0,
+        "mass": 0.0132
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_right_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_right_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_right_aileron.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_right_aileron.stl",
+          "parent_body": "fuselage"
+        }
+      ]
+    },
+    {
+      "name": "elevator",
+      "parent_body": "fuselage",
+      "child_body": "elevator",
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "range": [
+        -0.52,
+        0.52
+      ],
+      "range_deg": [
+        -29.8,
+        29.8
+      ],
+      "pos": [
+        0.0,
+        -0.09,
+        0.0
+      ],
+      "servo": "SCS0009",
+      "continuous": false,
+      "servo_specs": {
+        "stall_torque_nm": 0.226,
+        "no_load_speed_rad_s": 10.472,
+        "voltage": 6.0,
+        "gear_ratio": 1.0,
+        "mass": 0.0132
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_elevator.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_elevator.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_elevator.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_elevator.stl",
+          "parent_body": "fuselage"
+        }
+      ]
+    },
+    {
+      "name": "rudder",
+      "parent_body": "fuselage",
+      "child_body": "rudder",
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "range": [
+        -0.52,
+        0.52
+      ],
+      "range_deg": [
+        -29.8,
+        29.8
+      ],
+      "pos": [
+        0.0,
+        -0.09,
+        0.025
+      ],
+      "servo": "SCS0009",
+      "continuous": false,
+      "servo_specs": {
+        "stall_torque_nm": 0.226,
+        "no_load_speed_rad_s": 10.472,
+        "voltage": 6.0,
+        "gear_ratio": 1.0,
+        "mass": 0.0132
+      },
+      "design_layers": [
+        {
+          "kind": "bracket",
+          "mesh": "bracket_rudder.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "coupler",
+          "mesh": "coupler_rudder.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "clearance",
+          "mesh": "clearance_rudder.stl",
+          "parent_body": "fuselage"
+        },
+        {
+          "kind": "insertion",
+          "mesh": "insertion_rudder.stl",
+          "parent_body": "fuselage"
+        }
+      ]
+    }
+  ],
+  "mounts": [
+    {
+      "body": "fuselage",
+      "label": "fc",
+      "component": "MatekF405Wing",
+      "category": "generic",
+      "mesh": "comp_fuselage_fc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.026
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.01,
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
+      "shapescript_component": "MatekF405Wing"
+    },
+    {
+      "body": "fuselage",
+      "label": "battery",
+      "component": "LiPo3S-1300",
+      "category": "battery",
+      "mesh": "comp_fuselage_battery.stl",
+      "pos": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.11,
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
+      ],
+      "shapescript_component": "LiPo3S-1300"
+    },
+    {
+      "body": "fuselage",
+      "label": "esc",
+      "component": "ESC-30A",
+      "category": "generic",
+      "mesh": "comp_fuselage_esc.stl",
+      "pos": [
+        0.0,
+        0.0,
+        -0.0245
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.025,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "ESC-30A"
+    },
+    {
+      "body": "fuselage",
+      "label": "motor",
+      "component": "MT2213",
+      "category": "motor",
+      "mesh": "comp_fuselage_motor.stl",
+      "pos": [
+        0.0,
+        0.081,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        -0.707107,
+        0.0,
+        0.0
+      ],
+      "mass": 0.056,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "MT2213"
+    },
+    {
+      "body": "fuselage",
+      "label": "prop",
+      "component": "Propeller-9x4.5",
+      "category": "propeller",
+      "mesh": "comp_fuselage_prop.stl",
+      "pos": [
+        0.0,
+        -0.0143,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.01,
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "shapescript_component": "Propeller-9x4.5"
+    }
+  ],
+  "parts": [
+    {
+      "id": "fastener_left_aileron_ear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.05775,
+        -0.05,
+        -0.0082
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_left_aileron_ear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.05775,
+        -0.05,
+        0.0198
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_left_aileron_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.048,
+        -0.046,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_left_aileron_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.048,
+        -0.054,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_left_aileron_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.048,
+        -0.046,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_left_aileron_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.048,
+        -0.054,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_ear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.04225,
+        -0.05,
+        -0.0082
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_ear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.04225,
+        -0.05,
+        0.0198
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.052,
+        -0.046,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.052,
+        -0.054,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.052,
+        -0.046,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_right_aileron_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.052,
+        -0.054,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_aileron"
+    },
+    {
+      "id": "fastener_elevator_ear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.00775,
+        -0.09,
+        -0.0082
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_elevator_ear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.00775,
+        -0.09,
+        0.0198
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_elevator_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.002,
+        -0.086,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_elevator_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.002,
+        -0.094,
+        -0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_elevator_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.002,
+        -0.086,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_elevator_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.002,
+        -0.094,
+        0.004
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elevator"
+    },
+    {
+      "id": "fastener_rudder_ear_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.0082,
+        -0.09,
+        0.01725
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_rudder_ear_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.0198,
+        -0.09,
+        0.01725
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_rudder_horn_0",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.004,
+        -0.086,
+        0.027
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_rudder_horn_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.004,
+        -0.094,
+        0.027
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_rudder_horn_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.004,
+        -0.086,
+        0.027
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_rudder_horn_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.004,
+        -0.094,
+        0.027
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "rudder"
+    },
+    {
+      "id": "fastener_fc_mount_0",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.01525,
+        0.01525,
+        0.026
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "fc mount -> fuselage",
+      "mount_label": "fc"
+    },
+    {
+      "id": "fastener_fc_mount_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        0.01525,
+        -0.01525,
+        0.026
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "fc mount -> fuselage",
+      "mount_label": "fc"
+    },
+    {
+      "id": "fastener_fc_mount_2",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.01525,
+        0.01525,
+        0.026
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "fc mount -> fuselage",
+      "mount_label": "fc"
+    },
+    {
+      "id": "fastener_fc_mount_3",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "fuselage",
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.01525,
+        -0.01525,
+        0.026
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "material": "steel",
+      "context": "fc mount -> fuselage",
+      "mount_label": "fc"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_0",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_0.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_1",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_1.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_2",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_2.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_3",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_3.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_4",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_4.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_5",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_5.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_6",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_6.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_7",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_7.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_8",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_8.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_9",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_9.stl"
+    },
+    {
+      "id": "wire_servo_bus_fuselage_10",
+      "name": "servo_bus",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "fuselage",
+      "bus_type": "uart_half_duplex",
+      "mesh": "wire_servo_bus_fuselage_10.stl"
+    },
+    {
+      "id": "wire_stub_fuselage_esc_batt_pos",
+      "name": "batt_pos",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "fuselage",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0225,
+        0.0,
+        -0.037
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "bus_type": "power",
+      "connector_type": "xt30",
+      "color": [
+        0.9,
+        0.3,
+        0.25,
+        1.0
+      ]
+    }
+  ],
+  "assembly_steps": [
+    {
+      "step": 1,
+      "title": "fuselage",
+      "body": "fuselage",
+      "components": [
+        {
+          "label": "fc",
+          "component": "MatekF405Wing"
+        },
+        {
+          "label": "battery",
+          "component": "LiPo3S-1300"
+        },
+        {
+          "label": "esc",
+          "component": "ESC-30A"
+        },
+        {
+          "label": "motor",
+          "component": "MT2213"
+        },
+        {
+          "label": "prop",
+          "component": "Propeller-9x4.5"
+        }
+      ],
+      "description": "Base structure \u2014 mount fc, battery, esc, motor, prop"
+    },
+    {
+      "step": 2,
+      "title": "left_aileron",
+      "body": "left_aileron",
+      "servo": {
+        "joint": "left_aileron",
+        "model": "SCS0009"
+      },
+      "description": "Attach via SCS0009 at joint left_aileron"
+    },
+    {
+      "step": 3,
+      "title": "right_aileron",
+      "body": "right_aileron",
+      "servo": {
+        "joint": "right_aileron",
+        "model": "SCS0009"
+      },
+      "description": "Attach via SCS0009 at joint right_aileron"
+    },
+    {
+      "step": 4,
+      "title": "elevator",
+      "body": "elevator",
+      "servo": {
+        "joint": "elevator",
+        "model": "SCS0009"
+      },
+      "description": "Attach via SCS0009 at joint elevator"
+    },
+    {
+      "step": 5,
+      "title": "rudder",
+      "body": "rudder",
+      "servo": {
+        "joint": "rudder",
+        "model": "SCS0009"
+      },
+      "description": "Attach via SCS0009 at joint rudder"
+    }
+  ],
+  "ik_chains": [],
+  "materials": {
+    "fr4_green": {
+      "color": [
+        0.0588,
+        0.6,
+        0.3765,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.85,
+      "opacity": 1.0
+    },
+    "lipo_wrap": {
+      "color": [
+        0.0745,
+        0.4863,
+        0.7412,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.7,
+      "opacity": 1.0
+    },
+    "abs_dark": {
+      "color": [
+        0.0941,
+        0.1255,
+        0.149,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.6,
+      "opacity": 1.0
+    }
+  }
+}

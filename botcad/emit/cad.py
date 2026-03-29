@@ -355,6 +355,9 @@ def _build_multi_material_solids(
         log.debug("Multi-material emitter failed for %s", body.name, exc_info=True)
         return
 
+    if mm_result is None:
+        return
+
     mat_solids = []
     for mp in mm_result.material_programs:
         try:

@@ -48,6 +48,8 @@ class ComponentKind(StrEnum):
     COMPUTE = "compute"
     WHEEL = "wheel"
     BEARING = "bearing"
+    MOTOR = "motor"
+    PROPELLER = "propeller"
     GENERIC = "generic"
 
 
@@ -143,6 +145,18 @@ def _build_registry() -> dict[ComponentKind, ComponentMeta]:
             layers=("body",),
             mount_orientation=MountOrientation.FLAT,
             script_emitter=bearing_script,
+        ),
+        ComponentKind.MOTOR: ComponentMeta(
+            category="actuator",
+            layers=("body",),
+            mount_orientation=MountOrientation.FACE_NORMAL,
+            script_emitter=generic_pcb_script,
+        ),
+        ComponentKind.PROPELLER: ComponentMeta(
+            category="structure",
+            layers=("body",),
+            mount_orientation=MountOrientation.FLAT,
+            script_emitter=generic_pcb_script,
         ),
         ComponentKind.GENERIC: ComponentMeta(
             category="component",
@@ -243,6 +257,28 @@ class BearingSpec(Component):
     od: Meters = Meters(0.0)  # outer diameter (meters)
     id: Meters = Meters(0.0)  # inner diameter (meters)
     width: Meters = Meters(0.0)  # thickness (meters)
+
+
+@dataclass(frozen=True)
+class MotorSpec(Component):
+    """A brushless DC motor for propulsion."""
+
+    kind: ComponentKind = ComponentKind.MOTOR
+    kv: float = 0.0  # motor velocity constant (RPM per volt)
+    max_thrust_n: float = 0.0  # max thrust in Newtons
+    shaft_diameter: Meters = Meters(0.0)  # output shaft diameter
+    can_diameter: Meters = Meters(0.0)  # motor can outer diameter
+    can_length: Meters = Meters(0.0)  # motor can length (without shaft)
+
+
+@dataclass(frozen=True)
+class PropellerSpec(Component):
+    """A propeller for aerodynamic thrust."""
+
+    kind: ComponentKind = ComponentKind.PROPELLER
+    diameter: Meters = Meters(0.0)  # prop diameter
+    pitch: Meters = Meters(0.0)  # prop pitch
+    blades: int = 2
 
 
 @dataclass(frozen=True)
