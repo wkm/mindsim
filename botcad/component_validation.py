@@ -28,7 +28,9 @@ class WireCollision:
     port_a: str  # label of first port
     port_b: str  # label of second port
     kind: CollisionKind
-    overlap_mm: float  # max overlap extent in mm (positive = overlapping)
+    overlap_mm: (
+        float  # min penetration depth across axes, in mm (positive = overlapping)
+    )
 
 
 # Default connector envelope when connector_type is empty (3 mm cube).
@@ -86,27 +88,33 @@ def _stub_aabb(
     except KeyError:
         return None  # unknown connector → skip stub
     dx, dy, dz = spec.wire_exit_direction
+    ox, oy, oz = spec.wire_exit_offset
 
     px, py, pz = float(port.pos[0]), float(port.pos[1]), float(port.pos[2])
     length = float(WIRE_STUB_LENGTH)
     radius = float(WIRE_STUB_RADIUS)
 
+    # Stub base starts at port pos + wire_exit_offset.
+    bx = px + float(ox)
+    by = py + float(oy)
+    bz = pz + float(oz)
+
     # Tip of stub.
-    tx = px + dx * length
-    ty = py + dy * length
-    tz = pz + dz * length
+    tx = bx + dx * length
+    ty = by + dy * length
+    tz = bz + dz * length
 
     # AABB center = midpoint of base and tip.
-    cx = (px + tx) / 2
-    cy = (py + ty) / 2
-    cz = (pz + tz) / 2
+    cx = (bx + tx) / 2
+    cy = (by + ty) / 2
+    cz = (bz + tz) / 2
 
     # Half-extents = half the span along each axis, expanded by radius
     # perpendicular to the cylinder axis.  For a general direction we
     # expand all three axes by the radius (conservative).
-    hx = abs(tx - px) / 2 + radius
-    hy = abs(ty - py) / 2 + radius
-    hz = abs(tz - pz) / 2 + radius
+    hx = abs(tx - bx) / 2 + radius
+    hy = abs(ty - by) / 2 + radius
+    hz = abs(tz - bz) / 2 + radius
 
     return (cx, cy, cz), (hx, hy, hz)
 

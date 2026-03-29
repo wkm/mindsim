@@ -40,7 +40,8 @@ class _StubRecord:
     """A wire stub collected from a body."""
 
     label: str
-    pos: Position
+    pos: Position  # connector port position in body frame
+    stub_base: Position  # pos + rotated wire_exit_offset (where the stub starts)
     exit_dir: Vec3
     spec: ConnectorSpec
     source_ref: ComponentRef
@@ -135,6 +136,12 @@ def _collect_stubs(
             pos = _port_pos_in_body_frame(mount, port.pos)
             wire_exit_local = spec.wire_exit_direction
             exit_dir = mount.rotate_point(wire_exit_local)
+            rotated_offset = mount.rotate_point(spec.wire_exit_offset)
+            stub_base = (
+                pos[0] + rotated_offset[0],
+                pos[1] + rotated_offset[1],
+                pos[2] + rotated_offset[2],
+            )
             ref = ComponentRef(body=body.name, mount_label=mount.label)
             step = step_index.get((body.name, mount.label), 0)
 
@@ -142,6 +149,7 @@ def _collect_stubs(
                 _StubRecord(
                     label=f"{mount.label}:{port.label}",
                     pos=pos,
+                    stub_base=stub_base,
                     exit_dir=exit_dir,
                     spec=spec,
                     source_ref=ref,
@@ -161,6 +169,12 @@ def _collect_stubs(
 
             pos = _servo_port_pos_in_body_frame(joint, port.pos)
             exit_dir = rotate_vec(joint.solved_servo_quat, spec.wire_exit_direction)
+            rotated_offset = rotate_vec(joint.solved_servo_quat, spec.wire_exit_offset)
+            stub_base = (
+                pos[0] + rotated_offset[0],
+                pos[1] + rotated_offset[1],
+                pos[2] + rotated_offset[2],
+            )
             mount_label = f"servo_{joint.name}"
             ref = ComponentRef(body=body.name, mount_label=mount_label)
             step = step_index.get((body.name, mount_label), 0)
@@ -169,6 +183,7 @@ def _collect_stubs(
                 _StubRecord(
                     label=f"{mount_label}:{port.label}",
                     pos=pos,
+                    stub_base=stub_base,
                     exit_dir=exit_dir,
                     spec=spec,
                     source_ref=ref,
@@ -202,9 +217,9 @@ def _connector_aabb(
 def _stub_aabb(
     stub: _StubRecord,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
-    """AABB for the wire stub cylinder extending from port along exit dir."""
+    """AABB for the wire stub cylinder extending from wire-exit base along exit dir."""
     dx, dy, dz = stub.exit_dir
-    px, py, pz = stub.pos
+    px, py, pz = stub.stub_base
     length = float(WIRE_STUB_LENGTH)
     radius = float(WIRE_STUB_RADIUS)
 

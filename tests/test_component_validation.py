@@ -100,11 +100,12 @@ def test_all_components() -> None:
 
 
 def test_stub_collision_converging_directions() -> None:
-    """Stubs collide (converging directions) but connectors don't."""
-    # Port A: 5264_3pin at origin, exit direction (0, 0, -1)
-    # Port B: usb_c at (0, 0, -12.5mm), exit direction (-1, 0, 0)
-    # Connector housings don't overlap (12.5mm Z separation > sum of half-extents)
-    # But stubs cross paths in 3D space
+    """Stubs collide (converging directions) but connectors don't.
+
+    Port A: 5264_3pin at origin, stub extends along (0, 0, -1) from offset (0, 0, -3mm)
+    Port B: usb_c at (2mm, 0, -8mm), stub extends along (-1, 0, 0) from offset (-4.2mm, 0, 0)
+    Connector housings are separated in Z. But stubs cross paths.
+    """
     comp = Component(
         name="test_stub_only",
         dimensions=mm3(60, 30, 40),
@@ -118,7 +119,7 @@ def test_stub_collision_converging_directions() -> None:
             ),
             WirePort(
                 "b",
-                pos=(Meters(0.0), Meters(0.0), mm(-12.5)),
+                pos=(mm(2), Meters(0.0), mm(-8)),
                 bus_type=BusType.USB,
                 connector_type="usb_c",
             ),
