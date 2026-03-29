@@ -222,36 +222,6 @@ function injectAssemblyStyles(): void {
       background: var(--background);
     }
 
-    /* Sub-tab bar */
-    .assembly-subtabs {
-      display: flex;
-      gap: 2px;
-      padding: 4px 8px;
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .assembly-subtab {
-      font-family: var(--font);
-      font-size: 11px;
-      font-weight: 500;
-      padding: 4px 12px;
-      border: none;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--muted-fg);
-      cursor: pointer;
-      transition: background 0.1s, color 0.1s;
-    }
-    .assembly-subtab:hover {
-      background: var(--secondary);
-      color: var(--foreground);
-    }
-    .assembly-subtab.active {
-      background: var(--primary);
-      color: var(--primary-fg, #fff);
-    }
-
     /* Nav pane (top third) */
     .assembly-nav {
       height: 33%;
@@ -441,21 +411,6 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
 
   const root = document.createElement('div');
   root.className = 'assembly-root';
-
-  // -- Sub-tab bar --
-  const tabBar = document.createElement('div');
-  tabBar.className = 'assembly-subtabs';
-  root.appendChild(tabBar);
-
-  const subTabButtons: Record<AssemblySubTab, HTMLButtonElement> = {} as Record<AssemblySubTab, HTMLButtonElement>;
-  for (const tab of ['steps', 'dag', 'dfm'] as const) {
-    const btn = document.createElement('button');
-    btn.className = `assembly-subtab${tab === 'steps' ? ' active' : ''}`;
-    btn.textContent = tab === 'dfm' ? 'DFM' : tab === 'dag' ? 'DAG' : 'Steps';
-    btn.addEventListener('click', () => switchSubTab(tab));
-    tabBar.appendChild(btn);
-    subTabButtons[tab] = btn;
-  }
 
   // -- Nav pane (top third) --
   const navPane = document.createElement('div');
@@ -737,10 +692,6 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   function switchSubTab(tab: AssemblySubTab): void {
     if (tab === activeSubTab) return;
     activeSubTab = tab;
-
-    for (const [key, btn] of Object.entries(subTabButtons)) {
-      btn.classList.toggle('active', key === tab);
-    }
 
     navPane.innerHTML = '';
 
