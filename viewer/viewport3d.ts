@@ -163,6 +163,9 @@ export class Viewport3D {
   _updateSecPopoverPos: any;
   _updateSettingsPopoverPos: any;
   _hatchTextures: any;
+  _transparentBtn: any;
+  _transparentOn: boolean;
+  onTransparentToggle: ((on: boolean) => void) | null;
 
   /** @param {HTMLElement} container  @param {Object} [options] */
   constructor(container: any, options: any = {}) {
@@ -190,6 +193,9 @@ export class Viewport3D {
     this._contourLineMat = null;
     // Ghosting
     this._ghostedMeshes = new Map(); // mesh → { opacity, transparent }
+    // Transparent mode
+    this._transparentOn = false;
+    this.onTransparentToggle = null;
     // Follow mode
     this._followMode = false;
     this._followTarget = null; // Vector3 — center of followed geometry
@@ -1290,6 +1296,18 @@ export class Viewport3D {
     // Keep popover positioned next to the strip
     this._positionSecPopover();
 
+    // Transparent toggle (not a tool — independent toggle like section)
+    this._transparentBtn = document.createElement('button');
+    this._transparentBtn.style.cssText = toolBtnCSS;
+    this._transparentBtn.innerHTML = ICONS.transparent;
+    this._transparentBtn.addEventListener('click', () => {
+      this._transparentOn = !this._transparentOn;
+      this._updateTransparentBtn();
+      if (this.onTransparentToggle) this.onTransparentToggle(this._transparentOn);
+    });
+    strip.appendChild(this._transparentBtn);
+    this._addToolTooltip(this._transparentBtn, 'Transparent (T)');
+
     // ── Settings button (bottom of strip) ──
     const settingsDivider = document.createElement('div');
     settingsDivider.style.cssText = 'height:1px;margin:2px 4px;background:rgba(206,217,224,0.2);';
@@ -1439,6 +1457,14 @@ export class Viewport3D {
     this._secBtn.style.cssText = base + (tool === 'section' ? activeCSS : inactiveCSS);
   }
 
+  _updateTransparentBtn() {
+    const base =
+      'width:36px;height:36px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.12s,color 0.12s;position:relative;';
+    const activeCSS = 'background:rgba(19,124,189,0.3);color:#2B95D6;';
+    const inactiveCSS = 'background:transparent;color:#CED9E0;';
+    this._transparentBtn.style.cssText = base + (this._transparentOn ? activeCSS : inactiveCSS);
+  }
+
   _initKeys() {
     this._onKey = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -1456,6 +1482,9 @@ export class Viewport3D {
       } else if (e.key === 's') {
         e.preventDefault();
         this._secBtn.click();
+      } else if (e.key === 't') {
+        e.preventDefault();
+        this._transparentBtn.click();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         if (this._meas.enabled) this.disableMeasureTool();

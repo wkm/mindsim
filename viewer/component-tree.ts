@@ -59,6 +59,7 @@ interface ComponentTreeOptions {
   onCategoryToggle?: (category: string, visible: boolean) => void;
   onSolo?: (nodeId: string) => void;
   onUnsolo?: () => void;
+  onHover?: (nodeId: string | null) => void;
 }
 
 export class ComponentTree {
@@ -71,7 +72,9 @@ export class ComponentTree {
   onCategoryToggle: ((category: string, visible: boolean) => void) | null;
   onSolo: ((nodeId: string) => void) | null;
   onUnsolo: (() => void) | null;
+  onHover: ((nodeId: string | null) => void) | null;
   focusedNodeId: string | null;
+  _highlightedNodeId: string | null;
   _filters: Record<string, boolean>;
   _searchQuery: string;
   _searchTimeout: ReturnType<typeof setTimeout> | null;
@@ -95,7 +98,9 @@ export class ComponentTree {
     this.onCategoryToggle = options.onCategoryToggle || null;
     this.onSolo = options.onSolo || null;
     this.onUnsolo = options.onUnsolo || null;
+    this.onHover = options.onHover || null;
     this.focusedNodeId = null;
+    this._highlightedNodeId = null;
 
     // Escape key un-solos — store reference so we can remove it in dispose()
     this._escapeHandler = (e: KeyboardEvent) => {
@@ -676,6 +681,14 @@ export class ComponentTree {
       });
     }
 
+    // Hover handlers for bidirectional tree ↔ viewport hover
+    header.addEventListener('mouseenter', () => {
+      if (this.onHover) this.onHover(nodeId);
+    });
+    header.addEventListener('mouseleave', () => {
+      if (this.onHover) this.onHover(null);
+    });
+
     // Click header to select (also toggles if has children)
     header.addEventListener('click', () => {
       this.setFocused(nodeId);
@@ -724,6 +737,24 @@ export class ComponentTree {
     this.focusedNodeId = null;
     const prev = this.container.querySelector('.tree-node.focused');
     if (prev) prev.classList.remove('focused');
+  }
+
+  /** Highlight a tree node from viewport hover (distinct from focus/selection). */
+  setHighlighted(nodeId: string | null): void {
+    // Clear previous highlight
+    if (this._highlightedNodeId) {
+      const prev = this.container.querySelector(`[data-node-id="${this._highlightedNodeId}"]`);
+      if (prev) prev.classList.remove('highlighted');
+    }
+    this._highlightedNodeId = nodeId;
+    if (!nodeId) return;
+
+    const el = this.container.querySelector(`[data-node-id="${nodeId}"]`);
+    if (el) {
+      el.classList.add('highlighted');
+      // Scroll into view if off-screen
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 
   // ── Inject scoped CSS ──
@@ -807,6 +838,9 @@ export class ComponentTree {
         color: var(--accent);
         border-left: 3px solid var(--primary);
         padding-left: 3px;
+      }
+      .tree-node.highlighted > .tree-node-header {
+        background: rgba(206,217,224,0.15);
       }
 
       /* Disclosure triangle (SVG chevron) */

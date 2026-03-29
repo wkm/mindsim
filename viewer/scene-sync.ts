@@ -70,7 +70,6 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
     // Body groups always stay visible (fixes body-0 cascading bug)
     group.visible = true;
 
-    const targetOpacity = botScene.bodyOpacity(body.id);
     const emissiveHex = botScene.bodyEmissive(body.id);
 
     group.traverse((child: any) => {
@@ -84,6 +83,7 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
 
       const mat = ensureCloned(child);
       const origOpacity = mat[ORIG_OPACITY] ?? 1.0;
+      const targetOpacity = botScene.bodyOpacity(body.id, child.geomGroup);
 
       if (targetOpacity <= 0) {
         // Hidden — make mesh invisible
