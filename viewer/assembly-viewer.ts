@@ -259,6 +259,7 @@ function injectAssemblyStyles(): void {
       overflow-y: auto;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      padding-top: 4px;
     }
 
     /* Bottom 2/3 */
@@ -555,11 +556,26 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
     for (const op of assemblyOps) {
       const row = document.createElement('div');
       row.className = `asm-step-row${op.step === selectedStep ? ' selected' : ''}`;
-      row.textContent = opSummary(op);
+      row.innerHTML = highlightRepr(opSummary(op));
       row.addEventListener('click', () => selectStep(op.step));
       stepsListEl.appendChild(row);
     }
   }
+
+  // Keyboard navigation: arrow up/down to move through steps
+  root.tabIndex = 0;
+  root.style.outline = 'none';
+  root.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.min(selectedStep + 1, assemblyOps.length - 1);
+      selectStep(next);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = Math.max(selectedStep - 1, 0);
+      selectStep(prev);
+    }
+  });
 
   function updateStepsListSelection(): void {
     const rows = stepsListEl.querySelectorAll('.asm-step-row');

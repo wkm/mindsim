@@ -168,7 +168,7 @@ if (cadstepsParam) {
           dfmHandle = await initAssemblyViewer(botName);
           // Mount the assembly root as a sibling of canvas-container
           const parent = container.parentElement!;
-          dfmHandle.rootEl.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0;';
+          dfmHandle.rootEl.style.cssText = 'position: absolute; top: 40px; left: 0; right: 0; bottom: 0;';
           parent.appendChild(dfmHandle.rootEl);
         } else {
           dfmHandle.rootEl.style.display = '';
