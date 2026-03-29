@@ -1055,6 +1055,15 @@ class Bot:
 
         emit_mujoco(self, output_dir_path)
 
+    def write_print(self, output_dir: str | None = None) -> None:
+        """Write print-ready STLs for fabricated bodies (for slicer)."""
+        output_dir_path = self._resolve_output_dir(output_dir)
+        self._ensure_cad()
+
+        from botcad.emit.cad import emit_print
+
+        emit_print(self, output_dir_path, self._cad_model)
+
     def write_docs(self, output_dir: str | None = None) -> None:
         """Write BOM, assembly guide, and technical drawings."""
         output_dir_path = self._resolve_output_dir(output_dir)
@@ -1115,6 +1124,7 @@ class Bot:
         individual methods when you only need specific outputs.
         """
         self.write_mujoco(output_dir)
+        self.write_print(output_dir)
         self.write_docs(output_dir)
         self.write_renders(output_dir)
         self.write_viewer_manifest(output_dir)

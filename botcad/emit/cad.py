@@ -75,7 +75,6 @@ class CadModel:
 
     body_solids: dict[BodyId, object]  # body_name → build123d Solid
     parent_joint_map: dict[BodyId, Joint]  # body_name → parent Joint
-    rigid_groups: dict[BodyId, list[Body]]  # group_name → [Body, ...]
     body_wire_segments: dict[BodyId, list[tuple]]  # body_name → [(seg, bus_type), ...]
     # Multi-material: body_name → list of (material_name, solid) for viewer STLs
     multi_material_solids: dict[BodyId, list[MaterialSolid]] = field(
@@ -390,9 +389,6 @@ def build_cad(bot: Bot) -> CadModel:
     # on each Body as body.world_pos / body.world_quat.  No need to
     # recompute here.
 
-    # Group bodies into rigid parts (separated at servo joints)
-    rigid_groups = _collect_rigid_groups(bot)
-
     # Collect per-body wire segments for channel cutting
     body_wire_segments: dict[BodyId, list] = {}
     for route in bot.wire_routes:
@@ -522,7 +518,6 @@ def build_cad(bot: Bot) -> CadModel:
     return CadModel(
         body_solids=body_solids,
         parent_joint_map=parent_joint_map,
-        rigid_groups=rigid_groups,
         body_wire_segments=body_wire_segments,
         multi_material_solids=multi_material_solids,
     )
@@ -622,16 +617,24 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> None:
                     str(meshes_dir / f"wire_{route.label}_{seg.body_name}_{i}.stl"),
                 )
 
-    # --- Print-ready STLs (for slicer — only fabricated bodies) ---
+    print(f"CAD: wrote {len(body_solids)} STLs to {meshes_dir}")
+
+
+def emit_print(bot: Bot, output_dir: Path, cad: CadModel) -> None:
+    """Write print-ready STLs for fabricated bodies (for slicer)."""
+    from build123d import export_stl
+
     print_dir = output_dir / "print"
     print_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
     for body in bot.all_bodies:
         if body.kind == BodyKind.FABRICATED:
-            solid = body_solids.get(body.name)
+            solid = cad.body_solids.get(body.name)
             if solid is not None:
                 export_stl(solid, str(print_dir / f"{body.name}.stl"))
-
-    print(f"CAD: wrote {len(body_solids)} STLs to {meshes_dir}")
+                count += 1
+    if count:
+        print(f"CAD: wrote {count} print STLs to {print_dir}")
 
 
 def _compute_world_positions(bot: Bot) -> dict[BodyId, tuple[float, float, float]]:
@@ -667,27 +670,6 @@ def _compute_world_positions(bot: Bot) -> dict[BodyId, tuple[float, float, float
     if bot.root:
         _walk(bot.root, (0.0, 0.0, 0.0))
     return positions
-
-
-def _collect_rigid_groups(bot: Bot) -> dict[BodyId, list[Body]]:
-    """Group bodies into printable rigid parts.
-
-    Bodies separated by servo joints become separate parts. Bodies connected
-    without a joint (rigidly welded in MuJoCo terms) are grouped together
-    and will be boolean-unioned into a single solid.
-
-    Currently every body-to-body connection goes through a servo joint, so
-    each body is its own group. When the skeleton DSL supports rigid
-    attachments (bodies without joints), this will group them.
-
-    Only fabricated bodies are grouped — purchased parts have separate meshes.
-    """
-
-    groups: dict[BodyId, list[Body]] = {}
-    for body in bot.all_bodies:
-        if body.kind == BodyKind.FABRICATED:
-            groups[body.name] = [body]
-    return groups
 
 
 def _ensure_solid(shape):
