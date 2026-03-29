@@ -113,7 +113,12 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
     const portIds = net.ports.map((p) => `${p.component_id}:${p.port_label}`);
 
     if (net.topology === 'daisy_chain') {
+      // Skip edges between ports on the same component — those represent
+      // internal pass-through, not a physical wire between components.
       for (let i = 0; i < portIds.length - 1; i++) {
+        const srcComp = net.ports[i].component_id;
+        const tgtComp = net.ports[i + 1].component_id;
+        if (srcComp === tgtComp) continue;
         edges.push({
           id: `${net.label}:${i}`,
           sourcePortId: portIds[i],
