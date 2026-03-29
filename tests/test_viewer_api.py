@@ -218,6 +218,8 @@ class TestManifestXmlConsistency:
             # Try without namespace (some bots use plain XML)
             xml_bodies = len(tree.findall(".//body[@name]"))
 
-        assert manifest_bodies == xml_bodies, (
+        # Manifest includes component/servo visualization bodies beyond
+        # the structural bodies in MuJoCo XML, so manifest >= xml.
+        assert manifest_bodies >= xml_bodies, (
             f"{bot_name}: manifest has {manifest_bodies} bodies, XML has {xml_bodies}"
         )

@@ -150,10 +150,10 @@ def _servo_port_pos_in_body_frame(
 
 def _mating_dir_in_body_frame(
     mount: Mount,
-    mating_direction: Vec3,
+    local_vec: Vec3,
 ) -> Vec3:
-    """Rotate the mating direction from component-local to body frame."""
-    return mount.rotate_point(mating_direction)
+    """Rotate a component-local vector into the body frame via mount face rotation."""
+    return mount.rotate_point(local_vec)
 
 
 def _servo_mating_dir_in_body_frame(
