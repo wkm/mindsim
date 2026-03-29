@@ -480,6 +480,13 @@ class Body:
     # `material` provides both physical props (density, print process) and
     # visual props (color, metallic, roughness) for rendering.
     material: Material = PLA
+    # When True, _assign_materials() will not override the material.
+    _explicit_material: bool = field(default=False, repr=False)
+
+    def set_material(self, mat: Material) -> None:
+        """Explicitly set this body's material (won't be overridden by solve)."""
+        self.material = mat
+        self._explicit_material = True
 
     @property
     def world_pos(self) -> Vec3:
@@ -1090,6 +1097,9 @@ class Bot:
         )
 
         for body in self.all_bodies:
+            # Respect explicitly-set materials from design code
+            if body._explicit_material:
+                continue
             # Purchased body: inherit from first component
             if body.mounts and body.mounts[0].component.default_material is not None:
                 body.material = body.mounts[0].component.default_material
