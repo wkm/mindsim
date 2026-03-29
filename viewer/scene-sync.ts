@@ -27,12 +27,17 @@ const ORIG_OPACITY = Symbol('orig-opacity');
 /** Original transparent flag stored on first clone. */
 const ORIG_TRANSPARENT = Symbol('orig-transparent');
 
+/** Original depthWrite flag stored on first clone. */
+const ORIG_DEPTH_WRITE = Symbol('orig-depth-write');
+
 interface SyncedMaterial extends THREE.Material {
   [SYNCED]?: boolean;
   [ORIG_OPACITY]?: number;
   [ORIG_TRANSPARENT]?: boolean;
+  [ORIG_DEPTH_WRITE]?: boolean;
   opacity: number;
   transparent: boolean;
+  depthWrite: boolean;
   emissive?: THREE.Color;
 }
 
@@ -47,6 +52,7 @@ function ensureCloned(mesh: THREE.Mesh): SyncedMaterial {
     mat[SYNCED] = true;
     mat[ORIG_OPACITY] = mat.opacity;
     mat[ORIG_TRANSPARENT] = mat.transparent;
+    mat[ORIG_DEPTH_WRITE] = mat.depthWrite;
     mesh.material = mat;
   }
   return mat;
@@ -75,15 +81,17 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
     group.traverse((child: any) => {
       if (!child.isMesh) return;
 
-      // Skip meshes replaced by multi-material sub-meshes — keep hidden
+      // Original meshes replaced by multi-material sub-meshes stay hidden,
+      // but sub-meshes themselves ARE synced (they don't have this flag).
       if (child._multiMaterialReplaced) {
         child.visible = false;
         return;
       }
 
+      // Per-mesh opacity: uses geomGroup for transparent mode split
+      const targetOpacity = botScene.bodyOpacity(body.id, child.geomGroup);
       const mat = ensureCloned(child);
       const origOpacity = mat[ORIG_OPACITY] ?? 1.0;
-      const targetOpacity = botScene.bodyOpacity(body.id, child.geomGroup);
 
       if (targetOpacity <= 0) {
         // Hidden — make mesh invisible
@@ -92,13 +100,15 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
         child.visible = true;
 
         if (targetOpacity < 1.0) {
-          // Ghosted
+          // Ghosted or transparent — set opacity and disable depth write
           mat.opacity = targetOpacity;
           mat.transparent = true;
+          mat.depthWrite = false;
         } else {
-          // Normal — restore original
+          // Normal — restore originals
           mat.opacity = origOpacity;
           mat.transparent = mat[ORIG_TRANSPARENT] ?? origOpacity < 1.0;
+          mat.depthWrite = mat[ORIG_DEPTH_WRITE] ?? true;
         }
 
         // Emissive highlight (structural meshes only)

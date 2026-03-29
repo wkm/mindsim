@@ -1502,12 +1502,15 @@ export class Viewport3D {
         if (mat._origOpacity === undefined) {
           mat._origOpacity = mat.opacity;
           mat._origTransparent = mat.transparent;
+          mat._origDepthWrite = mat.depthWrite;
         }
         mat.opacity = mat._origOpacity * 0.35;
         mat.transparent = true;
+        mat.depthWrite = false;
       } else if (mat._origOpacity !== undefined) {
         mat.opacity = mat._origOpacity;
         mat.transparent = mat._origTransparent;
+        mat.depthWrite = mat._origDepthWrite;
       }
     });
   }
