@@ -7,6 +7,7 @@
 
 import type { ComponentTree } from './component-tree.ts';
 import type { DesignScene } from './design-scene.ts';
+import { timedFetch } from './log.ts';
 import type { ViewerManifest } from './manifest-types.ts';
 import { initManifestViewer } from './manifest-viewer.ts';
 import { clearViewState, updateViewState } from './view-state.ts';
@@ -33,7 +34,7 @@ export async function initDesignViewer(
   treePanelEl: HTMLElement,
 ): Promise<DesignViewerContext> {
   // Fetch manifest
-  const resp = await fetch(`/api/bots/${botName}/viewer_manifest`);
+  const resp = await timedFetch(`/api/bots/${botName}/viewer_manifest`);
   if (!resp.ok) {
     throw new Error(`Failed to fetch viewer manifest: ${resp.status}`);
   }

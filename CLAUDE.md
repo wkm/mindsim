@@ -73,3 +73,12 @@ The viewer (`viewer/`) is written in TypeScript. See **[TYPESCRIPT_STYLE.md](TYP
 - **Bot changes require `NEW_BOT_CHECKLIST.md`.**
 - **TUI changes require snapshot tests:** `uv run pytest tests/test_tui_snapshots.py -v`
 - **Merge** branches instead of rebasing. Be skeptical of cherry-picking from parallel work.
+
+## Logging
+
+- **Python:** `import structlog; log = structlog.get_logger(__name__)` — colored console + JSON file
+- **TypeScript:** `import { info, warn, error, timedFetch } from './log.ts'`
+- **Server logs:** `logs/mindsim.log` (JSON lines) — API requests, CAD, FEA, server events
+- **Client logs:** `logs/client.log` (JSON lines) — browser fetch timing, errors, flushed every 30s
+- **Browser devtools:** `window.__mindsim_logs` ring buffer for live inspection
+- **Training runs** log to `runs/<run>/run.log` (unchanged)
