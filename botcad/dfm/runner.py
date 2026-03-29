@@ -8,7 +8,10 @@ import botcad.dfm.checks.connector_access
 import botcad.dfm.checks.fastener_clearance
 import botcad.dfm.checks.wire_bend_radius
 import botcad.dfm.checks.wire_channel_sizing
-import botcad.dfm.checks.wire_stub_collision  # noqa: F401
+import botcad.dfm.checks.wire_stub_collision
+import botcad.dfm.checks.wirenet_bus_type_mismatch
+import botcad.dfm.checks.wirenet_orphaned_ports
+import botcad.dfm.checks.wirenet_overloaded_ports  # noqa: F401
 from botcad.assembly.build import build_assembly_sequence
 from botcad.dfm.check import DFMCheck, DFMFinding
 from botcad.skeleton import Bot
