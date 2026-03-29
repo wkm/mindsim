@@ -14,6 +14,10 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+# build123d logs "None context requested by Box/Cylinder/..." at INFO for every
+# shape created outside a BuildPart context. ShapeScript always does this.
+logging.getLogger("build123d").setLevel(logging.WARNING)
+
 if TYPE_CHECKING:
     from botcad.shapescript.program import ShapeScriptBuilder
 
