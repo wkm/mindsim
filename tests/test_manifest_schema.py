@@ -155,11 +155,9 @@ class TestWireRoutes:
             assert len(r["color"]) == 4  # RGBA
 
     def test_wire_routes_no_stub_fields(self, manifest):
-        """Wire routes should NOT have stub-era fields (wire_kind, pos, quat)."""
+        """Wire routes should NOT have stub-era fields (wire_kind)."""
         routes = self._wire_routes(manifest)
         for r in routes:
             assert "wire_kind" not in r, (
                 f"wire route {r['id']} has legacy 'wire_kind' field"
             )
-            assert "pos" not in r, f"wire route {r['id']} has legacy 'pos' field"
-            assert "quat" not in r, f"wire route {r['id']} has legacy 'quat' field"

@@ -61,13 +61,52 @@ def route_to_world_polyline(bot: Bot, route: WireRoute) -> list[Position]:
     return polyline
 
 
-def emit_wire_tubes(bot: Bot, meshes_dir: Path) -> list[str]:
-    """Generate one tube STL per WireNet-matched route. Returns filenames.
+def wire_route_solid(bot: Bot, route: WireRoute):
+    """Build a tube solid for a single route. Returns a build123d shape or None."""
+    from build123d import Align, Compound, Cylinder, Location, Sphere
 
-    Each tube is a Compound of capsule segments (cylinder + sphere caps),
-    grouped without boolean fusion for speed.
-    """
-    from build123d import Align, Compound, Cylinder, Location, Sphere, export_stl
+    polyline = route_to_world_polyline(bot, route)
+    if len(polyline) < 2:
+        return None
+
+    radius = _WIRE_VISUAL_RADIUS.get(route.bus_type, _DEFAULT_WIRE_RADIUS)
+
+    parts = []
+    for j in range(len(polyline) - 1):
+        p0 = polyline[j]
+        p1 = polyline[j + 1]
+
+        dx = p1[0] - p0[0]
+        dy = p1[1] - p0[1]
+        dz = p1[2] - p0[2]
+        length = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length < 1e-6:
+            continue
+
+        axis = (dx / length, dy / length, dz / length)
+        mid = (
+            (p0[0] + p1[0]) / 2,
+            (p0[1] + p1[1]) / 2,
+            (p0[2] + p1[2]) / 2,
+        )
+
+        cyl = Cylinder(radius, length, align=(Align.CENTER, Align.CENTER, Align.CENTER))
+        cap0 = Sphere(radius).moved(Location((0, 0, -length / 2)))
+        cap1 = Sphere(radius).moved(Location((0, 0, length / 2)))
+        seg_solid = cyl + cap0 + cap1
+
+        seg_solid = _orient_z_to_axis(seg_solid, axis).moved(Location(mid))
+        parts.append(seg_solid)
+
+    if not parts:
+        return None
+
+    return Compound(children=parts) if len(parts) > 1 else parts[0]
+
+
+def emit_wire_tubes(bot: Bot, meshes_dir: Path) -> list[str]:
+    """Generate one tube STL per WireNet-matched route. Returns filenames."""
+    from build123d import export_stl
 
     net_labels = {net.label for net in bot.wire_nets}
     filenames: list[str] = []
@@ -78,48 +117,9 @@ def emit_wire_tubes(bot: Bot, meshes_dir: Path) -> list[str]:
         if not route.segments:
             continue
 
-        polyline = route_to_world_polyline(bot, route)
-        if len(polyline) < 2:
+        tube = wire_route_solid(bot, route)
+        if tube is None:
             continue
-
-        radius = _WIRE_VISUAL_RADIUS.get(route.bus_type, _DEFAULT_WIRE_RADIUS)
-
-        # Build tube segments: capsule (cylinder + sphere caps) per edge
-        parts = []
-        for j in range(len(polyline) - 1):
-            p0 = polyline[j]
-            p1 = polyline[j + 1]
-
-            dx = p1[0] - p0[0]
-            dy = p1[1] - p0[1]
-            dz = p1[2] - p0[2]
-            length = math.sqrt(dx * dx + dy * dy + dz * dz)
-            if length < 1e-6:
-                continue
-
-            axis = (dx / length, dy / length, dz / length)
-            mid = (
-                (p0[0] + p1[0]) / 2,
-                (p0[1] + p1[1]) / 2,
-                (p0[2] + p1[2]) / 2,
-            )
-
-            cyl = Cylinder(
-                radius, length, align=(Align.CENTER, Align.CENTER, Align.CENTER)
-            )
-            cap0 = Sphere(radius).moved(Location((0, 0, -length / 2)))
-            cap1 = Sphere(radius).moved(Location((0, 0, length / 2)))
-            seg_solid = cyl + cap0 + cap1
-
-            # Orient Z-aligned cylinder to point along axis, then move to midpoint
-            seg_solid = _orient_z_to_axis(seg_solid, axis).moved(Location(mid))
-            parts.append(seg_solid)
-
-        if not parts:
-            continue
-
-        # Group without boolean fusion — fast, and STL export handles compounds
-        tube = Compound(children=parts) if len(parts) > 1 else parts[0]
 
         stl_name = f"wire_{route.label}.stl"
         export_stl(tube, str(meshes_dir / stl_name))
