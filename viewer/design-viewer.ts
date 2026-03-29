@@ -7,8 +7,10 @@
 
 import type { ComponentTree } from './component-tree.ts';
 import type { DesignScene } from './design-scene.ts';
+import { timedFetch } from './log.ts';
 import type { ViewerManifest } from './manifest-types.ts';
 import { initManifestViewer } from './manifest-viewer.ts';
+import { clearViewState, updateViewState } from './view-state.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -32,7 +34,7 @@ export async function initDesignViewer(
   treePanelEl: HTMLElement,
 ): Promise<DesignViewerContext> {
   // Fetch manifest
-  const resp = await fetch(`/api/bots/${botName}/viewer_manifest`);
+  const resp = await timedFetch(`/api/bots/${botName}/viewer_manifest`);
   if (!resp.ok) {
     throw new Error(`Failed to fetch viewer manifest: ${resp.status}`);
   }
@@ -46,7 +48,20 @@ export async function initDesignViewer(
     manifest,
     viewport,
     resolveStlUrl: (mesh) => `/api/bots/${botName}/meshes/${mesh}`,
-    onNodeSelected: undefined,
+    onNodeSelected: (nodeId: string | null) => {
+      if (nodeId) {
+        updateViewState({ select: nodeId });
+      } else {
+        clearViewState('select');
+      }
+    },
+    onSoloChanged: (nodeId: string | null) => {
+      if (nodeId) {
+        updateViewState({ solo: nodeId });
+      } else {
+        clearViewState('solo');
+      }
+    },
   });
 
   return {

@@ -1954,6 +1954,34 @@
       ]
     },
     {
+      "id": "wire_conn_base_battery_power",
+      "name": "power connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_xt30.stl",
+      "pos": [
+        0.0,
+        0.0365,
+        -0.0183
+      ],
+      "quat": [
+        0.707107,
+        -0.707107,
+        0.0,
+        0.0
+      ],
+      "bus_type": "power",
+      "connector_type": "xt30",
+      "color": [
+        0.9,
+        0.3,
+        0.25,
+        1.0
+      ]
+    },
+    {
       "id": "wire_stub_base_battery_balance",
       "name": "balance",
       "kind": "fabricated",
@@ -1970,6 +1998,34 @@
         0.0,
         0.0,
         -1.0,
+        0.0
+      ],
+      "bus_type": "balance",
+      "connector_type": "jst_xh_3pin",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_battery_balance",
+      "name": "balance connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_jst_xh_3pin.stl",
+      "pos": [
+        -0.01,
+        0.0365,
+        -0.0183
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
         0.0
       ],
       "bus_type": "balance",
@@ -2010,6 +2066,34 @@
       ]
     },
     {
+      "id": "wire_conn_base_camera_csi",
+      "name": "csi connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_csi_15pin.stl",
+      "pos": [
+        0.0,
+        0.04845,
+        0.0125
+      ],
+      "quat": [
+        0.707107,
+        0.707107,
+        0.0,
+        -0.0
+      ],
+      "bus_type": "csi",
+      "connector_type": "csi_15pin",
+      "color": [
+        0.4,
+        0.73,
+        0.42,
+        1.0
+      ]
+    },
+    {
       "id": "wire_stub_base_pi_usb_power",
       "name": "usb_power",
       "kind": "fabricated",
@@ -2026,6 +2110,34 @@
         0.707107,
         0.707107,
         -0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_pi_usb_power",
+      "name": "usb_power connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_usb_c.stl",
+      "pos": [
+        -0.0,
+        -0.0325,
+        0.025375
+      ],
+      "quat": [
+        0.707107,
+        -0.707107,
+        0.0,
         0.0
       ],
       "bus_type": "usb",
@@ -2066,6 +2178,34 @@
       ]
     },
     {
+      "id": "wire_conn_base_pi_usb_data",
+      "name": "usb_data connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_usb_c.stl",
+      "pos": [
+        -0.0,
+        -0.02,
+        0.025375
+      ],
+      "quat": [
+        0.707107,
+        -0.707107,
+        0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
       "id": "wire_stub_base_controller_usb_c",
       "name": "usb_c",
       "kind": "fabricated",
@@ -2094,6 +2234,34 @@
       ]
     },
     {
+      "id": "wire_conn_base_controller_usb_c",
+      "name": "usb_c connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_usb_c.stl",
+      "pos": [
+        0.0165,
+        -0.027,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        -0.707107,
+        0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
       "id": "wire_stub_base_controller_servo_bus",
       "name": "servo_bus",
       "kind": "fabricated",
@@ -2110,6 +2278,258 @@
         0.0,
         0.0,
         -1.0,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_controller_servo_bus",
+      "name": "servo_bus connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_5264_3pin.stl",
+      "pos": [
+        -0.0165,
+        -0.032,
+        0.0
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_left_wheel_uart_in",
+      "name": "uart_in",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0205,
+        0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        -0.0,
+        0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_left_wheel_uart_in",
+      "name": "uart_in connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_5264_3pin.stl",
+      "pos": [
+        -0.033,
+        0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_left_wheel_uart_out",
+      "name": "uart_out",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0205,
+        -0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        -0.0,
+        0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_left_wheel_uart_out",
+      "name": "uart_out connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_5264_3pin.stl",
+      "pos": [
+        -0.033,
+        -0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_right_wheel_uart_in",
+      "name": "uart_in",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0205,
+        -0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        -0.0,
+        -0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_right_wheel_uart_in",
+      "name": "uart_in connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_5264_3pin.stl",
+      "pos": [
+        0.033,
+        -0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_right_wheel_uart_out",
+      "name": "uart_out",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0205,
+        0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        -0.0,
+        -0.707107,
+        0.0
+      ],
+      "bus_type": "uart_half_duplex",
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_conn_base_right_wheel_uart_out",
+      "name": "uart_out connector",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "connector",
+      "parent_body": "base",
+      "mesh": "connector_5264_3pin.stl",
+      "pos": [
+        0.033,
+        0.0025,
+        0.0205
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.707107,
         0.0
       ],
       "bus_type": "uart_half_duplex",

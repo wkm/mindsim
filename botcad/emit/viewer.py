@@ -490,14 +490,13 @@ def emit_viewer_manifest(bot: Bot, output_dir: Path) -> None:
 
 
 def _emit_wire_stubs(bot: Bot, manifest: dict, packing) -> None:
-    """Emit short wire stub entries at each component's WirePort.
+    """Emit wire stubs and connector housings at each WirePort.
 
     Wire stubs are short cylinders (~25mm) extending from connector sockets
-    along the wire exit direction. They let the viewer show "there's a wire
-    here, does it collide?" without full cable routing.
+    along the wire exit direction. Connector housings are the physical plug
+    meshes placed at the port origin oriented along the mating direction.
 
-    Each stub is emitted as a proper part with pos/quat/mesh so the viewer
-    can render it the same way as any other part.
+    Covers both mount-attached components and servo wire ports on joints.
     """
     from botcad.geometry import (
         pose_transform_dir,
@@ -553,6 +552,10 @@ def _emit_wire_stubs(bot: Bot, manifest: dict, packing) -> None:
                     body_pos[2] + body_dir[2] * half_len,
                 )
 
+                bus_color = _BUS_TYPE_COLORS.get(
+                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                )
+
                 manifest["parts"].append(
                     {
                         "id": f"wire_stub_{body.name}_{mount.label}_{wp.label}",
@@ -566,9 +569,121 @@ def _emit_wire_stubs(bot: Bot, manifest: dict, packing) -> None:
                         "quat": _round_vec(stub_quat),
                         "bus_type": str(wp.bus_type),
                         "connector_type": wp.connector_type,
-                        "color": _BUS_TYPE_COLORS.get(
-                            str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
-                        ),
+                        "color": bus_color,
+                    }
+                )
+
+                # Connector housing — physical plug at the wire port
+                body_mate_dir = pose_transform_dir(mount_pose, cspec.mating_direction)
+                conn_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_conn_{body.name}_{mount.label}_{wp.label}",
+                        "name": f"{wp.label} connector",
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "connector",
+                        "parent_body": body.name,
+                        "mesh": f"connector_{wp.connector_type}.stl",
+                        "pos": _round_vec(body_pos),
+                        "quat": _round_vec(conn_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": bus_color,
+                    }
+                )
+
+        # --- Servo wire ports (on joints, not mounts) ---
+        for joint in body.joints:
+            servo = joint.servo
+            for wp in servo.wire_ports:
+                if not wp.connector_type:
+                    continue
+
+                try:
+                    from botcad.connectors import connector_spec
+
+                    cspec = connector_spec(wp.connector_type)
+                except KeyError:
+                    log.debug(
+                        "Unknown connector_type %r on servo %s/%s, skipping",
+                        wp.connector_type,
+                        servo.name,
+                        wp.label,
+                    )
+                    continue
+
+                # Build a Pose from the joint's solved servo placement
+                from botcad.geometry import rotate_vec
+
+                rotated_pos = rotate_vec(joint.solved_servo_quat, wp.pos)
+                sc = joint.solved_servo_center
+                body_pos = (
+                    rotated_pos[0] + sc[0],
+                    rotated_pos[1] + sc[1],
+                    rotated_pos[2] + sc[2],
+                )
+
+                body_dir = rotate_vec(
+                    joint.solved_servo_quat, cspec.wire_exit_direction
+                )
+                stub_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
+
+                half_len = 0.0125
+                stub_center = (
+                    body_pos[0] + body_dir[0] * half_len,
+                    body_pos[1] + body_dir[1] * half_len,
+                    body_pos[2] + body_dir[2] * half_len,
+                )
+
+                bus_color = _BUS_TYPE_COLORS.get(
+                    str(wp.bus_type), [0.53, 0.53, 0.53, 1.0]
+                )
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_stub_{body.name}_{joint.name}_{wp.label}",
+                        "name": wp.label,
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "stub",
+                        "parent_body": body.name,
+                        "mesh": "wire_stub.stl",
+                        "pos": _round_vec(stub_center),
+                        "quat": _round_vec(stub_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": bus_color,
+                    }
+                )
+
+                # Connector housing for servo wire port
+                body_mate_dir = rotate_vec(
+                    joint.solved_servo_quat, cspec.mating_direction
+                )
+                conn_quat = rotation_between(
+                    (0.0, 0.0, 1.0), tuple(body_mate_dir)
+                )  # plint: disable=no-rotation-between-in-emitters
+
+                manifest["parts"].append(
+                    {
+                        "id": f"wire_conn_{body.name}_{joint.name}_{wp.label}",
+                        "name": f"{wp.label} connector",
+                        "kind": "fabricated",
+                        "category": "wire",
+                        "wire_kind": "connector",
+                        "parent_body": body.name,
+                        "mesh": f"connector_{wp.connector_type}.stl",
+                        "pos": _round_vec(body_pos),
+                        "quat": _round_vec(conn_quat),
+                        "bus_type": str(wp.bus_type),
+                        "connector_type": wp.connector_type,
+                        "color": bus_color,
                     }
                 )
 
