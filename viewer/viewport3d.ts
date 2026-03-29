@@ -1506,7 +1506,8 @@ export class Viewport3D {
         }
         mat.opacity = mat._origOpacity * 0.35;
         mat.transparent = true;
-        mat.depthWrite = false;
+        // Keep depthWrite on — disabling it causes sort-order glitches
+        mat.depthWrite = true;
       } else if (mat._origOpacity !== undefined) {
         mat.opacity = mat._origOpacity;
         mat.transparent = mat._origTransparent;

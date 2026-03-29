@@ -100,10 +100,14 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
         child.visible = true;
 
         if (targetOpacity < 1.0) {
-          // Ghosted or transparent — set opacity and disable depth write
+          // Semi-transparent (ghosted or transparent mode)
           mat.opacity = targetOpacity;
           mat.transparent = true;
-          mat.depthWrite = false;
+          // Only disable depthWrite for very low opacity (ghosting).
+          // Transparent mode (0.35/0.6) keeps depthWrite on — with
+          // depthWrite off, Three.js sorts by object center distance
+          // which causes objects to snap in/out of view as camera rotates.
+          mat.depthWrite = targetOpacity > 0.1;
         } else {
           // Normal — restore originals
           mat.opacity = origOpacity;
