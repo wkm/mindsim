@@ -57,3 +57,4 @@ viewer/.cdn_cache/
 \n# Component reference files\nreferences/components/
 .botcad_cache/
 *.ply
+.npmrc
