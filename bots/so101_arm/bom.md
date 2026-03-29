@@ -9,7 +9,7 @@
 | STS3215 | 6 | 45.2 x 24.7 x 35.0 | 55 | Joints: shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
-| PiCamera2 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
+| PiCamera2 | 1 | 23.9 x 25.0 x 9.0 | 3 | camera |
 | Structural (printed) | — | — | 235 | PLA/PETG frame |
 | **Total** | | | **633** | |
 

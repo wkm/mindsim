@@ -557,7 +557,6 @@ class Bot:
         bot.solve()           # run packing + routing
         bot.emit()            # generate all outputs (calls all write_*())
         bot.write_mujoco()    # or generate only what you need
-        bot.write_step()
         bot.write_docs()
         bot.write_renders()
         bot.write_viewer_manifest()
@@ -1059,23 +1058,14 @@ class Bot:
 
         emit_mujoco(self, output_dir_path)
 
-    def write_step(self, output_dir: str | None = None) -> None:
-        """Write STEP assembly files for manufacturing/CAD."""
+    def write_print(self, output_dir: str | None = None) -> None:
+        """Write print-ready STLs for fabricated bodies (for slicer)."""
         output_dir_path = self._resolve_output_dir(output_dir)
-        (output_dir_path / "meshes").mkdir(exist_ok=True)
-
         self._ensure_cad()
 
-        from botcad.emit.cad import emit_cad
+        from botcad.emit.cad import emit_print
 
-        parts = emit_cad(self, output_dir_path, self._cad_model)
-
-        # Per-assembly STEP files
-        if self._assemblies:
-            from botcad.emit.cad import emit_cad_for_assembly
-
-            for asm_name in self._assemblies:
-                emit_cad_for_assembly(self, asm_name, output_dir_path, parts)
+        emit_print(self, output_dir_path, self._cad_model)
 
     def write_docs(self, output_dir: str | None = None) -> None:
         """Write BOM, assembly guide, and technical drawings."""
@@ -1137,7 +1127,7 @@ class Bot:
         individual methods when you only need specific outputs.
         """
         self.write_mujoco(output_dir)
-        self.write_step(output_dir)
+        self.write_print(output_dir)
         self.write_docs(output_dir)
         self.write_renders(output_dir)
         self.write_viewer_manifest(output_dir)

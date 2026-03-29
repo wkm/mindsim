@@ -13,10 +13,8 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import build123d as b3d
+import build123d as b3d
 
 
 def _as_solid(shape):

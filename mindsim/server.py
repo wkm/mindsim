@@ -24,8 +24,11 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
+
+log = structlog.get_logger("mindsim.server")
 
 # ---------------------------------------------------------------------------
 # App
@@ -34,12 +37,46 @@ from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Ensure the component registry is built when uvicorn starts."""
+    """Ensure logging and component registry are ready when uvicorn starts."""
+    from mindsim.log import setup_logging
+
+    setup_logging()  # idempotent — no-op if main.py already called it
     init_registry()
     yield
 
 
 app = FastAPI(title="MindSim Viewer API", lifespan=_lifespan)
+
+# ---------------------------------------------------------------------------
+# Request timing middleware — logs duration for /api/ requests
+# ---------------------------------------------------------------------------
+
+_request_log = structlog.get_logger("mindsim.server.requests")
+
+
+@app.middleware("http")
+async def _log_api_requests(request: Request, call_next):
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+
+    t0 = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception:
+        raise
+    finally:
+        duration_ms = round((time.perf_counter() - t0) * 1000, 1)
+        _request_log.info(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status=status_code,
+            duration_ms=duration_ms,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Project root — needed for static file serving and relative path resolution
@@ -134,9 +171,9 @@ def init_registry() -> None:
     global _component_registry
     if _component_registry:
         return  # already initialised
-    print("Building component registry...")
+    log.info("building_component_registry")
     _component_registry = _build_component_registry()
-    print(f"  {len(_component_registry)} components registered")
+    log.info("component_registry_ready", count=len(_component_registry))
 
 
 # ---------------------------------------------------------------------------
@@ -597,7 +634,7 @@ def _load_bot(bot_name: str):
         raise FileNotFoundError(f"No design.py for bot {bot_name}")
 
     t0 = time.monotonic()
-    print(f"[cad-steps] Loading bot {bot_name}...")
+    log.info("loading_bot", bot=bot_name)
 
     spec = importlib.util.spec_from_file_location("design", design_py)
     mod = importlib.util.module_from_spec(spec)
@@ -605,14 +642,19 @@ def _load_bot(bot_name: str):
     bot = mod.build()
     bot.solve()
     t1 = time.monotonic()
-    print(f"[cad-steps]   build + solve: {t1 - t0:.1f}s")
+    log.info("bot_solved", bot=bot_name, duration_s=round(t1 - t0, 1))
 
     from botcad.emit.cad import build_cad
 
     cad = build_cad(bot)
     t2 = time.monotonic()
-    print(f"[cad-steps]   build_cad: {t2 - t1:.1f}s")
-    print(f"[cad-steps]   total: {t2 - t0:.1f}s ({len(bot.all_bodies)} bodies)")
+    log.info(
+        "bot_cad_built",
+        bot=bot_name,
+        cad_duration_s=round(t2 - t1, 1),
+        total_duration_s=round(t2 - t0, 1),
+        body_count=len(bot.all_bodies),
+    )
 
     with _bot_cache_lock:
         _bot_cache[bot_name] = (bot, cad)
@@ -645,10 +687,16 @@ def _get_cad_steps(bot_name: str, body_name: str) -> list:
     from botcad.emit.cad import make_body_solid_with_steps
 
     t0 = time.monotonic()
-    print(f"[cad-steps] Building steps for {bot_name}:{body_name}...")
+    log.info("building_cad_steps", bot=bot_name, body=body_name)
     steps = make_body_solid_with_steps(target, parent_joint, wire_segs_tuple)
     t1 = time.monotonic()
-    print(f"[cad-steps]   {len(steps)} steps in {t1 - t0:.1f}s")
+    log.info(
+        "cad_steps_built",
+        bot=bot_name,
+        body=body_name,
+        step_count=len(steps),
+        duration_s=round(t1 - t0, 1),
+    )
 
     with _cad_steps_lock:
         _cad_steps_cache[cache_key] = steps
@@ -1801,7 +1849,7 @@ async def run_fea(bot: str):
                 if joint.servo:
                     torque = max(torque, joint.servo.stall_torque)
 
-            print(f"[fea] Running analysis for {bot}:{target_body.name}...")
+            log.info("fea_running", bot=bot, body=target_body.name)
             solve_res_tuple = analyze_component(
                 solid, result, torque_nm=torque, res=(20, 20, 20), body=target_body
             )
@@ -1820,7 +1868,7 @@ async def run_fea(bot: str):
             eff_yield = target_body.material.effective_yield_strength
             sf = float(eff_yield / max_stress) if max_stress > 0 else 99.0
 
-            print(f"[fea] Generating PLY meshes for {target_body.name}...")
+            log.info("fea_generating_meshes", body=target_body.name)
             # Find the fixed BC mask (coupler, fastener_hole, or largest bracket)
             import numpy as np
 
@@ -1919,6 +1967,50 @@ def get_fea_file(bot: str, file_name: str):
                 return Response(content=bdata, media_type="application/octet-stream")
 
     raise HTTPException(404, f"FEA file {file_name} not found. Run analysis first.")
+
+
+# ---------------------------------------------------------------------------
+# Client log ingestion — browser logs written to logs/client.log
+# ---------------------------------------------------------------------------
+
+# Dedicated file for client logs, preserving client-side timestamps and order.
+# Not routed through structlog — entries are written as JSON lines directly.
+_client_log_lock = threading.Lock()
+
+
+def _get_client_log_path() -> Path:
+    path = PROJECT_ROOT / "logs"
+    path.mkdir(exist_ok=True)
+    return path / "client.log"
+
+
+@app.post("/api/client-log")
+async def post_client_log(request: Request):
+    """Append browser log entries to logs/client.log as JSON lines.
+
+    Accepts JSON: {"entries": [{"level": "info", "tag": "...", "msg": "...",
+    "data": {...}, "ts": "..."}]}. Capped at 50 entries per request.
+    Client timestamps are preserved as-is to maintain ordering.
+    """
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "request body must be a JSON object")
+    entries = body.get("entries", [])
+    if not isinstance(entries, list):
+        raise HTTPException(400, "entries must be a list")
+
+    lines: list[str] = []
+    for entry in entries[:50]:
+        if not isinstance(entry, dict):
+            continue
+        line = json.dumps(entry, separators=(",", ":"), default=str)
+        lines.append(line)
+
+    if lines:
+        with _client_log_lock, open(_get_client_log_path(), "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------

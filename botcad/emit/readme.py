@@ -7,13 +7,9 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from botcad.component import ComponentKind
-from botcad.skeleton import BaseType
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot
+from botcad.skeleton import BaseType, Body, Bot
 
 
 def emit_assembly_guide(bot: Bot, output_dir: Path) -> None:
