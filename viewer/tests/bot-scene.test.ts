@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BotScene, GHOST_OPACITY } from '../bot-scene.ts';
+import { BotScene, GHOST_OPACITY, TRANSPARENT_DETAIL_OPACITY, TRANSPARENT_STRUCTURAL_OPACITY } from '../bot-scene.ts';
 import { getBodyAndDescendants } from '../explore-mode.ts';
 
 const BODY_NAMES = ['world', 'base', 'turntable', 'upper_arm', 'forearm', 'hand'];
@@ -160,6 +160,82 @@ describe('BotScene.bodyEmissive', () => {
     scene.setHovered(3);
     scene.setHovered(null);
     assert.equal(scene.bodyEmissive(3), 0);
+  });
+
+  it('selected takes priority over hovered', () => {
+    const scene = createScene();
+    scene.setSelected(3);
+    scene.setHovered(3);
+    assert.equal(scene.bodyEmissive(3), 0x333333, 'selected should win over hovered');
+  });
+});
+
+describe('BotScene.setHoveredBodies', () => {
+  it('highlights exactly the specified bodies', () => {
+    const scene = createScene();
+    scene.setHoveredBodies([1, 3]);
+    assert.equal(scene.bodies[0].hovered, false);
+    assert.equal(scene.bodies[1].hovered, true);
+    assert.equal(scene.bodies[2].hovered, false);
+    assert.equal(scene.bodies[3].hovered, true);
+    assert.equal(scene.bodies[4].hovered, false);
+  });
+
+  it('clears previous hover when called with new set', () => {
+    const scene = createScene();
+    scene.setHoveredBodies([1, 3]);
+    scene.setHoveredBodies([2]);
+    assert.equal(scene.bodies[1].hovered, false);
+    assert.equal(scene.bodies[2].hovered, true);
+    assert.equal(scene.bodies[3].hovered, false);
+  });
+
+  it('empty array clears all hovers', () => {
+    const scene = createScene();
+    scene.setHoveredBodies([1, 3]);
+    scene.setHoveredBodies([]);
+    for (const body of scene.bodies) {
+      assert.equal(body.hovered, false);
+    }
+  });
+});
+
+describe('BotScene.transparent', () => {
+  it('defaults to false', () => {
+    const scene = createScene();
+    assert.equal(scene.transparent, false);
+  });
+
+  it('structural meshes get 0.35 opacity when transparent', () => {
+    const scene = createScene();
+    scene.setTransparent(true);
+    assert.equal(scene.bodyOpacity(1, 0), TRANSPARENT_STRUCTURAL_OPACITY);
+  });
+
+  it('detail meshes get 0.6 opacity when transparent', () => {
+    const scene = createScene();
+    scene.setTransparent(true);
+    assert.equal(scene.bodyOpacity(1, 1), TRANSPARENT_DETAIL_OPACITY);
+  });
+
+  it('ghosted bodies still use GHOST_OPACITY even when transparent', () => {
+    const scene = createScene();
+    scene.setTransparent(true);
+    scene.ghostAllExcept([2]);
+    assert.equal(scene.bodyOpacity(1, 0), GHOST_OPACITY);
+  });
+
+  it('normal opacity when transparent is off', () => {
+    const scene = createScene();
+    scene.setTransparent(false);
+    assert.equal(scene.bodyOpacity(1, 0), 1.0);
+  });
+
+  it('toggling off restores normal opacity', () => {
+    const scene = createScene();
+    scene.setTransparent(true);
+    scene.setTransparent(false);
+    assert.equal(scene.bodyOpacity(1, 0), 1.0);
   });
 });
 

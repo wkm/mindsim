@@ -22,6 +22,13 @@ export const TRANSPARENT_STRUCTURAL_OPACITY = 0.35;
 /** Opacity for detail (servo/screw/component) bodies in transparent mode. */
 export const TRANSPARENT_DETAIL_OPACITY = 0.6;
 
+/**
+ * Geom group constant for detail meshes (servos, screws, components).
+ * Mirrors GEOM_GROUP_DETAIL from utils.ts — duplicated here to keep
+ * BotScene free of Three.js transitive imports.
+ */
+const GEOM_GROUP_DETAIL = 1;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -199,7 +206,7 @@ export class BotScene {
     if (body.ghosted) return GHOST_OPACITY;
     if (this.transparent) {
       // Detail meshes (servos, screws) are more opaque than structural shells
-      if (geomGroup === 1) return TRANSPARENT_DETAIL_OPACITY;
+      if (geomGroup === GEOM_GROUP_DETAIL) return TRANSPARENT_DETAIL_OPACITY;
       return TRANSPARENT_STRUCTURAL_OPACITY;
     }
     return 1.0;
@@ -212,8 +219,8 @@ export class BotScene {
   bodyEmissive(bodyId: number): number {
     const body = this.bodies[bodyId];
     if (!body) return 0;
-    if (body.hovered) return 0x666666;
     if (body.selected) return 0x333333;
+    if (body.hovered) return 0x666666;
     return 0;
   }
 }
