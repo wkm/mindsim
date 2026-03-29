@@ -9,14 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
 from botcad.assembly.tools import ToolKind
 from botcad.ids import BodyId, JointId
-
-if TYPE_CHECKING:
-    from botcad.units import Radians
+from botcad.units import Radians
 
 
 class AssemblyAction(Enum):

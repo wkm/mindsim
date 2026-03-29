@@ -23,13 +23,10 @@ Servo local frame convention (same as servo.py):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from botcad.component import ServoSpec
+from botcad.shapescript.program import ShapeScriptBuilder
 from botcad.units import Meters, mm
-
-if TYPE_CHECKING:
-    from botcad.component import ServoSpec
-    from botcad.shapescript.program import ShapeScriptBuilder
 
 
 def _cable_slot_dims(servo: ServoSpec, spec: BracketSpec) -> tuple[float, float]:

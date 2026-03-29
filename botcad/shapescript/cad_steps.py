@@ -6,12 +6,9 @@ which expects CadStep(label, solid, op, tool) objects.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from botcad.emit.cad import CadStep
-    from botcad.shapescript.backend_occt import ExecutionResult
-    from botcad.shapescript.program import ShapeScriptBuilder
+from botcad.emit.cad import CadStep
+from botcad.shapescript.backend_occt import ExecutionResult
+from botcad.shapescript.program import ShapeScriptBuilder
 
 
 def shapescript_to_cad_steps(

@@ -14,18 +14,15 @@ and the bracket cable_slot dimensions.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import WireRef
+from botcad.assembly.sequence import AssemblySequence
 from botcad.bracket import BracketSpec, _cable_slot_dims
 from botcad.connectors import ConnectorSpec, connector_spec
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
 from botcad.dfm.utils import build_body_map, build_wire_steps
 from botcad.routing import WireRoute, WireSegment, solve_routing
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.skeleton import Body, Bot, Joint
+from botcad.skeleton import Body, Bot, Joint
 
 # Channel radius table — must match emit_components._CHANNEL_RADIUS
 _CHANNEL_RADIUS: dict[str, float] = {

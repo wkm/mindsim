@@ -7,18 +7,14 @@ and enriched body/joint/mount data for the CAD-app-style explore mode.
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from botcad.geometry import PackingResult, Pose
-    from botcad.ids import BodyId
-    from botcad.skeleton import Body, Bot, Joint
-
-import logging
 
 from botcad.component import ComponentKind
+from botcad.geometry import PackingResult, Pose
+from botcad.ids import BodyId
+from botcad.skeleton import Body, Bot, Joint
 
 log = logging.getLogger(__name__)
 

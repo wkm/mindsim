@@ -6,11 +6,8 @@ import contextlib
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from botcad.materials import Material
-
+from botcad.materials import Material
 from botcad.shapescript.ops import (
     ALIGN_CENTER,
     Align3,

@@ -11,13 +11,10 @@ No intersection → BRepExtrema distance (positive gap).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from botcad.ids import BodyId
+from botcad.skeleton import Bot
 from botcad.units import Meters
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Bot
 
 
 @dataclass(frozen=True)

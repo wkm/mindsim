@@ -20,17 +20,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from botcad.bracket import BracketSpec
 from botcad.component import BusType, Vec3
 from botcad.geometry import rotate_vec
 from botcad.ids import BodyId, JointId
-from botcad.skeleton import BodyShape
+from botcad.skeleton import Body, BodyShape, Bot, Joint
 from botcad.units import Meters, Position
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot, Joint
 
 
 @dataclass(frozen=True)

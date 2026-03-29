@@ -9,20 +9,17 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing import Protocol
-
-    class _HasPosAxis(Protocol):
-        pos: Vec3
-        axis: Vec3
-
+from typing import Protocol
 
 from botcad.component import POSE_IDENTITY as POSE_IDENTITY
 from botcad.component import Pose as Pose
 from botcad.component import Quat, Vec3
 from botcad.units import Degrees
+
+
+class _HasPosAxis(Protocol):
+    pos: Vec3
+    axis: Vec3
 
 
 @dataclass(frozen=True)

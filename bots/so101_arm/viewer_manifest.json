@@ -217,8 +217,8 @@
           "label": "camera",
           "component_name": "PiCamera2",
           "dimensions": [
+            0.023862,
             0.025,
-            0.024,
             0.009
           ],
           "mass": 0.003,
@@ -2972,9 +2972,9 @@
       "parent_body": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.0105,
+        -0.009931,
         0.01295,
-        0.3435
+        0.3445
       ],
       "quat": [
         0.707107,
@@ -2994,9 +2994,9 @@
       "parent_body": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.0105,
+        0.008869,
         0.01295,
-        0.3435
+        0.3445
       ],
       "quat": [
         0.707107,
@@ -3016,9 +3016,9 @@
       "parent_body": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.0105,
+        -0.009931,
         0.01295,
-        0.331
+        0.3235
       ],
       "quat": [
         0.707107,
@@ -3038,9 +3038,9 @@
       "parent_body": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
-        0.0105,
+        0.008869,
         0.01295,
-        0.331
+        0.3235
       ],
       "quat": [
         0.707107,
@@ -3355,7 +3355,7 @@
       "pos": [
         0.0,
         0.01295,
-        0.0245
+        0.025
       ],
       "quat": [
         1.0,

@@ -11,15 +11,12 @@ Wraps SimEnv with:
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING
 
 import mujoco
 import numpy as np
 
 from sim.env import SimEnv, assemble_sensor_data
-
-if TYPE_CHECKING:
-    from training.pipeline import EnvConfig
+from training.pipeline import EnvConfig
 
 
 class TrainingEnv:

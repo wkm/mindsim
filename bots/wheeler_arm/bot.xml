@@ -219,16 +219,16 @@
             <geom name="wire_camera_csi_forearm_1" type="mesh" mesh="wire_camera_csi_forearm_1_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
             <geom name="wire_camera_csi_forearm_2" type="mesh" mesh="wire_camera_csi_forearm_2_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
             <body name="hand" pos="0.000000 0.000000 0.100000">
-              <inertial pos="0.003924 0.000127 -0.004719" mass="0.026534" fullinertia="8.768623e-06 1.051567e-05 7.753395e-06 3.935129e-07 -1.390088e-06 -4.732405e-07"/>
+              <inertial pos="0.003917 0.000161 -0.004711" mass="0.026549" fullinertia="8.775248e-06 1.051213e-05 7.755208e-06 3.883125e-07 -1.389602e-06 -4.669864e-07"/>
               <joint name="wrist" type="hinge" pos="0 0 0" axis="0.000000 0.000000 1.000000" damping="0.6237" range="-1.5000 1.5000"/>
               <geom name="wrist_horn_disc" type="mesh" mesh="horn_wrist_mesh" pos="0.000000 0.000000 0.004000" rgba="0.8824 0.9098 0.9294 0.9000" contype="0" conaffinity="0" group="1"/>
               <geom type="mesh" mesh="hand_mesh" rgba="0.0941 0.1255 0.1490 1.0000" contype="1" conaffinity="1"/>
               <camera name="camera_cam" fovy="72.0" pos="0.000000 0.015450 0.000000" xyaxes="1 0 0 0 0 1"/>
               <geom name="comp_hand_camera" type="mesh" mesh="comp_hand_camera_mesh" pos="0.000000 0.015450 0.000000" rgba="0.0941 0.1255 0.1490 1.0000" contype="0" conaffinity="0" group="1" quat="0.707107 -0.707107 0.000000 0.000000"/>
-              <geom name="mount_hand_camera_m1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.010500 0.015450 0.009500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-              <geom name="mount_hand_camera_m2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.010500 0.015450 0.009500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-              <geom name="mount_hand_camera_m3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.010500 0.015450 -0.003000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
-              <geom name="mount_hand_camera_m4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.010500 0.015450 -0.003000" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+              <geom name="mount_hand_camera_m1" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.009931 0.015450 0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+              <geom name="mount_hand_camera_m2" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008869 0.015450 0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+              <geom name="mount_hand_camera_m3" type="mesh" mesh="hardware_M2_shc_mesh" pos="-0.009931 0.015450 -0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
+              <geom name="mount_hand_camera_m4" type="mesh" mesh="hardware_M2_shc_mesh" pos="0.008869 0.015450 -0.010500" quat="0.707107 -0.707107 0.000000 0.000000" rgba="0.2235 0.2941 0.3490 0.9000" contype="0" conaffinity="0" group="1"/>
               <geom name="wire_camera_csi_hand_0" type="mesh" mesh="wire_camera_csi_hand_0_mesh" pos="0 0 0" rgba="1.0000 0.7882 0.2510 0.9000" contype="0" conaffinity="0" group="2"/>
             </body>
           </body>
