@@ -7,8 +7,6 @@ child bodies, then remaining components, then wires.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
 from botcad.assembly.sequence import AssemblyAction, AssemblyOp, AssemblySequence
 from botcad.assembly.tools import ToolKind
@@ -16,9 +14,7 @@ from botcad.component import MountPoint
 from botcad.fasteners import HeadType, resolve_fastener
 from botcad.ids import BodyId
 from botcad.routing import WireRoute, solve_routing
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot
+from botcad.skeleton import Body, Bot
 
 
 def build_assembly_sequence(bot: Bot) -> AssemblySequence:

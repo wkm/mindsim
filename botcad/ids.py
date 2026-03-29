@@ -39,3 +39,19 @@ class JointId(str):
 
     def __repr__(self) -> str:
         return f"JointId({str.__repr__(self)})"
+
+
+class ComponentId(str):
+    """Unique identifier for a component instance in the wiring netlist.
+
+    For mounted components, this is the mount label (e.g. "controller",
+    "pi", "battery"). For servos, it is the joint name (e.g. "shoulder",
+    "elbow") since servos live on joints, not mounts.
+    """
+
+    @property
+    def name(self) -> str:
+        return str(self)
+
+    def __repr__(self) -> str:
+        return f"ComponentId({str.__repr__(self)})"

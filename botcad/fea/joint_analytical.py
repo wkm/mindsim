@@ -8,12 +8,9 @@ fabricated structure.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from botcad.ids import BodyId, JointId
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot, Joint
+from botcad.skeleton import Body, Bot, Joint
 
 
 @dataclass(frozen=True)

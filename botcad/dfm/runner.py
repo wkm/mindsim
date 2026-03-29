@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from botcad.assembly.build import build_assembly_sequence
-from botcad.dfm.check import DFMCheck, DFMFinding
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Bot
-
 # Import all check modules to trigger subclass registration
 import botcad.dfm.checks.component_retention
 import botcad.dfm.checks.connector_access
 import botcad.dfm.checks.fastener_clearance
 import botcad.dfm.checks.wire_bend_radius
-import botcad.dfm.checks.wire_channel_sizing  # noqa: F401
+import botcad.dfm.checks.wire_channel_sizing
+import botcad.dfm.checks.wire_stub_collision
+import botcad.dfm.checks.wirenet_bus_type_mismatch
+import botcad.dfm.checks.wirenet_orphaned_ports
+import botcad.dfm.checks.wirenet_overloaded_ports  # noqa: F401
+from botcad.assembly.build import build_assembly_sequence
+from botcad.dfm.check import DFMCheck, DFMFinding
+from botcad.skeleton import Bot
 
 
 def discover_checks() -> list[DFMCheck]:

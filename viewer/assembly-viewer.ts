@@ -19,6 +19,7 @@ import type { ManifestMaterial, ViewerManifest } from './manifest-types.ts';
 import { highlightRepr } from './syntax-highlight.ts';
 import { createPositionedMesh, fetchSTL, makeMaterial } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
+import { type WireNet, WiringDiagram } from './wiring-diagram.ts';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -36,7 +37,7 @@ export interface AssemblyHandle {
 // Sub-tab type
 // ---------------------------------------------------------------------------
 
-type AssemblySubTab = 'steps' | 'dag' | 'dfm';
+type AssemblySubTab = 'steps' | 'dag' | 'dfm' | 'wiring';
 
 // ---------------------------------------------------------------------------
 // Mesh helpers
@@ -497,6 +498,13 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   const dfmInternalContainer = document.createElement('div');
   dfmPanel = new DFMPanel(dfmInternalContainer, (finding) => onFindingClick(finding));
 
+  // Wiring diagram container
+  const wiringContainer = document.createElement('div');
+  wiringContainer.style.cssText = 'width: 100%; height: 100%; overflow: auto; position: relative;';
+
+  let wiringDiagram: WiringDiagram | null = null;
+  let wiringLoaded = false;
+
   // =========================================================================
   // Steps list rendering
   // =========================================================================
@@ -653,6 +661,133 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   }
 
   // =========================================================================
+  // Wiring nets loading
+  // =========================================================================
+
+  async function loadWiringNets(): Promise<void> {
+    if (wiringLoaded) return;
+    try {
+      const resp = await fetch(`/api/bots/${botName}/wirenets`);
+      if (!resp.ok) return;
+      const nets: WireNet[] = await resp.json();
+      wiringLoaded = true;
+      if (!wiringDiagram) {
+        wiringDiagram = new WiringDiagram(wiringContainer, {
+          onNodeClick: (nodeId) => {
+            renderWiringNodeDetail(nodeId, nets);
+          },
+          onEdgeClick: (_edgeId, net) => {
+            renderWiringEdgeDetail(net);
+          },
+        });
+      }
+      await wiringDiagram.setNets(nets);
+    } catch (err) {
+      console.warn('[assembly] wirenets fetch error:', err);
+    }
+  }
+
+  function renderWiringNodeDetail(nodeId: string, nets: WireNet[]): void {
+    detailPane.innerHTML = '';
+    const heading = document.createElement('h3');
+    heading.style.cssText = 'margin: 0 0 8px; font-size: 14px; color: var(--foreground);';
+    heading.textContent = nodeId;
+    detailPane.appendChild(heading);
+
+    // Collect ports for this component across all nets
+    const portInfo: { label: string; busType: string; netLabel: string; connected: boolean }[] = [];
+    const connectedPorts = new Set<string>();
+
+    for (const net of nets) {
+      for (const port of net.ports) {
+        if (port.component_id === nodeId) {
+          const isConnected = net.ports.length > 1;
+          if (isConnected) connectedPorts.add(port.port_label);
+          portInfo.push({
+            label: port.port_label,
+            busType: net.bus_type,
+            netLabel: net.label,
+            connected: isConnected,
+          });
+        }
+      }
+    }
+
+    if (portInfo.length > 0) {
+      const table = document.createElement('table');
+      table.style.cssText =
+        'width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--font-mono, monospace);';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const thStyle = 'text-align:left;padding:4px 6px;color:var(--muted-fg);font-size:10px;';
+      for (const col of ['Port', 'Bus', 'Net', 'Status']) {
+        const th = document.createElement('th');
+        th.style.cssText = thStyle;
+        th.textContent = col;
+        headerRow.appendChild(th);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      for (const p of portInfo) {
+        const tr = document.createElement('tr');
+        for (const [text, style] of [
+          [p.label, 'padding:2px 6px;'],
+          [p.busType, 'padding:2px 6px;'],
+          [p.netLabel, 'padding:2px 6px;'],
+          [
+            p.connected ? 'connected' : 'dangling',
+            `padding:2px 6px;color:${p.connected ? 'var(--success,#38a169)' : 'orange'};`,
+          ],
+        ] as const) {
+          const td = document.createElement('td');
+          td.style.cssText = style;
+          td.textContent = text;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      detailPane.appendChild(table);
+    }
+  }
+
+  function renderWiringEdgeDetail(net: WireNet): void {
+    detailPane.innerHTML = '';
+    const heading = document.createElement('h3');
+    heading.style.cssText = 'margin: 0 0 8px; font-size: 14px; color: var(--foreground);';
+    heading.textContent = `Net: ${net.label}`;
+    detailPane.appendChild(heading);
+
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size: 12px; color: var(--muted-fg); line-height: 1.8;';
+    for (const [label, value] of [
+      ['Bus type', net.bus_type],
+      ['Topology', net.topology],
+      ['Ports', String(net.ports.length)],
+    ] as const) {
+      const row = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = `${label}: `;
+      row.appendChild(strong);
+      row.appendChild(document.createTextNode(value));
+      info.appendChild(row);
+    }
+    detailPane.appendChild(info);
+
+    const portList = document.createElement('ul');
+    portList.style.cssText = 'margin: 8px 0; padding-left: 20px; font-size: 11px; color: var(--muted-fg);';
+    for (const port of net.ports) {
+      const li = document.createElement('li');
+      li.textContent = `${port.component_id} : ${port.port_label}`;
+      portList.appendChild(li);
+    }
+    detailPane.appendChild(portList);
+  }
+
+  // =========================================================================
   // Detail pane rendering
   // =========================================================================
 
@@ -745,7 +880,10 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
     if (tab === activeSubTab) return;
     activeSubTab = tab;
 
-    navPane.innerHTML = '';
+    // Remove content but keep tabBar
+    while (navPane.children.length > 1) {
+      navPane.removeChild(navPane.lastChild!);
+    }
 
     if (tab === 'steps') {
       navPane.appendChild(stepsListEl);
@@ -755,8 +893,59 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
     } else if (tab === 'dfm') {
       navPane.appendChild(dfmNavEl);
       updateDfmNavSelection();
+    } else if (tab === 'wiring') {
+      navPane.appendChild(wiringContainer);
+      if (!wiringLoaded) loadWiringNets();
+    }
+
+    // Update tab bar active state
+    updateTabBarActive(tab);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tab bar
+  // ---------------------------------------------------------------------------
+
+  const tabBar = document.createElement('div');
+  tabBar.style.cssText =
+    'display: flex; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0;';
+
+  const tabBarButtons: Map<AssemblySubTab, HTMLButtonElement> = new Map();
+  const tabDefs: [string, AssemblySubTab][] = [
+    ['Steps', 'steps'],
+    ['DAG', 'dag'],
+    ['DFM', 'dfm'],
+    ['Wiring', 'wiring'],
+  ];
+
+  for (const [label, tab] of tabDefs) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-ghost';
+    btn.textContent = label;
+    btn.style.cssText =
+      'padding: 2px 10px; font-size: 11px; border: none; border-radius: 3px; cursor: pointer; ' +
+      'background: transparent; color: var(--muted-fg); font-family: var(--font, system-ui);';
+    btn.onclick = () => _switchSubTab(tab);
+    tabBar.appendChild(btn);
+    tabBarButtons.set(tab, btn);
+  }
+
+  function updateTabBarActive(tab: AssemblySubTab): void {
+    for (const [t, btn] of tabBarButtons) {
+      if (t === tab) {
+        btn.style.background = 'var(--secondary)';
+        btn.style.color = 'var(--foreground)';
+        btn.style.fontWeight = '600';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--muted-fg)';
+        btn.style.fontWeight = 'normal';
+      }
     }
   }
+
+  navPane.appendChild(tabBar);
+  updateTabBarActive('steps');
 
   // Initialize Steps as the active sub-tab
   navPane.appendChild(stepsListEl);
@@ -1002,6 +1191,10 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
       if (dag) {
         dag.dispose();
         dag = null;
+      }
+      if (wiringDiagram) {
+        wiringDiagram.dispose();
+        wiringDiagram = null;
       }
       viewport.scene.remove(asmGroup);
       viewport.dispose();

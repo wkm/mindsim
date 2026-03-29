@@ -11,18 +11,13 @@ or beyond body walls.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from botcad.assembly.refs import FastenerRef
-from botcad.assembly.sequence import AssemblyAction, AssemblyOp
+from botcad.assembly.sequence import AssemblyAction, AssemblyOp, AssemblySequence
 from botcad.assembly.tools import TOOL_LIBRARY
+from botcad.component import MountPoint, Vec3
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
 from botcad.dfm.utils import build_body_map
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.component import MountPoint, Vec3
-    from botcad.skeleton import Body, Bot, Joint
+from botcad.skeleton import Body, Bot, Joint
 
 
 class FastenerToolClearance(DFMCheck):

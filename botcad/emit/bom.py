@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from botcad.skeleton import Bot
+from botcad.skeleton import Bot
 
 
 def _build_bom_lines(bodies: list, joints: list, title: str) -> list[str]:

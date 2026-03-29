@@ -8,13 +8,9 @@ the final build123d Solid.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from botcad.shapescript.ops import ALIGN_CENTER, ALIGN_MIN_Z
 from botcad.shapescript.program import ShapeScriptBuilder
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot, Joint
+from botcad.skeleton import Body, Bot, Joint
 
 
 def emit_body_ir(

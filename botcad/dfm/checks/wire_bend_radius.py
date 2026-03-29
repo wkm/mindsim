@@ -17,16 +17,13 @@ Thresholds:
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import WireRef
+from botcad.assembly.sequence import AssemblySequence
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
 from botcad.dfm.utils import build_wire_steps
 from botcad.routing import WireRoute, WireSegment, solve_routing
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.skeleton import Bot
+from botcad.skeleton import Bot
 
 # Default cable outer diameter (meters) — AWG 26 servo wire
 _DEFAULT_CABLE_OD: float = 0.0015  # 1.5mm

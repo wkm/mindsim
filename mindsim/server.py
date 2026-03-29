@@ -1274,6 +1274,31 @@ def get_viewer_manifest(bot: str):
     return build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
 
 
+@app.get("/api/bots/{bot}/wirenets")
+def get_wirenets(bot: str):
+    """Return the wire netlist for a bot."""
+    try:
+        bot_obj, _cad = _load_bot(bot)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, f"WireNet generation failed: {e}") from e
+
+    return [
+        {
+            "label": net.label,
+            "bus_type": str(net.bus_type),
+            "topology": str(net.topology),
+            "ports": [
+                {"component_id": str(p.component_id), "port_label": p.port_label}
+                for p in net.ports
+            ],
+        }
+        for net in bot_obj.wire_nets
+    ]
+
+
 @app.get("/api/bots/{bot}/assembly-sequence")
 def get_assembly_sequence(bot: str):
     """Return the assembly sequence for a bot, enriched with mesh references.

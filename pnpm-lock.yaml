@@ -11,6 +11,9 @@ importers:
       '@tabler/icons':
         specifier: ^3.40.0
         version: 3.40.0
+      elkjs:
+        specifier: ^0.11.1
+        version: 0.11.1
       three:
         specifier: ^0.183.2
         version: 0.183.2
@@ -428,6 +431,9 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  elkjs@0.11.1:
+    resolution: {integrity: sha512-zxxR9k+rx5ktMwT/FwyLdPCrq7xN6e4VGGHH8hA01vVYKjTFik7nHOxBnAYtrgYUB1RpAiLvA1/U2YraWxyKKg==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -956,6 +962,8 @@ snapshots:
       yargs: 17.7.2
 
   detect-libc@2.1.2: {}
+
+  elkjs@0.11.1: {}
 
   emoji-regex@8.0.0: {}
 

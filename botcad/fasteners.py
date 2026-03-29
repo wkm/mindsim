@@ -11,12 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
+from botcad.component import MountPoint
 from botcad.units import Meters, mm
-
-if TYPE_CHECKING:
-    from botcad.component import MountPoint
 
 
 class HeadType(StrEnum):

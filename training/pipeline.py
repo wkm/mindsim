@@ -12,10 +12,9 @@ pipeline_for_bot(). Smoketest is a uniform modifier applied on top.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
-if TYPE_CHECKING:
-    from training.rewards import RewardHierarchy
+from training.rewards import RewardHierarchy
 
 
 @dataclass(frozen=True)
