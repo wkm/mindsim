@@ -38,6 +38,7 @@ log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from botcad.component import BearingSpec, Component, Vec3
+    from botcad.ids import BodyId
     from botcad.skeleton import Body, Bot, Joint
 
 
@@ -78,12 +79,14 @@ class MaterialSolid:
 class CadModel:
     """Pre-built CAD geometry for all bodies in a bot."""
 
-    body_solids: dict[str, object]  # body_name → build123d Solid
-    parent_joint_map: dict[str, Joint]  # body_name → parent Joint
-    rigid_groups: dict[str, list[Body]]  # group_name → [Body, ...]
-    body_wire_segments: dict[str, list[tuple]]  # body_name → [(seg, bus_type), ...]
+    body_solids: dict[BodyId, object]  # body_name → build123d Solid
+    parent_joint_map: dict[BodyId, Joint]  # body_name → parent Joint
+    rigid_groups: dict[BodyId, list[Body]]  # group_name → [Body, ...]
+    body_wire_segments: dict[BodyId, list[tuple]]  # body_name → [(seg, bus_type), ...]
     # Multi-material: body_name → list of (material_name, solid) for viewer STLs
-    multi_material_solids: dict[str, list[MaterialSolid]] = field(default_factory=dict)
+    multi_material_solids: dict[BodyId, list[MaterialSolid]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -106,6 +109,7 @@ class CadStep:
     tool: object | None = None  # cutting/union tool solid (placed in body frame)
     group: str | None = None  # CallOp sub-program key, for viewer grouping
     script: str = ""  # ShapeScript code line, e.g. "cut_3 = Cut(box_0, loc_2)"
+    ir_repr: str = ""  # repr(original_op), e.g. "BoxOp(ref=..., width=0.06, ...)"
 
 
 def _solid_to_brep_bytes(solid) -> bytes:
@@ -329,7 +333,7 @@ def _build_multi_material_solids(
     body: Body,
     mount: object,
     ir_backend: object,
-    multi_material_solids: dict[str, list[MaterialSolid]],
+    multi_material_solids: dict[BodyId, list[MaterialSolid]],
     log,
     bot=None,
 ) -> None:
@@ -393,7 +397,7 @@ def build_cad(bot: Bot) -> CadModel:
     export so that accurate mass properties are available before any emitter runs.
     """
     # Build body → parent joint mapping
-    parent_joint_map: dict[str, Joint] = {}
+    parent_joint_map: dict[BodyId, Joint] = {}
     for joint in bot.all_joints:
         if joint.child is not None:
             parent_joint_map[joint.child.name] = joint
@@ -406,7 +410,7 @@ def build_cad(bot: Bot) -> CadModel:
     rigid_groups = _collect_rigid_groups(bot)
 
     # Collect per-body wire segments for channel cutting
-    body_wire_segments: dict[str, list] = {}
+    body_wire_segments: dict[BodyId, list] = {}
     for route in bot.wire_routes:
         for seg in route.segments:
             body_wire_segments.setdefault(seg.body_name, []).append(
@@ -421,13 +425,13 @@ def build_cad(bot: Bot) -> CadModel:
     cache = DiskCache()
     cache_hits = 0
 
-    body_solids: dict[str, object] = {}
-    multi_material_solids: dict[str, list[MaterialSolid]] = {}
+    body_solids: dict[BodyId, object] = {}
+    multi_material_solids: dict[BodyId, list[MaterialSolid]] = {}
 
     # Pre-build comp_name → Mount lookup for rotation application.
     comp_mount_map: dict[str, object] = {}
     # Pre-build name → Body lookup for parent frame_quat.
-    bodies_by_name: dict[str, Body] = {}
+    bodies_by_name: dict[BodyId, Body] = {}
     for body in bot.all_bodies:
         bodies_by_name[body.name] = body
         for mount in body.mounts:
@@ -768,13 +772,13 @@ def emit_cad(bot: Bot, output_dir: Path, cad: CadModel) -> list[AssemblyPart]:
     return parts
 
 
-def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
+def _compute_world_positions(bot: Bot) -> dict[BodyId, tuple[float, float, float]]:
     """Walk kinematic tree, accumulate joint positions for rest pose.
 
     At rest (all joints at 0°), body frames are axis-aligned with their
     parents, so we just add joint.pos vectors up the chain.
     """
-    positions: dict[str, tuple[float, float, float]] = {}
+    positions: dict[BodyId, tuple[float, float, float]] = {}
 
     def _walk(body: Body, parent_world_pos: tuple[float, float, float]) -> None:
         positions[body.name] = parent_world_pos
@@ -803,7 +807,7 @@ def _compute_world_positions(bot: Bot) -> dict[str, tuple[float, float, float]]:
     return positions
 
 
-def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
+def _collect_rigid_groups(bot: Bot) -> dict[BodyId, list[Body]]:
     """Group bodies into printable rigid parts.
 
     Bodies separated by servo joints become separate parts. Bodies connected
@@ -817,7 +821,7 @@ def _collect_rigid_groups(bot: Bot) -> dict[str, list[Body]]:
     Only fabricated bodies are grouped — purchased parts have separate meshes.
     """
 
-    groups: dict[str, list[Body]] = {}
+    groups: dict[BodyId, list[Body]] = {}
     for body in bot.all_bodies:
         if body.kind == BodyKind.FABRICATED:
             groups[body.name] = [body]

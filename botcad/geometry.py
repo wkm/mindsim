@@ -28,7 +28,9 @@ from botcad.component import Quat, Vec3
 class MountRotation:
     """Design-time rotation of a component on its mounting surface."""
 
-    yaw: float = 0.0  # degrees around component local Z
+    yaw: float = (
+        0.0  # degrees around component local Z (not Radians — build123d convention)
+    )
 
 
 MOUNT_NO_ROTATION = MountRotation()
@@ -50,7 +52,7 @@ class PackingResult:
     placements: dict  # Mount | Joint -> Placement
 
 
-# Named Euler rotations (degrees) — used by face rotation, camera orientation
+# Named Euler rotations (degrees, not Radians — build123d convention) — used by face rotation, camera orientation
 EULER_RX_NEG90: tuple[float, float, float] = (-90.0, 0.0, 0.0)
 EULER_RX_POS90: tuple[float, float, float] = (90.0, 0.0, 0.0)
 EULER_RX_180: tuple[float, float, float] = (180.0, 0.0, 0.0)

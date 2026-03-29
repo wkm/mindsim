@@ -5,7 +5,7 @@
 import { expect } from '@playwright/test';
 import { test, waitForViewer } from './fixtures.mjs';
 
-const MODES = ['explore', 'joint', 'assembly', 'ik'];
+const MODES = ['explore', 'joint', 'ik'];
 
 test.describe('Mode tabs', () => {
   test.beforeEach(async ({ page }) => {

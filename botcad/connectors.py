@@ -14,6 +14,7 @@ from enum import StrEnum
 from functools import lru_cache
 
 from botcad.component import Vec3
+from botcad.units import Meters
 
 
 class ConnectorType(StrEnum):
@@ -34,7 +35,7 @@ class ConnectorSpec:
     body_dimensions: Vec3  # (x, y, z) housing size in meters
     wire_exit_direction: Vec3  # unit vec, cable leaves this way
     wire_exit_offset: Vec3  # from connector origin to cable start
-    cable_bend_radius: float  # meters
+    cable_bend_radius: Meters  # meters
     mating_direction: Vec3  # push direction to mate
 
 

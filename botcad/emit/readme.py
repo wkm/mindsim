@@ -1,3 +1,6 @@
+# DEPRECATED: This prose assembly guide is superseded by the structured
+# AssemblySequence in botcad/assembly/. Will be removed in a future cleanup.
+# See docs/superpowers/specs/2026-03-28-dfm-validation-design.md
 """Assembly guide emitter — generates assembly_guide.md from a Bot."""
 
 from __future__ import annotations

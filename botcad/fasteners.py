@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from botcad.component import MountPoint
 
+from botcad.units import Meters
+
 
 class HeadType(StrEnum):
     SOCKET_HEAD_CAP = "socket_head_cap"  # hex socket (Allen) — default
@@ -28,14 +30,14 @@ class FastenerSpec:
     """ISO metric fastener with accurate head geometry."""
 
     designation: str  # "M2", "M2.5", "M3"
-    thread_diameter: float  # meters
-    thread_pitch: float  # meters (coarse)
+    thread_diameter: Meters  # meters
+    thread_pitch: Meters  # meters (coarse)
     head_type: HeadType
-    head_diameter: float  # meters
-    head_height: float  # meters
-    socket_size: float  # meters (hex AF, or 0 for Phillips)
-    clearance_hole: float  # meters
-    close_fit_hole: float  # meters
+    head_diameter: Meters  # meters
+    head_height: Meters  # meters
+    socket_size: Meters  # meters (hex AF, or 0 for Phillips)
+    clearance_hole: Meters  # meters
+    close_fit_hole: Meters  # meters
 
 
 # ── ISO 4762 Socket Head Cap Screws ──────────────────────────────────

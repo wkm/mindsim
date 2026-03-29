@@ -10,9 +10,11 @@
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
+| WaveshareSerialBus | 1 | 42.0 x 33.0 x 12.0 | 16 | controller |
+| BEC5V | 1 | 12.7 x 17.8 x 2.8 | 2 | bec |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| Structural (printed) | — | — | 246 | PLA/PETG frame |
-| **Total** | | | **468** | |
+| Structural (printed) | — | — | 245 | PLA/PETG frame |
+| **Total** | | | **485** | |
 
 ## Power Budget
 
@@ -20,13 +22,15 @@
 |----------|-------------|-------------|-----------|
 | STS3215 x2 | 12.0 | ~1.6 | ~19.6 |
 | RaspberryPiZero2W x1 | 5.0 | 0.6 | 3.0 |
-| **Total** | | | **~22.6** |
+| WaveshareSerialBus x1 | 5.0 | 0.1 | 0.5 |
+| BEC5V x1 | 5.0 | 0.0 | 0.1 |
+| **Total** | | | **~23.2** |
 
 ## Fasteners
 
 | Fastener | Head Type | Qty | Usage |
 |----------|-----------|-----|-------|
-| M2 | Socket Head Cap | 20 | 8x per horn coupler (2 joints); 4x for OV5647 |
+| M2 | Socket Head Cap | 24 | 8x per horn coupler (2 joints); 4x for OV5647; 4x for WaveshareSerialBus |
 | M2.5 | Socket Head Cap | 4 | 4x for RaspberryPiZero2W |
 | M3 | Socket Head Cap | 24 | 6x per joint bracket (2 joints); 6x for Pololu 90x10mm Wheel |
 
@@ -34,15 +38,20 @@
 
 | Connector | Qty |
 |-----------|-----|
-| 5264_3pin | 4 |
+| 5264_3pin | 5 |
 | csi_15pin | 1 |
+| dc5521 | 1 |
 | jst_xh_3pin | 1 |
+| pin_header | 2 |
+| usb_c | 3 |
 | xt30 | 1 |
 
 ## Wire Lengths
 
 | Route | Type | Length (cm) | Slack (cm) |
 |-------|------|------------|------------|
-| servo_bus | uart_half_duplex | 18.1 | 0.0 |
+| servo_bus | uart_half_duplex | 16.4 | 0.0 |
 | camera_csi | csi | 0.0 | 0.0 |
-| power | power | 11.2 | 0.0 |
+| power_servo | power | 8.6 | 0.0 |
+| power_pi | power | 17.2 | 0.0 |
+| pi_usb_data | usb | 7.9 | 0.0 |

@@ -59,6 +59,12 @@ if (cadstepsParam) {
   designTab.textContent = 'Design';
   modeTabs.appendChild(designTab);
 
+  const dfmTab = document.createElement('button');
+  dfmTab.className = 'btn-ghost';
+  dfmTab.dataset.tab = 'dfm';
+  dfmTab.textContent = 'Assembly';
+  modeTabs.appendChild(dfmTab);
+
   const simTab = document.createElement('button');
   simTab.className = 'btn-ghost';
   simTab.dataset.tab = 'sim';
@@ -77,11 +83,14 @@ if (cadstepsParam) {
   import('./viewport3d.ts').then(async ({ Viewport3D }) => {
     const container = document.getElementById('canvas-container');
     const TREE_PANEL_WIDTH = 280;
+    const SIDE_PANEL_WIDTH = 320;
 
-    /** Offset the canvas container so it doesn't overlap the tree panel. */
-    function updateCanvasLayout(treePanelVisible: boolean) {
+    /** Offset the canvas container so it doesn't overlap the tree or side panel. */
+    function updateCanvasLayout(treePanelVisible: boolean, sidePanelVisible = false) {
       const left = treePanelVisible ? TREE_PANEL_WIDTH : 0;
+      const right = sidePanelVisible ? SIDE_PANEL_WIDTH : 0;
       container.style.left = `${left}px`;
+      container.style.right = `${right}px`;
     }
 
     // Initial layout: Design tab is active, tree panel visible
@@ -100,36 +109,80 @@ if (cadstepsParam) {
     // Start the design viewport animation loop
     designViewport.animate(() => {});
 
-    // Track active tab and lazy-loaded Sim viewer
+    // Track active tab and lazy-loaded viewers
     type SimHandle = { pause(): void; resume(): void };
-    let activeTab: 'design' | 'sim' = 'design';
+    type DFMHandle = { pause(): void; resume(): void; dispose(): void; rootEl: HTMLElement };
+    let activeTab: 'design' | 'dfm' | 'sim' = 'design';
     let simHandle: SimHandle | null = null;
+    let dfmHandle: DFMHandle | null = null;
+
+    const sidePanel = document.getElementById('side-panel');
 
     function updateTabUI() {
       designTab.classList.toggle('active', activeTab === 'design');
+      dfmTab.classList.toggle('active', activeTab === 'dfm');
       simTab.classList.toggle('active', activeTab === 'sim');
     }
 
-    async function switchTab(tab: 'design' | 'sim') {
+    async function switchTab(tab: 'design' | 'dfm' | 'sim') {
       if (tab === activeTab) return;
+      const prevTab = activeTab;
       activeTab = tab;
       updateTabUI();
 
       const simModeTabs = document.getElementById('sim-mode-tabs');
 
-      if (tab === 'sim') {
-        // Hide Design scene
-        designViewport.scene.visible = false;
-        treePanel.style.display = 'none';
-        updateCanvasLayout(false);
+      // Deactivate previous tab
+      if (prevTab === 'sim') {
+        simHandle?.pause();
+        document.getElementById('bot-tools-group').style.display = 'none';
+        if (simModeTabs) simModeTabs.style.display = 'none';
+      } else if (prevTab === 'dfm') {
+        dfmHandle?.pause();
+        if (dfmHandle) dfmHandle.rootEl.style.display = 'none';
+      } else {
+        // was design
+        designViewport.setVisible(false);
+      }
 
+      // Hide common panels between switches
+      sidePanel.style.display = 'none';
+      treePanel.style.display = 'none';
+
+      if (tab === 'design') {
+        // Show Design scene
+        container.style.display = '';
+        updateCanvasLayout(true);
+        designViewport.setVisible(true);
+        treePanel.style.display = 'block';
+        designCtx.syncVisibility();
+        designViewport.resize();
+      } else if (tab === 'dfm') {
+        // Assembly viewer owns its own layout (nav/detail/viewport split).
+        // Hide the shared canvas container; the assembly viewer's rootEl
+        // is mounted as a sibling that fills the same area.
+        container.style.display = 'none';
+
+        if (!dfmHandle) {
+          const { initAssemblyViewer } = await import('./assembly-viewer.ts');
+          dfmHandle = await initAssemblyViewer(botName);
+          // Mount the assembly root as a sibling of canvas-container
+          const parent = container.parentElement!;
+          dfmHandle.rootEl.style.cssText = 'position: absolute; top: 40px; left: 0; right: 0; bottom: 0;';
+          parent.appendChild(dfmHandle.rootEl);
+        } else {
+          dfmHandle.rootEl.style.display = '';
+          dfmHandle.resume();
+        }
+      } else if (tab === 'sim') {
         // Show Sim UI
-        document.getElementById('side-panel').style.display = '';
+        container.style.display = '';
+        updateCanvasLayout(false);
+        sidePanel.style.display = '';
         document.getElementById('loading').style.display = '';
         if (simModeTabs) simModeTabs.style.display = '';
 
         if (!simHandle) {
-          // First time — lazy-load MuJoCo viewer
           const { initBotViewer } = await import('./bot-viewer.ts');
           simHandle = await initBotViewer(botName);
         } else {
@@ -137,25 +190,11 @@ if (cadstepsParam) {
         }
 
         document.getElementById('loading').style.display = 'none';
-      } else {
-        // Pause Sim
-        simHandle?.pause();
-
-        // Hide Sim scene (the MuJoCo root group)
-        document.getElementById('side-panel').style.display = 'none';
-        document.getElementById('bot-tools-group').style.display = 'none';
-        if (simModeTabs) simModeTabs.style.display = 'none';
-
-        // Show Design scene
-        designViewport.scene.visible = true;
-        treePanel.style.display = 'block';
-        updateCanvasLayout(true);
-        designCtx.syncVisibility();
-        designViewport.resize();
       }
     }
 
     designTab.addEventListener('click', () => switchTab('design'));
+    dfmTab.addEventListener('click', () => switchTab('dfm'));
     simTab.addEventListener('click', () => switchTab('sim'));
   });
 } else if (componentParam) {

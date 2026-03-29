@@ -15,12 +15,18 @@ class TestClearanceConstraint:
     """Unit tests for the ClearanceConstraint dataclass."""
 
     def test_defaults(self):
-        c = ClearanceConstraint(body_a="a", body_b="b")
+        from botcad.ids import BodyId
+
+        c = ClearanceConstraint(body_a=BodyId("a"), body_b=BodyId("b"))
         assert c.min_distance == 0.0
         assert c.label == ""
 
     def test_frozen(self):
-        c = ClearanceConstraint(body_a="a", body_b="b", min_distance=0.001)
+        from botcad.ids import BodyId
+
+        c = ClearanceConstraint(
+            body_a=BodyId("a"), body_b=BodyId("b"), min_distance=0.001
+        )
         with pytest.raises(AttributeError):
             c.min_distance = 0.002  # type: ignore[misc]
 

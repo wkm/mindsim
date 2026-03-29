@@ -139,6 +139,23 @@ const EDITOR_STYLES = `
   /* Hover parameter highlight */
   .ss-param-hover { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
+  /* Repr detail pane */
+  .cs-repr-pane {
+    flex: 0 0 auto; max-height: 140px; min-height: 0;
+    overflow: auto; margin: 0;
+    padding: 8px 12px; border-top: 1px solid #30363D;
+    background: #161A1E;
+    font-family: 'Input Mono Narrow', 'SF Mono', 'Menlo', monospace;
+    font-size: 11px; line-height: 1.5; color: #8A9BA8;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .cs-repr-pane:empty { display: none; }
+  .cs-repr-pane .rp-type { color: #2B95D6; font-weight: 600; }
+  .cs-repr-pane .rp-num { color: #C87619; }
+  .cs-repr-pane .rp-str { color: #D4A72C; }
+  .cs-repr-pane .rp-kw { color: #9179F2; }
+  .cs-repr-pane .rp-ref { color: #8A9BA8; }
+
   /* Body switcher dropdown in navbar */
   .cs-body-select {
     background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -211,6 +228,7 @@ class CadStepsViewer {
   _outcomeBtn!: HTMLButtonElement;
   _inputsBtn!: HTMLButtonElement;
   codeScrollEl!: HTMLDivElement;
+  reprPaneEl!: HTMLPreElement;
   lineEls: HTMLDivElement[];
 
   constructor(botName: string | null, bodyName: string | null, componentName: string | null = null) {
@@ -576,6 +594,11 @@ class CadStepsViewer {
     this.codeScrollEl.appendChild(codeTable);
     this.editorPaneEl.appendChild(this.codeScrollEl);
 
+    // Repr detail pane — shows raw IR repr of current step
+    this.reprPaneEl = document.createElement('pre');
+    this.reprPaneEl.className = 'cs-repr-pane';
+    this.editorPaneEl.appendChild(this.reprPaneEl);
+
     // Keyboard shortcuts — prevent code pane from capturing arrow keys
     this.editorPaneEl.addEventListener('keydown', (e) => {
       if (e.key.startsWith('Arrow')) e.preventDefault();
@@ -663,6 +686,34 @@ class CadStepsViewer {
     return s;
   }
 
+  _highlightRepr(repr: string): string {
+    let s = this._escapeHtml(repr);
+    const tokens: { key: string; html: string }[] = [];
+    let tokenId = 0;
+    const ph = (cls: string, text: string) => {
+      const key = `\x00R${tokenId++}\x00`;
+      tokens.push({ key, html: `<span class="${cls}">${text}</span>` });
+      return key;
+    };
+
+    // Strings
+    s = s.replace(/'[^']*'/g, (m) => ph('rp-str', m));
+
+    // Type names (PascalCase identifiers before parens)
+    s = s.replace(/\b([A-Z][a-zA-Z0-9]+)\b/g, (m) => ph('rp-type', m));
+
+    // Numbers
+    s = s.replace(/\b(-?\d+\.?\d*)\b/g, (m) => ph('rp-num', m));
+
+    // None, True, False
+    s = s.replace(/\b(None|True|False)\b/g, (m) => ph('rp-kw', m));
+
+    for (const { key, html } of tokens) {
+      s = s.replace(key, html);
+    }
+    return s;
+  }
+
   // ── Scroll sync ──
 
   _scrollToLine(idx: number) {
@@ -747,6 +798,16 @@ class CadStepsViewer {
     // Update toolbar
     this.slider.value = String(idx);
     this.stepCountEl.textContent = `${idx + 1} / ${this.steps.length}`;
+
+    // Update repr pane
+    if (this.reprPaneEl) {
+      const reprText = step.repr || '';
+      if (reprText) {
+        this.reprPaneEl.innerHTML = this._highlightRepr(reprText);
+      } else {
+        this.reprPaneEl.textContent = '';
+      }
+    }
 
     // Highlight current line in code editor
     for (let i = 0; i < this.lineEls.length; i++) {

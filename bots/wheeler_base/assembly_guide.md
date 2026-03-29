@@ -33,7 +33,7 @@ Raspberry Pi Zero 2W
   └── CSI connector → Camera ribbon cable → OV5647
 
 Servo Daisy Chain:
-  Pi UART → ID1(left_wheel) → ID2(right_wheel)
+  Waveshare board → ID1(left_wheel) → ID2(right_wheel)
 ```
 
 ## 3D Printed Parts
@@ -52,6 +52,8 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 | comp_base_battery | `meshes/comp_base_battery.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_base_camera | `meshes/comp_base_camera.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_base_pi | `meshes/comp_base_pi.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_controller | `meshes/comp_base_controller.stl` | box | 50.0 x 50.0 x 50.0 |
+| comp_base_bec | `meshes/comp_base_bec.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_left_rim_wheel | `meshes/comp_left_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
 | comp_right_rim_wheel | `meshes/comp_right_rim_wheel.stl` | box | 50.0 x 50.0 x 50.0 |
 
@@ -59,12 +61,14 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 1. **Program servo IDs** — Connect each STS3215 individually to the Feetech debug board or Waveshare controller and assign IDs 1–2 as listed above.
 
-2. **Print structural parts** — Print all 12 body shells from the STL files listed above.
+2. **Print structural parts** — Print all 14 body shells from the STL files listed above.
 
 3. **Assemble base** (`base`):
    - Mount LiPo2S-1000 (battery) at bottom position
    - Mount OV5647 (camera) at front position using 4x M2
    - Mount RaspberryPiZero2W (pi) at top position using 4x M2.5
+   - Mount WaveshareSerialBus (controller) at back position using 4x screw
+   - Mount BEC5V (bec) at (0.0, -0.025, 0.015) position
 
 4. **Attach left_rim** to base via STS3215 at joint `left_wheel` (axis: roll (inverted)):
    - Screw servo into base bracket using 6x M3 screws through mounting ears
@@ -78,10 +82,10 @@ Print all body shells from the STL files in `meshes/`. Recommended: PLA+, 0.4mm 
 
 6. **Route servo bus cable** — Daisy-chain all servos following the wiring diagram above. Route cables through/along each structural member.
 
-7. **Connect power** — Battery XT30 to servo bus power + buck converter → Pi USB.
+7. **Connect power** — Connect 12V power supply to the Waveshare board barrel jack. Connect USB-C cable from host PC.
 
 8. **Connect camera** — Route CSI ribbon cable from OV5647 to Pi.
 
 9. **Test** — Power on and verify all servo IDs respond. 
-   Run `sts3215_scan.py` to verify servos, test camera with `rpicam-hello`.
+   Use the Waveshare controller software or `python -m lerobot.scripts.control_robot` to test each joint.
 

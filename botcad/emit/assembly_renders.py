@@ -44,6 +44,7 @@ from botcad.emit.renders import (
     _servo_geom_id,
     _sweepable_joints,
 )
+from botcad.ids import BodyId, JointId
 
 
 class DeterministicFPDF(FPDF):
@@ -86,7 +87,7 @@ _HARDWARE_PREFIXES = ("screw_", "horn_", "rear_", "mount_", "wire_")
 
 @dataclass(frozen=True)
 class StripData:
-    jname: str
+    jname: JointId
     # Collision test (full visibility)
     s_frames: list = field(default_factory=list)
     s_labels: list = field(default_factory=list)
@@ -102,7 +103,7 @@ class StripData:
     # Minimap
     minimap: Image.Image | None = None
     # Child body name (for human-readable step text)
-    child_body_name: str = ""
+    child_body_name: BodyId = field(default_factory=lambda: BodyId(""))
     # Custom step text (defaults to servo/joint text if empty)
     step_a_title: str = ""
     step_b_title: str = ""

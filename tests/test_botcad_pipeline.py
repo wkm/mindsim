@@ -58,7 +58,9 @@ def test_route_servo_bus_enters_child_body_at_joint_origin() -> None:
     bot._collect_tree()
     route = solve_routing(bot)[0]
 
+    from botcad.ids import BodyId
+
     body_names = {segment.body_name for segment in route.segments}
-    assert body_names == {"base", "mid"}
+    assert body_names == {BodyId("base"), BodyId("mid")}
     assert all(segment.body_name in body_names for segment in route.segments)
     assert route.segments[1].start == (0.0, 0.0, 0.0)

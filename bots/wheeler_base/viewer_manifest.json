@@ -1,6 +1,5 @@
 {
   "bot_name": "wheeler_base",
-  "assemblies": [],
   "bodies": [
     {
       "name": "base",
@@ -13,7 +12,7 @@
         0.106,
         0.054
       ],
-      "mass": 0.3829,
+      "mass": 0.3997,
       "pos": [
         0.0,
         0.0,
@@ -72,6 +71,28 @@
           ],
           "mass": 0.01,
           "component_type": "compute"
+        },
+        {
+          "label": "controller",
+          "component_name": "WaveshareSerialBus",
+          "dimensions": [
+            0.042,
+            0.033,
+            0.012
+          ],
+          "mass": 0.016,
+          "component_type": "generic"
+        },
+        {
+          "label": "bec",
+          "component_name": "BEC5V",
+          "dimensions": [
+            0.0127,
+            0.0178,
+            0.0028
+          ],
+          "mass": 0.0015,
+          "component_type": "generic"
         }
       ]
     },
@@ -397,10 +418,10 @@
         -0.0178
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
+        0.707107
       ],
       "mass": 0.055,
       "color": [
@@ -423,8 +444,8 @@
         0.0
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
       ],
@@ -463,10 +484,10 @@
         0.024875
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
+        0.707107
       ],
       "mass": 0.01,
       "color": [
@@ -492,6 +513,86 @@
       ]
     },
     {
+      "body": "base",
+      "label": "controller",
+      "component": "WaveshareSerialBus",
+      "category": "generic",
+      "mesh": "comp_base_controller.stl",
+      "pos": [
+        0.0,
+        -0.032,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        0.0,
+        0.707107
+      ],
+      "mass": 0.016,
+      "color": [
+        0.1373,
+        0.549,
+        0.1725,
+        1.0
+      ],
+      "shapescript_component": "WaveshareSerialBus",
+      "meshes": [
+        {
+          "file": "comp_base_controller__fr4_green.stl",
+          "material": "fr4_green"
+        },
+        {
+          "file": "comp_base_controller__ic_package.stl",
+          "material": "ic_package"
+        },
+        {
+          "file": "comp_base_controller__nickel.stl",
+          "material": "nickel"
+        }
+      ]
+    },
+    {
+      "body": "base",
+      "label": "bec",
+      "component": "BEC5V",
+      "category": "generic",
+      "mesh": "comp_base_bec.stl",
+      "pos": [
+        0.0,
+        -0.025,
+        0.015
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mass": 0.0015,
+      "color": [
+        0.1373,
+        0.549,
+        0.1725,
+        1.0
+      ],
+      "shapescript_component": "BEC5V",
+      "meshes": [
+        {
+          "file": "comp_base_bec__fr4_green.stl",
+          "material": "fr4_green"
+        },
+        {
+          "file": "comp_base_bec__ic_package.stl",
+          "material": "ic_package"
+        },
+        {
+          "file": "comp_base_bec__nickel.stl",
+          "material": "nickel"
+        }
+      ]
+    },
+    {
       "body": "left_rim",
       "label": "wheel",
       "component": "Pololu 90x10mm Wheel",
@@ -503,9 +604,9 @@
         0.0
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
       ],
       "mass": 0.022,
@@ -529,9 +630,9 @@
         0.0
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        0.707107,
         0.0
       ],
       "mass": 0.022,
@@ -551,7 +652,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -560,10 +660,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_ear_1",
@@ -571,7 +674,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -580,10 +682,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_ear_2",
@@ -591,7 +696,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -600,10 +704,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_ear_3",
@@ -611,7 +718,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -620,10 +726,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_ear_4",
@@ -631,7 +740,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -640,10 +748,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_ear_5",
@@ -651,7 +762,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0315,
@@ -660,10 +770,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_horn_0",
@@ -671,7 +784,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.065,
@@ -680,10 +792,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_horn_1",
@@ -691,7 +806,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.065,
@@ -700,10 +814,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_horn_2",
@@ -711,7 +828,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.065,
@@ -720,10 +836,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_horn_3",
@@ -731,7 +850,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.065,
@@ -740,10 +858,13 @@
       ],
       "quat": [
         0.0,
-        -0.707107,
+        0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_rear_0",
@@ -751,7 +872,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.033,
@@ -763,7 +883,10 @@
         -0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_rear_1",
@@ -771,7 +894,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.033,
@@ -783,7 +905,10 @@
         -0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_rear_2",
@@ -791,7 +916,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.033,
@@ -803,7 +927,10 @@
         -0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_left_wheel_rear_3",
@@ -811,7 +938,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "left_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.033,
@@ -823,7 +949,10 @@
         -0.707107,
         0.0,
         0.707107
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "left_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_0",
@@ -831,7 +960,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -841,9 +969,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_1",
@@ -851,7 +982,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -861,9 +991,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_2",
@@ -871,7 +1004,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -881,9 +1013,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_3",
@@ -891,7 +1026,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -901,9 +1035,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_4",
@@ -911,7 +1048,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -921,9 +1057,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_ear_5",
@@ -931,7 +1070,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0315,
@@ -941,9 +1079,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_horn_0",
@@ -951,7 +1092,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.065,
@@ -961,9 +1101,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_horn_1",
@@ -971,7 +1114,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.065,
@@ -981,9 +1123,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_horn_2",
@@ -991,7 +1136,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.065,
@@ -1001,9 +1145,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_horn_3",
@@ -1011,7 +1158,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.065,
@@ -1021,9 +1167,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_rear_0",
@@ -1031,7 +1180,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.033,
@@ -1043,7 +1191,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_rear_1",
@@ -1051,7 +1202,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.033,
@@ -1063,7 +1213,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_rear_2",
@@ -1071,7 +1224,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.033,
@@ -1083,7 +1235,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "right_wheel"
     },
     {
       "id": "fastener_right_wheel_rear_3",
@@ -1091,7 +1246,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "right_wheel",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.033,
@@ -1103,15 +1257,17 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "right_wheel"
     },
     {
-      "id": "fastener_base_camera_0",
+      "id": "fastener_camera_mount_0",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0105,
@@ -1119,19 +1275,21 @@
         0.0095
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> base",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_base_camera_1",
+      "id": "fastener_camera_mount_1",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0105,
@@ -1139,19 +1297,21 @@
         0.0095
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> base",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_base_camera_2",
+      "id": "fastener_camera_mount_2",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0105,
@@ -1159,19 +1319,21 @@
         -0.003
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> base",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_base_camera_3",
+      "id": "fastener_camera_mount_3",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0105,
@@ -1179,19 +1341,21 @@
         -0.003
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> base",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_base_pi_0",
+      "id": "fastener_pi_mount_0",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         0.0115,
@@ -1199,19 +1363,21 @@
         0.024875
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
-      ]
+        0.707107
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_1",
+      "id": "fastener_pi_mount_1",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         0.0115,
@@ -1219,19 +1385,21 @@
         0.024875
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
-      ]
+        0.707107
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_2",
+      "id": "fastener_pi_mount_2",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         -0.0115,
@@ -1239,19 +1407,21 @@
         0.024875
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
-      ]
+        0.707107
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_3",
+      "id": "fastener_pi_mount_3",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         -0.0115,
@@ -1259,251 +1429,366 @@
         0.024875
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
         0.0,
-        0.0
-      ]
+        0.707107
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_left_rim_wheel_0",
-      "name": "M3 SHC",
+      "id": "fastener_controller_mount_0",
+      "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
-      "parent_body": "left_rim",
-      "mount_label": "wheel",
-      "mesh": "hardware_M3_shc.stl",
+      "parent_body": "base",
+      "mesh": "hardware_M2_shc.stl",
       "pos": [
-        -0.06865,
-        0.0,
+        0.014,
+        -0.0505,
         0.0
       ],
       "quat": [
-        1.0,
         0.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "controller mount -> base",
+      "mount_label": "controller"
     },
     {
-      "id": "fastener_left_rim_wheel_1",
+      "id": "fastener_controller_mount_1",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        0.014,
+        -0.0135,
+        0.0
+      ],
+      "quat": [
+        0.0,
+        0.707107,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "controller mount -> base",
+      "mount_label": "controller"
+    },
+    {
+      "id": "fastener_controller_mount_2",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.014,
+        -0.0505,
+        0.0
+      ],
+      "quat": [
+        0.0,
+        0.707107,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "controller mount -> base",
+      "mount_label": "controller"
+    },
+    {
+      "id": "fastener_controller_mount_3",
+      "name": "M2 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "base",
+      "mesh": "hardware_M2_shc.stl",
+      "pos": [
+        -0.014,
+        -0.0135,
+        0.0
+      ],
+      "quat": [
+        0.0,
+        0.707107,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "controller mount -> base",
+      "mount_label": "controller"
+    },
+    {
+      "id": "fastener_wheel_mount_0",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        -0.070225,
+        -0.075,
+        0.0,
+        0.00635
+      ],
+      "quat": [
+        -0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
+    },
+    {
+      "id": "fastener_wheel_mount_1",
+      "name": "M3 SHC",
+      "kind": "purchased",
+      "category": "fastener",
+      "parent_body": "left_rim",
+      "mesh": "hardware_M3_shc.stl",
+      "pos": [
+        -0.075,
         0.008271,
-        0.0
+        0.004775
       ],
       "quat": [
-        1.0,
+        -0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_left_rim_wheel_2",
+      "id": "fastener_wheel_mount_2",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        -0.079775,
+        -0.075,
         0.008271,
-        0.0
+        -0.004775
       ],
       "quat": [
-        1.0,
+        -0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_left_rim_wheel_3",
+      "id": "fastener_wheel_mount_3",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        -0.08135,
+        -0.075,
         0.0,
-        0.0
+        -0.00635
       ],
       "quat": [
-        1.0,
+        -0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_left_rim_wheel_4",
+      "id": "fastener_wheel_mount_4",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        -0.079775,
+        -0.075,
         -0.008271,
-        0.0
+        -0.004775
       ],
       "quat": [
-        1.0,
+        -0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_left_rim_wheel_5",
+      "id": "fastener_wheel_mount_5",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "left_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        -0.070225,
+        -0.075,
         -0.008271,
-        0.0
+        0.004775
       ],
       "quat": [
-        1.0,
+        -0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> left_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_0",
+      "id": "fastener_wheel_mount_0",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.08135,
+        0.075,
         0.0,
-        0.0
+        -0.00635
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_1",
+      "id": "fastener_wheel_mount_1",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.079775,
+        0.075,
         0.008271,
-        0.0
+        -0.004775
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_2",
+      "id": "fastener_wheel_mount_2",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.070225,
+        0.075,
         0.008271,
-        0.0
+        0.004775
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_3",
+      "id": "fastener_wheel_mount_3",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.06865,
+        0.075,
         0.0,
-        0.0
+        0.00635
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_4",
+      "id": "fastener_wheel_mount_4",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.070225,
+        0.075,
         -0.008271,
-        0.0
+        0.004775
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
-      "id": "fastener_right_rim_wheel_5",
+      "id": "fastener_wheel_mount_5",
       "name": "M3 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "right_rim",
-      "mount_label": "wheel",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
-        0.079775,
+        0.075,
         -0.008271,
-        0.0
+        -0.004775
       ],
       "quat": [
-        1.0,
+        0.707107,
         0.0,
-        0.0,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "wheel mount -> right_rim",
+      "mount_label": "wheel"
     },
     {
       "id": "wire_servo_bus_base_0",
@@ -1551,94 +1836,290 @@
       "mesh": "wire_servo_bus_base_4.stl"
     },
     {
-      "id": "wire_servo_bus_base_5",
+      "id": "wire_power_servo_base_0",
+      "name": "power_servo",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_servo_base_0.stl"
+    },
+    {
+      "id": "wire_power_servo_base_1",
+      "name": "power_servo",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_servo_base_1.stl"
+    },
+    {
+      "id": "wire_power_pi_base_0",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_0.stl"
+    },
+    {
+      "id": "wire_power_pi_base_1",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_1.stl"
+    },
+    {
+      "id": "wire_power_pi_base_2",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_2.stl"
+    },
+    {
+      "id": "wire_power_pi_base_3",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_3.stl"
+    },
+    {
+      "id": "wire_power_pi_base_4",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_4.stl"
+    },
+    {
+      "id": "wire_power_pi_base_5",
+      "name": "power_pi",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "power",
+      "mesh": "wire_power_pi_base_5.stl"
+    },
+    {
+      "id": "wire_pi_usb_data_base_0",
+      "name": "pi_usb_data",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "usb",
+      "mesh": "wire_pi_usb_data_base_0.stl"
+    },
+    {
+      "id": "wire_pi_usb_data_base_1",
+      "name": "pi_usb_data",
+      "kind": "fabricated",
+      "category": "wire",
+      "parent_body": "base",
+      "bus_type": "usb",
+      "mesh": "wire_pi_usb_data_base_1.stl"
+    },
+    {
+      "id": "wire_stub_base_battery_power",
+      "name": "power",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0,
+        0.0365,
+        -0.0303
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "bus_type": "power",
+      "connector_type": "xt30",
+      "color": [
+        0.9,
+        0.3,
+        0.25,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_battery_balance",
+      "name": "balance",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.01,
+        0.0365,
+        -0.0303
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "bus_type": "balance",
+      "connector_type": "jst_xh_3pin",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_camera_csi",
+      "name": "csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0,
+        0.04845,
+        0.0245
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bus_type": "csi",
+      "connector_type": "csi_15pin",
+      "color": [
+        0.4,
+        0.73,
+        0.42,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_pi_usb_power",
+      "name": "usb_power",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0,
+        -0.045,
+        0.024875
+      ],
+      "quat": [
+        0.707107,
+        0.707107,
+        -0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_pi_usb_data",
+      "name": "usb_data",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0,
+        -0.0325,
+        0.024875
+      ],
+      "quat": [
+        0.707107,
+        0.707107,
+        -0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_controller_usb_c",
+      "name": "usb_c",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0165,
+        -0.0395,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.707107,
+        -0.0,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_controller_servo_bus",
       "name": "servo_bus",
       "kind": "fabricated",
       "category": "wire",
+      "wire_kind": "stub",
       "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0165,
+        -0.032,
+        -0.0125
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
       "bus_type": "uart_half_duplex",
-      "mesh": "wire_servo_bus_base_5.stl"
-    },
-    {
-      "id": "wire_power_base_0",
-      "name": "power",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "base",
-      "bus_type": "power",
-      "mesh": "wire_power_base_0.stl"
-    },
-    {
-      "id": "wire_power_base_1",
-      "name": "power",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "base",
-      "bus_type": "power",
-      "mesh": "wire_power_base_1.stl"
-    },
-    {
-      "id": "wire_power_base_2",
-      "name": "power",
-      "kind": "fabricated",
-      "category": "wire",
-      "parent_body": "base",
-      "bus_type": "power",
-      "mesh": "wire_power_base_2.stl"
-    }
-  ],
-  "assembly_steps": [
-    {
-      "step": 1,
-      "title": "base",
-      "body": "base",
-      "components": [
-        {
-          "label": "battery",
-          "component": "LiPo2S-1000"
-        },
-        {
-          "label": "camera",
-          "component": "OV5647"
-        },
-        {
-          "label": "pi",
-          "component": "RaspberryPiZero2W"
-        }
-      ],
-      "description": "Base structure \u2014 mount battery, camera, pi"
-    },
-    {
-      "step": 2,
-      "title": "left_rim",
-      "body": "left_rim",
-      "components": [
-        {
-          "label": "wheel",
-          "component": "Pololu 90x10mm Wheel"
-        }
-      ],
-      "servo": {
-        "joint": "left_wheel",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint left_wheel"
-    },
-    {
-      "step": 3,
-      "title": "right_rim",
-      "body": "right_rim",
-      "components": [
-        {
-          "label": "wheel",
-          "component": "Pololu 90x10mm Wheel"
-        }
-      ],
-      "servo": {
-        "joint": "right_wheel",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint right_wheel"
+      "connector_type": "5264_3pin",
+      "color": [
+        0.2,
+        0.6,
+        0.86,
+        1.0
+      ]
     }
   ],
   "ik_chains": [],
@@ -1670,6 +2151,17 @@
         0.0588,
         0.6,
         0.3765,
+        1.0
+      ],
+      "metallic": 0.0,
+      "roughness": 0.85,
+      "opacity": 1.0
+    },
+    "pcb_dark_green": {
+      "color": [
+        0.1373,
+        0.549,
+        0.1725,
         1.0
       ],
       "metallic": 0.0,

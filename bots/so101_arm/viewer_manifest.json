@@ -1,28 +1,5 @@
 {
   "bot_name": "so101_arm",
-  "assemblies": [
-    {
-      "name": "base",
-      "path": "base",
-      "bodies": [
-        "base"
-      ],
-      "sub_assemblies": []
-    },
-    {
-      "name": "arm",
-      "path": "arm",
-      "bodies": [
-        "turntable",
-        "upper_arm",
-        "forearm",
-        "wrist",
-        "wrist_roll",
-        "jaw"
-      ],
-      "sub_assemblies": []
-    }
-  ],
   "bodies": [
     {
       "name": "base",
@@ -1021,8 +998,8 @@
         0.334
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
       ],
@@ -1057,7 +1034,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0045,
@@ -1065,11 +1041,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_ear_1",
@@ -1077,7 +1056,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0125,
@@ -1085,11 +1063,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_ear_2",
@@ -1097,7 +1078,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0045,
@@ -1105,11 +1085,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_ear_3",
@@ -1117,7 +1100,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0125,
@@ -1125,11 +1107,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_ear_4",
@@ -1137,7 +1122,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0295,
@@ -1145,11 +1129,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_ear_5",
@@ -1157,7 +1144,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0295,
@@ -1165,11 +1151,14 @@
         -0.0025
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_horn_0",
@@ -1177,7 +1166,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.007,
@@ -1185,11 +1173,14 @@
         0.031
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_horn_1",
@@ -1197,7 +1188,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.007,
@@ -1205,11 +1195,14 @@
         0.031
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_horn_2",
@@ -1217,7 +1210,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1225,11 +1217,14 @@
         0.031
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_horn_3",
@@ -1237,7 +1232,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1245,11 +1239,14 @@
         0.031
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_rear_0",
@@ -1257,7 +1254,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.007,
@@ -1269,7 +1265,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_rear_1",
@@ -1277,7 +1276,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.007,
@@ -1289,7 +1287,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_rear_2",
@@ -1297,7 +1298,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1309,7 +1309,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_pan_rear_3",
@@ -1317,7 +1320,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "joint": "shoulder_pan",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1329,7 +1331,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_pan"
     },
     {
       "id": "fastener_shoulder_lift_ear_0",
@@ -1337,7 +1342,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1347,9 +1351,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_ear_1",
@@ -1357,7 +1364,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1367,9 +1373,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_ear_2",
@@ -1377,7 +1386,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1387,9 +1395,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_ear_3",
@@ -1397,7 +1408,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1407,9 +1417,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_ear_4",
@@ -1417,7 +1430,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1427,9 +1439,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_ear_5",
@@ -1437,7 +1452,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1447,9 +1461,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_horn_0",
@@ -1457,7 +1474,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1467,9 +1483,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_horn_1",
@@ -1477,7 +1496,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1487,9 +1505,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_horn_2",
@@ -1497,7 +1518,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1507,9 +1527,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_horn_3",
@@ -1517,7 +1540,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1527,9 +1549,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_rear_0",
@@ -1537,7 +1562,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1549,7 +1573,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_rear_1",
@@ -1557,7 +1584,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1569,7 +1595,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_rear_2",
@@ -1577,7 +1606,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1589,7 +1617,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_shoulder_lift_rear_3",
@@ -1597,7 +1628,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "turntable",
-      "joint": "shoulder_lift",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1609,7 +1639,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "shoulder_lift"
     },
     {
       "id": "fastener_elbow_flex_ear_0",
@@ -1617,7 +1650,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1627,9 +1659,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_ear_1",
@@ -1637,7 +1672,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1647,9 +1681,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_ear_2",
@@ -1657,7 +1694,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1667,9 +1703,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_ear_3",
@@ -1677,7 +1716,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1687,9 +1725,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_ear_4",
@@ -1697,7 +1738,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1707,9 +1747,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_ear_5",
@@ -1717,7 +1760,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1727,9 +1769,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_horn_0",
@@ -1737,7 +1782,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1747,9 +1791,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_horn_1",
@@ -1757,7 +1804,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1767,9 +1813,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_horn_2",
@@ -1777,7 +1826,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1787,9 +1835,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_horn_3",
@@ -1797,7 +1848,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -1807,9 +1857,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_rear_0",
@@ -1817,7 +1870,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1829,7 +1881,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_rear_1",
@@ -1837,7 +1892,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1849,7 +1903,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_rear_2",
@@ -1857,7 +1914,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1869,7 +1925,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_elbow_flex_rear_3",
@@ -1877,7 +1936,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "upper_arm",
-      "joint": "elbow_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -1889,7 +1947,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "elbow_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_0",
@@ -1897,7 +1958,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1907,9 +1967,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_1",
@@ -1917,7 +1980,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1927,9 +1989,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_2",
@@ -1937,7 +2002,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1947,9 +2011,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_3",
@@ -1957,7 +2024,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1967,9 +2033,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_4",
@@ -1977,7 +2046,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -1987,9 +2055,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_ear_5",
@@ -1997,7 +2068,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2007,9 +2077,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_horn_0",
@@ -2017,7 +2090,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2027,9 +2099,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_horn_1",
@@ -2037,7 +2112,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2047,9 +2121,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_horn_2",
@@ -2057,7 +2134,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2067,9 +2143,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_horn_3",
@@ -2077,7 +2156,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2087,9 +2165,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_rear_0",
@@ -2097,7 +2178,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2109,7 +2189,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_rear_1",
@@ -2117,7 +2200,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2129,7 +2211,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_rear_2",
@@ -2137,7 +2222,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2149,7 +2233,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_flex_rear_3",
@@ -2157,7 +2244,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "forearm",
-      "joint": "wrist_flex",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2169,7 +2255,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_flex"
     },
     {
       "id": "fastener_wrist_roll_ear_0",
@@ -2177,7 +2266,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0045,
@@ -2185,11 +2273,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_ear_1",
@@ -2197,7 +2288,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0125,
@@ -2205,11 +2295,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_ear_2",
@@ -2217,7 +2310,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         0.0045,
@@ -2225,11 +2317,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_ear_3",
@@ -2237,7 +2332,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0125,
@@ -2245,11 +2339,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_ear_4",
@@ -2257,7 +2354,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0295,
@@ -2265,11 +2361,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_ear_5",
@@ -2277,7 +2376,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0295,
@@ -2285,11 +2383,14 @@
         0.3005
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_horn_0",
@@ -2297,7 +2398,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.007,
@@ -2305,11 +2405,14 @@
         0.334
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_horn_1",
@@ -2317,7 +2420,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.007,
@@ -2325,11 +2427,14 @@
         0.334
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_horn_2",
@@ -2337,7 +2442,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2345,11 +2449,14 @@
         0.334
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_horn_3",
@@ -2357,7 +2464,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2365,11 +2471,14 @@
         0.334
       ],
       "quat": [
-        1.0,
         0.0,
         0.0,
+        -1.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_rear_0",
@@ -2377,7 +2486,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.007,
@@ -2389,7 +2497,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_rear_1",
@@ -2397,7 +2508,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.007,
@@ -2409,7 +2519,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_rear_2",
@@ -2417,7 +2530,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2429,7 +2541,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_wrist_roll_rear_3",
@@ -2437,7 +2552,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist",
-      "joint": "wrist_roll",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2449,7 +2563,10 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "wrist_roll"
     },
     {
       "id": "fastener_gripper_ear_0",
@@ -2457,7 +2574,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2467,9 +2583,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_ear_1",
@@ -2477,7 +2596,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2487,9 +2605,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_ear_2",
@@ -2497,7 +2618,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2507,9 +2627,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_ear_3",
@@ -2517,7 +2640,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2527,9 +2649,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_ear_4",
@@ -2537,7 +2662,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2547,9 +2671,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_ear_5",
@@ -2557,7 +2684,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M3_shc.stl",
       "pos": [
         -0.0335,
@@ -2567,9 +2693,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "bracket ear -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_horn_0",
@@ -2577,7 +2706,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2587,9 +2715,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_horn_1",
@@ -2597,7 +2728,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2607,9 +2737,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_horn_2",
@@ -2617,7 +2750,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2627,9 +2759,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_horn_3",
@@ -2637,7 +2772,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0,
@@ -2647,9 +2781,12 @@
       "quat": [
         0.707107,
         0.0,
-        0.707107,
+        -0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "coupler -> horn",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_rear_0",
@@ -2657,7 +2794,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2669,7 +2805,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_rear_1",
@@ -2677,7 +2816,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2689,7 +2827,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_rear_2",
@@ -2697,7 +2838,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2709,7 +2849,10 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "gripper"
     },
     {
       "id": "fastener_gripper_rear_3",
@@ -2717,7 +2860,6 @@
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "joint": "gripper",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.032,
@@ -2729,15 +2871,17 @@
         0.0,
         0.707107,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "rear horn -> servo case",
+      "joint": "gripper"
     },
     {
-      "id": "fastener_base_pi_0",
+      "id": "fastener_pi_mount_0",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         -0.029,
@@ -2749,15 +2893,17 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_1",
+      "id": "fastener_pi_mount_1",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         0.029,
@@ -2769,15 +2915,17 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_2",
+      "id": "fastener_pi_mount_2",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         -0.029,
@@ -2789,15 +2937,17 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_base_pi_3",
+      "id": "fastener_pi_mount_3",
       "name": "M2.5 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "base",
-      "mount_label": "pi",
       "mesh": "hardware_M2.5_shc.stl",
       "pos": [
         0.029,
@@ -2809,15 +2959,17 @@
         0.0,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "pi mount -> base",
+      "mount_label": "pi"
     },
     {
-      "id": "fastener_wrist_roll_camera_0",
+      "id": "fastener_camera_mount_0",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0105,
@@ -2825,19 +2977,21 @@
         0.3435
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> wrist_roll",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_wrist_roll_camera_1",
+      "id": "fastener_camera_mount_1",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0105,
@@ -2845,19 +2999,21 @@
         0.3435
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> wrist_roll",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_wrist_roll_camera_2",
+      "id": "fastener_camera_mount_2",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         -0.0105,
@@ -2865,19 +3021,21 @@
         0.331
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> wrist_roll",
+      "mount_label": "camera"
     },
     {
-      "id": "fastener_wrist_roll_camera_3",
+      "id": "fastener_camera_mount_3",
       "name": "M2 SHC",
       "kind": "purchased",
       "category": "fastener",
       "parent_body": "wrist_roll",
-      "mount_label": "camera",
       "mesh": "hardware_M2_shc.stl",
       "pos": [
         0.0105,
@@ -2885,11 +3043,14 @@
         0.331
       ],
       "quat": [
-        1.0,
-        0.0,
+        0.707107,
+        -0.707107,
         0.0,
         0.0
-      ]
+      ],
+      "material": "steel",
+      "context": "camera mount -> wrist_roll",
+      "mount_label": "camera"
     },
     {
       "id": "wire_servo_bus_base_0",
@@ -3070,90 +3231,146 @@
       "parent_body": "base",
       "bus_type": "power",
       "mesh": "wire_power_base_1.stl"
-    }
-  ],
-  "assembly_steps": [
+    },
     {
-      "step": 1,
-      "title": "base",
-      "body": "base",
-      "components": [
-        {
-          "label": "pi",
-          "component": "RaspberryPiZero2W"
-        },
-        {
-          "label": "battery",
-          "component": "LiPo2S-1000"
-        }
+      "id": "wire_stub_base_pi_usb_power",
+      "name": "usb_power",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.045,
+        0.0,
+        0.0
       ],
-      "description": "Base structure \u2014 mount pi, battery"
-    },
-    {
-      "step": 2,
-      "title": "turntable",
-      "body": "turntable",
-      "servo": {
-        "joint": "shoulder_pan",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint shoulder_pan"
-    },
-    {
-      "step": 3,
-      "title": "upper_arm",
-      "body": "upper_arm",
-      "servo": {
-        "joint": "shoulder_lift",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint shoulder_lift"
-    },
-    {
-      "step": 4,
-      "title": "forearm",
-      "body": "forearm",
-      "servo": {
-        "joint": "elbow_flex",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint elbow_flex"
-    },
-    {
-      "step": 5,
-      "title": "wrist",
-      "body": "wrist",
-      "servo": {
-        "joint": "wrist_flex",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint wrist_flex"
-    },
-    {
-      "step": 6,
-      "title": "wrist_roll",
-      "body": "wrist_roll",
-      "components": [
-        {
-          "label": "camera",
-          "component": "PiCamera2"
-        }
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
       ],
-      "servo": {
-        "joint": "wrist_roll",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint wrist_roll"
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
     },
     {
-      "step": 7,
-      "title": "jaw",
-      "body": "jaw",
-      "servo": {
-        "joint": "gripper",
-        "model": "STS3215"
-      },
-      "description": "Attach via STS3215 at joint gripper"
+      "id": "wire_stub_base_pi_usb_data",
+      "name": "usb_data",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        -0.0325,
+        0.0,
+        0.0
+      ],
+      "quat": [
+        0.707107,
+        0.0,
+        -0.707107,
+        0.0
+      ],
+      "bus_type": "usb",
+      "connector_type": "usb_c",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_battery_power",
+      "name": "power",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0365,
+        0.0,
+        -0.0283
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "bus_type": "power",
+      "connector_type": "xt30",
+      "color": [
+        0.9,
+        0.3,
+        0.25,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_base_battery_balance",
+      "name": "balance",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "base",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0365,
+        0.01,
+        -0.0283
+      ],
+      "quat": [
+        0.0,
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "bus_type": "balance",
+      "connector_type": "jst_xh_3pin",
+      "color": [
+        0.53,
+        0.53,
+        0.53,
+        1.0
+      ]
+    },
+    {
+      "id": "wire_stub_wrist_roll_camera_csi",
+      "name": "csi",
+      "kind": "fabricated",
+      "category": "wire",
+      "wire_kind": "stub",
+      "parent_body": "wrist_roll",
+      "mesh": "wire_stub.stl",
+      "pos": [
+        0.0,
+        0.01295,
+        0.0245
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bus_type": "csi",
+      "connector_type": "csi_15pin",
+      "color": [
+        0.4,
+        0.73,
+        0.42,
+        1.0
+      ]
     }
   ],
   "ik_chains": [

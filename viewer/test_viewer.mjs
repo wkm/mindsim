@@ -243,7 +243,7 @@ async function main() {
     assert(tabs.length === 4, `Four mode tabs present (${tabs.length})`);
 
     // Screenshot each mode
-    const modeNames = ['explore', 'joint', 'assembly', 'ik'];
+    const modeNames = ['explore', 'joint', 'ik'];
     for (const mode of modeNames) {
       await page.click(`.mode-tab[data-mode="${mode}"]`);
       await page.waitForTimeout(500);
@@ -326,41 +326,6 @@ async function main() {
       assert(text.trim() === '0.0°', `After reset, ${sliderId} shows "${text}" (expect "0.0°")`);
     }
     await page.screenshot({ path: path.join(screenshotDir, 'joint_reset.png') });
-
-    // =================================================================
-    // Assembly mode: full step-through (7 steps)
-    // =================================================================
-    console.log('\n--- Assembly Step-Through ---');
-    await page.click('.mode-tab[data-mode="assembly"]');
-    await page.waitForTimeout(500);
-
-    // Go back to step 1 via slider
-    await page.$eval('#asm-step-slider', el => { el.value = 0; el.dispatchEvent(new Event('input')); });
-    await page.waitForTimeout(300);
-
-    const initialStepText = await page.textContent('#asm-step-val');
-    assert(initialStepText.includes('1 / 7'), `Assembly starts at step 1 (got "${initialStepText}")`);
-
-    let prevAsmShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_step_1.png') });
-
-    for (let step = 2; step <= 7; step++) {
-      await page.click('#asm-next-btn');
-      await page.waitForTimeout(300);
-
-      const stepText = await page.textContent('#asm-step-val');
-      assert(stepText.includes(`${step} / 7`), `Assembly step ${step} counter (got "${stepText}")`);
-
-      const currentShot = await page.screenshot({ path: path.join(screenshotDir, `assembly_step_${step}.png`) });
-      const isDifferent = !prevAsmShot.equals(currentShot);
-      assert(isDifferent, `Assembly step ${step} differs from step ${step - 1}`);
-      prevAsmShot = currentShot;
-    }
-
-    // Assembly Show All
-    await page.click('#asm-show-all-btn');
-    await page.waitForTimeout(300);
-    const showAllShot = await page.screenshot({ path: path.join(screenshotDir, 'assembly_show_all.png') });
-    assert(showAllShot.length > 30000, `Assembly "Show All" renders full robot (${(showAllShot.length/1024).toFixed(0)} KB)`);
 
     // =================================================================
     // IK mode: body selection

@@ -37,6 +37,7 @@
 | 5264_3pin | 12 |
 | csi_15pin | 1 |
 | jst_xh_3pin | 1 |
+| usb_c | 2 |
 | xt30 | 1 |
 
 ## Wire Lengths
