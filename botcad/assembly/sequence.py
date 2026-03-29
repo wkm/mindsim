@@ -41,22 +41,6 @@ class AssemblyOp:
     prerequisites: tuple[int, ...]
     description: str
 
-    def __repr__(self) -> str:
-        lines = [
-            "AssemblyOp(",
-            f"  step={self.step},",
-            f"  action={self.action!r},",
-            f"  target={self.target!r},",
-            f"  body={self.body!r},",
-            f"  tool={self.tool!r},",
-            f"  approach_axis={self.approach_axis},",
-            f"  angle={self.angle},",
-            f"  prerequisites={self.prerequisites},",
-            f"  description={self.description!r},",
-            ")",
-        ]
-        return "\n".join(lines)
-
 
 @dataclass(frozen=True)
 class AssemblyState:

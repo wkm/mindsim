@@ -62,7 +62,7 @@ if (cadstepsParam) {
   const dfmTab = document.createElement('button');
   dfmTab.className = 'btn-ghost';
   dfmTab.dataset.tab = 'dfm';
-  dfmTab.textContent = 'DFM';
+  dfmTab.textContent = 'Assembly';
   modeTabs.appendChild(dfmTab);
 
   const simTab = document.createElement('button');
@@ -168,8 +168,8 @@ if (cadstepsParam) {
             cameraType: 'perspective',
             grid: true,
           });
-          const { initDFMViewer } = await import('./dfm-viewer.ts');
-          dfmHandle = await initDFMViewer(botName, dfmViewport, sidePanel);
+          const { initAssemblyViewer } = await import('./assembly-viewer.ts');
+          dfmHandle = await initAssemblyViewer(botName, dfmViewport, sidePanel);
         } else {
           dfmViewport!.setVisible(true);
           dfmHandle.resume();

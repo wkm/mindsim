@@ -1001,6 +1001,7 @@ def get_assembly_sequence(bot: str):
     from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
     from botcad.assembly.tools import TOOL_LIBRARY
     from botcad.emit.viewer import build_viewer_manifest
+    from botcad.formatting import pretty_repr
 
     seq = build_assembly_sequence(bot_obj)
     manifest = build_viewer_manifest(bot_obj, packing=bot_obj.packing_result)
@@ -1151,7 +1152,7 @@ def get_assembly_sequence(bot: str):
             "angle": op.angle,
             "prerequisites": list(op.prerequisites),
             "description": op.description,
-            "repr": repr(op),
+            "repr": pretty_repr(repr(op)),
             "meshes": _meshes_for_op(op),
         }
         ops.append(op_dict)
@@ -1371,6 +1372,13 @@ def get_bot_mesh(bot: str, mesh_name: str):
     )
 
 
+def _pretty_repr_cad(s: str) -> str:
+    """Lazy-import pretty_repr for cad-steps endpoint."""
+    from botcad.formatting import pretty_repr
+
+    return pretty_repr(s)
+
+
 @app.get("/api/bots/{bot}/body/{body}/cad-steps")
 def get_cad_steps_meta(bot: str, body: str):
     """Return JSON metadata for all CAD construction steps of a body."""
@@ -1392,7 +1400,7 @@ def get_cad_steps_meta(bot: str, body: str):
                 "op": s.op,
                 "has_tool": s.tool is not None,
                 "script": s.script,
-                "repr": s.ir_repr,
+                "repr": _pretty_repr_cad(s.ir_repr),
             }
             for i, s in enumerate(steps)
         ],
