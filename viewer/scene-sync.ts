@@ -105,27 +105,15 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
       } else {
         child.visible = true;
 
-        if (targetOpacity < 1.0 && botScene.transparent) {
-          // Transparent mode — use alphaHash for order-independent
-          // transparency. Standard alpha blending breaks with many
-          // overlapping objects (depthWrite off = sort glitches,
-          // depthWrite on = inner objects occluded).
-          mat.opacity = targetOpacity;
-          mat.alphaHash = true;
-          mat.transparent = false; // render in opaque pass
-          mat.depthWrite = true;
-        } else if (targetOpacity < 1.0) {
-          // Ghosted — very low opacity, standard blending is fine
+        if (targetOpacity < 1.0) {
           mat.opacity = targetOpacity;
           mat.transparent = true;
-          mat.alphaHash = false;
           mat.depthWrite = false;
         } else {
           // Normal — restore originals
           mat.opacity = origOpacity;
           mat.transparent = mat[ORIG_TRANSPARENT] ?? origOpacity < 1.0;
           mat.depthWrite = mat[ORIG_DEPTH_WRITE] ?? true;
-          mat.alphaHash = mat[ORIG_ALPHA_HASH] ?? false;
         }
 
         // Emissive highlight (structural meshes only)

@@ -1504,14 +1504,13 @@ export class Viewport3D {
           mat._origTransparent = mat.transparent;
           mat._origAlphaHash = mat.alphaHash;
         }
-        // alphaHash: order-independent stochastic transparency
         mat.opacity = mat._origOpacity * 0.35;
-        mat.alphaHash = true;
-        mat.transparent = false;
+        mat.transparent = true;
+        mat.depthWrite = false;
       } else if (mat._origOpacity !== undefined) {
         mat.opacity = mat._origOpacity;
         mat.transparent = mat._origTransparent;
-        mat.alphaHash = mat._origAlphaHash ?? false;
+        mat.depthWrite = mat._origDepthWrite ?? true;
       }
     });
   }
