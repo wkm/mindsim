@@ -30,14 +30,19 @@ const ORIG_TRANSPARENT = Symbol('orig-transparent');
 /** Original depthWrite flag stored on first clone. */
 const ORIG_DEPTH_WRITE = Symbol('orig-depth-write');
 
+/** Original alphaHash flag stored on first clone. */
+const ORIG_ALPHA_HASH = Symbol('orig-alpha-hash');
+
 interface SyncedMaterial extends THREE.Material {
   [SYNCED]?: boolean;
   [ORIG_OPACITY]?: number;
   [ORIG_TRANSPARENT]?: boolean;
   [ORIG_DEPTH_WRITE]?: boolean;
+  [ORIG_ALPHA_HASH]?: boolean;
   opacity: number;
   transparent: boolean;
   depthWrite: boolean;
+  alphaHash: boolean;
   emissive?: THREE.Color;
 }
 
@@ -53,6 +58,7 @@ function ensureCloned(mesh: THREE.Mesh): SyncedMaterial {
     mat[ORIG_OPACITY] = mat.opacity;
     mat[ORIG_TRANSPARENT] = mat.transparent;
     mat[ORIG_DEPTH_WRITE] = mat.depthWrite;
+    mat[ORIG_ALPHA_HASH] = mat.alphaHash;
     mesh.material = mat;
   }
   return mat;
@@ -99,20 +105,27 @@ export function sync(botScene: BotScene, bodies: Record<number, THREE.Group>): v
       } else {
         child.visible = true;
 
-        if (targetOpacity < 1.0) {
-          // Semi-transparent (ghosted or transparent mode)
+        if (targetOpacity < 1.0 && botScene.transparent) {
+          // Transparent mode — use alphaHash for order-independent
+          // transparency. Standard alpha blending breaks with many
+          // overlapping objects (depthWrite off = sort glitches,
+          // depthWrite on = inner objects occluded).
+          mat.opacity = targetOpacity;
+          mat.alphaHash = true;
+          mat.transparent = false; // render in opaque pass
+          mat.depthWrite = true;
+        } else if (targetOpacity < 1.0) {
+          // Ghosted — very low opacity, standard blending is fine
           mat.opacity = targetOpacity;
           mat.transparent = true;
-          // Only disable depthWrite for very low opacity (ghosting).
-          // Transparent mode (0.35/0.6) keeps depthWrite on — with
-          // depthWrite off, Three.js sorts by object center distance
-          // which causes objects to snap in/out of view as camera rotates.
-          mat.depthWrite = targetOpacity > 0.1;
+          mat.alphaHash = false;
+          mat.depthWrite = false;
         } else {
           // Normal — restore originals
           mat.opacity = origOpacity;
           mat.transparent = mat[ORIG_TRANSPARENT] ?? origOpacity < 1.0;
           mat.depthWrite = mat[ORIG_DEPTH_WRITE] ?? true;
+          mat.alphaHash = mat[ORIG_ALPHA_HASH] ?? false;
         }
 
         // Emissive highlight (structural meshes only)

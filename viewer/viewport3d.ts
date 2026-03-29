@@ -1502,16 +1502,16 @@ export class Viewport3D {
         if (mat._origOpacity === undefined) {
           mat._origOpacity = mat.opacity;
           mat._origTransparent = mat.transparent;
-          mat._origDepthWrite = mat.depthWrite;
+          mat._origAlphaHash = mat.alphaHash;
         }
+        // alphaHash: order-independent stochastic transparency
         mat.opacity = mat._origOpacity * 0.35;
-        mat.transparent = true;
-        // Keep depthWrite on — disabling it causes sort-order glitches
-        mat.depthWrite = true;
+        mat.alphaHash = true;
+        mat.transparent = false;
       } else if (mat._origOpacity !== undefined) {
         mat.opacity = mat._origOpacity;
         mat.transparent = mat._origTransparent;
-        mat.depthWrite = mat._origDepthWrite;
+        mat.alphaHash = mat._origAlphaHash ?? false;
       }
     });
   }
