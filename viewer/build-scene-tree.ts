@@ -195,6 +195,9 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
         asmChildren.push(subAsmId);
       }
 
+      // Attachment children of the child body
+      buildAttachmentChildren(childBody, asmId, asmChildren);
+
       // Wire group for child body
       buildWireGroup(childBody, asmId, asmChildren);
     }
@@ -229,6 +232,31 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
     return asmId;
   }
 
+  // Process attachment children (rigid bodies without joints) for a given body
+  function buildAttachmentChildren(body: ManifestBody, parentId: string, parentChildren: string[]): void {
+    const attachments = idx.attachmentChildrenOf[body.name] || [];
+    for (const attachedBody of attachments) {
+      const bodyId = buildBodyNode(attachedBody, parentId);
+      parentChildren.push(bodyId);
+
+      // Components mounted on attached body
+      buildMountedComponents(attachedBody, parentId, parentChildren);
+
+      // Joints from attached body create nested sub-assemblies
+      const childJoints = idx.childJointsOf[attachedBody.name] || [];
+      for (const childJoint of childJoints) {
+        const subAsmId = buildJointAssembly(childJoint, parentId);
+        parentChildren.push(subAsmId);
+      }
+
+      // Recurse: attachment children of the attached body
+      buildAttachmentChildren(attachedBody, parentId, parentChildren);
+
+      // Wire group for attached body
+      buildWireGroup(attachedBody, parentId, parentChildren);
+    }
+  }
+
   // Build auto-generated assembly tree from kinematic structure
   function buildAutoAssemblyTree(rootBody: ManifestBody): string {
     const asmId = `assembly:${manifest.bot_name}`;
@@ -247,6 +275,9 @@ export function buildSceneTree(manifest: ViewerManifest): SceneTree {
       const subAsmId = buildJointAssembly(joint, asmId);
       asmChildren.push(subAsmId);
     }
+
+    // Attachment children (rigid bodies without joints)
+    buildAttachmentChildren(rootBody, asmId, asmChildren);
 
     // Wire group for root body
     buildWireGroup(rootBody, asmId, asmChildren);

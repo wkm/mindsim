@@ -115,6 +115,8 @@ export interface ViewerManifest {
 export interface ManifestIndex {
   bodiesByName: Record<string, ManifestBody>;
   childJointsOf: Record<string, ManifestJoint[]>;
+  /** Structural bodies attached to a parent without a joint (rigid attachments). */
+  attachmentChildrenOf: Record<string, ManifestBody[]>;
   servosByJoint: Record<string, ManifestBody[]>;
   hornsByJoint: Record<string, ManifestBody[]>;
   mountsByBody: Record<string, ManifestMount[]>;
@@ -134,6 +136,18 @@ export function indexManifest(manifest: ViewerManifest): ManifestIndex {
   for (const j of manifest.joints) {
     if (!childJointsOf[j.parent_body]) childJointsOf[j.parent_body] = [];
     childJointsOf[j.parent_body].push(j);
+  }
+
+  // Bodies that are joint children (so we can exclude them from attachment children)
+  const jointChildNames = new Set(manifest.joints.map((j) => j.child_body));
+
+  // Attachment children: structural bodies with a parent, not reached via a joint
+  const attachmentChildrenOf: Record<string, ManifestBody[]> = {};
+  for (const b of manifest.bodies) {
+    if (b.parent && b.role === 'structure' && !jointChildNames.has(b.name)) {
+      if (!attachmentChildrenOf[b.parent]) attachmentChildrenOf[b.parent] = [];
+      attachmentChildrenOf[b.parent].push(b);
+    }
   }
 
   const servosByJoint: Record<string, ManifestBody[]> = {};
@@ -166,5 +180,14 @@ export function indexManifest(manifest: ViewerManifest): ManifestIndex {
     }
   }
 
-  return { bodiesByName, childJointsOf, servosByJoint, hornsByJoint, mountsByBody, partsByBody, partsByJoint };
+  return {
+    bodiesByName,
+    childJointsOf,
+    attachmentChildrenOf,
+    servosByJoint,
+    hornsByJoint,
+    mountsByBody,
+    partsByBody,
+    partsByJoint,
+  };
 }
