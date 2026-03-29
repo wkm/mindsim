@@ -9,12 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from build123d import Solid
+from build123d import Solid
 
-    from botcad.units import Meters
+from botcad.units import Meters
 
 
 class ToolKind(Enum):

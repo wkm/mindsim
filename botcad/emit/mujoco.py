@@ -12,7 +12,6 @@ Follows existing conventions:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
@@ -29,10 +28,7 @@ from botcad.component import Vec3 as Vec3Type
 from botcad.fasteners import fastener_key as _hw_key
 from botcad.fasteners import fastener_stl_stem as _hw_name
 from botcad.geometry import Pose, Quat, fastener_pose, rotate_vec
-from botcad.skeleton import BaseType, BodyKind
-
-if TYPE_CHECKING:
-    from botcad.skeleton import Body, Bot, Joint
+from botcad.skeleton import BaseType, Body, BodyKind, Bot, Joint
 
 
 def _relative_pos(pb_world: Vec3Type, parent_world: Vec3Type) -> Vec3Type:

@@ -17,23 +17,18 @@ import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from botcad.bracket import (
     horn_disc_params,
     servo_solid,
 )
 from botcad.cad_utils import as_solid as _as_solid
-from botcad.component import BusType, ComponentKind
+from botcad.component import BearingSpec, BusType, Component, ComponentKind, Vec3
 from botcad.geometry import quat_to_euler
-from botcad.skeleton import BodyKind
+from botcad.ids import BodyId
+from botcad.skeleton import Body, BodyKind, Bot, Joint
 
 log = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from botcad.component import BearingSpec, Component, Vec3
-    from botcad.ids import BodyId
-    from botcad.skeleton import Body, Bot, Joint
 
 
 def _apply_mount_rotation(solid, mount, bot=None):

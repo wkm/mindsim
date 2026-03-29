@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import WireRef
-from botcad.assembly.sequence import AssemblyAction
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.ids import BodyId
-    from botcad.skeleton import Body, Bot
+from botcad.assembly.sequence import AssemblyAction, AssemblySequence
+from botcad.ids import BodyId
+from botcad.skeleton import Body, Bot
 
 
 def build_body_map(bot: Bot) -> dict[BodyId, Body]:

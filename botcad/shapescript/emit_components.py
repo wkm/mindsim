@@ -5,23 +5,18 @@ All geometry uses native ShapeScript ops — no PrebuiltOps.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from botcad.shapescript.ops import ALIGN_MIN_Z, Align3
+from botcad.component import (
+    BatterySpec,
+    BearingSpec,
+    BusType,
+    CameraSpec,
+    ServoSpec,
+)
+from botcad.connectors import ConnectorSpec
+from botcad.fasteners import FastenerSpec
+from botcad.shapescript.ops import ALIGN_MIN_Z, Align3, ShapeRef
 from botcad.shapescript.program import MultiMaterialResult, ShapeScriptBuilder
-
-if TYPE_CHECKING:
-    from botcad.component import (
-        BatterySpec,
-        BearingSpec,
-        BusType,
-        CameraSpec,
-        ServoSpec,
-    )
-    from botcad.connectors import ConnectorSpec
-    from botcad.fasteners import FastenerSpec
-    from botcad.shapescript.ops import ShapeRef
-    from botcad.skeleton import Body, Joint
+from botcad.skeleton import Body, Joint
 
 
 def camera_script(spec: CameraSpec) -> ShapeScriptBuilder:

@@ -12,10 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from botcad.shapescript.program import ShapeScriptBuilder
+from typing import Any
 
 from botcad.shapescript.ops import (
     Align3,
@@ -43,6 +40,7 @@ from botcad.shapescript.ops import (
     RegularPolygonExtrudeOp,
     SphereOp,
 )
+from botcad.shapescript.program import ShapeScriptBuilder
 from botcad.shapescript.tags import TagRegistry
 
 log = logging.getLogger(__name__)

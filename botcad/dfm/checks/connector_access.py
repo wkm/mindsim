@@ -10,18 +10,14 @@ robust, catches the common case of connectors near body walls.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from botcad.assembly.refs import ComponentRef
+from botcad.assembly.sequence import AssemblySequence
+from botcad.component import Vec3, WirePort
 from botcad.connectors import connector_spec
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
 from botcad.dfm.utils import build_body_map
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.component import Vec3, WirePort
-    from botcad.ids import BodyId
-    from botcad.skeleton import Body, Bot, Joint, Mount
+from botcad.ids import BodyId
+from botcad.skeleton import Body, Bot, Joint, Mount
 
 # Clearance thresholds (meters)
 MATING_AXIAL_CLEARANCE = 0.015  # 15mm along plug insertion direction

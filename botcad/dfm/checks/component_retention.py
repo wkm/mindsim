@@ -8,17 +8,12 @@ tilts or experiences acceleration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from botcad.assembly.refs import ComponentRef, FastenerRef
-from botcad.assembly.sequence import AssemblyAction
+from botcad.assembly.sequence import AssemblyAction, AssemblySequence
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
 from botcad.dfm.utils import build_body_map
 from botcad.ids import BodyId
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.skeleton import Body, Bot
+from botcad.skeleton import Body, Bot
 
 
 class ComponentRetention(DFMCheck):

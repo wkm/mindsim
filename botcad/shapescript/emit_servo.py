@@ -7,13 +7,9 @@ No PrebuiltOps.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+from botcad.component import ServoSpec
 from botcad.shapescript.ops import Align3
 from botcad.shapescript.program import ShapeScriptBuilder
-
-if TYPE_CHECKING:
-    from botcad.component import ServoSpec
 
 
 def servo_script(servo: ServoSpec) -> ShapeScriptBuilder:

@@ -9,14 +9,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import ComponentRef, FastenerRef, WireRef
+from botcad.assembly.sequence import AssemblySequence
 from botcad.ids import BodyId, JointId
-
-if TYPE_CHECKING:
-    from botcad.assembly.sequence import AssemblySequence
-    from botcad.skeleton import Bot
+from botcad.skeleton import Bot
 
 
 class DFMSeverity(Enum):
