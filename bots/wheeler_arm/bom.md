@@ -10,7 +10,7 @@
 | RaspberryPiZero2W | 1 | 65.0 x 30.0 x 5.0 | 10 | pi |
 | LiPo2S-1000 | 1 | 73.0 x 35.0 x 18.0 | 55 | battery |
 | Pololu 90x10mm Wheel | 2 | 90.0 x 90.0 x 10.0 | 22 | wheel, wheel |
-| OV5647 | 1 | 25.0 x 24.0 x 9.0 | 3 | camera |
+| OV5647 | 1 | 23.9 x 25.0 x 9.0 | 3 | camera |
 | Structural (printed) | — | — | 272 | PLA/PETG frame |
 | **Total** | | | **714** | |
 
