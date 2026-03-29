@@ -254,28 +254,84 @@ function injectAssemblyStyles(): void {
       min-height: 0;
     }
 
-    /* Steps list */
-    .asm-step-row {
+    /* Steps table */
+    .asm-steps-table {
+      width: 100%;
+      border-collapse: collapse;
       font-family: "Input Mono Narrow", "SF Mono", "Menlo", monospace;
       font-size: 11px;
-      line-height: 1.6;
-      padding: 2px 12px;
-      cursor: pointer;
+      line-height: 1.5;
+      table-layout: fixed;
+    }
+    .asm-steps-table th {
+      position: sticky;
+      top: 0;
+      background: var(--card);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted-fg);
+      padding: 4px 6px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 1;
+    }
+    .asm-steps-table td {
+      padding: 2px 6px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       color: var(--muted-fg);
+      vertical-align: middle;
+    }
+    .asm-steps-table .col-step { width: 36px; text-align: right; }
+    .asm-steps-table .col-action { width: 72px; }
+    .asm-steps-table .col-body { width: 80px; }
+    .asm-steps-table .col-op { }
+    .asm-steps-table .col-warn { width: 28px; text-align: center; }
+    .asm-steps-table .col-err { width: 28px; text-align: center; }
+    .asm-steps-table tr {
+      cursor: pointer;
       border-left: 3px solid transparent;
       transition: background 0.08s;
     }
-    .asm-step-row:hover {
+    .asm-steps-table tr:hover {
       background: var(--secondary);
     }
-    .asm-step-row.selected {
+    .asm-steps-table tr.selected {
       background: var(--secondary);
       color: var(--foreground);
       border-left-color: var(--primary);
+    }
+    .asm-steps-table tr.selected td {
+      color: var(--foreground);
       font-weight: 600;
+    }
+    .asm-badge-warn {
+      display: inline-block;
+      min-width: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: #F5A623;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 16px;
+    }
+    .asm-badge-err {
+      display: inline-block;
+      min-width: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: #DB3737;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 16px;
     }
 
     /* DFM nav list */
@@ -508,13 +564,70 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
 
   function renderStepsList(): void {
     stepsListEl.innerHTML = '';
+    const table = document.createElement('table');
+    table.className = 'asm-steps-table';
+
+    // Header
+    const thead = document.createElement('thead');
+    thead.innerHTML = `<tr>
+      <th class="col-step">#</th>
+      <th class="col-action">Action</th>
+      <th class="col-body">Body</th>
+      <th class="col-op">Op</th>
+      <th class="col-warn" title="Warnings">W</th>
+      <th class="col-err" title="Errors">E</th>
+    </tr>`;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
     for (const op of assemblyOps) {
-      const row = document.createElement('div');
-      row.className = `asm-step-row${op.step === selectedStep ? ' selected' : ''}`;
-      row.innerHTML = highlightRepr(opSummary(op));
-      row.addEventListener('click', () => selectStep(op.step));
-      stepsListEl.appendChild(row);
+      const stepFindings = findingsForStep(op.step);
+      const errorCount = stepFindings.filter((f) => f.severity === 'error').length;
+      const warnCount = stepFindings.filter((f) => f.severity === 'warning').length;
+
+      const tr = document.createElement('tr');
+      tr.className = op.step === selectedStep ? 'selected' : '';
+      tr.dataset.step = String(op.step);
+
+      const tdStep = document.createElement('td');
+      tdStep.className = 'col-step';
+      tdStep.textContent = String(op.step);
+      tr.appendChild(tdStep);
+
+      const tdAction = document.createElement('td');
+      tdAction.className = 'col-action';
+      tdAction.textContent = op.action.toUpperCase();
+      tr.appendChild(tdAction);
+
+      const tdBody = document.createElement('td');
+      tdBody.className = 'col-body';
+      tdBody.textContent = op.body;
+      tr.appendChild(tdBody);
+
+      const tdOp = document.createElement('td');
+      tdOp.className = 'col-op';
+      tdOp.innerHTML = highlightRepr(opSummary(op));
+      tr.appendChild(tdOp);
+
+      const tdWarn = document.createElement('td');
+      tdWarn.className = 'col-warn';
+      if (warnCount > 0) {
+        tdWarn.innerHTML = `<span class="asm-badge-warn">${warnCount}</span>`;
+      }
+      tr.appendChild(tdWarn);
+
+      const tdErr = document.createElement('td');
+      tdErr.className = 'col-err';
+      if (errorCount > 0) {
+        tdErr.innerHTML = `<span class="asm-badge-err">${errorCount}</span>`;
+      }
+      tr.appendChild(tdErr);
+
+      tr.addEventListener('click', () => selectStep(op.step));
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
+    stepsListEl.appendChild(table);
   }
 
   // Keyboard navigation: arrow up/down to move through steps
@@ -533,12 +646,12 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   });
 
   function updateStepsListSelection(): void {
-    const rows = stepsListEl.querySelectorAll('.asm-step-row');
-    for (let i = 0; i < rows.length; i++) {
-      rows[i].classList.toggle('selected', i < assemblyOps.length && assemblyOps[i].step === selectedStep);
+    const rows = stepsListEl.querySelectorAll<HTMLElement>('tr[data-step]');
+    for (const row of rows) {
+      row.classList.toggle('selected', row.dataset.step === String(selectedStep));
     }
     // Auto-scroll to selected
-    const sel = stepsListEl.querySelector('.asm-step-row.selected') as HTMLElement | null;
+    const sel = stepsListEl.querySelector('tr.selected') as HTMLElement | null;
     if (sel) {
       sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
@@ -921,6 +1034,9 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   });
   resizeObserver.observe(viewportPane);
 
+  // Focus root so arrow keys work immediately
+  requestAnimationFrame(() => root.focus());
+
   // =========================================================================
   // Handle
   // =========================================================================
@@ -933,6 +1049,7 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
     resume() {
       paused = false;
       viewport.resize();
+      root.focus();
     },
     dispose() {
       stopPolling();
