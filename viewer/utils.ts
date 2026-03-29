@@ -219,7 +219,10 @@ export function fetchSTLFromUrl(url: string): Promise<THREE.BufferGeometry | nul
   const cached = stlFetchCache.get(url);
   if (cached) return cached;
 
-  const promise = doFetchSTL(url);
+  const promise = doFetchSTL(url).then((geometry) => {
+    if (geometry === null) stlFetchCache.delete(url);
+    return geometry;
+  });
   stlFetchCache.set(url, promise);
   return promise;
 }
