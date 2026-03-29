@@ -34,6 +34,7 @@ export interface ManifestViewerOptions {
   manifest: ViewerManifest;
   resolveStlUrl: (mesh: string, context: StlUrlContext) => string;
   onNodeSelected?: (nodeId: string | null, manifest: ViewerManifest) => void;
+  onSoloChanged?: (nodeId: string | null) => void;
   viewport?: Viewport3D;
 }
 
@@ -289,7 +290,15 @@ interface SectionState {
 // ---------------------------------------------------------------------------
 
 export async function initManifestViewer(options: ManifestViewerOptions): Promise<ManifestViewerContext> {
-  const { container, treePanelEl, sidePanelEl: _sidePanelEl, manifest, resolveStlUrl, onNodeSelected } = options;
+  const {
+    container,
+    treePanelEl,
+    sidePanelEl: _sidePanelEl,
+    manifest,
+    resolveStlUrl,
+    onNodeSelected,
+    onSoloChanged,
+  } = options;
   const materials = manifest.materials ?? {};
 
   // Layer lazy-loading state
@@ -489,14 +498,17 @@ export async function initManifestViewer(options: ManifestViewerOptions): Promis
       onSolo: (nodeId: string) => {
         if (designScene.tree.soloedId === nodeId) {
           designScene.tree.unsolo();
+          if (onSoloChanged) onSoloChanged(null);
         } else {
           designScene.tree.solo(nodeId);
+          if (onSoloChanged) onSoloChanged(nodeId);
         }
         syncVisibility();
         tree.updateFromDesignScene(designScene.tree);
       },
       onUnsolo: () => {
         designScene.tree.unsolo();
+        if (onSoloChanged) onSoloChanged(null);
         syncVisibility();
         tree.updateFromDesignScene(designScene.tree);
       },

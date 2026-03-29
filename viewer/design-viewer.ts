@@ -9,6 +9,7 @@ import type { ComponentTree } from './component-tree.ts';
 import type { DesignScene } from './design-scene.ts';
 import type { ViewerManifest } from './manifest-types.ts';
 import { initManifestViewer } from './manifest-viewer.ts';
+import { clearViewState, updateViewState } from './view-state.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,20 @@ export async function initDesignViewer(
     manifest,
     viewport,
     resolveStlUrl: (mesh) => `/api/bots/${botName}/meshes/${mesh}`,
-    onNodeSelected: undefined,
+    onNodeSelected: (nodeId: string | null) => {
+      if (nodeId) {
+        updateViewState({ select: nodeId });
+      } else {
+        clearViewState('select');
+      }
+    },
+    onSoloChanged: (nodeId: string | null) => {
+      if (nodeId) {
+        updateViewState({ solo: nodeId });
+      } else {
+        clearViewState('solo');
+      }
+    },
   });
 
   return {

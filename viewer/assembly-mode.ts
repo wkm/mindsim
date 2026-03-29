@@ -8,6 +8,7 @@
 import { FocusController } from './focus-controller.ts';
 import type { ViewerContext } from './types.ts';
 import { GEOM_GROUP_DETAIL, GEOM_GROUP_STRUCTURAL, GEOM_GROUP_WIRE } from './utils.ts';
+import { updateViewState } from './view-state.ts';
 
 export class AssemblyMode {
   ctx: ViewerContext;
@@ -201,6 +202,9 @@ export class AssemblyMode {
     (document.getElementById('asm-step-slider') as HTMLInputElement).value = String(idx);
     (document.getElementById('asm-sub-slider') as HTMLInputElement).value = '1';
     this.applyStep(idx, 1.0);
+
+    // Update URL with current step
+    updateViewState({ step: idx });
 
     // Focus camera on the step's body
     const step = this.steps[idx];
