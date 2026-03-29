@@ -29,5 +29,5 @@ def run_dfm(bot: Bot) -> list[DFMFinding]:
     checks = discover_checks()
     findings: list[DFMFinding] = []
     for check in checks:
-        findings.extend(check.run(bot, seq, {}))
+        findings.extend(check.run(bot, seq))
     return findings

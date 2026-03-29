@@ -68,5 +68,4 @@ class DFMCheck(ABC):
         self,
         bot: Bot,
         sequence: AssemblySequence,
-        body_solids: dict[BodyId, object],
     ) -> list[DFMFinding]: ...

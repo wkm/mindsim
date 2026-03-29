@@ -17,15 +17,14 @@ import math
 from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import WireRef
-from botcad.assembly.sequence import AssemblyAction
 from botcad.bracket import BracketSpec, _cable_slot_dims
 from botcad.connectors import ConnectorSpec, connector_spec
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
+from botcad.dfm.utils import build_body_map, build_wire_steps
 from botcad.routing import WireRoute, WireSegment, solve_routing
 
 if TYPE_CHECKING:
     from botcad.assembly.sequence import AssemblySequence
-    from botcad.ids import BodyId
     from botcad.skeleton import Body, Bot, Joint
 
 # Channel radius table — must match emit_components._CHANNEL_RADIUS
@@ -48,7 +47,6 @@ class WireChannelSizing(DFMCheck):
         self,
         bot: Bot,
         sequence: AssemblySequence,
-        body_solids: dict[BodyId, object],
     ) -> list[DFMFinding]:
         findings: list[DFMFinding] = []
 
@@ -56,15 +54,8 @@ class WireChannelSizing(DFMCheck):
             return findings
 
         routes = solve_routing(bot)
-        body_map = _build_body_map(bot)
-
-        # Find the ROUTE_WIRE step for each route label
-        wire_steps: dict[str, int] = {}
-        for op in sequence.ops:
-            if op.action == AssemblyAction.ROUTE_WIRE and isinstance(
-                op.target, WireRef
-            ):
-                wire_steps[op.target.label] = op.step
+        body_map = build_body_map(bot)
+        wire_steps = build_wire_steps(sequence)
 
         for route in routes:
             if not route.segments:
@@ -270,26 +261,6 @@ def _check_bracket_slot(
 
 
 # ── Tree traversal helpers ──
-
-
-def _build_body_map(bot: Bot) -> dict[BodyId, Body]:
-    """Walk the kinematic tree and collect all bodies by name."""
-    from collections import deque
-
-    result: dict[BodyId, Body] = {}
-    if bot.root is None:
-        return result
-
-    queue: deque[Body] = deque([bot.root])
-    while queue:
-        body = queue.popleft()
-        if body.name in result:
-            continue
-        result[body.name] = body
-        for joint in body.joints:
-            if joint.child is not None:
-                queue.append(joint.child)
-    return result
 
 
 def _find_joint(body: Body, joint_name: str) -> Joint | None:

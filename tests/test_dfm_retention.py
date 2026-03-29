@@ -97,7 +97,7 @@ def test_no_mounting_points_no_fasteners_warns():
         include_fasten_ops=False,
     )
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
 
     assert len(findings) == 1
     assert findings[0].severity == DFMSeverity.WARNING
@@ -115,7 +115,7 @@ def test_has_mounting_points_and_fasteners_ok():
         include_fasten_ops=True,
     )
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
 
     assert len(findings) == 0
 
@@ -127,7 +127,7 @@ def test_has_mounting_points_but_no_fasteners_warns():
         include_fasten_ops=False,
     )
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
 
     assert len(findings) == 1
     assert findings[0].severity == DFMSeverity.WARNING
@@ -141,7 +141,7 @@ def test_finding_target_is_component_ref():
         include_fasten_ops=False,
     )
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
 
     assert len(findings) == 1
     target = findings[0].target
@@ -159,7 +159,7 @@ def test_wheeler_base_battery_no_retention():
 
     seq = build_assembly_sequence(bot)
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     # Battery should be flagged
     battery_findings = [
         f
@@ -178,5 +178,5 @@ def test_empty_bot_no_findings():
     bot = Bot("empty")
     seq = AssemblySequence(ops=())
     check = ComponentRetention()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     assert findings == []

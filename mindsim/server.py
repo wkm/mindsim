@@ -1179,6 +1179,7 @@ def get_assembly_sequence(bot: str):
 class DFMRun:
     run_id: str
     bot_name: str
+    created_at: float = field(default_factory=time.monotonic)
     state: str = "running"  # "running" | "complete" | "failed"
     checks: list[dict] = field(default_factory=list)  # per-check status
     findings: list[dict] = field(default_factory=list)  # serialized findings
@@ -1187,6 +1188,20 @@ class DFMRun:
 
 
 _dfm_runs: dict[str, DFMRun] = {}
+
+_DFM_RUN_TTL = 600.0  # 10 minutes
+
+
+def _evict_stale_dfm_runs() -> None:
+    """Remove completed/failed DFM runs older than _DFM_RUN_TTL."""
+    now = time.monotonic()
+    stale = [
+        rid
+        for rid, run in _dfm_runs.items()
+        if run.state in ("complete", "failed") and now - run.created_at > _DFM_RUN_TTL
+    ]
+    for rid in stale:
+        del _dfm_runs[rid]
 
 
 def _serialize_finding(f) -> dict:
@@ -1246,7 +1261,7 @@ def _run_dfm_background(run: DFMRun) -> None:
                 run.checks[i]["state"] = "running"
 
             try:
-                findings = check.run(bot_obj, seq, {})
+                findings = check.run(bot_obj, seq)
                 serialized = [_serialize_finding(f) for f in findings]
                 with run.lock:
                     run.findings.extend(serialized)
@@ -1270,6 +1285,8 @@ def _run_dfm_background(run: DFMRun) -> None:
 @app.post("/api/bots/{bot}/dfm/run")
 def start_dfm_run(bot: str):
     """Start an async DFM run. Returns a run_id for polling."""
+    _evict_stale_dfm_runs()
+
     # Validate bot exists
     try:
         _load_bot(bot)

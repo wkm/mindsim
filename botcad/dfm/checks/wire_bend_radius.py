@@ -20,13 +20,12 @@ import math
 from typing import TYPE_CHECKING
 
 from botcad.assembly.refs import WireRef
-from botcad.assembly.sequence import AssemblyAction
 from botcad.dfm.check import DFMCheck, DFMFinding, DFMSeverity
+from botcad.dfm.utils import build_wire_steps
 from botcad.routing import WireRoute, WireSegment, solve_routing
 
 if TYPE_CHECKING:
     from botcad.assembly.sequence import AssemblySequence
-    from botcad.ids import BodyId
     from botcad.skeleton import Bot
 
 # Default cable outer diameter (meters) — AWG 26 servo wire
@@ -90,7 +89,6 @@ class WireBendRadius(DFMCheck):
         self,
         bot: Bot,
         sequence: AssemblySequence,
-        body_solids: dict[BodyId, object],
     ) -> list[DFMFinding]:
         findings: list[DFMFinding] = []
 
@@ -98,14 +96,7 @@ class WireBendRadius(DFMCheck):
             return findings
 
         routes = solve_routing(bot)
-
-        # Find the ROUTE_WIRE step for each route label
-        wire_steps: dict[str, int] = {}
-        for op in sequence.ops:
-            if op.action == AssemblyAction.ROUTE_WIRE and isinstance(
-                op.target, WireRef
-            ):
-                wire_steps[op.target.label] = op.step
+        wire_steps = build_wire_steps(sequence)
 
         for route in routes:
             findings.extend(self._check_route(route, wire_steps.get(route.label, 0)))

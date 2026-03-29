@@ -10,7 +10,7 @@ import { buildSceneTree } from './build-scene-tree.ts';
 import { ComponentTree } from './component-tree.ts';
 import { DesignScene, NodeKind } from './design-scene.ts';
 import type { ManifestPart, ViewerManifest } from './manifest-types.ts';
-import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
+import { createPositionedMesh, fetchSTL, makeMaterial } from './utils.ts';
 import type { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -22,36 +22,6 @@ export interface DesignViewerContext {
   tree: ComponentTree;
   viewport: Viewport3D;
   syncVisibility(): void;
-}
-
-/** Edge line material — shared across all meshes for consistent look. */
-const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
-  color: 0x000000,
-  transparent: true,
-  opacity: 0.35,
-  linewidth: 2, // only effective on some platforms; WebGL often caps at 1px
-});
-
-/** Create a positioned mesh with edge lines, matching component browser style. */
-function createPositionedMesh(
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  pos: number[],
-  quat: number[],
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.position.set(pos[0], pos[1], pos[2]);
-  mesh.quaternion.copy(manifestQuatToThree(quat));
-
-  // Add wireframe edge lines for surface definition (same as component browser)
-  const edges = new THREE.EdgesGeometry(geometry, 28);
-  const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
-  lines.raycast = () => {}; // edges don't participate in picking
-  mesh.add(lines);
-
-  return mesh;
 }
 
 /** Lazy-load a design layer mesh on first visibility toggle. */

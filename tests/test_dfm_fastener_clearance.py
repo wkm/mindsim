@@ -23,7 +23,7 @@ def test_wheeler_base_has_fastener_clearance_issues():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = FastenerToolClearance()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     # We expect at least some findings
     assert len(findings) > 0
     # At least one should be an error
@@ -37,7 +37,7 @@ def test_findings_have_valid_structure():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = FastenerToolClearance()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     for f in findings:
         assert f.check_name == "fastener_tool_clearance"
         assert f.pos is not None

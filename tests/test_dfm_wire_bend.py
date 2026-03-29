@@ -60,7 +60,7 @@ def test_wheeler_base_bend_radius():
     bot = build()
     seq = build_assembly_sequence(bot)
     check = WireBendRadius()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     # May or may not have findings depending on route geometry
     # But structure should be valid
     for f in findings:

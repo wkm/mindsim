@@ -21,7 +21,7 @@ def test_wheeler_base_connector_access():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = ConnectorMatingAccess()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     # Structure should be valid
     for f in findings:
         assert f.check_name == "connector_mating_access"
@@ -34,7 +34,7 @@ def test_findings_have_direction_and_thresholds():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = ConnectorMatingAccess()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     for f in findings:
         # direction is the mating axis that was checked
         assert f.direction is not None

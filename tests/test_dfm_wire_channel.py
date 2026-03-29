@@ -58,7 +58,7 @@ def test_wheeler_base_wire_channel_findings():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = WireChannelSizing()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     # Should have findings about connector vs channel sizing
     assert len(findings) > 0, (
         "Expected wire channel sizing findings for wheeler_base "
@@ -76,7 +76,7 @@ def test_findings_reference_servo_bus():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = WireChannelSizing()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     servo_bus_findings = [f for f in findings if "servo_bus" in f.id]
     assert len(servo_bus_findings) > 0, (
         f"Expected findings for servo_bus route, got: {[f.id for f in findings]}"
@@ -88,7 +88,7 @@ def test_findings_have_valid_structure():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = WireChannelSizing()
-    findings = check.run(bot, seq, {})
+    findings = check.run(bot, seq)
     for f in findings:
         assert f.check_name == "wire_channel_sizing"
         assert f.pos is not None
@@ -125,6 +125,6 @@ def test_finding_id_is_deterministic():
     bot = _wheeler_base()
     seq = build_assembly_sequence(bot)
     check = WireChannelSizing()
-    ids_1 = sorted(f.id for f in check.run(bot, seq, {}))
-    ids_2 = sorted(f.id for f in check.run(bot, seq, {}))
+    ids_1 = sorted(f.id for f in check.run(bot, seq))
+    ids_2 = sorted(f.id for f in check.run(bot, seq))
     assert ids_1 == ids_2

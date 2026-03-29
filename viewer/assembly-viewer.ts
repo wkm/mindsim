@@ -16,7 +16,8 @@ import { AssemblyDAG } from './assembly-dag.ts';
 import type { AssemblyMeshRef, AssemblyOpData } from './assembly-scrubber.ts';
 import { type DFMFindingData, DFMPanel } from './dfm-panel.ts';
 import type { ManifestMaterial, ViewerManifest } from './manifest-types.ts';
-import { fetchSTL, makeMaterial, manifestQuatToThree } from './utils.ts';
+import { highlightRepr } from './syntax-highlight.ts';
+import { createPositionedMesh, fetchSTL, makeMaterial } from './utils.ts';
 import { Viewport3D } from './viewport3d.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,33 +41,6 @@ type AssemblySubTab = 'steps' | 'dag' | 'dfm';
 // ---------------------------------------------------------------------------
 // Mesh helpers
 // ---------------------------------------------------------------------------
-
-const EDGE_LINE_MAT = new THREE.LineBasicMaterial({
-  color: 0x000000,
-  transparent: true,
-  opacity: 0.35,
-  linewidth: 2,
-});
-
-function createPositionedMesh(
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  pos: number[],
-  quat: number[],
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.position.set(pos[0], pos[1], pos[2]);
-  mesh.quaternion.copy(manifestQuatToThree(quat));
-
-  const edges = new THREE.EdgesGeometry(geometry, 28);
-  const lines = new THREE.LineSegments(edges, EDGE_LINE_MAT);
-  lines.raycast = () => {};
-  mesh.add(lines);
-
-  return mesh;
-}
 
 // ---------------------------------------------------------------------------
 // Camera fly-to animation (standalone, no MuJoCo dependency)
@@ -165,41 +139,6 @@ function materialForMeshRef(
     });
   }
   return new THREE.MeshPhysicalMaterial({ color: 0xd9d9d9, roughness: 0.6, metalness: 0.0 });
-}
-
-// ---------------------------------------------------------------------------
-// Repr syntax highlighting (duplicated from assembly-scrubber to avoid export)
-// ---------------------------------------------------------------------------
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function highlightRepr(repr: string): string {
-  let s = escapeHtml(repr);
-
-  const tokens: { key: string; html: string }[] = [];
-  let tokenId = 0;
-  const placeholder = (cls: string, text: string) => {
-    const key = `\x00T${tokenId++}\x00`;
-    tokens.push({ key, html: `<span style="${cls}">${text}</span>` });
-    return key;
-  };
-
-  s = s.replace(/'[^']*'/g, (m) => placeholder('color:#D4A72C', m));
-  s = s.replace(/"[^"]*"/g, (m) => placeholder('color:#D4A72C', m));
-  s = s.replace(/\b(AssemblyOp|AssemblyAction|ComponentRef|FastenerRef|WireRef|JointId|BodyId|ToolKind)\b/g, (m) =>
-    placeholder('color:#2B95D6;font-weight:600', m),
-  );
-  s = s.replace(/\.([A-Z][A-Z0-9_]+)\b/g, (_m, val) => `.${placeholder('color:#0F9960;font-weight:600', val)}`);
-  s = s.replace(/\b(-?\d+\.?\d*)\b/g, (m) => placeholder('color:#C87619', m));
-  s = s.replace(/\b(None|True|False)\b/g, (m) => placeholder('color:#9179F2', m));
-
-  for (const { key, html } of tokens) {
-    s = s.replace(key, html);
-  }
-
-  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -802,7 +741,7 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
   // Sub-tab switching
   // =========================================================================
 
-  function switchSubTab(tab: AssemblySubTab): void {
+  function _switchSubTab(tab: AssemblySubTab): void {
     if (tab === activeSubTab) return;
     activeSubTab = tab;
 
