@@ -78,6 +78,7 @@ interface GraphPort {
   label: string;
   busType: string;
   orphaned: boolean;
+  side: 'WEST' | 'EAST'; // WEST = input (left), EAST = output (right)
 }
 
 interface GraphEdge {
@@ -105,29 +106,7 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
     }
   }
 
-  // Build nodes
-  const nodes: GraphNode[] = [];
-  for (const [compId, ports] of componentPorts) {
-    const portList: GraphPort[] = [];
-    for (const [portLabel, busType] of ports) {
-      portList.push({
-        id: `${compId}:${portLabel}`,
-        label: portLabel,
-        busType,
-        orphaned: false, // will be set after edge building
-      });
-    }
-    const height = NODE_HEADER_H + portList.length * PORT_ROW_H + NODE_PAD_BOTTOM;
-    nodes.push({
-      id: compId,
-      label: compId,
-      ports: portList,
-      width: NODE_W,
-      height,
-    });
-  }
-
-  // Build edges based on topology
+  // Build edges based on topology (before nodes, so we can determine port sides)
   const edges: GraphEdge[] = [];
 
   for (const net of nets) {
@@ -166,15 +145,58 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
     }
   }
 
-  // Orphaned port detection: ports not referenced by any edge
-  const referencedPorts = new Set<string>();
+  // Determine port sides: edge sources → EAST (output, right), edge targets → WEST (input, left)
+  const sourcePorts = new Set<string>();
+  const targetPorts = new Set<string>();
   for (const edge of edges) {
-    referencedPorts.add(edge.sourcePortId);
-    referencedPorts.add(edge.targetPortId);
+    sourcePorts.add(edge.sourcePortId);
+    targetPorts.add(edge.targetPortId);
   }
+
+  // Build nodes
+  const nodes: GraphNode[] = [];
+  for (const [compId, ports] of componentPorts) {
+    const westPorts: GraphPort[] = [];
+    const eastPorts: GraphPort[] = [];
+    for (const [portLabel, busType] of ports) {
+      const portId = `${compId}:${portLabel}`;
+      const isSource = sourcePorts.has(portId);
+      const isTarget = targetPorts.has(portId);
+      // If only a source → output (right). If only a target → input (left).
+      // If both or neither, use naming convention.
+      let side: 'WEST' | 'EAST';
+      if (isTarget && !isSource) {
+        side = 'WEST';
+      } else if (isSource && !isTarget) {
+        side = 'EAST';
+      } else {
+        // Ambiguous — use naming: labels ending in _in/input → left, else right
+        side = /_in$|_input$|^power_in$|^usb_power$|^csi_in$/.test(portLabel) ? 'WEST' : 'EAST';
+      }
+      const gp: GraphPort = { id: portId, label: portLabel, busType, orphaned: false, side };
+      if (side === 'WEST') {
+        westPorts.push(gp);
+      } else {
+        eastPorts.push(gp);
+      }
+    }
+    // Interleave: west ports first, then east ports (for consistent vertical ordering)
+    const portList = [...westPorts, ...eastPorts];
+    const maxSidePorts = Math.max(westPorts.length, eastPorts.length);
+    const height = NODE_HEADER_H + maxSidePorts * PORT_ROW_H + NODE_PAD_BOTTOM;
+    nodes.push({
+      id: compId,
+      label: compId,
+      ports: portList,
+      width: NODE_W,
+      height,
+    });
+  }
+
+  // Orphaned port detection: ports not referenced by any edge
   for (const node of nodes) {
     for (const port of node.ports) {
-      if (!referencedPorts.has(port.id)) {
+      if (!sourcePorts.has(port.id) && !targetPorts.has(port.id)) {
         port.orphaned = true;
       }
     }
@@ -189,17 +211,26 @@ function buildGraphModel(nets: WireNet[]): { nodes: GraphNode[]; edges: GraphEdg
 
 function toElkGraph(nodes: GraphNode[], edges: GraphEdge[]): ElkNode {
   const elkNodes: ElkNode[] = nodes.map((node) => {
-    const elkPorts: ElkPort[] = node.ports.map((port, idx) => ({
-      id: port.id,
-      width: PORT_W,
-      height: PORT_H,
-      // Place ports on right side of node, spaced vertically
-      x: node.width - PORT_W,
-      y: NODE_HEADER_H + idx * PORT_ROW_H + (PORT_ROW_H - PORT_H) / 2,
-      layoutOptions: {
-        'port.side': 'EAST',
-      },
-    }));
+    // Separate ports by side for independent vertical spacing
+    const westPorts = node.ports.filter((p) => p.side === 'WEST');
+    const eastPorts = node.ports.filter((p) => p.side === 'EAST');
+
+    const elkPorts: ElkPort[] = node.ports.map((port) => {
+      const sameSide = port.side === 'WEST' ? westPorts : eastPorts;
+      const sideIdx = sameSide.indexOf(port);
+      const portX = port.side === 'WEST' ? 0 : node.width - PORT_W;
+      const portY = NODE_HEADER_H + sideIdx * PORT_ROW_H + (PORT_ROW_H - PORT_H) / 2;
+      return {
+        id: port.id,
+        width: PORT_W,
+        height: PORT_H,
+        x: portX,
+        y: portY,
+        layoutOptions: {
+          'port.side': port.side,
+        },
+      };
+    });
     return {
       id: node.id,
       width: node.width,
@@ -379,41 +410,55 @@ function renderSVG(layout: LayoutResult, callbacks: WiringDiagramCallbacks): SVG
     divider.setAttribute('stroke-width', '0.5');
     g.appendChild(divider);
 
-    // Ports
-    for (let pi = 0; pi < node.ports.length; pi++) {
-      const port = node.ports[pi];
-      const portY = NODE_HEADER_H + pi * PORT_ROW_H + (PORT_ROW_H - PORT_H) / 2;
+    // Ports — west (input) on left, east (output) on right
+    const westPorts = node.ports.filter((p) => p.side === 'WEST');
+    const eastPorts = node.ports.filter((p) => p.side === 'EAST');
 
-      // Port dot
-      const portRect = document.createElementNS(SVG_NS, 'rect');
-      portRect.setAttribute('x', String(node.width - PORT_W - 4));
-      portRect.setAttribute('y', String(portY));
-      portRect.setAttribute('width', String(PORT_W));
-      portRect.setAttribute('height', String(PORT_H));
-      portRect.setAttribute('rx', '2');
+    for (const [sidePorts, side] of [
+      [westPorts, 'WEST'],
+      [eastPorts, 'EAST'],
+    ] as const) {
+      for (let si = 0; si < sidePorts.length; si++) {
+        const port = sidePorts[si];
+        const portY = NODE_HEADER_H + si * PORT_ROW_H + (PORT_ROW_H - PORT_H) / 2;
+        const isWest = side === 'WEST';
 
-      const portColor = BUS_TYPE_COLORS[port.busType] ?? '#666';
+        // Port dot
+        const portRect = document.createElementNS(SVG_NS, 'rect');
+        const dotX = isWest ? 4 : node.width - PORT_W - 4;
+        portRect.setAttribute('x', String(dotX));
+        portRect.setAttribute('y', String(portY));
+        portRect.setAttribute('width', String(PORT_W));
+        portRect.setAttribute('height', String(PORT_H));
+        portRect.setAttribute('rx', '2');
 
-      if (port.orphaned) {
-        portRect.setAttribute('fill', 'none');
-        portRect.setAttribute('stroke', 'orange');
-        portRect.setAttribute('stroke-width', '2');
-      } else {
-        portRect.setAttribute('fill', portColor);
+        const portColor = BUS_TYPE_COLORS[port.busType] ?? '#666';
+
+        if (port.orphaned) {
+          portRect.setAttribute('fill', 'none');
+          portRect.setAttribute('stroke', 'orange');
+          portRect.setAttribute('stroke-width', '2');
+        } else {
+          portRect.setAttribute('fill', portColor);
+        }
+
+        g.appendChild(portRect);
+
+        // Port label — next to the dot, inward from the edge
+        const portLabel = document.createElementNS(SVG_NS, 'text');
+        const labelX = isWest ? PORT_W + 8 : node.width - PORT_W - 8;
+        portLabel.setAttribute('x', String(labelX));
+        portLabel.setAttribute('y', String(portY + PORT_H - 1));
+        portLabel.setAttribute('font-size', '10');
+        portLabel.setAttribute('font-family', 'var(--font-mono, monospace)');
+        portLabel.setAttribute('fill', '#999');
+        if (!isWest) {
+          portLabel.setAttribute('text-anchor', 'end');
+        }
+        const maxLabelLen = 14;
+        portLabel.textContent = port.label.length > maxLabelLen ? `${port.label.slice(0, maxLabelLen)}...` : port.label;
+        g.appendChild(portLabel);
       }
-
-      g.appendChild(portRect);
-
-      // Port label
-      const portLabel = document.createElementNS(SVG_NS, 'text');
-      portLabel.setAttribute('x', '8');
-      portLabel.setAttribute('y', String(portY + PORT_H - 1));
-      portLabel.setAttribute('font-size', '10');
-      portLabel.setAttribute('font-family', 'var(--font-mono, monospace)');
-      portLabel.setAttribute('fill', '#999');
-      const maxLabelLen = 16;
-      portLabel.textContent = port.label.length > maxLabelLen ? `${port.label.slice(0, maxLabelLen)}...` : port.label;
-      g.appendChild(portLabel);
     }
 
     g.addEventListener('click', (e) => {
