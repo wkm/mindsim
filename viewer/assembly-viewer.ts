@@ -978,7 +978,9 @@ export async function initAssemblyViewer(botName: string): Promise<AssemblyHandl
                 dfmPanel.setFindings(findings);
                 dfmPanel.filterByStep(selectedStep);
               }
-              // Re-render DFM nav list with updated findings
+              // Re-render nav lists with updated findings
+              renderStepsList();
+              updateStepsListSelection();
               renderDfmNavList();
               // Re-render detail if we have findings for the current step
               renderDetail();
